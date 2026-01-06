@@ -231,7 +231,7 @@ This enterprise-grade script audits your Customer Journey Analytics implementati
 
 ### 1.3 What's New in This Version
 
-**Version 2.0 Enhancements:**
+**Version 3.0 Enhancements:**
 
 ✅ **Modern Dependency Management**
 - Uses `uv` for fast, reliable package management
@@ -563,7 +563,7 @@ Summary information about the data view and generation process:
 - Data quality issue summary
 - Severity distribution
 
-#### **Sheet 2: Data Quality** (NEW in v2.0)
+#### **Sheet 2: Data Quality** (NEW in v3.0)
 Comprehensive data quality report with color-coded severity:
 - **CRITICAL** (Red): Issues requiring immediate attention
 - **HIGH** (Yellow): Important issues affecting functionality
