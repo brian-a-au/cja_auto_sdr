@@ -1302,5 +1302,3 @@ uv run python cja_sdr_generator.py
 # 6. Review output
 # Check the generated Excel file and logs/ directory
 ```
-
-**Happy auditing! 🚀**
