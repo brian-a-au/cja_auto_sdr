@@ -71,7 +71,7 @@ wheels = [
 
 [[package]]
 name = "cja-auto-sdr-2026"
-version = "0.1.0"
+version = "3.0.0"
 source = { virtual = "." }
 dependencies = [
     { name = "cjapy" },
@@ -79,12 +79,19 @@ dependencies = [
     { name = "xlsxwriter" },
 ]
 
+[package.optional-dependencies]
+dev = [
+    { name = "pytest" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "cjapy", specifier = ">=0.2.4.post2" },
     { name = "pandas", specifier = ">=2.3.3" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3.4" },
     { name = "xlsxwriter", specifier = ">=3.2.9" },
 ]
+provides-extras = ["dev"]
 
 [[package]]
 name = "cjapy"

@@ -2,7 +2,6 @@ import cjapy
 import pandas as pd
 import json
 from datetime import datetime
-import pytz
 import logging
 import sys
 from typing import Dict, List, Tuple, Optional
