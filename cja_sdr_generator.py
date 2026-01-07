@@ -881,8 +881,201 @@ except Exception as e:
 
 # ==================== EXCEL GENERATION ====================
 
+# ==================== EXCEL GENERATION ====================
+
+class OptimizedExcelWriter:
+    """Optimized Excel writing with performance enhancements"""
+    
+    def __init__(self, filename: str, logger: logging.Logger):
+        self.filename = filename
+        self.logger = logger
+        self.workbook = None
+        self.writer = None
+        self.formats = {}
+    
+    def __enter__(self):
+        """Context manager entry"""
+        self.writer = pd.ExcelWriter(
+            self.filename, 
+            engine='xlsxwriter',
+            engine_kwargs={'options': {'constant_memory': True}}
+        )
+        self.workbook = self.writer.book
+        self._create_formats()
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit"""
+        if self.writer:
+            self.writer.close()
+    
+    def _create_formats(self):
+        """Pre-create all formats to avoid repeated creation"""
+        self.logger.debug("Creating Excel formats...")
+        
+        # Header format
+        self.formats['header'] = self.workbook.add_format({
+            'bold': True,
+            'bg_color': '#366092',
+            'font_color': 'white',
+            'border': 1,
+            'align': 'center',
+            'text_wrap': True
+        })
+        
+        # Alternating row formats
+        self.formats['grey'] = self.workbook.add_format({
+            'bg_color': '#F2F2F2',
+            'border': 1,
+            'text_wrap': True,
+            'align': 'top',
+            'valign': 'top'
+        })
+        
+        self.formats['white'] = self.workbook.add_format({
+            'bg_color': '#FFFFFF',
+            'border': 1,
+            'text_wrap': True,
+            'align': 'top',
+            'valign': 'top'
+        })
+        
+        # Data quality severity formats
+        self.formats['critical'] = self.workbook.add_format({
+            'bg_color': '#FFC7CE',
+            'font_color': '#9C0006',
+            'border': 1,
+            'text_wrap': True,
+            'align': 'top',
+            'valign': 'top'
+        })
+        
+        self.formats['high'] = self.workbook.add_format({
+            'bg_color': '#FFEB9C',
+            'font_color': '#9C6500',
+            'border': 1,
+            'text_wrap': True,
+            'align': 'top',
+            'valign': 'top'
+        })
+        
+        self.formats['medium'] = self.workbook.add_format({
+            'bg_color': '#C6EFCE',
+            'font_color': '#006100',
+            'border': 1,
+            'text_wrap': True,
+            'align': 'top',
+            'valign': 'top'
+        })
+        
+        self.formats['low'] = self.workbook.add_format({
+            'bg_color': '#DDEBF7',
+            'font_color': '#1F4E78',
+            'border': 1,
+            'text_wrap': True,
+            'align': 'top',
+            'valign': 'top'
+        })
+    
+    def write_sheet(self, df: pd.DataFrame, sheet_name: str):
+        """Write DataFrame to sheet with optimized formatting"""
+        perf_tracker.start(f"Write Sheet: {sheet_name}")
+        self.logger.debug(f"Writing sheet: {sheet_name} ({len(df)} rows)")
+        
+        try:
+            # Write dataframe without index (faster)
+            df.to_excel(self.writer, sheet_name=sheet_name, index=False)
+            worksheet = self.writer.sheets[sheet_name]
+            
+            # Apply formatting efficiently
+            self._format_headers(worksheet, df)
+            self._format_columns(worksheet, df)
+            self._format_rows(worksheet, df, sheet_name)
+            
+            # Add filters and freeze panes
+            self._add_filters(worksheet, df)
+            self._freeze_panes(worksheet)
+            
+            self.logger.debug(f"Sheet {sheet_name} written successfully")
+            
+        except Exception as e:
+            self.logger.error(f"Error writing sheet {sheet_name}: {str(e)}")
+            raise
+        finally:
+            perf_tracker.end(f"Write Sheet: {sheet_name}")
+    
+    def _format_headers(self, worksheet, df):
+        """Format header row efficiently"""
+        for col_num, value in enumerate(df.columns.values):
+            worksheet.write(0, col_num, value, self.formats['header'])
+    
+    def _format_columns(self, worksheet, df):
+        """Set optimal column widths"""
+        max_column_width = 100
+        
+        for idx, col in enumerate(df.columns):
+            # Calculate column width based on content
+            series = df[col]
+            
+            # Sample-based width calculation for large datasets
+            if len(series) > 1000:
+                sample_size = min(100, len(series))
+                sample = series.sample(n=sample_size) if len(series) > sample_size else series
+                max_len = max(
+                    max(len(str(val).split('\n')[0]) for val in sample),
+                    len(str(series.name))
+                )
+            else:
+                max_len = max(
+                    max(len(str(val).split('\n')[0]) for val in series) if len(series) > 0 else 0,
+                    len(str(series.name))
+                )
+            
+            # Set width with limits
+            width = min(max_len + 2, max_column_width)
+            worksheet.set_column(idx, idx, width)
+    
+    def _format_rows(self, worksheet, df, sheet_name):
+        """Format data rows with appropriate styling"""
+        # Determine if this is a data quality sheet
+        is_dq_sheet = sheet_name == 'Data Quality' and 'Severity' in df.columns
+        
+        # Batch process rows for better performance
+        for idx in range(len(df)):
+            # Calculate row height based on content
+            row_data = df.iloc[idx]
+            max_lines = max(str(val).count('\n') for val in row_data) + 1
+            row_height = min(max_lines * 15, 400)
+            
+            # Select format based on sheet type
+            if is_dq_sheet:
+                severity = row_data['Severity']
+                if severity == 'CRITICAL':
+                    row_format = self.formats['critical']
+                elif severity == 'HIGH':
+                    row_format = self.formats['high']
+                elif severity == 'MEDIUM':
+                    row_format = self.formats['medium']
+                else:
+                    row_format = self.formats['low']
+            else:
+                # Alternating row colors
+                row_format = self.formats['grey'] if idx % 2 == 0 else self.formats['white']
+            
+            # Set row height with format
+            worksheet.set_row(idx + 1, row_height, row_format)
+    
+    def _add_filters(self, worksheet, df):
+        """Add autofilter to sheet"""
+        if len(df) > 0:
+            worksheet.autofilter(0, 0, len(df), len(df.columns) - 1)
+    
+    def _freeze_panes(self, worksheet):
+        """Freeze top row"""
+        worksheet.freeze_panes(1, 0)
+
 def apply_excel_formatting(writer, df, sheet_name):
-    """Apply formatting to Excel sheets with error handling"""
+    """Legacy function wrapper for backward compatibility"""
     try:
         logger.info(f"Formatting sheet: {sheet_name}")
         
@@ -966,7 +1159,7 @@ def apply_excel_formatting(writer, df, sheet_name):
             series = df[col]
             max_len = min(
                 max(
-                    max(len(str(val).split('\n')[0]) for val in series),
+                    max(len(str(val).split('\n')[0]) for val in series) if len(series) > 0 else 0,
                     len(str(series.name))
                 ) + 2,
                 max_column_width
@@ -1006,16 +1199,18 @@ def apply_excel_formatting(writer, df, sheet_name):
         logger.error(f"Error formatting sheet {sheet_name}: {str(e)}")
         raise
 
-# Write to Excel with formatting
+# Write to Excel with optimization
 logger.info("=" * 60)
 logger.info("Generating Excel file")
 logger.info("=" * 60)
 
 try:
-    logger.info(f"Creating Excel writer for: {excel_file_name}")
+    logger.info(f"Creating Excel file: {excel_file_name}")
+    perf_tracker.start("Total Excel Generation")
     
-    with pd.ExcelWriter(excel_file_name, engine='xlsxwriter') as writer:
-        # Write sheets in order, with Data Quality first for visibility
+    # Use optimized Excel writer
+    with OptimizedExcelWriter(excel_file_name, logger) as excel_writer:
+        # Define sheets to write
         sheets_to_write = [
             (metadata_df, 'Metadata'),
             (data_quality_df, 'Data Quality'),
@@ -1029,14 +1224,15 @@ try:
                 if sheet_data.empty:
                     logger.warning(f"Sheet {sheet_name} is empty, creating placeholder")
                     placeholder_df = pd.DataFrame({'Note': [f'No data available for {sheet_name}']})
-                    apply_excel_formatting(writer, placeholder_df, sheet_name)
+                    excel_writer.write_sheet(placeholder_df, sheet_name)
                 else:
-                    apply_excel_formatting(writer, sheet_data, sheet_name)
+                    excel_writer.write_sheet(sheet_data, sheet_name)
             except Exception as e:
                 logger.error(f"Failed to write sheet {sheet_name}: {str(e)}")
                 # Continue with other sheets
                 continue
     
+    perf_tracker.end("Total Excel Generation")
     logger.info(f"✓ SDR generation complete! File saved as: {excel_file_name}")
     
     # Final summary
