@@ -1,7 +1,7 @@
 [project]
 name = "cja-auto-sdr-2026"
 version = "0.1.0"
-description = "Add your description here"
+description = "Customer Journey Analytics SDR Generator with Data Quality Validation"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
