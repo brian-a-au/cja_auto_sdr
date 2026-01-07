@@ -13,18 +13,20 @@ The CJA SDR Generator now supports high-performance batch processing with **3-4x
 uv run python cja_sdr_generator.py dv_677ea9291244fd082f02dd42
 ```
 
-### Multiple Data Views (Sequential)
+### Multiple Data Views (Automatic Batch Mode)
 
 ```bash
-# Process multiple data views one after another
+# Automatically triggers parallel batch processing
 uv run python cja_sdr_generator.py dv_12345 dv_67890 dv_abcde
 ```
 
-### Batch Processing (Parallel)
+**Note:** When you provide multiple data view IDs, the script automatically enables parallel processing with 4 workers by default. The `--batch` flag is optional.
+
+### Batch Processing with Custom Configuration
 
 ```bash
-# Process multiple data views in parallel (4 workers by default)
-uv run python cja_sdr_generator.py --batch dv_12345 dv_67890 dv_abcde dv_11111
+# Explicitly use batch mode with custom settings
+uv run python cja_sdr_generator.py --batch dv_12345 dv_67890 dv_abcde dv_11111 --workers 8
 ```
 
 ## Command-Line Arguments
@@ -37,7 +39,7 @@ uv run python cja_sdr_generator.py --batch dv_12345 dv_67890 dv_abcde dv_11111
 
 | Argument | Description | Default |
 |----------|-------------|---------|
-| `--batch` | Enable parallel batch processing | Sequential mode |
+| `--batch` | Explicitly enable batch mode (optional with multiple data views) | Auto-detect (parallel if multiple data views) |
 | `--workers N` | Number of parallel workers | 4 |
 | `--output-dir PATH` | Output directory for generated files | Current directory |
 | `--config-file PATH` | Path to CJA configuration file | myconfig.json |
@@ -53,10 +55,10 @@ uv run python cja_sdr_generator.py --batch dv_12345 dv_67890 dv_abcde dv_11111
 # Single data view
 uv run python cja_sdr_generator.py dv_12345
 
-# Multiple data views (sequential processing)
+# Multiple data views (automatically triggers parallel batch processing)
 uv run python cja_sdr_generator.py dv_12345 dv_67890 dv_abcde
 
-# Batch processing with default settings (4 workers)
+# Explicitly use batch mode (same result as above when multiple data views)
 uv run python cja_sdr_generator.py --batch dv_12345 dv_67890 dv_abcde
 ```
 
@@ -136,16 +138,18 @@ $ uv run python cja_sdr_generator.py --help
 
 ## Performance Comparison
 
-### Sequential Processing (Old/Default)
+### Single Data View Processing
 ```
-10 data views × 35s each = 350 seconds (5.8 minutes)
+1 data view × 35s = 35 seconds per data view
 ```
 
-### Parallel Processing (Batch Mode with 4 Workers)
+### Multiple Data Views (Automatic Parallel Batch Processing with 4 Workers)
 ```
 10 data views / 4 workers × 35s = ~87.5 seconds (1.5 minutes)
-Improvement: 4x faster (75% time savings)
+Improvement: 4x faster than processing individually (75% time savings)
 ```
+
+**Note:** Multiple data views automatically trigger parallel batch processing for optimal performance.
 
 ### Worker Optimization
 
