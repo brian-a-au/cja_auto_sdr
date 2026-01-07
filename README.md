@@ -1,5 +1,8 @@
 # Adobe Customer Journey Analytics Solution Design Reference Generator with Data Quality Validation
 
+<img width="1024" height="572" alt="image" src="https://github.com/user-attachments/assets/54a43474-3fc6-4379-909c-452c19cdeac2" />
+
+
 **Version 3.0** - A production-ready Python tool for auditing your Customer Journey Analytics (CJA) implementation by generating comprehensive Solution Design Reference (SDR) documents with enterprise-grade data quality validation, error handling, and modern dependency management.
 
 ## What Makes Version 3.0 Different
