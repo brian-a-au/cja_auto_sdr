@@ -420,6 +420,7 @@ Typical output sizes for a data view with 150 metrics and 75 dimensions:
 ## Use Case Recommendations
 
 ### Excel - When to Use
+
 - Manual analysis and review
 - Stakeholder presentations
 - Complex formatting requirements
@@ -427,6 +428,7 @@ Typical output sizes for a data view with 150 metrics and 75 dimensions:
 - Multi-sheet organization
 
 ### CSV - When to Use
+
 - Automated data processing
 - ETL pipelines
 - Database imports
@@ -434,6 +436,7 @@ Typical output sizes for a data view with 150 metrics and 75 dimensions:
 - Programming language integration
 
 ### JSON - When to Use
+
 - API integrations
 - Automation workflows
 - Configuration management
@@ -441,6 +444,7 @@ Typical output sizes for a data view with 150 metrics and 75 dimensions:
 - Microservices communication
 
 ### HTML - When to Use
+
 - Web-based viewing
 - Email distribution
 - Non-technical audiences
@@ -448,6 +452,7 @@ Typical output sizes for a data view with 150 metrics and 75 dimensions:
 - Documentation portals
 
 ### All - When to Use
+
 - Comprehensive documentation
 - Archival requirements
 - Multi-audience distribution
