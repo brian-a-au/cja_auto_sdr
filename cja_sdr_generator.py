@@ -896,9 +896,12 @@ class OptimizedExcelWriter:
     def __enter__(self):
         """Context manager entry"""
         self.writer = pd.ExcelWriter(
-            self.filename, 
+            self.filename,
             engine='xlsxwriter',
-            engine_kwargs={'options': {'constant_memory': True}}
+            engine_kwargs={'options': {
+                'constant_memory': True,
+                'nan_inf_to_errors': True
+            }}
         )
         self.workbook = self.writer.book
         self._create_formats()
@@ -1039,14 +1042,14 @@ class OptimizedExcelWriter:
         """Format data rows with appropriate styling"""
         # Determine if this is a data quality sheet
         is_dq_sheet = sheet_name == 'Data Quality' and 'Severity' in df.columns
-        
+
         # Batch process rows for better performance
         for idx in range(len(df)):
             # Calculate row height based on content
             row_data = df.iloc[idx]
             max_lines = max(str(val).count('\n') for val in row_data) + 1
             row_height = min(max_lines * 15, 400)
-            
+
             # Select format based on sheet type
             if is_dq_sheet:
                 severity = row_data['Severity']
@@ -1061,9 +1064,13 @@ class OptimizedExcelWriter:
             else:
                 # Alternating row colors
                 row_format = self.formats['grey'] if idx % 2 == 0 else self.formats['white']
-            
-            # Set row height with format
-            worksheet.set_row(idx + 1, row_height, row_format)
+
+            # Set row height
+            worksheet.set_row(idx + 1, row_height)
+
+            # Write each cell with the appropriate format
+            for col_num, value in enumerate(row_data):
+                worksheet.write(idx + 1, col_num, value, row_format)
     
     def _add_filters(self, worksheet, df):
         """Add autofilter to sheet"""
