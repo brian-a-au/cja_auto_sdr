@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CJA SDR - Sample Production Analytics</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        h1 {
+            margin: 0 0 10px 0;
+            font-size: 2em;
+        }
+        .metadata {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        th {
+            background: #4a5568;
+            color: white;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+        }
+        td {
+            padding: 12px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        tr:hover {
+            background: #f7fafc;
+        }
+        .severity-HIGH {
+            background: #fed7d7;
+            color: #c53030;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+        .severity-MEDIUM {
+            background: #feebc8;
+            color: #c05621;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+        .severity-LOW {
+            background: #bee3f8;
+            color: #2c5282;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+        .section {
+            margin-bottom: 30px;
+        }
+        h2 {
+            color: #2d3748;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 10px;
+            margin-top: 30px;
+        }
+        .footer {
+            text-align: center;
+            color: #718096;
+            margin-top: 40px;
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Customer Journey Analytics</h1>
+        <h2 style="margin: 0; font-weight: 300;">Solution Design Reference</h2>
+        <p style="margin: 10px 0 0 0; opacity: 0.9;">Generated with v3.0.0</p>
+    </div>
+
+    <div class="metadata">
+        <h2>Metadata</h2>
+        <table>
+            <tr><td><strong>Data View ID:</strong></td><td>dv_sample_12345</td></tr>
+            <tr><td><strong>Data View Name:</strong></td><td>Sample Production Analytics</td></tr>
+            <tr><td><strong>Generated:</strong></td><td>2026-01-08 12:39:41 </td></tr>
+            <tr><td><strong>Total Metrics:</strong></td><td>25</td></tr>
+            <tr><td><strong>Total Dimensions:</strong></td><td>15</td></tr>
+            <tr><td><strong>Tool Version:</strong></td><td>3.0.0</td></tr>
+        </table>
+    </div>
+
+    <div class="section">
+        <h2>Data Quality Issues</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Severity</th>
+                    <th>Category</th>
+                    <th>Type</th>
+                    <th>Item Name</th>
+                    <th>Issue</th>
+                    <th>Details</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><span class="severity-HIGH">HIGH</span></td>
+                    <td>Duplicates</td>
+                    <td>Metrics</td>
+                    <td>Page Views</td>
+                    <td>Duplicate name found 2 times</td>
+                    <td>This metrics name appears 2 times in the data view</td>
+                </tr>
+                <tr>
+                    <td><span class="severity-MEDIUM">MEDIUM</span></td>
+                    <td>Null Values</td>
+                    <td>Dimensions</td>
+                    <td>Product Category</td>
+                    <td>Null values in "description" field</td>
+                    <td>Missing description for better documentation</td>
+                </tr>
+                <tr>
+                    <td><span class="severity-LOW">LOW</span></td>
+                    <td>Missing Fields</td>
+                    <td>Metrics</td>
+                    <td>Conversion Rate</td>
+                    <td>Missing description</td>
+                    <td>Description field is empty</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="section">
+        <h2>Metrics</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Name</th>
+                    <th>Type</th>
+                    <th>Title</th>
+                    <th>Description</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>metrics/pageviews</td>
+                    <td>Page Views</td>
+                    <td>int</td>
+                    <td>Page Views</td>
+                    <td>Total number of page views</td>
+                </tr>
+                <tr>
+                    <td>metrics/visits</td>
+                    <td>Visits</td>
+                    <td>int</td>
+                    <td>Visits</td>
+                    <td>Total number of visits</td>
+                </tr>
+                <tr>
+                    <td>metrics/revenue</td>
+                    <td>Revenue</td>
+                    <td>currency</td>
+                    <td>Revenue</td>
+                    <td>Total revenue in USD</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="section">
+        <h2>Dimensions</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Name</th>
+                    <th>Type</th>
+                    <th>Title</th>
+                    <th>Description</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>variables/evar1</td>
+                    <td>Campaign</td>
+                    <td>string</td>
+                    <td>Marketing Campaign</td>
+                    <td>Marketing campaign tracking code</td>
+                </tr>
+                <tr>
+                    <td>variables/evar2</td>
+                    <td>Product Category</td>
+                    <td>string</td>
+                    <td>Product Category</td>
+                    <td>Product category classification</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="footer">
+        <p>Generated by CJA Auto SDR Generator v3.0.0</p>
+        <p>Features: Validation Caching • Parallel Processing • Optimized Validation</p>
+    </div>
+</body>
+</html>

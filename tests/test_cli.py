@@ -90,3 +90,19 @@ class TestCLIArguments:
             assert args.config_file == 'myconfig.json'
             assert args.continue_on_error is False
             assert args.log_level == 'INFO'
+            assert args.production is False
+
+    def test_production_flag(self):
+        """Test parsing with --production flag"""
+        test_args = ['cja_sdr_generator.py', '--production', 'dv_12345']
+        with patch.object(sys, 'argv', test_args):
+            args = parse_arguments()
+            assert args.production is True
+
+    def test_production_with_log_level(self):
+        """Test that production and log-level can be specified together"""
+        test_args = ['cja_sdr_generator.py', '--production', '--log-level', 'DEBUG', 'dv_12345']
+        with patch.object(sys, 'argv', test_args):
+            args = parse_arguments()
+            assert args.production is True
+            assert args.log_level == 'DEBUG'  # Both parsed, main() decides priority

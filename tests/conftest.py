@@ -194,3 +194,33 @@ def sample_metadata_dict():
         'Metrics Count': '2',
         'Dimensions Count': '3'
     }
+
+
+@pytest.fixture
+def large_metrics_df():
+    """Generate large metrics DataFrame for performance testing"""
+    data = []
+    for i in range(1000):
+        data.append({
+            "id": f"metric_{i}",
+            "name": f"Test Metric {i}",
+            "type": "calculated",
+            "title": f"Metric {i}",
+            "description": f"Description {i}" if i % 2 == 0 else ""  # Some missing
+        })
+    return pd.DataFrame(data)
+
+
+@pytest.fixture
+def large_dimensions_df():
+    """Generate large dimensions DataFrame for performance testing"""
+    data = []
+    for i in range(1000):
+        data.append({
+            "id": f"dimension_{i}",
+            "name": f"Test Dimension {i}",
+            "type": "string",
+            "title": f"Dimension {i}",
+            "description": f"Description {i}" if i % 3 == 0 else ""  # Some missing
+        })
+    return pd.DataFrame(data)

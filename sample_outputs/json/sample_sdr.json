@@ -1,0 +1,83 @@
+{
+  "metadata": {
+    "Generation Timestamp": "2026-01-08 12:39:41 ",
+    "Data View ID": "dv_sample_12345",
+    "Data View Name": "Sample Production Analytics",
+    "Total Metrics": 25,
+    "Total Dimensions": 15,
+    "Tool Version": "3.0.0"
+  },
+  "data_quality": [
+    {
+      "Severity": "HIGH",
+      "Category": "Duplicates",
+      "Type": "Metrics",
+      "Item Name": "Page Views",
+      "Issue": "Duplicate name found 2 times",
+      "Details": "This metrics name appears 2 times in the data view"
+    },
+    {
+      "Severity": "MEDIUM",
+      "Category": "Null Values",
+      "Type": "Dimensions",
+      "Item Name": "Product Category",
+      "Issue": "Null values in \"description\" field",
+      "Details": "Missing description for better documentation"
+    },
+    {
+      "Severity": "LOW",
+      "Category": "Missing Fields",
+      "Type": "Metrics",
+      "Item Name": "Conversion Rate",
+      "Issue": "Missing description",
+      "Details": "Description field is empty"
+    }
+  ],
+  "metrics": [
+    {
+      "id": "metrics/pageviews",
+      "name": "Page Views",
+      "type": "int",
+      "title": "Page Views",
+      "description": "Total number of page views",
+      "dataType": "integer",
+      "precision": 0
+    },
+    {
+      "id": "metrics/visits",
+      "name": "Visits",
+      "type": "int",
+      "title": "Visits",
+      "description": "Total number of visits",
+      "dataType": "integer",
+      "precision": 0
+    },
+    {
+      "id": "metrics/revenue",
+      "name": "Revenue",
+      "type": "currency",
+      "title": "Revenue",
+      "description": "Total revenue in USD",
+      "dataType": "decimal",
+      "precision": 2
+    }
+  ],
+  "dimensions": [
+    {
+      "id": "variables/evar1",
+      "name": "Campaign",
+      "type": "string",
+      "title": "Marketing Campaign",
+      "description": "Marketing campaign tracking code",
+      "dataType": "string"
+    },
+    {
+      "id": "variables/evar2",
+      "name": "Product Category",
+      "type": "string",
+      "title": "Product Category",
+      "description": "Product category classification",
+      "dataType": "string"
+    }
+  ]
+}
