@@ -3,7 +3,7 @@
 <img width="1024" height="572" alt="image" src="https://github.com/user-attachments/assets/54a43474-3fc6-4379-909c-452c19cdeac2" />
 
 
-**Version 3.0.3** - A production-ready Python tool for auditing your Customer Journey Analytics (CJA) implementation by generating comprehensive Solution Design Reference (SDR) documents with enterprise-grade data quality validation, high-performance batch processing, automatic retry with exponential backoff, and modern dependency management.
+**Version 3.0.4** - A production-ready Python tool for auditing your Customer Journey Analytics (CJA) implementation by generating comprehensive Solution Design Reference (SDR) documents with enterprise-grade data quality validation, high-performance batch processing, automatic retry with exponential backoff, and modern dependency management.
 
 ## What Makes Version 3.0 Different
 
@@ -654,6 +654,9 @@ uv run python cja_sdr_generator.py --batch dv_ID1 dv_ID2 dv_ID3
 - `--production` - Enable production mode (minimal logging for 5-10% performance gain)
 - `--dry-run` - Validate configuration and connectivity without generating reports
 - `--quiet, -q` - Quiet mode: suppress all output except errors and final summary
+- `--list-dataviews` - List all accessible data views and exit (no data view ID required)
+- `--skip-validation` - Skip data quality validation for faster processing (20-30% faster)
+- `--sample-config` - Generate a sample configuration file and exit
 - `-h, --help` - Show help message and exit
 
 **Environment Variables:**
@@ -694,9 +697,22 @@ uv run python cja_sdr_generator.py dv_12345 --dry-run
 # Quiet mode (suppress output except errors and final summary)
 uv run python cja_sdr_generator.py dv_12345 --quiet
 
+# Skip data quality validation (20-30% faster)
+uv run python cja_sdr_generator.py dv_12345 --skip-validation
+
 # Using environment variable for log level
 export CJA_LOG_LEVEL=WARNING
 uv run python cja_sdr_generator.py dv_12345
+```
+
+#### **Discovery and Setup Commands**
+
+```bash
+# List all accessible data views (helps discover correct IDs)
+uv run python cja_sdr_generator.py --list-dataviews
+
+# Generate a sample configuration file
+uv run python cja_sdr_generator.py --sample-config
 ```
 
 #### **Multiple Data Views (Automatic Batch Mode)**

@@ -19,7 +19,7 @@ from dataclasses import dataclass
 
 # ==================== VERSION ====================
 
-__version__ = "3.0.3"
+__version__ = "3.0.4"
 
 # ==================== CONSOLE COLORS ====================
 
@@ -2208,7 +2208,7 @@ def process_single_dataview(data_view_id: str, config_file: str = "myconfig.json
                            output_dir: str = ".", log_level: str = "INFO",
                            output_format: str = "excel", enable_cache: bool = False,
                            cache_size: int = 1000, cache_ttl: int = 3600,
-                           quiet: bool = False) -> ProcessingResult:
+                           quiet: bool = False, skip_validation: bool = False) -> ProcessingResult:
     """
     Process a single data view and generate SDR in specified format(s)
 
@@ -2218,6 +2218,7 @@ def process_single_dataview(data_view_id: str, config_file: str = "myconfig.json
         output_dir: Directory to save output files
         log_level: Logging level (DEBUG, INFO, WARNING, ERROR)
         output_format: Output format (excel, csv, json, html, or all)
+        skip_validation: Skip data quality validation for faster processing
 
     Returns:
         ProcessingResult with processing details
@@ -2275,62 +2276,68 @@ def process_single_dataview(data_view_id: str, config_file: str = "myconfig.json
 
         logger.info("Data fetch operations completed successfully")
 
-        # Data quality validation
-        logger.info("=" * 60)
-        logger.info("Starting data quality validation (optimized)")
-        logger.info("=" * 60)
+        # Data quality validation (skip if --skip-validation flag is set)
+        if skip_validation:
+            logger.info("=" * 60)
+            logger.info("Skipping data quality validation (--skip-validation)")
+            logger.info("=" * 60)
+            data_quality_df = pd.DataFrame(columns=['Severity', 'Category', 'Type', 'Item Name', 'Issue', 'Details'])
+        else:
+            logger.info("=" * 60)
+            logger.info("Starting data quality validation (optimized)")
+            logger.info("=" * 60)
 
-        # Start performance tracking for data quality validation
-        perf_tracker.start("Data Quality Validation")
+            # Start performance tracking for data quality validation
+            perf_tracker.start("Data Quality Validation")
 
-        # Create validation cache if enabled
-        validation_cache = None
-        if enable_cache:
-            validation_cache = ValidationCache(
-                max_size=cache_size,
-                ttl_seconds=cache_ttl,
-                logger=logger
-            )
-            logger.info(f"Validation cache enabled (max_size={cache_size}, ttl={cache_ttl}s)")
+            # Create validation cache if enabled
+            validation_cache = None
+            if enable_cache:
+                validation_cache = ValidationCache(
+                    max_size=cache_size,
+                    ttl_seconds=cache_ttl,
+                    logger=logger
+                )
+                logger.info(f"Validation cache enabled (max_size={cache_size}, ttl={cache_ttl}s)")
 
-        dq_checker = DataQualityChecker(logger, validation_cache=validation_cache)
+            dq_checker = DataQualityChecker(logger, validation_cache=validation_cache)
 
-        # Required fields for validation
-        REQUIRED_METRIC_FIELDS = ['id', 'name', 'type']
-        REQUIRED_DIMENSION_FIELDS = ['id', 'name', 'type']
-        CRITICAL_FIELDS = ['id', 'name', 'title', 'description']
+            # Required fields for validation
+            REQUIRED_METRIC_FIELDS = ['id', 'name', 'type']
+            REQUIRED_DIMENSION_FIELDS = ['id', 'name', 'type']
+            CRITICAL_FIELDS = ['id', 'name', 'title', 'description']
 
-        # Run parallel data quality checks (10-15% faster than sequential)
-        logger.info("Running parallel data quality checks...")
+            # Run parallel data quality checks (10-15% faster than sequential)
+            logger.info("Running parallel data quality checks...")
 
-        try:
-            # Parallel validation for metrics and dimensions (10-15% faster)
-            dq_checker.check_all_parallel(
-                metrics_df=metrics,
-                dimensions_df=dimensions,
-                metrics_required_fields=REQUIRED_METRIC_FIELDS,
-                dimensions_required_fields=REQUIRED_DIMENSION_FIELDS,
-                critical_fields=CRITICAL_FIELDS,
-                max_workers=2
-            )
+            try:
+                # Parallel validation for metrics and dimensions (10-15% faster)
+                dq_checker.check_all_parallel(
+                    metrics_df=metrics,
+                    dimensions_df=dimensions,
+                    metrics_required_fields=REQUIRED_METRIC_FIELDS,
+                    dimensions_required_fields=REQUIRED_DIMENSION_FIELDS,
+                    critical_fields=CRITICAL_FIELDS,
+                    max_workers=2
+                )
 
-            # Log aggregated summary instead of individual issue count
-            dq_checker.log_summary()
+                # Log aggregated summary instead of individual issue count
+                dq_checker.log_summary()
 
-            # Log cache statistics if cache was used
-            if validation_cache is not None:
-                perf_tracker.add_cache_statistics(validation_cache)
+                # Log cache statistics if cache was used
+                if validation_cache is not None:
+                    perf_tracker.add_cache_statistics(validation_cache)
 
-            # End performance tracking
-            perf_tracker.end("Data Quality Validation")
+                # End performance tracking
+                perf_tracker.end("Data Quality Validation")
 
-        except Exception as e:
-            logger.error(f"Error during data quality validation: {str(e)}")
-            logger.info("Continuing with SDR generation despite validation errors")
-            perf_tracker.end("Data Quality Validation")
+            except Exception as e:
+                logger.error(f"Error during data quality validation: {str(e)}")
+                logger.info("Continuing with SDR generation despite validation errors")
+                perf_tracker.end("Data Quality Validation")
 
-        # Get data quality issues dataframe
-        data_quality_df = dq_checker.get_issues_dataframe()
+            # Get data quality issues dataframe
+            data_quality_df = dq_checker.get_issues_dataframe()
 
         # Data processing
         logger.info("=" * 60)
@@ -2588,14 +2595,14 @@ def process_single_dataview_worker(args: tuple) -> ProcessingResult:
 
     Args:
         args: Tuple of (data_view_id, config_file, output_dir, log_level, output_format,
-                       enable_cache, cache_size, cache_ttl, quiet)
+                       enable_cache, cache_size, cache_ttl, quiet, skip_validation)
 
     Returns:
         ProcessingResult
     """
-    data_view_id, config_file, output_dir, log_level, output_format, enable_cache, cache_size, cache_ttl, quiet = args
+    data_view_id, config_file, output_dir, log_level, output_format, enable_cache, cache_size, cache_ttl, quiet, skip_validation = args
     return process_single_dataview(data_view_id, config_file, output_dir, log_level, output_format,
-                                   enable_cache, cache_size, cache_ttl, quiet)
+                                   enable_cache, cache_size, cache_ttl, quiet, skip_validation)
 
 # ==================== BATCH PROCESSOR CLASS ====================
 
@@ -2605,7 +2612,8 @@ class BatchProcessor:
     def __init__(self, config_file: str = "myconfig.json", output_dir: str = ".",
                  workers: int = 4, continue_on_error: bool = False, log_level: str = "INFO",
                  output_format: str = "excel", enable_cache: bool = False,
-                 cache_size: int = 1000, cache_ttl: int = 3600, quiet: bool = False):
+                 cache_size: int = 1000, cache_ttl: int = 3600, quiet: bool = False,
+                 skip_validation: bool = False):
         self.config_file = config_file
         self.output_dir = output_dir
         self.workers = workers
@@ -2616,6 +2624,7 @@ class BatchProcessor:
         self.cache_size = cache_size
         self.cache_ttl = cache_ttl
         self.quiet = quiet
+        self.skip_validation = skip_validation
         self.logger = setup_logging(batch_mode=True, log_level=log_level)
 
         # Create output directory if it doesn't exist
@@ -2653,7 +2662,7 @@ class BatchProcessor:
         # Prepare arguments for each worker
         worker_args = [
             (dv_id, self.config_file, self.output_dir, self.log_level, self.output_format,
-             self.enable_cache, self.cache_size, self.cache_ttl, self.quiet)
+             self.enable_cache, self.cache_size, self.cache_ttl, self.quiet, self.skip_validation)
             for dv_id in data_view_ids
         ]
 
@@ -2960,8 +2969,17 @@ Examples:
   # Quiet mode (errors only)
   python cja_sdr_generator.py dv_12345 --quiet
 
+  # List all accessible data views
+  python cja_sdr_generator.py --list-dataviews
+
+  # Skip data quality validation (faster processing)
+  python cja_sdr_generator.py dv_12345 --skip-validation
+
+  # Generate sample configuration file
+  python cja_sdr_generator.py --sample-config
+
 Note:
-  At least one data view ID must be provided.
+  At least one data view ID must be provided (except for --list-dataviews, --sample-config).
   Use 'python cja_sdr_generator.py --help' to see all options.
         '''
     )
@@ -3067,7 +3085,162 @@ Note:
         help='Quiet mode - suppress all output except errors and final summary'
     )
 
+    parser.add_argument(
+        '--list-dataviews',
+        action='store_true',
+        help='List all accessible data views and exit (no data view ID required)'
+    )
+
+    parser.add_argument(
+        '--skip-validation',
+        action='store_true',
+        help='Skip data quality validation for faster processing (20-30%% faster)'
+    )
+
+    parser.add_argument(
+        '--sample-config',
+        action='store_true',
+        help='Generate a sample configuration file and exit'
+    )
+
     return parser.parse_args()
+
+# ==================== LIST DATA VIEWS ====================
+
+def list_dataviews(config_file: str = "myconfig.json") -> bool:
+    """
+    List all accessible data views and exit
+
+    Args:
+        config_file: Path to CJA configuration file
+
+    Returns:
+        True if successful, False otherwise
+    """
+    print()
+    print("=" * 60)
+    print("LISTING ACCESSIBLE DATA VIEWS")
+    print("=" * 60)
+    print()
+
+    # Validate config file first
+    print(f"Using configuration: {config_file}")
+    print()
+
+    try:
+        cjapy.importConfigFile(config_file)
+        cja = cjapy.CJA()
+
+        # Get all data views
+        print("Connecting to CJA API...")
+        available_dvs = cja.getDataViews()
+
+        if available_dvs is None or (hasattr(available_dvs, '__len__') and len(available_dvs) == 0):
+            print()
+            print(ConsoleColors.warning("No data views found or no access to any data views."))
+            print()
+            return True
+
+        # Convert to list if DataFrame
+        if isinstance(available_dvs, pd.DataFrame):
+            available_dvs = available_dvs.to_dict('records')
+
+        print()
+        print(f"Found {len(available_dvs)} accessible data view(s):")
+        print()
+        print(f"{'ID':<45} {'Name':<40} {'Owner'}")
+        print("-" * 100)
+
+        for dv in available_dvs:
+            if isinstance(dv, dict):
+                dv_id = dv.get('id', 'N/A')
+                dv_name = dv.get('name', 'N/A')[:38]
+                dv_owner = dv.get('owner', {})
+                owner_name = dv_owner.get('name', 'N/A') if isinstance(dv_owner, dict) else str(dv_owner)[:20]
+                print(f"{dv_id:<45} {dv_name:<40} {owner_name}")
+
+        print()
+        print("=" * 60)
+        print("Usage: python cja_sdr_generator.py <DATA_VIEW_ID>")
+        print("=" * 60)
+
+        return True
+
+    except FileNotFoundError:
+        print(ConsoleColors.error(f"ERROR: Configuration file '{config_file}' not found"))
+        print()
+        print("Generate a sample configuration file with:")
+        print("  python cja_sdr_generator.py --sample-config")
+        return False
+
+    except Exception as e:
+        print(ConsoleColors.error(f"ERROR: Failed to connect to CJA API: {str(e)}"))
+        return False
+
+
+# ==================== SAMPLE CONFIG GENERATOR ====================
+
+def generate_sample_config(output_path: str = "myconfig.sample.json") -> bool:
+    """
+    Generate a sample configuration file
+
+    Args:
+        output_path: Path to write the sample config file
+
+    Returns:
+        True if successful, False otherwise
+    """
+    sample_config = {
+        "_comment": "CJA SDR Generator Configuration - Choose ONE authentication method below",
+        "_oauth_s2s": "OAuth Server-to-Server (Recommended) - Remove JWT fields if using this method",
+        "org_id": "YOUR_ORG_ID@AdobeOrg",
+        "client_id": "your_client_id_here",
+        "secret": "your_client_secret_here",
+        "scopes": "openid, AdobeID, additional_info.projectedProductContext",
+        "_jwt_legacy": "JWT Authentication (Legacy) - Remove OAuth scopes field if using this method",
+        "tech_id": "your_tech_account_id@techacct.adobe.com",
+        "private_key": "path/to/your/private.key"
+    }
+
+    print()
+    print("=" * 60)
+    print("GENERATING SAMPLE CONFIGURATION FILE")
+    print("=" * 60)
+    print()
+
+    try:
+        with open(output_path, 'w') as f:
+            json.dump(sample_config, f, indent=2)
+
+        print(f"✓ Sample configuration file created: {output_path}")
+        print()
+        print("Next steps:")
+        print("  1. Copy the sample file to 'myconfig.json':")
+        print(f"     cp {output_path} myconfig.json")
+        print()
+        print("  2. Edit myconfig.json with your Adobe Developer Console credentials")
+        print()
+        print("  3. Choose ONE authentication method:")
+        print()
+        print("     OAuth Server-to-Server (Recommended):")
+        print("       - Keep: org_id, client_id, secret, scopes")
+        print("       - Remove: tech_id, private_key, _comment fields")
+        print()
+        print("     JWT (Legacy):")
+        print("       - Keep: org_id, client_id, secret, tech_id, private_key")
+        print("       - Remove: scopes, _comment fields")
+        print()
+        print("  4. Test your configuration:")
+        print("     python cja_sdr_generator.py --list-dataviews")
+        print()
+        print("=" * 60)
+
+        return True
+
+    except Exception as e:
+        print(ConsoleColors.error(f"ERROR: Failed to create sample config: {str(e)}"))
+        return False
+
 
 # ==================== MAIN FUNCTION ====================
 
@@ -3082,6 +3255,16 @@ def main():
         # argparse calls sys.exit() on error or --help
         # Re-raise to maintain expected behavior
         raise
+
+    # Handle --sample-config mode (no data view required)
+    if args.sample_config:
+        success = generate_sample_config()
+        sys.exit(0 if success else 1)
+
+    # Handle --list-dataviews mode (no data view required)
+    if args.list_dataviews:
+        success = list_dataviews(args.config_file)
+        sys.exit(0 if success else 1)
 
     # Get data views from arguments
     data_views = args.data_views
@@ -3132,7 +3315,8 @@ def main():
             enable_cache=args.enable_cache,
             cache_size=args.cache_size,
             cache_ttl=args.cache_ttl,
-            quiet=args.quiet
+            quiet=args.quiet,
+            skip_validation=args.skip_validation
         )
 
         results = processor.process_batch(data_views)
@@ -3161,7 +3345,8 @@ def main():
             enable_cache=args.enable_cache,
             cache_size=args.cache_size,
             cache_ttl=args.cache_ttl,
-            quiet=args.quiet
+            quiet=args.quiet,
+            skip_validation=args.skip_validation
         )
 
         # Print final status with color and total runtime

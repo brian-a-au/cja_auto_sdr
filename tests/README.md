@@ -8,7 +8,7 @@ This directory contains automated tests for the CJA SDR Generator.
 tests/
 ├── __init__.py                      # Test package initialization
 ├── conftest.py                      # Pytest fixtures and configuration
-├── test_cli.py                      # Command-line interface tests (19 tests)
+├── test_cli.py                      # Command-line interface tests (29 tests)
 ├── test_data_quality.py             # Data quality validation tests (10 tests)
 ├── test_dry_run.py                  # Dry-run mode tests (12 tests)
 ├── test_early_exit.py               # Early exit optimization tests (11 tests)
@@ -22,7 +22,7 @@ tests/
 └── README.md                        # This file
 ```
 
-**Total: 161 comprehensive tests**
+**Total: 171 comprehensive tests**
 
 ## Running Tests
 
@@ -101,10 +101,11 @@ uv run pytest --cov=cja_sdr_generator --cov-report=html --cov-report=term
 
 ## Test Categories
 
-### CLI Tests (`test_cli.py` - 19 tests)
+### CLI Tests (`test_cli.py` - 29 tests)
 - **Argument parsing**: Tests command-line argument parsing
 - **Data view validation**: Tests data view ID format validation
-- **Flag handling**: Tests --version, --quiet, --dry-run flags
+- **Flag handling**: Tests --version, --quiet, --dry-run, --list-dataviews, --skip-validation, --sample-config flags
+- **Sample config generation**: Tests generate_sample_config function
 - **Error handling**: Tests error cases and edge conditions
 
 ### Data Quality Tests (`test_data_quality.py` - 10 tests)

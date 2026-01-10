@@ -5,6 +5,31 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.4] - 2026-01-10
+
+### Added
+
+#### CLI Usability Enhancements
+- **`--list-dataviews`**: New flag to list all accessible data views without processing
+  - Displays data view ID, name, and owner in a formatted table
+  - Helps users discover available data view IDs before running reports
+  - No data view ID argument required when using this flag
+- **`--skip-validation`**: New flag to skip data quality validation for faster processing
+  - Provides 20-30% performance improvement when validation is not needed
+  - Useful for quick regeneration of reports when data quality is already known
+  - Works with both single and batch processing modes
+- **`--sample-config`**: New flag to generate a sample configuration file
+  - Creates `myconfig.sample.json` with template for both OAuth S2S and JWT authentication
+  - Includes clear instructions for configuring credentials
+  - No data view ID argument required when using this flag
+
+#### Test Coverage Expansion
+- Added 10 new CLI tests for new flags (--list-dataviews, --skip-validation, --sample-config)
+- Added 3 new tests for sample config generation functionality
+- Total test count increased from 161 to 171
+
+---
+
 ## [3.0.3] - 2026-01-10
 
 ### Added

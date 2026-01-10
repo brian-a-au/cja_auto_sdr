@@ -1,13 +1,16 @@
 """Tests for command-line interface"""
 import pytest
 import sys
+import os
+import json
+import tempfile
 from unittest.mock import patch
 import argparse
 
 
 # Import the function we're testing
 sys.path.insert(0, '/Users/bau/DEV/cja_auto_sdr_2026')
-from cja_sdr_generator import parse_arguments
+from cja_sdr_generator import parse_arguments, generate_sample_config
 
 
 class TestCLIArguments:
@@ -159,3 +162,90 @@ class TestCLIArguments:
             with pytest.raises(SystemExit) as exc_info:
                 parse_arguments()
             assert exc_info.value.code == 0  # Clean exit
+
+    def test_list_dataviews_flag(self):
+        """Test parsing with --list-dataviews flag"""
+        test_args = ['cja_sdr_generator.py', '--list-dataviews']
+        with patch.object(sys, 'argv', test_args):
+            args = parse_arguments()
+            assert args.list_dataviews is True
+
+    def test_list_dataviews_default_false(self):
+        """Test that list-dataviews is False by default"""
+        test_args = ['cja_sdr_generator.py', 'dv_12345']
+        with patch.object(sys, 'argv', test_args):
+            args = parse_arguments()
+            assert args.list_dataviews is False
+
+    def test_skip_validation_flag(self):
+        """Test parsing with --skip-validation flag"""
+        test_args = ['cja_sdr_generator.py', '--skip-validation', 'dv_12345']
+        with patch.object(sys, 'argv', test_args):
+            args = parse_arguments()
+            assert args.skip_validation is True
+
+    def test_skip_validation_default_false(self):
+        """Test that skip-validation is False by default"""
+        test_args = ['cja_sdr_generator.py', 'dv_12345']
+        with patch.object(sys, 'argv', test_args):
+            args = parse_arguments()
+            assert args.skip_validation is False
+
+    def test_skip_validation_with_batch(self):
+        """Test skip-validation with batch mode"""
+        test_args = ['cja_sdr_generator.py', '--batch', '--skip-validation', 'dv_12345', 'dv_67890']
+        with patch.object(sys, 'argv', test_args):
+            args = parse_arguments()
+            assert args.skip_validation is True
+            assert args.batch is True
+            assert args.data_views == ['dv_12345', 'dv_67890']
+
+    def test_sample_config_flag(self):
+        """Test parsing with --sample-config flag"""
+        test_args = ['cja_sdr_generator.py', '--sample-config']
+        with patch.object(sys, 'argv', test_args):
+            args = parse_arguments()
+            assert args.sample_config is True
+
+    def test_sample_config_default_false(self):
+        """Test that sample-config is False by default"""
+        test_args = ['cja_sdr_generator.py', 'dv_12345']
+        with patch.object(sys, 'argv', test_args):
+            args = parse_arguments()
+            assert args.sample_config is False
+
+
+class TestSampleConfig:
+    """Test sample configuration file generation"""
+
+    def test_generate_sample_config_creates_file(self):
+        """Test that generate_sample_config creates a file"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = os.path.join(tmpdir, 'test_config.json')
+            result = generate_sample_config(output_path)
+            assert result is True
+            assert os.path.exists(output_path)
+
+    def test_generate_sample_config_valid_json(self):
+        """Test that generated config is valid JSON"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = os.path.join(tmpdir, 'test_config.json')
+            generate_sample_config(output_path)
+            with open(output_path) as f:
+                config = json.load(f)
+            assert 'org_id' in config
+            assert 'client_id' in config
+            assert 'secret' in config
+
+    def test_generate_sample_config_has_both_auth_methods(self):
+        """Test that generated config has both OAuth S2S and JWT fields"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = os.path.join(tmpdir, 'test_config.json')
+            generate_sample_config(output_path)
+            with open(output_path) as f:
+                config = json.load(f)
+            # OAuth S2S fields
+            assert 'scopes' in config
+            # JWT fields
+            assert 'tech_id' in config
+            assert 'private_key' in config
