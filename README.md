@@ -329,9 +329,22 @@ This enterprise-grade script audits your Customer Journey Analytics implementati
 - Error diagnosis information
 - Execution summaries
 
-### 1.3 What's New in Version 3.0.3
+### 1.3 What's New in Version 3.0.5
 
-**Latest Updates (v3.0.2 - v3.0.3):**
+**Latest Updates (v3.0.4 - v3.0.5):**
+
+📊 **UX Improvements** (v3.0.5)
+- File size displayed in output success message (human-readable: B, KB, MB, GB)
+- `--validate-only` alias for `--dry-run` with clearer semantics
+- `--max-issues N` flag to limit data quality issues to top N by severity
+- Issues sorted by severity (CRITICAL first) before limiting
+
+🔧 **CLI Usability Enhancements** (v3.0.4)
+- `--list-dataviews` flag to list all accessible data views without processing
+- `--skip-validation` flag for 20-30% faster processing when validation not needed
+- `--sample-config` flag to generate a sample configuration file template
+
+**Previous Updates (v3.0.2 - v3.0.3):**
 
 🔄 **Retry with Exponential Backoff** (v3.0.3)
 - Automatic retry on transient network errors (ConnectionError, TimeoutError)
@@ -434,7 +447,7 @@ All dependencies are managed through `pyproject.toml`:
 ```toml
 [project]
 name = "cja-auto-sdr-2026"
-version = "3.0.3"
+version = "3.0.5"
 description = "Customer Journey Analytics SDR Generator with Data Quality Validation"
 readme = "README.md"
 requires-python = ">=3.14"
@@ -1681,12 +1694,14 @@ uv run pytest tests/test_utils.py
 
 ### Test Coverage
 
-The test suite includes **161 comprehensive tests**:
+The test suite includes **179 comprehensive tests**:
 
-- **CLI Tests** (`test_cli.py`) - 19 tests
+- **CLI Tests** (`test_cli.py`) - 37 tests
   - Command-line argument parsing
   - Data view ID validation
-  - Dry-run, quiet, and version flag handling
+  - Flag handling: --version, --quiet, --dry-run, --validate-only, --list-dataviews, --skip-validation, --sample-config, --max-issues
+  - Sample config generation
+  - UX improvements (file size formatting)
   - Error handling for invalid inputs
 
 - **Data Quality Tests** (`test_data_quality.py`) - 10 tests
@@ -1746,15 +1761,12 @@ The test suite includes **161 comprehensive tests**:
   - Retryable vs non-retryable exceptions
   - Function metadata preservation
 
-- **Output Format Tests** (`test_output_formats.py`) - 20 tests
+- **Output Format Tests** (`test_output_formats.py`) - 22 tests
   - Excel, CSV, JSON, HTML output validation
   - Format-specific features
+  - Cross-format consistency
   - Edge case handling
   - Unicode and special characters
-
-- **Additional Output Tests** - 2 tests
-  - Cross-format consistency
-  - Large dataset handling
 
 ### Test Structure
 
@@ -1762,16 +1774,17 @@ The test suite includes **161 comprehensive tests**:
 tests/
 ├── __init__.py                      # Test package initialization
 ├── conftest.py                      # Pytest fixtures and shared configuration
-├── test_cli.py                      # Command-line interface tests (15 tests)
+├── test_cli.py                      # Command-line interface tests (37 tests)
 ├── test_data_quality.py             # Data quality validation tests (10 tests)
 ├── test_dry_run.py                  # Dry-run mode tests (12 tests)
-├── test_optimized_validation.py     # Optimized validation tests (16 tests)
-├── test_utils.py                    # Utility function tests (14 tests)
 ├── test_early_exit.py               # Early exit optimization tests (11 tests)
 ├── test_logging_optimization.py     # Logging optimization tests (15 tests)
+├── test_optimized_validation.py     # Optimized validation tests (16 tests)
+├── test_output_formats.py           # Output format tests (22 tests)
 ├── test_parallel_validation.py      # Parallel validation tests (8 tests)
+├── test_retry.py                    # Retry with exponential backoff tests (21 tests)
+├── test_utils.py                    # Utility function tests (14 tests)
 ├── test_validation_cache.py         # Validation caching tests (15 tests)
-├── test_output_formats.py           # Output format tests (20 tests)
 └── README.md                        # Detailed testing documentation
 ```
 
