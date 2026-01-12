@@ -16,8 +16,9 @@ import time
 import threading
 from concurrent.futures import ThreadPoolExecutor
 import sys
+import os
 
-sys.path.insert(0, '/Users/bau/DEV/cja_auto_sdr_2026')
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from cja_sdr_generator import ValidationCache, DataQualityChecker
 
 

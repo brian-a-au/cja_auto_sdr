@@ -3,10 +3,11 @@ import pytest
 import sys
 import pandas as pd
 import logging
+import os
 
 
 # Import the class we're testing
-sys.path.insert(0, '/Users/bau/DEV/cja_auto_sdr_2026')
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from cja_sdr_generator import DataQualityChecker
 
 

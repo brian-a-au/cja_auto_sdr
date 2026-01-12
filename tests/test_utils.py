@@ -5,10 +5,11 @@ import json
 from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 import logging
+import os
 
 
 # Import the functions and classes we're testing
-sys.path.insert(0, '/Users/bau/DEV/cja_auto_sdr_2026')
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from cja_sdr_generator import (
     setup_logging,
     validate_config_file,

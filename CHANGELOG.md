@@ -513,8 +513,8 @@ Batch Processing (10 data views):
 
 ## Links
 
-- **Repository**: https://github.com/brian-a-au/cja_auto_sdr_2026
-- **Issues**: https://github.com/brian-a-au/cja_auto_sdr_2026/issues
+- **Repository**: https://github.com/brian-a-au/cja_auto_sdr
+- **Issues**: https://github.com/brian-a-au/cja_auto_sdr/issues
 - **Original Notebook**: https://github.com/pitchmuc/CJA_Summit_2025
 
 ---

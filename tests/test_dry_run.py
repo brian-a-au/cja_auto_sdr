@@ -8,7 +8,7 @@ import json
 import os
 
 # Import the functions we're testing
-sys.path.insert(0, '/Users/bau/DEV/cja_auto_sdr_2026')
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from cja_sdr_generator import run_dry_run, validate_config_file
 
 

@@ -14,7 +14,7 @@ import os
 from unittest.mock import patch
 import pandas as pd
 
-sys.path.insert(0, '/Users/bau/DEV/cja_auto_sdr_2026')
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from cja_sdr_generator import (
     setup_logging, DataQualityChecker, PerformanceTracker, parse_arguments
 )

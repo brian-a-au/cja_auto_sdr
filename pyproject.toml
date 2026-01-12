@@ -1,5 +1,5 @@
 [project]
-name = "cja-auto-sdr-2026"
+name = "cja-auto-sdr"
 version = "3.0.5"
 description = "Customer Journey Analytics SDR Generator with Data Quality Validation"
 readme = "README.md"
