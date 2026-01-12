@@ -19,15 +19,27 @@ A **Solution Design Reference (SDR)** is the essential documentation that bridge
 3. **Validates** data quality with 8+ automated checks (duplicates, missing fields, null values)
 4. **Generates** formatted documentation with color-coded quality indicators
 
-### Key Features
+### Key Features (v3.0)
 
-| Feature | Benefit |
-|---------|---------|
-| **Batch Processing** | Process multiple Data Views in parallel (3-4x faster) |
-| **Data Quality Validation** | Automatically detect duplicates, missing fields, and configuration issues |
-| **Multiple Output Formats** | Excel, CSV, JSON, or HTML—choose what fits your workflow |
-| **Automatic Retry** | Handles network issues gracefully with exponential backoff |
-| **CLI-First Design** | Easy to automate via cron jobs, CI/CD pipelines, or scripts |
+| Category | Feature | Benefit |
+|----------|---------|---------|
+| **Performance** | Parallel Batch Processing | Process multiple Data Views simultaneously (3-4x faster) |
+| | Validation Caching | 50-90% faster on repeated runs with intelligent result caching |
+| | Optimized Validation | Single-pass DataFrame scanning (30-50% faster) |
+| | Configurable Workers | Scale from 1-8+ parallel workers based on your infrastructure |
+| **Quality** | 8+ Validation Checks | Detect duplicates, missing fields, null values, invalid IDs |
+| | Severity Classification | CRITICAL, HIGH, MEDIUM, LOW with color-coded Excel formatting |
+| | Quality Dashboard | Dedicated sheet with filtering, sorting, and actionable insights |
+| **Output** | Multiple Formats | Excel, CSV, JSON, HTML—or generate all at once |
+| | Professional Excel | 5 formatted sheets with conditional formatting, frozen headers, auto-filtering |
+| | File Size Display | Human-readable output size (KB, MB) in success messages |
+| **Reliability** | Automatic Retry | Exponential backoff with jitter for transient network failures |
+| | Continue-on-Error | Batch processing continues even if individual Data Views fail |
+| | Pre-flight Validation | Validates config and connectivity before processing |
+| **Usability** | Dry-Run Mode | Test configuration without generating reports |
+| | Discovery Commands | `--list-dataviews` and `--sample-config` for easy setup |
+| | Color-Coded Output | Green/yellow/red console feedback for instant status |
+| | Comprehensive Logging | Timestamped logs with rotation for audit trails |
 
 ### Who It's For
 
