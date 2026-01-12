@@ -534,7 +534,7 @@ If you're still stuck:
 3. **Review documentation:**
    - [Troubleshooting Guide](TROUBLESHOOTING.md)
    - [CLI Reference](CLI_REFERENCE.md)
-4. **Report issues:** [GitHub Issues](https://github.com/anthropics/claude-code/issues)
+4. **Report issues:** [GitHub Issues](https://github.com/brian-a-au/cja_auto_sdr/issues)
 
 ---
 
