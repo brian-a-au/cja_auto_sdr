@@ -12,6 +12,22 @@ A **Solution Design Reference (SDR)** is the essential documentation that bridge
 
 **The Solution:** This tool connects directly to the CJA API, extracts your complete Data View configuration, validates data quality, and generates professionally formatted documentation in seconds.
 
+### Version 3.0: From Notebook to Enterprise Tool
+
+This project evolved from a [Jupyter notebook proof-of-concept](https://github.com/pitchmuc/CJA_Summit_2025/blob/main/notebooks/06.%20CJA%20Data%20View%20Solution%20Design%20Reference%20Generator.ipynb) into a production-ready CLI application. Version 3.0 represents a complete rewrite focused on enterprise needs:
+
+| Aspect | Original Notebook | Version 3.0 |
+|--------|------------------|-------------|
+| Execution | Interactive cells | CLI with full argument parsing |
+| Scale | Single Data View | Unlimited Data Views in parallel |
+| Speed | Sequential (~35s each) | 3-4x faster with batch processing |
+| Quality | Basic extraction | 8+ automated validation checks |
+| Reliability | Manual retry | Automatic retry with exponential backoff |
+| Output | Single Excel file | Excel, CSV, JSON, HTML formats |
+| Automation | Copy-paste workflow | Cron, CI/CD, script-ready |
+
+The notebook remains excellent for learning and ad-hoc exploration. Version 3.0 is for teams that need scheduled automation, multi-environment processing, and enterprise-grade reliability.
+
 ### How It Works
 
 1. **Connects** to your CJA instance via the Adobe API
