@@ -336,11 +336,23 @@ class ProcessingResult:
 
 # ==================== LOGGING SETUP ====================
 
+# Module-level tracking to prevent duplicate logger initialization
+_logging_initialized = False
+_current_log_file = None
+_atexit_registered = False
+
 def setup_logging(data_view_id: str = None, batch_mode: bool = False, log_level: str = None) -> logging.Logger:
     """Setup logging to both file and console
 
     Priority: 1) Passed parameter, 2) Environment variable LOG_LEVEL, 3) Default INFO
     """
+    global _logging_initialized, _current_log_file, _atexit_registered
+
+    # Register atexit handler once to ensure logs are flushed on exit
+    if not _atexit_registered:
+        atexit.register(logging.shutdown)
+        _atexit_registered = True
+
     # Create logs directory if it doesn't exist
     log_dir = Path("logs")
     try:
@@ -400,10 +412,20 @@ def setup_logging(data_view_id: str = None, batch_mode: bool = False, log_level:
     )
 
     logger = logging.getLogger(__name__)
+
+    # Track initialization state to prevent duplicates
+    _logging_initialized = True
+    _current_log_file = log_file
+
     if log_file is not None:
         logger.info(f"Logging initialized. Log file: {log_file}")
     else:
         logger.info("Logging initialized. Console output only.")
+
+    # Flush handlers to ensure log file is not empty even on early exit
+    for handler in logger.handlers:
+        handler.flush()
+
     return logger
 
 # ==================== PERFORMANCE TRACKING ====================
@@ -2481,6 +2503,16 @@ def process_single_dataview(data_view_id: str, config_file: str = "myconfig.json
             logger.critical("  - Verify the data view has components in the CJA UI")
             logger.critical("  - Check your OAuth scopes include component read permissions")
             logger.critical("  - Try running with --list-dataviews to verify access")
+            logger.info("=" * 60)
+            logger.info("EXECUTION FAILED")
+            logger.info("=" * 60)
+            logger.info(f"Data View: {dv_name} ({data_view_id})")
+            logger.info(f"Error: No metrics or dimensions found")
+            logger.info(f"Duration: {time.time() - start_time:.2f}s")
+            logger.info("=" * 60)
+            # Flush handlers to ensure log is written
+            for handler in logger.handlers:
+                handler.flush()
             return ProcessingResult(
                 data_view_id=data_view_id,
                 data_view_name=dv_name,
@@ -2787,6 +2819,15 @@ def process_single_dataview(data_view_id: str, config_file: str = "myconfig.json
         except PermissionError as e:
             logger.critical(f"Permission denied writing to {output_path}. File may be open in another program.")
             logger.critical("Please close the file and try again.")
+            logger.info("=" * 60)
+            logger.info("EXECUTION FAILED")
+            logger.info("=" * 60)
+            logger.info(f"Data View: {dv_name} ({data_view_id})")
+            logger.info(f"Error: Permission denied")
+            logger.info(f"Duration: {time.time() - start_time:.2f}s")
+            logger.info("=" * 60)
+            for handler in logger.handlers:
+                handler.flush()
             return ProcessingResult(
                 data_view_id=data_view_id,
                 data_view_name=dv_name,
@@ -2797,6 +2838,15 @@ def process_single_dataview(data_view_id: str, config_file: str = "myconfig.json
         except Exception as e:
             logger.critical(f"Failed to generate Excel file: {str(e)}")
             logger.exception("Full exception details:")
+            logger.info("=" * 60)
+            logger.info("EXECUTION FAILED")
+            logger.info("=" * 60)
+            logger.info(f"Data View: {dv_name} ({data_view_id})")
+            logger.info(f"Error: {str(e)}")
+            logger.info(f"Duration: {time.time() - start_time:.2f}s")
+            logger.info("=" * 60)
+            for handler in logger.handlers:
+                handler.flush()
             return ProcessingResult(
                 data_view_id=data_view_id,
                 data_view_name=dv_name,
@@ -2808,6 +2858,15 @@ def process_single_dataview(data_view_id: str, config_file: str = "myconfig.json
     except Exception as e:
         logger.critical(f"Unexpected error processing data view {data_view_id}: {str(e)}")
         logger.exception("Full exception details:")
+        logger.info("=" * 60)
+        logger.info("EXECUTION FAILED")
+        logger.info("=" * 60)
+        logger.info(f"Data View ID: {data_view_id}")
+        logger.info(f"Error: {str(e)}")
+        logger.info(f"Duration: {time.time() - start_time:.2f}s")
+        logger.info("=" * 60)
+        for handler in logger.handlers:
+            handler.flush()
         return ProcessingResult(
             data_view_id=data_view_id,
             data_view_name="Unknown",
@@ -3022,6 +3081,10 @@ class BatchProcessor:
         self.logger.info(f"Total output size: {total_size_formatted}")
         self.logger.info(f"Total duration: {total_duration:.1f}s")
         self.logger.info(f"Average per data view: {avg_duration:.1f}s")
+        if total_duration > 0:
+            throughput = total / total_duration
+            self.logger.info(f"Throughput: {throughput:.2f} views/second")
+        self.logger.info("=" * 60)
 
         # Print color-coded console output
         print()
@@ -3038,6 +3101,9 @@ class BatchProcessor:
         print(f"Total output size: {total_size_formatted}")
         print(f"Total duration: {total_duration:.1f}s")
         print(f"Average per data view: {avg_duration:.1f}s")
+        if total_duration > 0:
+            throughput = total / total_duration
+            print(f"Throughput: {throughput:.2f} views/second")
         print()
 
         if results['successful']:
