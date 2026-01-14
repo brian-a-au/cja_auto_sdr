@@ -84,10 +84,10 @@ uv sync
 Create a `.env` file in the project root (requires `uv add python-dotenv`):
 
 ```bash
-CJA_ORG_ID=your_org_id@AdobeOrg
-CJA_CLIENT_ID=your_client_id
-CJA_SECRET=your_client_secret
-CJA_SCOPES=openid, AdobeID, additional_info.projectedProductContext
+ORG_ID=your_org_id@AdobeOrg
+CLIENT_ID=your_client_id
+SECRET=your_client_secret
+SCOPES=openid, AdobeID, additional_info.projectedProductContext
 ```
 
 **Option B: Configuration File**
@@ -163,7 +163,7 @@ cja_auto_sdr/
 ├── myconfig.json            # Your credentials (DO NOT COMMIT)
 ├── pyproject.toml           # Project configuration
 ├── docs/                    # Documentation
-├── tests/                   # Test suite (208 tests)
+├── tests/                   # Test suite (221 tests)
 ├── logs/                    # Generated log files
 └── *.xlsx                   # Generated SDR files
 ```

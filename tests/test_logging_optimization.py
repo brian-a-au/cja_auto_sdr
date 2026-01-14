@@ -40,25 +40,25 @@ class TestProductionMode:
 
 
 class TestEnvironmentVariable:
-    """Test CJA_LOG_LEVEL environment variable support"""
+    """Test LOG_LEVEL environment variable support"""
 
     def test_env_var_sets_log_level(self):
-        """Test that CJA_LOG_LEVEL environment variable works"""
-        with patch.dict(os.environ, {'CJA_LOG_LEVEL': 'WARNING'}):
+        """Test that LOG_LEVEL environment variable works"""
+        with patch.dict(os.environ, {'LOG_LEVEL': 'WARNING'}):
             logger = setup_logging('test_dv', batch_mode=False)
             # Check root logger level since basicConfig sets it
             assert logging.root.level == logging.WARNING
 
     def test_env_var_overridden_by_parameter(self):
         """Test that explicit parameter overrides environment variable"""
-        with patch.dict(os.environ, {'CJA_LOG_LEVEL': 'WARNING'}):
+        with patch.dict(os.environ, {'LOG_LEVEL': 'WARNING'}):
             logger = setup_logging('test_dv', batch_mode=False, log_level='DEBUG')
             # Check root logger level
             assert logging.root.level == logging.DEBUG
 
     def test_invalid_env_var_falls_back_to_info(self):
-        """Test that invalid CJA_LOG_LEVEL falls back to INFO"""
-        with patch.dict(os.environ, {'CJA_LOG_LEVEL': 'INVALID'}):
+        """Test that invalid LOG_LEVEL falls back to INFO"""
+        with patch.dict(os.environ, {'LOG_LEVEL': 'INVALID'}):
             logger = setup_logging('test_dv', batch_mode=False)
             # Check root logger level
             assert logging.root.level == logging.INFO

@@ -107,13 +107,13 @@ Create a `.env` file in the project root (or set environment variables directly)
 
 ```bash
 # OAuth Server-to-Server Authentication (Required)
-CJA_ORG_ID=your_org_id@AdobeOrg
-CJA_CLIENT_ID=your_client_id
-CJA_SECRET=your_client_secret
-CJA_SCOPES=openid, AdobeID, additional_info.projectedProductContext
+ORG_ID=your_org_id@AdobeOrg
+CLIENT_ID=your_client_id
+SECRET=your_client_secret
+SCOPES=openid, AdobeID, additional_info.projectedProductContext
 
 # Optional
-# CJA_SANDBOX=your_sandbox_name
+# SANDBOX=your_sandbox_name
 ```
 
 To enable `.env` file loading, install the optional dependency:
@@ -166,7 +166,7 @@ cja_auto_sdr/
 ├── pyproject.toml            # Project configuration
 ├── uv.lock                   # Dependency lock file
 ├── myconfig.json             # Your CJA credentials (DO NOT COMMIT)
-├── private.key               # Your private key (DO NOT COMMIT)
+├── .env                      # Environment variables (DO NOT COMMIT)
 ├── cja_sdr_generator.py      # Main script
 └── README.md
 ```
@@ -180,8 +180,7 @@ Add to your `.gitignore`:
 ```gitignore
 # Credentials
 myconfig.json
-*.key
-*.pem
+.env
 
 # Generated files
 .venv/
@@ -191,10 +190,9 @@ logs/
 
 ### Credential Security
 
-- Never commit `myconfig.json` to version control
+- Never commit `myconfig.json` or `.env` to version control
 - Use service accounts for automated runs
 - Rotate credentials periodically
-- Store private keys securely (use key management systems)
 - Restrict access to sensitive data views
 
 ## Dependencies
@@ -204,10 +202,11 @@ All dependencies are managed through `pyproject.toml`:
 ```toml
 [project]
 name = "cja_auto_sdr"
-version = "3.0.7"
+version = "3.0.8"
 requires-python = ">=3.14"
 dependencies = [
     "cjapy>=0.2.4.post2",
+    "numpy>=2.2.0,!=2.4.0",
     "pandas>=2.3.3",
     "xlsxwriter>=3.2.9",
     "tqdm>=4.66.0",
@@ -216,6 +215,9 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8.3.4",
+]
+env = [
+    "python-dotenv>=1.0.0",
 ]
 ```
 

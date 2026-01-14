@@ -71,9 +71,21 @@ uv run python cja_sdr_generator.py [OPTIONS] DATA_VIEW_ID [DATA_VIEW_ID ...]
 
 ### Environment Variables
 
+**Credentials (take precedence over myconfig.json):**
+
 | Variable | Description |
 |----------|-------------|
-| `CJA_LOG_LEVEL` | Default log level (overridden by --log-level) |
+| `ORG_ID` | Adobe Organization ID |
+| `CLIENT_ID` | OAuth Client ID |
+| `SECRET` | Client Secret |
+| `SCOPES` | OAuth scopes |
+| `SANDBOX` | Sandbox name (optional) |
+
+**Configuration:**
+
+| Variable | Description |
+|----------|-------------|
+| `LOG_LEVEL` | Default log level (overridden by --log-level) |
 
 ## Usage Examples
 

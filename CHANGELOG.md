@@ -11,11 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 #### Environment Variable Credentials Support
 - **Environment Variable Loading**: Credentials can now be loaded from environment variables
-  - `CJA_ORG_ID`: Adobe Organization ID
-  - `CJA_CLIENT_ID`: OAuth Client ID
-  - `CJA_SECRET`: Client Secret
-  - `CJA_SCOPES`: OAuth scopes
-  - `CJA_SANDBOX`: Sandbox name (optional)
+  - `ORG_ID`: Adobe Organization ID
+  - `CLIENT_ID`: OAuth Client ID
+  - `SECRET`: Client Secret
+  - `SCOPES`: OAuth scopes
+  - `SANDBOX`: Sandbox name (optional)
 - **Priority Order**: Environment variables take precedence over `myconfig.json`
 - **Optional python-dotenv**: Install `python-dotenv` to enable automatic `.env` file loading
 - **`.env.example`**: Template file for environment variable configuration
@@ -36,7 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Removed JWT Authentication**: JWT (Service Account) authentication has been removed
   - Adobe has deprecated JWT credentials in favor of OAuth Server-to-Server
   - `tech_id` and `private_key` config fields are no longer supported
-  - `CJA_TECH_ID` and `CJA_PRIVATE_KEY` environment variables are no longer supported
+  - `TECH_ID` and `PRIVATE_KEY` environment variables are no longer supported
   - Users must migrate to OAuth Server-to-Server credentials
   - See [Adobe's migration guide](https://developer.adobe.com/developer-console/docs/guides/authentication/ServerToServerAuthentication/migration/) for details
 
@@ -336,7 +336,7 @@ if result is None:
 
 **Logging Optimization (5-10% Performance Gain)**
 - **Production Mode**: New `--production` CLI flag for minimal logging overhead
-- **Environment Variable Support**: `CJA_LOG_LEVEL` environment variable for system-wide log level defaults
+- **Environment Variable Support**: `LOG_LEVEL` environment variable for system-wide log level defaults
 - **Conditional Logging**: Data quality issues logged selectively based on severity and log level
 - **Summary Logging**: New `DataQualityChecker.log_summary()` method aggregates issues by severity
 - **Log Entry Reduction**: 73-82% fewer log entries depending on dataset size
@@ -510,7 +510,7 @@ Batch Processing (10 data views):
 | Validation Caching | No | Yes (50-90% faster on cache hits) |
 | Early Exit Optimization | No | Yes (15-20% faster on errors) |
 | Logging Optimization | No | Yes (5-10% faster with --production) |
-| Tests | None | 191 comprehensive tests |
+| Tests | None | 221 comprehensive tests |
 | Documentation | Basic | 5 detailed guides |
 | Performance Tracking | No | Yes, built-in with cache statistics |
 | Parallel Processing | No | Yes, configurable workers + concurrent validation |

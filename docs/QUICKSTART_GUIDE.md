@@ -157,10 +157,10 @@ You have two options for configuring credentials:
 Create a `.env` file in the project root:
 
 ```bash
-CJA_ORG_ID=YOUR_ORG_ID@AdobeOrg
-CJA_CLIENT_ID=YOUR_CLIENT_ID
-CJA_SECRET=YOUR_CLIENT_SECRET
-CJA_SCOPES=openid, AdobeID, additional_info.projectedProductContext
+ORG_ID=YOUR_ORG_ID@AdobeOrg
+CLIENT_ID=YOUR_CLIENT_ID
+SECRET=YOUR_CLIENT_SECRET
+SCOPES=openid, AdobeID, additional_info.projectedProductContext
 ```
 
 To enable `.env` file loading:

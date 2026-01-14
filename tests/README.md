@@ -8,21 +8,22 @@ This directory contains automated tests for the CJA SDR Generator.
 tests/
 ├── __init__.py                      # Test package initialization
 ├── conftest.py                      # Pytest fixtures and configuration
-├── test_cli.py                      # Command-line interface tests (49 tests)
-├── test_data_quality.py             # Data quality validation tests (10 tests)
-├── test_dry_run.py                  # Dry-run mode tests (12 tests)
-├── test_early_exit.py               # Early exit optimization tests (11 tests)
-├── test_logging_optimization.py     # Logging optimization tests (15 tests)
-├── test_optimized_validation.py     # Optimized validation tests (16 tests)
-├── test_output_formats.py           # Output format tests (22 tests)
-├── test_parallel_validation.py      # Parallel validation tests (8 tests)
-├── test_retry.py                    # Retry with exponential backoff tests (21 tests)
-├── test_utils.py                    # Utility function tests (14 tests)
-├── test_validation_cache.py         # Validation caching tests (15 tests)
+├── test_cli.py                      # Command-line interface tests
+├── test_data_quality.py             # Data quality validation tests
+├── test_dry_run.py                  # Dry-run mode tests
+├── test_early_exit.py               # Early exit optimization tests
+├── test_env_credentials.py          # Environment variable credentials tests
+├── test_logging_optimization.py     # Logging optimization tests
+├── test_optimized_validation.py     # Optimized validation tests
+├── test_output_formats.py           # Output format tests
+├── test_parallel_validation.py      # Parallel validation tests
+├── test_retry.py                    # Retry with exponential backoff tests
+├── test_utils.py                    # Utility function tests
+├── test_validation_cache.py         # Validation caching tests
 └── README.md                        # This file
 ```
 
-**Total: 191 comprehensive tests**
+**Total: 221 comprehensive tests**
 
 ## Running Tests
 
@@ -71,6 +72,9 @@ uv run pytest tests/test_dry_run.py
 
 # Test retry with exponential backoff
 uv run pytest tests/test_retry.py
+
+# Test environment variable credentials
+uv run pytest tests/test_env_credentials.py
 ```
 
 ### Run Specific Test Classes or Functions
@@ -101,7 +105,7 @@ uv run pytest --cov=cja_sdr_generator --cov-report=html --cov-report=term
 
 ## Test Categories
 
-### CLI Tests (`test_cli.py` - 49 tests)
+### CLI Tests (`test_cli.py`)
 - **Argument parsing**: Tests command-line argument parsing
 - **Data view validation**: Tests data view ID format validation
 - **Flag handling**: Tests --version, --quiet, --dry-run, --validate-only, --list-dataviews, --skip-validation, --sample-config, --max-issues flags
@@ -111,57 +115,63 @@ uv run pytest --cov=cja_sdr_generator --cov-report=html --cov-report=term
 - **UX improvements**: Tests file size formatting and new flags
 - **Error handling**: Tests error cases and edge conditions
 
-### Data Quality Tests (`test_data_quality.py` - 10 tests)
+### Data Quality Tests (`test_data_quality.py`)
 - **Duplicate detection**: Tests detection of duplicate component names
 - **Missing field detection**: Tests detection of missing required fields
 - **Null value detection**: Tests detection of null values in critical fields
 - **Severity classification**: Tests proper severity level assignment
 - **Clean data handling**: Tests that clean data produces minimal issues
 
-### Optimized Validation Tests (`test_optimized_validation.py` - 16 tests)
+### Optimized Validation Tests (`test_optimized_validation.py`)
 - **Single-pass validation**: Tests optimized validation correctness
 - **Performance comparison**: Tests performance improvements vs original
 - **Vectorized operations**: Tests vectorized pandas operations
 - **Edge cases**: Tests handling of special characters, empty data, missing columns
 
-### Output Format Tests (`test_output_formats.py` - 22 tests)
+### Output Format Tests (`test_output_formats.py`)
 - **CSV output**: Tests CSV file generation and structure
 - **JSON output**: Tests JSON format and validity
 - **HTML output**: Tests HTML generation and styling
 - **Cross-format consistency**: Tests data consistency across formats
 - **Unicode handling**: Tests special characters and encoding
 
-### Utility Tests (`test_utils.py` - 14 tests)
+### Utility Tests (`test_utils.py`)
 - **Logging setup**: Tests log file creation and configuration
 - **Config validation**: Tests configuration file validation
 - **Filename sanitization**: Tests filename helper functions
 - **Performance tracking**: Tests performance measurement utilities
 
-### Early Exit Tests (`test_early_exit.py` - 11 tests)
+### Early Exit Tests (`test_early_exit.py`)
 - **Empty DataFrame handling**: Tests early exit on empty data
 - **Missing required fields**: Tests early exit when fields missing
 - **Performance impact**: Tests that early exit improves performance
 
-### Logging Optimization Tests (`test_logging_optimization.py` - 15 tests)
+### Environment Credentials Tests (`test_env_credentials.py`)
+- **Environment variable loading**: Tests loading credentials from environment variables
+- **Priority handling**: Tests that env vars take precedence over config file
+- **Partial credentials**: Tests handling of incomplete credentials
+- **Missing credentials**: Tests error handling for missing required credentials
+
+### Logging Optimization Tests (`test_logging_optimization.py`)
 - **Production mode**: Tests minimal logging in production mode
 - **Log level filtering**: Tests conditional logging based on severity
 - **Summary logging**: Tests aggregated issue logging
 - **Performance impact**: Tests logging overhead reduction
 
-### Parallel Validation Tests (`test_parallel_validation.py` - 8 tests)
+### Parallel Validation Tests (`test_parallel_validation.py`)
 - **Concurrent execution**: Tests parallel validation correctness
 - **Thread safety**: Tests lock-protected operations
 - **Performance benchmarking**: Tests parallel speedup
 - **Error handling**: Tests error handling in parallel mode
 
-### Validation Caching Tests (`test_validation_cache.py` - 15 tests)
+### Validation Caching Tests (`test_validation_cache.py`)
 - **Cache operations**: Tests cache hit/miss behavior
 - **LRU eviction**: Tests least recently used eviction
 - **TTL expiration**: Tests time-to-live functionality
 - **Thread safety**: Tests concurrent cache access
 - **Performance**: Tests cache performance improvements
 
-### Retry Tests (`test_retry.py` - 21 tests)
+### Retry Tests (`test_retry.py`)
 - **Decorator behavior**: Tests retry_with_backoff decorator
 - **Exponential backoff**: Tests delay calculation and progression
 - **Jitter**: Tests randomization of delays
@@ -295,7 +305,7 @@ uv run pytest
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (covered in CLI tests)
-- [x] Comprehensive test coverage (191 tests total)
+- [x] Comprehensive test coverage (221 tests total)
 - [x] Parallel validation tests (test_parallel_validation.py)
 - [x] Validation caching tests (test_validation_cache.py)
 - [x] Early exit optimization tests (test_early_exit.py)
@@ -304,6 +314,7 @@ uv run pytest
 - [x] CLI quick wins tests: --version, --quiet flags (test_cli.py)
 - [x] Cache flags tests: --enable-cache, --clear-cache, --cache-size, --cache-ttl (test_cli.py)
 - [x] Constants validation tests (test_cli.py)
+- [x] Environment variable credentials tests (test_env_credentials.py)
 
 ## Future Enhancements
 
