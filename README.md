@@ -84,6 +84,12 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 uv sync
 ```
 
+> **Running commands:** You have two equivalent options:
+> - `uv run cja_auto_sdr ...` — works immediately, no activation needed
+> - `cja_auto_sdr ...` — after activating the venv: `source .venv/bin/activate`
+>
+> This guide uses `uv run`. The [Common Use Cases](#common-use-cases) table omits it for brevity.
+
 ### 3. Configure Credentials
 
 Get your credentials from [Adobe Developer Console](https://developer.adobe.com/console/) (see [QUICKSTART_GUIDE](docs/QUICKSTART_GUIDE.md) for detailed steps).
@@ -129,8 +135,6 @@ uv run cja_auto_sdr --list-dataviews
 # Generate SDR for a data view
 uv run cja_auto_sdr dv_YOUR_DATA_VIEW_ID
 ```
-
-> **Tip:** After activating the virtual environment (`source .venv/bin/activate`), you can omit `uv run`. Both `cja_auto_sdr` and `cja-auto-sdr` work identically.
 
 ### 5. Review Output
 
