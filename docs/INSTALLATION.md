@@ -40,20 +40,28 @@ uv --version
 
 ## Project Setup
 
-### Option 1: Clone/Download (Recommended)
+### Option 1: Clone from Git (Recommended)
+
+**Step 1: Choose an installation location**
 
 ```bash
-# Navigate to project directory
+# Examples of where to install:
+cd ~/projects          # A projects folder in your home directory
+cd ~/Documents         # Your documents folder
+cd /opt                # System-wide location (may need sudo)
+```
+
+**Step 2: Clone the repository**
+
+```bash
+git clone https://github.com/your-org/cja_auto_sdr.git
 cd cja_auto_sdr
+```
 
-# Create virtual environment and install dependencies
+**Step 3: Install dependencies**
+
+```bash
 uv sync
-
-# Activate the virtual environment (optional - uv run handles this)
-# macOS/Linux:
-source .venv/bin/activate
-# Windows:
-.venv\Scripts\activate
 ```
 
 The `uv sync` command will:
@@ -62,43 +70,68 @@ The `uv sync` command will:
 - Generate a `uv.lock` file for reproducible builds
 - Install the `cja_auto_sdr` console script
 
-After syncing, you can run the tool as:
-```bash
-# Using uv run (no activation needed)
-uv run cja_auto_sdr --help
+**Step 4: Verify installation**
 
-# Or activate the venv first
+```bash
+# Using uv run (no venv activation needed)
+uv run cja_auto_sdr --version
+
+# Or activate the venv first, then run directly
 source .venv/bin/activate  # macOS/Linux
-cja_auto_sdr --help
+# .venv\Scripts\activate   # Windows
+cja_auto_sdr --version
 ```
 
-### Option 2: Start from Scratch
+> **Note:** All subsequent commands assume you're in the `cja_auto_sdr` directory.
+
+### Option 2: Download ZIP
+
+If you don't have git installed:
+
+1. Download the repository as a ZIP file
+2. Extract to your preferred location
+3. Open terminal and navigate to the extracted folder:
+   ```bash
+   cd ~/Downloads/cja_auto_sdr-main  # adjust path as needed
+   ```
+4. Install dependencies:
+   ```bash
+   uv sync
+   ```
+
+### Option 3: Global Installation (pip)
+
+For system-wide installation without cloning:
 
 ```bash
-# Create new project
-uv init cja_auto_sdr
+# Clone first
+git clone https://github.com/your-org/cja_auto_sdr.git
 cd cja_auto_sdr
 
-# Add dependencies
-uv add cjapy>=0.2.4.post2
-uv add pandas>=2.3.3
-uv add xlsxwriter>=3.2.9
-uv add tqdm>=4.66.0
+# Install globally (no venv needed after this)
+pip install .
 
-# Copy script and config files into the project
+# Now usable from anywhere
+cja_auto_sdr --version
 ```
 
-### Option 3: Legacy pip Installation
+### Option 4: Legacy pip with Virtual Environment
 
 ```bash
+# Clone the repository
+git clone https://github.com/your-org/cja_auto_sdr.git
+cd cja_auto_sdr
+
 # Create virtual environment
 python -m venv .venv
 
 # Activate
 source .venv/bin/activate  # macOS/Linux
-.venv\Scripts\activate     # Windows
+# .venv\Scripts\activate   # Windows
 
 # Install dependencies
+pip install -r requirements.txt
+# Or manually:
 pip install cjapy>=0.2.4.post2 pandas>=2.3.3 xlsxwriter>=3.2.9 tqdm>=4.66.0
 ```
 
@@ -153,7 +186,7 @@ Create a `myconfig.json` file in the project root directory:
 ### Generate Sample Config
 
 ```bash
-cja_auto_sdr --sample-config
+uv run cja_auto_sdr --sample-config
 ```
 
 ### Configuration Fields
@@ -265,14 +298,17 @@ uv pip list
 ### Validate Configuration
 
 ```bash
-# Dry-run to test config and connectivity
-cja_auto_sdr dv_test --dry-run
+# Test config and API connectivity (no data view required)
+uv run cja_auto_sdr --validate-config
+
+# Or dry-run with a specific data view
+uv run cja_auto_sdr dv_test --dry-run
 ```
 
 ### List Available Data Views
 
 ```bash
-cja_auto_sdr --list-dataviews
+uv run cja_auto_sdr --list-dataviews
 ```
 
 ## Updating Dependencies

@@ -66,64 +66,74 @@ The notebook remains excellent for learning and ad-hoc exploration. Version 3.0 
 
 ## Quick Start
 
-### 1. Install Dependencies
+### 1. Clone the Repository
 
 ```bash
-# Install uv (if needed)
+# Clone the repository
+git clone https://github.com/your-org/cja_auto_sdr.git
+cd cja_auto_sdr
+```
+
+### 2. Install Dependencies
+
+```bash
+# Install uv package manager (if not already installed)
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Clone and setup
-cd cja_auto_sdr
+# Install project dependencies
 uv sync
 ```
 
-### 2. Configure Credentials
+### 3. Configure Credentials
 
-**Option A: Environment Variables (Recommended for CI/CD and production)**
+Get your credentials from [Adobe Developer Console](https://developer.adobe.com/console/) (see [QUICKSTART_GUIDE](docs/QUICKSTART_GUIDE.md) for detailed steps).
 
-Create a `.env` file in the project root (requires `uv add python-dotenv`):
+**Option A: Configuration File (Quickest)**
 
 ```bash
-ORG_ID=your_org_id@AdobeOrg
-CLIENT_ID=your_client_id
-SECRET=your_client_secret
-SCOPES=openid, AdobeID, additional_info.projectedProductContext
+# Generate a template
+uv run cja_auto_sdr --sample-config
+
+# Edit myconfig.json with your credentials
 ```
-
-**Option B: Configuration File**
-
-Create `myconfig.json` with your Adobe credentials:
 
 ```json
 {
-  "org_id": "your_org_id@AdobeOrg",
-  "client_id": "your_client_id",
-  "secret": "your_client_secret",
+  "org_id": "YOUR_ORG_ID@AdobeOrg",
+  "client_id": "YOUR_CLIENT_ID",
+  "secret": "YOUR_CLIENT_SECRET",
   "scopes": "openid, AdobeID, additional_info.projectedProductContext"
 }
 ```
 
-> **Note:** Environment variables take precedence over `myconfig.json` if both are present.
-
-### 3. Run the Generator
+**Option B: Environment Variables (Recommended for CI/CD)**
 
 ```bash
-# Single data view
-cja_auto_sdr dv_YOUR_DATA_VIEW_ID
-
-# Multiple data views (parallel processing)
-cja_auto_sdr dv_ID1 dv_ID2 dv_ID3
-
-# List available data views
-cja_auto_sdr --list-dataviews
+export ORG_ID=your_org_id@AdobeOrg
+export CLIENT_ID=your_client_id
+export SECRET=your_client_secret
+export SCOPES="openid, AdobeID, additional_info.projectedProductContext"
 ```
 
-> **Note:** After `uv sync`, run commands with `uv run cja_auto_sdr` or activate the venv first. Both `cja_auto_sdr` and `cja-auto-sdr` (hyphenated) work identically. For global installation: `pip install .` then use `cja_auto_sdr` directly.
+> **Note:** Environment variables take precedence over `myconfig.json` if both are present.
 
-### 4. Review Output
+### 4. Verify Setup & Run
 
-- Check generated Excel file: `CJA_DataView_[Name]_[ID]_SDR.xlsx`
-- Review logs in the `logs/` directory
+```bash
+# Verify configuration and list available data views
+uv run cja_auto_sdr --validate-config
+uv run cja_auto_sdr --list-dataviews
+
+# Generate SDR for a data view
+uv run cja_auto_sdr dv_YOUR_DATA_VIEW_ID
+```
+
+> **Tip:** After activating the virtual environment (`source .venv/bin/activate`), you can omit `uv run`. Both `cja_auto_sdr` and `cja-auto-sdr` work identically.
+
+### 5. Review Output
+
+- Generated Excel file: `SDR_[Name]_[Date].xlsx`
+- Logs: `logs/` directory
 
 ## Common Use Cases
 

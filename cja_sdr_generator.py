@@ -234,7 +234,13 @@ def retry_with_backoff(
 
             for attempt in range(_max_retries + 1):  # +1 for initial attempt
                 try:
-                    return func(*args, **kwargs)
+                    result = func(*args, **kwargs)
+                    # Log success after retry
+                    if attempt > 0:
+                        _logger.info(
+                            f"✓ {func.__name__} succeeded on attempt {attempt + 1}/{_max_retries + 1}"
+                        )
+                    return result
                 except _retryable_exceptions as e:
                     last_exception = e
 
@@ -250,7 +256,7 @@ def retry_with_backoff(
                         delay = delay * random.uniform(0.5, 1.5)
 
                     _logger.warning(
-                        f"Attempt {attempt + 1}/{_max_retries + 1} failed for {func.__name__}: {str(e)}. "
+                        f"⚠ {func.__name__} attempt {attempt + 1}/{_max_retries + 1} failed: {str(e)}. "
                         f"Retrying in {delay:.1f}s..."
                     )
                     time.sleep(delay)
@@ -326,6 +332,12 @@ def make_api_call_with_retry(
             if status_code is not None and status_code in RETRYABLE_STATUS_CODES:
                 raise RetryableHTTPError(status_code, f"Retryable status from {operation_name}")
 
+            # Log success after retry
+            if attempt > 0:
+                _logger.info(
+                    f"✓ {operation_name} succeeded on attempt {attempt + 1}/{max_retries + 1}"
+                )
+
             return result
         except RETRYABLE_EXCEPTIONS as e:
             last_exception = e
@@ -339,7 +351,7 @@ def make_api_call_with_retry(
                 delay = delay * random.uniform(0.5, 1.5)
 
             _logger.warning(
-                f"Attempt {attempt + 1}/{max_retries + 1} failed for {operation_name}: {str(e)}. "
+                f"⚠ {operation_name} attempt {attempt + 1}/{max_retries + 1} failed: {str(e)}. "
                 f"Retrying in {delay:.1f}s..."
             )
             time.sleep(delay)
@@ -3273,6 +3285,9 @@ def run_dry_run(data_views: List[str], config_file: str, logger: logging.Logger)
 
     valid_count = 0
     invalid_count = 0
+    total_metrics = 0
+    total_dimensions = 0
+    dv_details = []
 
     for dv_id in data_views:
         # Try to get data view info (with retry for transient errors)
@@ -3285,7 +3300,45 @@ def run_dry_run(data_views: List[str], config_file: str, logger: logging.Logger)
             )
             if dv_info:
                 dv_name = dv_info.get('name', 'Unknown')
+
+                # Fetch component counts for predictions
+                metrics_count = 0
+                dimensions_count = 0
+                try:
+                    metrics = make_api_call_with_retry(
+                        cja.getMetrics,
+                        dv_id,
+                        logger=logger,
+                        operation_name=f"getMetrics({dv_id})"
+                    )
+                    if metrics is not None:
+                        metrics_count = len(metrics) if hasattr(metrics, '__len__') else 0
+                except Exception:
+                    pass  # Count will be 0 if fetch fails
+
+                try:
+                    dimensions = make_api_call_with_retry(
+                        cja.getDimensions,
+                        dv_id,
+                        logger=logger,
+                        operation_name=f"getDimensions({dv_id})"
+                    )
+                    if dimensions is not None:
+                        dimensions_count = len(dimensions) if hasattr(dimensions, '__len__') else 0
+                except Exception:
+                    pass  # Count will be 0 if fetch fails
+
+                total_metrics += metrics_count
+                total_dimensions += dimensions_count
+                dv_details.append({
+                    'id': dv_id,
+                    'name': dv_name,
+                    'metrics': metrics_count,
+                    'dimensions': dimensions_count
+                })
+
                 print(f"  ✓ {dv_id}: {dv_name}")
+                print(f"      Components: {metrics_count} metrics, {dimensions_count} dimensions")
                 valid_count += 1
             else:
                 print(f"  ✗ {dv_id}: Not found or no access")
@@ -3300,6 +3353,12 @@ def run_dry_run(data_views: List[str], config_file: str, logger: logging.Logger)
             invalid_count += 1
             all_passed = False
 
+    # Calculate time estimates
+    # Based on benchmarks: ~0.5s per component for validation, ~0.1s without
+    total_components = total_metrics + total_dimensions
+    est_time_with_validation = total_components * 0.01 + len(data_views) * 2  # API overhead per view
+    est_time_skip_validation = total_components * 0.005 + len(data_views) * 1.5
+
     # Summary
     print()
     print("=" * 60)
@@ -3310,11 +3369,18 @@ def run_dry_run(data_views: List[str], config_file: str, logger: logging.Logger)
     print(f"  Data Views: {valid_count} valid, {invalid_count} invalid")
     print()
 
+    if valid_count > 0:
+        print("  Predictions:")
+        print(f"    Total components: {total_metrics} metrics + {total_dimensions} dimensions = {total_components}")
+        print(f"    Est. time (with validation): ~{est_time_with_validation:.0f}s")
+        print(f"    Est. time (--skip-validation): ~{est_time_skip_validation:.0f}s")
+        print()
+
     if all_passed:
         print("✓ All validations passed - ready to generate reports")
         print()
         print("Run without --dry-run to generate SDR reports:")
-        print(f"  python cja_sdr_generator.py {' '.join(data_views)}")
+        print(f"  cja_auto_sdr {' '.join(data_views)}")
     else:
         print("✗ Some validations failed - please fix issues before proceeding")
 
@@ -3711,9 +3777,34 @@ def validate_config_only(config_file: str = "myconfig.json") -> bool:
     env_credentials = load_credentials_from_env()
 
     if env_credentials:
-        print(f"  ✓ Environment variables found")
+        print(f"  ✓ Environment variables detected")
+        print()
+        print("  Credential status:")
+        # Show detailed status for each credential
+        required_vars = ['org_id', 'client_id', 'secret']
+        optional_vars = ['scopes', 'sandbox']
+        for var in required_vars:
+            env_name = ENV_VAR_MAPPING.get(var, var.upper())
+            if var in env_credentials and env_credentials[var]:
+                # Mask sensitive values
+                value = env_credentials[var]
+                if var in ['secret', 'client_id']:
+                    masked = value[:4] + '****' + value[-4:] if len(value) > 8 else '****'
+                else:
+                    masked = value
+                print(f"    ✓ {env_name}: {masked}")
+            else:
+                print(f"    ✗ {env_name}: not set (required)")
+        for var in optional_vars:
+            env_name = ENV_VAR_MAPPING.get(var, var.upper())
+            if var in env_credentials and env_credentials[var]:
+                print(f"    ✓ {env_name}: {env_credentials[var]}")
+            else:
+                print(f"    - {env_name}: not set (optional)")
+        print()
         if validate_env_credentials(env_credentials, logging.getLogger(__name__)):
             print(f"  ✓ Environment credentials are valid")
+            print(f"  → Using: Environment variables")
         else:
             print(f"  ⚠ Environment credentials incomplete, checking config file...")
             env_credentials = None  # Fall through to config file check
@@ -3726,20 +3817,45 @@ def validate_config_only(config_file: str = "myconfig.json") -> bool:
         print("[2/3] Checking configuration file...")
         config_path = Path(config_file)
         if config_path.exists():
-            print(f"  ✓ Config file found: {config_file}")
+            abs_path = config_path.resolve()
+            print(f"  ✓ Config file found: {abs_path}")
             try:
                 with open(config_file, 'r') as f:
                     config = json.load(f)
                 print(f"  ✓ Config file is valid JSON")
+                print()
+                print("  Credential status:")
 
-                # Check required fields
-                required = ['org_id', 'client_id', 'secret']
-                missing = [f for f in required if f not in config or not config[f]]
+                # Show detailed status for each field
+                required_fields = ['org_id', 'client_id', 'secret']
+                optional_fields = ['scopes', 'sandbox']
+                missing = []
+
+                for field in required_fields:
+                    if field in config and config[field]:
+                        value = config[field]
+                        if field in ['secret', 'client_id']:
+                            masked = value[:4] + '****' + value[-4:] if len(value) > 8 else '****'
+                        else:
+                            masked = value
+                        print(f"    ✓ {field}: {masked}")
+                    else:
+                        print(f"    ✗ {field}: not set (required)")
+                        missing.append(field)
+
+                for field in optional_fields:
+                    if field in config and config[field]:
+                        print(f"    ✓ {field}: {config[field]}")
+                    else:
+                        print(f"    - {field}: not set (optional)")
+
+                print()
                 if missing:
                     print(f"  ✗ Missing required fields: {', '.join(missing)}")
                     all_passed = False
                 else:
-                    print(f"  ✓ Required fields present")
+                    print(f"  ✓ All required fields present")
+                    print(f"  → Using: Config file ({config_file})")
             except json.JSONDecodeError as e:
                 print(f"  ✗ Invalid JSON: {str(e)}")
                 all_passed = False

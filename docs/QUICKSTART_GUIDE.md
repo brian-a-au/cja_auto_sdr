@@ -112,16 +112,34 @@ uv --version
 # Output: uv 0.x.x
 ```
 
-### 2.2 Get the Project Files
+### 2.2 Clone the Repository
 
-If you have the project files:
+Choose where you want to install the tool (e.g., your home directory, a projects folder, etc.):
+
 ```bash
-cd /path/to/cja_auto_sdr
+# Navigate to your preferred location
+cd ~/projects  # or any directory you prefer
+
+# Clone the repository
+git clone https://github.com/your-org/cja_auto_sdr.git
+
+# Enter the project directory
+cd cja_auto_sdr
 ```
+
+**Alternative: Download ZIP**
+
+If you don't have git or prefer a download:
+1. Download the ZIP from the repository
+2. Extract to your preferred location
+3. Open terminal and navigate to the extracted folder:
+   ```bash
+   cd ~/Downloads/cja_auto_sdr-main  # adjust path as needed
+   ```
 
 ### 2.3 Install Dependencies
 
-This creates a virtual environment and installs all required packages:
+From inside the `cja_auto_sdr` directory, run:
 
 ```bash
 uv sync
@@ -139,12 +157,27 @@ Installed 15 packages in 0.8s
  ...
 ```
 
+This command:
+- Creates a virtual environment in `.venv/`
+- Installs all required packages
+- Installs the `cja_auto_sdr` command
+
 ### 2.4 Verify Installation
 
 ```bash
+# Using uv run (works without activating venv)
+uv run cja_auto_sdr --version
+# Output: cja_sdr_generator.py version 3.0.8
+
+# Or activate the virtual environment first
+source .venv/bin/activate  # macOS/Linux
+# .venv\Scripts\activate   # Windows
+
 cja_auto_sdr --version
 # Output: cja_sdr_generator.py version 3.0.8
 ```
+
+> **Important:** All commands in this guide assume you're in the `cja_auto_sdr` directory. If you see "command not found", make sure you're in the right directory and have run `uv sync`.
 
 ---
 
@@ -177,7 +210,7 @@ Create a file named `myconfig.json` in the project root directory:
 
 ```bash
 # Generate a template (optional)
-cja_auto_sdr --sample-config
+uv run cja_auto_sdr --sample-config
 ```
 
 Or create it manually:
@@ -226,7 +259,7 @@ Before generating reports, verify everything is configured correctly.
 ### 4.1 Test API Connection
 
 ```bash
-cja_auto_sdr --list-dataviews
+uv run cja_auto_sdr --list-dataviews
 ```
 
 **Successful output:**
@@ -266,7 +299,7 @@ dv_677ea9291244fd082f02dd42
 Test without generating a report:
 
 ```bash
-cja_auto_sdr dv_YOUR_DATA_VIEW_ID --dry-run
+uv run cja_auto_sdr dv_YOUR_DATA_VIEW_ID --dry-run
 ```
 
 **Expected output:**
@@ -291,7 +324,7 @@ Dry run complete. Remove --dry-run to generate the SDR.
 Replace `dv_YOUR_DATA_VIEW_ID` with your actual Data View ID:
 
 ```bash
-cja_auto_sdr dv_677ea9291244fd082f02dd42
+uv run cja_auto_sdr dv_677ea9291244fd082f02dd42
 ```
 
 ### 5.2 Watch the Progress
