@@ -438,3 +438,101 @@ class TestConstants:
         with patch.object(sys, 'argv', test_args):
             args = parse_arguments()
             assert args.cache_ttl == DEFAULT_CACHE_TTL
+
+
+class TestConsoleScriptEntryPoints:
+    """Test console script entry point configuration"""
+
+    def test_main_function_is_importable(self):
+        """Test that main function can be imported from cja_sdr_generator"""
+        from cja_sdr_generator import main
+        assert callable(main)
+
+    def test_main_function_with_version_flag(self):
+        """Test that main function handles --version flag correctly"""
+        from cja_sdr_generator import main
+        test_args = ['cja_auto_sdr', '--version']
+        with patch.object(sys, 'argv', test_args):
+            with pytest.raises(SystemExit) as exc_info:
+                main()
+            assert exc_info.value.code == 0
+
+    def test_main_function_with_help_flag(self):
+        """Test that main function handles --help flag correctly"""
+        from cja_sdr_generator import main
+        test_args = ['cja_auto_sdr', '--help']
+        with patch.object(sys, 'argv', test_args):
+            with pytest.raises(SystemExit) as exc_info:
+                main()
+            assert exc_info.value.code == 0
+
+    def test_main_function_with_sample_config_flag(self):
+        """Test that main function handles --sample-config flag"""
+        from cja_sdr_generator import main
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = os.path.join(tmpdir, 'sample_config.json')
+            test_args = ['cja_auto_sdr', '--sample-config']
+            with patch.object(sys, 'argv', test_args):
+                with patch('cja_sdr_generator.generate_sample_config') as mock_gen:
+                    mock_gen.return_value = True
+                    with pytest.raises(SystemExit) as exc_info:
+                        main()
+                    assert exc_info.value.code == 0
+                    mock_gen.assert_called_once()
+
+    def test_entry_point_defined_in_pyproject(self):
+        """Test that console script entry points are defined in pyproject.toml"""
+        pyproject_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            'pyproject.toml'
+        )
+        with open(pyproject_path, 'r') as f:
+            content = f.read()
+
+        # Verify both entry point variants exist with correct targets
+        assert 'cja_auto_sdr = "cja_sdr_generator:main"' in content
+        assert 'cja-auto-sdr = "cja_sdr_generator:main"' in content
+
+        # Verify [project.scripts] section exists
+        assert '[project.scripts]' in content
+
+    def test_entry_point_builds_correctly(self):
+        """Test that the package build system is configured"""
+        pyproject_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            'pyproject.toml'
+        )
+        with open(pyproject_path, 'r') as f:
+            content = f.read()
+
+        # Check build system is defined
+        assert '[build-system]' in content
+        assert 'hatchling' in content
+        assert 'build-backend = "hatchling.build"' in content
+
+    def test_parse_arguments_works_with_console_script_name(self):
+        """Test that argument parsing works with console script names"""
+        # Test with underscore variant
+        test_args = ['cja_auto_sdr', 'dv_12345']
+        with patch.object(sys, 'argv', test_args):
+            args = parse_arguments()
+            assert args.data_views == ['dv_12345']
+
+        # Test with hyphen variant
+        test_args = ['cja-auto-sdr', 'dv_12345']
+        with patch.object(sys, 'argv', test_args):
+            args = parse_arguments()
+            assert args.data_views == ['dv_12345']
+
+    def test_version_output_format(self):
+        """Test that version output follows expected format"""
+        from cja_sdr_generator import __version__
+        import subprocess
+        result = subprocess.run(
+            ['uv', 'run', 'cja_auto_sdr', '--version'],
+            capture_output=True,
+            text=True,
+            cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        )
+        assert result.returncode == 0
+        assert __version__ in result.stdout
