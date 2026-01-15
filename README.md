@@ -106,7 +106,23 @@ uv run cja_auto_sdr --sample-config
 }
 ```
 
-**Option B: Environment Variables (Recommended for CI/CD)**
+**Option B: .env File (Recommended for Local Development)**
+
+```bash
+# Copy the template
+cp .env.example .env
+
+# Edit .env with your credentials
+```
+
+```bash
+ORG_ID=your_org_id@AdobeOrg
+CLIENT_ID=your_client_id
+SECRET=your_client_secret
+SCOPES=openid, AdobeID, additional_info.projectedProductContext
+```
+
+**Option C: Environment Variables (Recommended for CI/CD)**
 
 ```bash
 export ORG_ID=your_org_id@AdobeOrg
@@ -115,7 +131,7 @@ export SECRET=your_client_secret
 export SCOPES="openid, AdobeID, additional_info.projectedProductContext"
 ```
 
-> **Note:** Environment variables take precedence over `myconfig.json` if both are present.
+> **Note:** Priority order: Environment variables > `.env` file > `myconfig.json`
 
 ### 4. Verify Setup & Run
 
@@ -172,10 +188,20 @@ uv run cja_auto_sdr dv_YOUR_DATA_VIEW_ID
 ```
 cja_auto_sdr/
 ├── cja_sdr_generator.py     # Main script
+├── pyproject.toml           # Project configuration and dependencies
 ├── myconfig.json            # Your credentials (DO NOT COMMIT)
-├── pyproject.toml           # Project configuration
+├── .env.example             # Environment variable template
 ├── docs/                    # Documentation
-├── tests/                   # Test suite (229 tests)
+│   ├── QUICKSTART_GUIDE.md  # Getting started guide
+│   ├── CLI_REFERENCE.md     # Command-line reference
+│   ├── INSTALLATION.md      # Setup instructions
+│   └── ...                  # Additional guides
+├── tests/                   # Test suite (231 tests)
+├── sample_outputs/          # Example output files
+│   ├── excel/               # Sample Excel SDR
+│   ├── csv/                 # Sample CSV output
+│   ├── json/                # Sample JSON output
+│   └── html/                # Sample HTML output
 ├── logs/                    # Generated log files
 └── *.xlsx                   # Generated SDR files
 ```
