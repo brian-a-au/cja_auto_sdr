@@ -186,7 +186,7 @@ cja_auto_sdr/
 │   ├── CLI_REFERENCE.md     # Command-line reference
 │   ├── INSTALLATION.md      # Setup instructions
 │   └── ...                  # Additional guides
-├── tests/                   # Test suite (231 tests)
+├── tests/                   # Test suite (229 tests)
 ├── sample_outputs/          # Example output files
 │   ├── excel/               # Sample Excel SDR
 │   ├── csv/                 # Sample CSV output

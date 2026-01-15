@@ -23,7 +23,7 @@ tests/
 └── README.md                        # This file
 ```
 
-**Total: 221 comprehensive tests**
+**Total: 229 comprehensive tests**
 
 ## Running Tests
 
