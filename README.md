@@ -106,14 +106,9 @@ uv run cja_auto_sdr --sample-config
 }
 ```
 
-**Option B: .env File (Recommended for Local Development)**
+**Option B: Environment Variables (Recommended for CI/CD)**
 
-```bash
-# Copy the template
-cp .env.example .env
-
-# Edit .env with your credentials
-```
+Use a `.env` file (copy from `.env.example`) or export directly:
 
 ```bash
 ORG_ID=your_org_id@AdobeOrg
@@ -122,16 +117,7 @@ SECRET=your_client_secret
 SCOPES=openid, AdobeID, additional_info.projectedProductContext
 ```
 
-**Option C: Environment Variables (Recommended for CI/CD)**
-
-```bash
-export ORG_ID=your_org_id@AdobeOrg
-export CLIENT_ID=your_client_id
-export SECRET=your_client_secret
-export SCOPES="openid, AdobeID, additional_info.projectedProductContext"
-```
-
-> **Note:** Priority order: Environment variables > `.env` file > `myconfig.json`
+> **Note:** Environment variables take precedence over `myconfig.json`.
 
 ### 4. Verify Setup & Run
 
