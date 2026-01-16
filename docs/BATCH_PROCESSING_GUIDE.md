@@ -42,7 +42,7 @@ cja_auto_sdr --batch dv_12345 dv_67890 dv_abcde dv_11111 --workers 8
 | `--batch` | Explicitly enable batch mode (optional with multiple data views) | Auto-detect (parallel if multiple data views) |
 | `--workers N` | Number of parallel workers (1-256) | 4 |
 | `--output-dir PATH` | Output directory for generated files | Current directory |
-| `--config-file PATH` | Path to CJA configuration file | myconfig.json |
+| `--config-file PATH` | Path to CJA configuration file | config.json |
 | `--continue-on-error` | Continue processing if one data view fails | Stop on first error |
 | `--log-level LEVEL` | Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL) | INFO |
 | `--enable-cache` | Enable validation result caching | Disabled |

@@ -92,7 +92,7 @@ class TestCLIArguments:
             args = parse_arguments()
             assert args.workers == 4
             assert args.output_dir == '.'
-            assert args.config_file == 'myconfig.json'
+            assert args.config_file == 'config.json'
             assert args.continue_on_error is False
             assert args.log_level == 'INFO'
             assert args.production is False

@@ -164,20 +164,37 @@ This command:
 
 ### 2.4 Verify Installation
 
+**macOS/Linux:**
 ```bash
 # Using uv run (works without activating venv)
 uv run cja_auto_sdr --version
-# Output: cja_sdr_generator.py version 3.0.8
+# Output: cja_sdr_generator.py version 3.0.9
 
 # Or activate the virtual environment first
-source .venv/bin/activate  # macOS/Linux
-# .venv\Scripts\activate   # Windows
-
+source .venv/bin/activate
 cja_auto_sdr --version
-# Output: cja_sdr_generator.py version 3.0.8
+# Output: cja_sdr_generator.py version 3.0.9
+```
+
+**Windows (PowerShell):**
+```powershell
+# Try uv run first
+uv run cja_auto_sdr --version
+
+# If that doesn't work, activate virtual environment
+.venv\Scripts\activate
+
+# Then run directly
+python cja_sdr_generator.py --version
+# Output: cja_sdr_generator.py version 3.0.9
+
+# Or use the console script if it was installed
+cja_auto_sdr --version
 ```
 
 > **Important:** All commands in this guide assume you're in the `cja_auto_sdr` directory. If you see "command not found", make sure you're in the right directory and have run `uv sync`.
+
+> **Windows Users:** If `uv run` or the console script doesn't work, always use `python cja_sdr_generator.py` instead. This is the most reliable method on Windows. See [Windows-Specific Issues](TROUBLESHOOTING.md#windows-specific-issues) for troubleshooting.
 
 ---
 
@@ -206,11 +223,11 @@ uv add python-dotenv
 
 #### 3.1 Create Configuration File
 
-Create a file named `myconfig.json` in the project root directory:
+Create a file named `config.json` in the project root directory:
 
 ```bash
 # Copy the example template (recommended)
-cp .myconfig.json.example myconfig.json
+cp config.json.example config.json
 
 # Or generate a template
 uv run cja_auto_sdr --sample-config
@@ -246,11 +263,11 @@ Ensure credentials are not committed to version control:
 
 ```bash
 # Check if it's ignored
-git check-ignore myconfig.json
-# Should output: myconfig.json
+git check-ignore config.json
+# Should output: config.json
 
 # If not, add it
-echo "myconfig.json" >> .gitignore
+echo "config.json" >> .gitignore
 ```
 
 ---
@@ -261,8 +278,18 @@ Before generating reports, verify everything is configured correctly.
 
 ### 4.1 Test API Connection
 
+**macOS/Linux:**
 ```bash
 uv run cja_auto_sdr --list-dataviews
+```
+
+**Windows (PowerShell):**
+```powershell
+# If uv run works:
+uv run cja_auto_sdr --list-dataviews
+
+# If not, use Python directly:
+python cja_sdr_generator.py --list-dataviews
 ```
 
 **Successful output:**
@@ -301,8 +328,14 @@ dv_677ea9291244fd082f02dd42
 
 Test without generating a report:
 
+**macOS/Linux:**
 ```bash
 uv run cja_auto_sdr dv_YOUR_DATA_VIEW_ID --dry-run
+```
+
+**Windows (PowerShell):**
+```powershell
+python cja_sdr_generator.py dv_YOUR_DATA_VIEW_ID --dry-run
 ```
 
 **Expected output:**
@@ -326,8 +359,14 @@ Dry run complete. Remove --dry-run to generate the SDR.
 
 Replace `dv_YOUR_DATA_VIEW_ID` with your actual Data View ID:
 
+**macOS/Linux:**
 ```bash
 uv run cja_auto_sdr dv_677ea9291244fd082f02dd42
+```
+
+**Windows (PowerShell):**
+```powershell
+python cja_sdr_generator.py dv_677ea9291244fd082f02dd42
 ```
 
 ### 5.2 Watch the Progress
@@ -516,13 +555,13 @@ For large Data Views, see the [Performance Guide](PERFORMANCE.md):
 ### "Configuration file not found"
 
 ```
-Error: Configuration file 'myconfig.json' not found
+Error: Configuration file 'config.json' not found
 ```
 
-**Solution:** Ensure `myconfig.json` exists in the project root directory, not in a subdirectory.
+**Solution:** Ensure `config.json` exists in the project root directory, not in a subdirectory.
 
 ```bash
-ls myconfig.json  # Should show the file
+ls config.json  # Should show the file
 ```
 
 ### "Authentication failed"
@@ -532,7 +571,7 @@ Error: Authentication failed - invalid credentials
 ```
 
 **Solutions:**
-1. Double-check your `client_id` and `secret` in `myconfig.json`
+1. Double-check your `client_id` and `secret` in `config.json`
 2. Ensure there are no extra spaces or quotes
 3. Verify the integration is active in Adobe Developer Console
 4. Check that OAuth scopes match exactly
@@ -571,6 +610,59 @@ Error: Permission denied writing to ./output.xlsx
 1. Check directory write permissions
 2. Close the Excel file if it's open
 3. Specify a different output directory: `--output-dir ~/Desktop`
+
+### Windows: "uv run" command doesn't work
+
+**Symptoms (Windows):**
+```powershell
+PS> uv run cja_auto_sdr --version
+# Command fails, hangs, or shows errors
+```
+
+**Solution:** Use Python directly instead:
+
+```powershell
+# Activate virtual environment
+.venv\Scripts\activate
+
+# Run with Python
+python cja_sdr_generator.py --version
+python cja_sdr_generator.py --list-dataviews
+python cja_sdr_generator.py dv_12345
+```
+
+### Windows: NumPy ImportError
+
+**Symptoms (Windows):**
+```
+ImportError: Unable to import required dependencies:
+numpy:
+Importing the numpy C-extensions failed.
+```
+
+**Cause:** Common on Windows with Microsoft Store Python or incompatible binary wheels.
+
+**Solution:**
+
+1. Ensure Python is from [python.org](https://www.python.org/downloads/), not Microsoft Store
+2. Reinstall NumPy with binary wheels:
+
+```powershell
+# Activate virtual environment
+.venv\Scripts\activate
+
+# Reinstall NumPy
+pip uninstall numpy
+pip install --only-binary :all: numpy>=2.2.0
+
+# Verify
+python -c "import numpy; print(numpy.__version__)"
+
+# Then run the tool
+python cja_sdr_generator.py --version
+```
+
+**See also:** [Windows-Specific Issues](TROUBLESHOOTING.md#windows-specific-issues) for comprehensive Windows troubleshooting.
 
 ### Rate Limiting
 

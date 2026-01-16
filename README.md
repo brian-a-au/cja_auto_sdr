@@ -78,6 +78,7 @@ cd cja_auto_sdr
 
 ### 2. Install Dependencies
 
+**macOS/Linux:**
 ```bash
 # Install uv package manager (if not already installed)
 curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -86,11 +87,28 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 uv sync
 ```
 
-> **Running commands:** You have two equivalent options:
-> - `uv run cja_auto_sdr ...` — works immediately, no activation needed
-> - `cja_auto_sdr ...` — after activating the venv: `source .venv/bin/activate`
+**Windows (PowerShell):**
+```powershell
+# Install uv package manager
+powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+
+# Install project dependencies
+uv sync
+
+# If uv doesn't work, use native Python instead (recommended for Windows):
+python -m venv .venv
+.venv\Scripts\activate
+pip install -e .
+```
+
+> **Windows Users:** If you encounter issues with `uv run` or NumPy import errors on Windows, we recommend using Python directly. See the [Windows-Specific Issues](docs/TROUBLESHOOTING.md#windows-specific-issues) section in the troubleshooting guide for detailed solutions.
+
+> **Running commands:** You have three equivalent options:
+> - `uv run cja_auto_sdr ...` — works immediately on macOS/Linux, may have issues on Windows
+> - `cja_auto_sdr ...` — after activating the venv: `source .venv/bin/activate` (Unix) or `.venv\Scripts\activate` (Windows)
+> - `python cja_sdr_generator.py ...` — run the script directly (most reliable on Windows)
 >
-> This guide uses `uv run`. The [Common Use Cases](#common-use-cases) table omits it for brevity.
+> This guide uses `uv run`. Windows users should substitute with `python cja_sdr_generator.py`. The [Common Use Cases](#common-use-cases) table omits the prefix for brevity.
 
 ### 3. Configure Credentials
 
@@ -98,15 +116,19 @@ Get your credentials from [Adobe Developer Console](https://developer.adobe.com/
 
 **Option A: Configuration File (Quickest)**
 
+Create a `config.json` file with your Adobe credentials:
+
 ```bash
 # Copy the example template
-cp .myconfig.json.example myconfig.json
+cp config.json.example config.json
 
-# Or generate a template
+# Or generate a template (creates config.sample.json)
 uv run cja_auto_sdr --sample-config
 
-# Edit myconfig.json with your credentials
+# Edit config.json with your credentials
 ```
+
+> **Note:** The configuration file must be named `config.json` and placed in the project root directory.
 
 ```json
 {
@@ -128,18 +150,38 @@ SECRET=your_client_secret
 SCOPES=openid, AdobeID, additional_info.projectedProductContext
 ```
 
-> **Note:** Environment variables take precedence over `myconfig.json`.
+> **Note:** Environment variables take precedence over `config.json`.
 
 ### 4. Verify Setup & Run
 
+**macOS/Linux:**
 ```bash
 # Verify configuration and list available data views
 uv run cja_auto_sdr --validate-config
 uv run cja_auto_sdr --list-dataviews
 
-# Generate SDR for a data view
+# Generate SDR for a data view (by ID)
 uv run cja_auto_sdr dv_YOUR_DATA_VIEW_ID
+
+# Or by name (quotes recommended for names with spaces)
+uv run cja_auto_sdr "Production Analytics"
 ```
+
+**Windows (if uv run doesn't work):**
+```powershell
+# Activate virtual environment first
+.venv\Scripts\activate
+
+# Verify configuration and list available data views
+python cja_sdr_generator.py --validate-config
+python cja_sdr_generator.py --list-dataviews
+
+# Generate SDR for a data view (by ID or name)
+python cja_sdr_generator.py dv_YOUR_DATA_VIEW_ID
+python cja_sdr_generator.py "Production Analytics"
+```
+
+> **New in v3.0.9:** You can now specify data views by **name** in addition to ID. If multiple data views share the same name, all matching views will be processed.
 
 ### 5. Review Output
 
@@ -148,10 +190,17 @@ uv run cja_auto_sdr dv_YOUR_DATA_VIEW_ID
 
 ## Common Use Cases
 
+**Note:** Commands below omit the `uv run` or `python cja_sdr_generator.py` prefix for brevity:
+- **macOS/Linux:** Add `uv run` before each command (e.g., `uv run cja_auto_sdr dv_12345`)
+- **Windows:** Use `python cja_sdr_generator.py` instead (e.g., `python cja_sdr_generator.py dv_12345`)
+
 | Task | Command |
 |------|---------|
-| Single data view | `cja_auto_sdr dv_12345` |
-| Batch processing | `cja_auto_sdr dv_1 dv_2 dv_3` |
+| Single data view (by ID) | `cja_auto_sdr dv_12345` |
+| Single data view (by name) | `cja_auto_sdr "Production Analytics"` |
+| Batch processing (IDs) | `cja_auto_sdr dv_1 dv_2 dv_3` |
+| Batch processing (names) | `cja_auto_sdr "Prod" "Staging" "Test"` |
+| Mixed IDs and names | `cja_auto_sdr dv_12345 "Test Environment"` |
 | Custom output location | `cja_auto_sdr dv_12345 --output-dir ./reports` |
 | Validate only (no report) | `cja_auto_sdr dv_12345 --dry-run` |
 | Skip validation (faster) | `cja_auto_sdr dv_12345 --skip-validation` |
@@ -175,6 +224,7 @@ uv run cja_auto_sdr dv_YOUR_DATA_VIEW_ID
 | [Use Cases & Best Practices](docs/USE_CASES.md) | Automation, scheduling, workflows |
 | [Output Formats](docs/OUTPUT_FORMATS.md) | Format specifications and examples |
 | [Batch Processing](docs/BATCH_PROCESSING_GUIDE.md) | Multi-data view processing guide |
+| [Data View Names](docs/DATA_VIEW_NAMES.md) | Using data view names instead of IDs (v3.0.9+) |
 | [Testing](tests/README.md) | Running and writing tests |
 
 ## Requirements
@@ -189,15 +239,15 @@ uv run cja_auto_sdr dv_YOUR_DATA_VIEW_ID
 cja_auto_sdr/
 ├── cja_sdr_generator.py     # Main script
 ├── pyproject.toml           # Project configuration and dependencies
-├── myconfig.json            # Your credentials (DO NOT COMMIT)
-├── .myconfig.json.example   # Config file template
+├── config.json            # Your credentials (DO NOT COMMIT)
+├── .config.json.example   # Config file template
 ├── .env.example             # Environment variable template
 ├── docs/                    # Documentation
 │   ├── QUICKSTART_GUIDE.md  # Getting started guide
 │   ├── CLI_REFERENCE.md     # Command-line reference
 │   ├── INSTALLATION.md      # Setup instructions
 │   └── ...                  # Additional guides
-├── tests/                   # Test suite (262 tests)
+├── tests/                   # Test suite (278 tests)
 ├── sample_outputs/          # Example output files
 │   ├── excel/               # Sample Excel SDR
 │   ├── csv/                 # Sample CSV output

@@ -193,7 +193,7 @@ class ErrorMessageHelper:
                 "title": "Authentication Failed",
                 "reason": "Your credentials are invalid or have expired",
                 "suggestions": [
-                    "Verify CLIENT_ID and SECRET in myconfig.json or environment variables",
+                    "Verify CLIENT_ID and SECRET in config.json or environment variables",
                     "Check that your ORG_ID ends with '@AdobeOrg'",
                     "Ensure SCOPES includes: 'openid, AdobeID, additional_info.projectedProductContext'",
                     "Regenerate credentials at https://developer.adobe.com/console/",
@@ -385,11 +385,11 @@ class ErrorMessageHelper:
         messages = {
             "file_not_found": {
                 "title": "Configuration File Not Found",
-                "reason": "The myconfig.json file does not exist",
+                "reason": "The config.json file does not exist",
                 "suggestions": [
                     "Create a configuration file:",
                     "  Option 1: cja_auto_sdr --sample-config",
-                    "  Option 2: cp .myconfig.json.example myconfig.json",
+                    "  Option 2: cp .config.json.example config.json",
                     "",
                     "Or use environment variables instead:",
                     "  export ORG_ID='your_org_id@AdobeOrg'",
@@ -412,7 +412,7 @@ class ErrorMessageHelper:
                     "",
                     "Validate your JSON:",
                     "  - Use a JSON validator: https://jsonlint.com/",
-                    "  - Or check with: python -m json.tool myconfig.json",
+                    "  - Or check with: python -m json.tool config.json",
                     "",
                     "Generate a fresh template:",
                     "  cja_auto_sdr --sample-config",
@@ -422,7 +422,7 @@ class ErrorMessageHelper:
                 "title": "Missing Required Credentials",
                 "reason": "One or more required credential fields are missing",
                 "suggestions": [
-                    "Required fields in myconfig.json:",
+                    "Required fields in config.json:",
                     "  - org_id: Your Adobe Organization ID (ends with @AdobeOrg)",
                     "  - client_id: OAuth Client ID from Adobe Developer Console",
                     "  - secret: Client Secret from Adobe Developer Console",
@@ -1425,12 +1425,12 @@ def validate_config_file(config_file: str, logger: logging.Logger) -> bool:
         logger.error(f"Unexpected error validating config file ({type(e).__name__}): {str(e)}")
         return False
 
-def initialize_cja(config_file: str = "myconfig.json", logger: logging.Logger = None) -> Optional[cjapy.CJA]:
+def initialize_cja(config_file: str = "config.json", logger: logging.Logger = None) -> Optional[cjapy.CJA]:
     """Initialize CJA connection with comprehensive error handling
 
     Credential Loading Priority:
         1. Environment variables (ORG_ID, CLIENT_ID, SECRET, etc.)
-        2. Configuration file (myconfig.json)
+        2. Configuration file (config.json)
     """
     try:
         logger.info("=" * 60)
@@ -1476,7 +1476,7 @@ def initialize_cja(config_file: str = "myconfig.json", logger: logging.Logger = 
                 logger.critical("  export SECRET=your_client_secret")
                 logger.critical("  export SCOPES='openid, AdobeID, additional_info.projectedProductContext'")
                 logger.critical("")
-                logger.critical("Option 2: Config File (myconfig.json):")
+                logger.critical("Option 2: Config File (config.json):")
                 logger.critical(json.dumps({
                     "org_id": "your_org_id",
                     "client_id": "your_client_id",
@@ -3121,7 +3121,7 @@ def write_markdown_output(data_dict: Dict[str, pd.DataFrame], metadata_dict: Dic
 
 # ==================== REFACTORED SINGLE DATAVIEW PROCESSING ====================
 
-def process_single_dataview(data_view_id: str, config_file: str = "myconfig.json",
+def process_single_dataview(data_view_id: str, config_file: str = "config.json",
                            output_dir: str = ".", log_level: str = "INFO",
                            output_format: str = "excel", enable_cache: bool = False,
                            cache_size: int = 1000, cache_ttl: int = 3600,
@@ -3132,7 +3132,7 @@ def process_single_dataview(data_view_id: str, config_file: str = "myconfig.json
 
     Args:
         data_view_id: The data view ID to process (must start with 'dv_')
-        config_file: Path to CJA config file (default: 'myconfig.json')
+        config_file: Path to CJA config file (default: 'config.json')
         output_dir: Directory to save output files (default: current directory)
         log_level: Logging level - one of DEBUG, INFO, WARNING, ERROR, CRITICAL (default: INFO)
         output_format: Output format - one of excel, csv, json, html, markdown, all (default: excel)
@@ -3605,7 +3605,7 @@ class BatchProcessor:
     with configurable worker count and error handling.
 
     Args:
-        config_file: Path to CJA config file (default: 'myconfig.json')
+        config_file: Path to CJA config file (default: 'config.json')
         output_dir: Directory for output files (default: current directory)
         workers: Number of parallel workers, 1-256 (default: 4)
         continue_on_error: Continue if individual data views fail (default: False)
@@ -3620,7 +3620,7 @@ class BatchProcessor:
         clear_cache: Clear validation cache before processing (default: False)
     """
 
-    def __init__(self, config_file: str = "myconfig.json", output_dir: str = ".",
+    def __init__(self, config_file: str = "config.json", output_dir: str = ".",
                  workers: int = 4, continue_on_error: bool = False, log_level: str = "INFO",
                  output_format: str = "excel", enable_cache: bool = False,
                  cache_size: int = 1000, cache_ttl: int = 3600, quiet: bool = False,
@@ -4110,8 +4110,10 @@ Note:
     parser.add_argument(
         'data_views',
         nargs='*',
-        metavar='DATA_VIEW_ID',
-        help='Data view IDs to process (at least one required unless using --version)'
+        metavar='DATA_VIEW_ID_OR_NAME',
+        help='Data view IDs (e.g., dv_12345) or exact names (use quotes for names with spaces). '
+             'If a name matches multiple data views, all will be processed. '
+             'At least one required unless using --version, --list-dataviews, etc.'
     )
 
     parser.add_argument(
@@ -4137,8 +4139,8 @@ Note:
     parser.add_argument(
         '--config-file',
         type=str,
-        default='myconfig.json',
-        help='Path to CJA configuration file (default: myconfig.json)'
+        default='config.json',
+        help='Path to CJA configuration file (default: config.json)'
     )
 
     parser.add_argument(
@@ -4263,9 +4265,118 @@ Note:
 
     return parser.parse_args()
 
+# ==================== DATA VIEW NAME RESOLUTION ====================
+
+def is_data_view_id(identifier: str) -> bool:
+    """
+    Check if a string is a data view ID (starts with 'dv_')
+
+    Args:
+        identifier: String to check
+
+    Returns:
+        True if identifier is a data view ID, False if it's a name
+    """
+    return identifier.startswith('dv_')
+
+
+def resolve_data_view_names(identifiers: List[str], config_file: str = "config.json",
+                            logger: logging.Logger = None) -> Tuple[List[str], Dict[str, List[str]]]:
+    """
+    Resolve data view names to IDs. If an identifier is already an ID, keep it as-is.
+    If it's a name, look up all data views with that exact name.
+
+    Args:
+        identifiers: List of data view IDs or names
+        config_file: Path to CJA configuration file
+        logger: Logger instance for logging
+
+    Returns:
+        Tuple of (resolved_ids, name_to_ids_map)
+        - resolved_ids: List of all resolved data view IDs
+        - name_to_ids_map: Dict mapping names to their resolved IDs (for reporting)
+    """
+    if logger is None:
+        logger = logging.getLogger(__name__)
+
+    resolved_ids = []
+    name_to_ids_map = {}
+
+    try:
+        # Initialize CJA connection
+        logger.info(f"Resolving data view identifiers: {identifiers}")
+        cjapy.importConfigFile(config_file)
+        cja = cjapy.CJA()
+
+        # Get all available data views
+        logger.debug("Fetching all data views for name resolution")
+        available_dvs = cja.getDataViews()
+
+        if available_dvs is None or (hasattr(available_dvs, '__len__') and len(available_dvs) == 0):
+            logger.error("No data views found or no access to any data views")
+            return [], {}
+
+        # Convert to list if DataFrame
+        if isinstance(available_dvs, pd.DataFrame):
+            available_dvs = available_dvs.to_dict('records')
+
+        # Build a lookup map: name -> list of IDs
+        name_to_id_lookup = {}
+        id_to_name_lookup = {}
+
+        for dv in available_dvs:
+            if isinstance(dv, dict):
+                dv_id = dv.get('id')
+                dv_name = dv.get('name')
+
+                if dv_id and dv_name:
+                    id_to_name_lookup[dv_id] = dv_name
+                    if dv_name not in name_to_id_lookup:
+                        name_to_id_lookup[dv_name] = []
+                    name_to_id_lookup[dv_name].append(dv_id)
+
+        logger.debug(f"Built lookup map with {len(name_to_id_lookup)} unique names and {len(id_to_name_lookup)} IDs")
+
+        # Process each identifier
+        for identifier in identifiers:
+            if is_data_view_id(identifier):
+                # It's an ID - validate it exists
+                if identifier in id_to_name_lookup:
+                    resolved_ids.append(identifier)
+                    logger.debug(f"ID '{identifier}' validated: {id_to_name_lookup[identifier]}")
+                else:
+                    logger.warning(f"Data view ID '{identifier}' not found in accessible data views")
+                    # Still add it - will fail during processing with proper error message
+                    resolved_ids.append(identifier)
+            else:
+                # It's a name - look up all matching IDs
+                if identifier in name_to_id_lookup:
+                    matching_ids = name_to_id_lookup[identifier]
+                    resolved_ids.extend(matching_ids)
+                    name_to_ids_map[identifier] = matching_ids
+
+                    if len(matching_ids) == 1:
+                        logger.info(f"Name '{identifier}' resolved to ID: {matching_ids[0]}")
+                    else:
+                        logger.info(f"Name '{identifier}' matched {len(matching_ids)} data views: {matching_ids}")
+                else:
+                    logger.error(f"Data view name '{identifier}' not found in accessible data views")
+                    # Don't add to resolved_ids - this is an error
+
+        logger.info(f"Resolved {len(identifiers)} identifier(s) to {len(resolved_ids)} data view ID(s)")
+        return resolved_ids, name_to_ids_map
+
+    except FileNotFoundError:
+        logger.error(f"Configuration file '{config_file}' not found")
+        return [], {}
+    except Exception as e:
+        logger.error(f"Failed to resolve data view names: {str(e)}")
+        return [], {}
+
+
 # ==================== LIST DATA VIEWS ====================
 
-def list_dataviews(config_file: str = "myconfig.json") -> bool:
+def list_dataviews(config_file: str = "config.json") -> bool:
     """
     List all accessible data views and exit
 
@@ -4318,9 +4429,13 @@ def list_dataviews(config_file: str = "myconfig.json") -> bool:
                 print(f"{dv_id:<45} {dv_name:<40} {owner_name}")
 
         print()
-        print("=" * 60)
-        print("Usage: python cja_sdr_generator.py <DATA_VIEW_ID>")
-        print("=" * 60)
+        print("=" * 100)
+        print("Usage:")
+        print("  python cja_sdr_generator.py <DATA_VIEW_ID>       # Use ID directly")
+        print("  python cja_sdr_generator.py \"<DATA_VIEW_NAME>\"   # Use exact name (quotes recommended)")
+        print()
+        print("Note: If multiple data views share the same name, all will be processed.")
+        print("=" * 100)
 
         return True
 
@@ -4343,7 +4458,7 @@ def list_dataviews(config_file: str = "myconfig.json") -> bool:
 
 # ==================== SAMPLE CONFIG GENERATOR ====================
 
-def generate_sample_config(output_path: str = "myconfig.sample.json") -> bool:
+def generate_sample_config(output_path: str = "config.sample.json") -> bool:
     """
     Generate a sample configuration file
 
@@ -4373,10 +4488,10 @@ def generate_sample_config(output_path: str = "myconfig.sample.json") -> bool:
         print(f"✓ Sample configuration file created: {output_path}")
         print()
         print("Next steps:")
-        print("  1. Copy the sample file to 'myconfig.json':")
-        print(f"     cp {output_path} myconfig.json")
+        print("  1. Copy the sample file to 'config.json':")
+        print(f"     cp {output_path} config.json")
         print()
-        print("  2. Edit myconfig.json with your Adobe Developer Console credentials")
+        print("  2. Edit config.json with your Adobe Developer Console credentials")
         print()
         print("  3. Test your configuration:")
         print("     python cja_sdr_generator.py --list-dataviews")
@@ -4392,7 +4507,7 @@ def generate_sample_config(output_path: str = "myconfig.sample.json") -> bool:
 
 # ==================== VALIDATE CONFIG ====================
 
-def validate_config_only(config_file: str = "myconfig.json") -> bool:
+def validate_config_only(config_file: str = "config.json") -> bool:
     """
     Validate configuration file and API connectivity without processing data views.
 
@@ -4630,22 +4745,67 @@ def main():
         sys.exit(0 if success else 1)
 
     # Get data views from arguments
-    data_views = args.data_views
+    data_view_inputs = args.data_views
 
     # Validate that at least one data view is provided
-    if not data_views:
-        print(ConsoleColors.error("ERROR: At least one data view ID is required"), file=sys.stderr)
-        print("Usage: python cja_sdr_generator.py DATA_VIEW_ID [DATA_VIEW_ID ...]", file=sys.stderr)
+    if not data_view_inputs:
+        print(ConsoleColors.error("ERROR: At least one data view ID or name is required"), file=sys.stderr)
+        print("Usage: python cja_sdr_generator.py DATA_VIEW_ID_OR_NAME [DATA_VIEW_ID_OR_NAME ...]", file=sys.stderr)
         print("       Use --help for more information", file=sys.stderr)
         sys.exit(1)
 
-    # Validate data view format
-    invalid_dvs = [dv for dv in data_views if not dv.startswith('dv_')]
-    if invalid_dvs:
-        print(ConsoleColors.error(f"ERROR: Invalid data view ID format: {', '.join(invalid_dvs)}"), file=sys.stderr)
-        print(f"       Data view IDs should start with 'dv_'", file=sys.stderr)
-        print(f"       Example: dv_677ea9291244fd082f02dd42", file=sys.stderr)
+    # Resolve data view names to IDs
+    # Create a temporary logger for name resolution
+    temp_logger = logging.getLogger('name_resolution')
+    temp_logger.setLevel(logging.INFO if not args.quiet else logging.ERROR)
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter('%(levelname)s - %(message)s'))
+    temp_logger.addHandler(handler)
+    temp_logger.propagate = False
+
+    # Show what we're resolving
+    ids_provided = [dv for dv in data_view_inputs if is_data_view_id(dv)]
+    names_provided = [dv for dv in data_view_inputs if not is_data_view_id(dv)]
+
+    if names_provided and not args.quiet:
+        print()
+        print(ConsoleColors.info(f"Resolving {len(names_provided)} data view name(s)..."))
+
+    data_views, name_to_ids_map = resolve_data_view_names(data_view_inputs, args.config_file, temp_logger)
+
+    # Remove the temporary handler
+    temp_logger.removeHandler(handler)
+
+    # Check if resolution failed
+    if not data_views:
+        print()
+        print(ConsoleColors.error("ERROR: No valid data views found"), file=sys.stderr)
+        print()
+        print("Possible issues:", file=sys.stderr)
+        print("  - Data view name(s) not found or you don't have access", file=sys.stderr)
+        print("  - Configuration issue preventing data view lookup", file=sys.stderr)
+        print()
+        print("Try running: python cja_sdr_generator.py --list-dataviews", file=sys.stderr)
+        print("  to see all accessible data views", file=sys.stderr)
         sys.exit(1)
+
+    # Show resolution summary if names were used
+    if name_to_ids_map and not args.quiet:
+        print()
+        print(ConsoleColors.success("Data view name resolution:"))
+        for name, ids in name_to_ids_map.items():
+            if len(ids) == 1:
+                print(f"  ✓ '{name}' → {ids[0]}")
+            else:
+                print(f"  ✓ '{name}' → {len(ids)} matching data views:")
+                for dv_id in ids:
+                    print(f"      - {dv_id}")
+        print()
+
+    # Validate the resolved data view IDs
+    if not args.quiet and names_provided:
+        print(ConsoleColors.info(f"Processing {len(data_views)} data view(s) total..."))
+        print()
 
     # Priority logic for log level: --quiet > --production > --log-level
     if args.quiet:

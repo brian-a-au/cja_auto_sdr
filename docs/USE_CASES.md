@@ -204,7 +204,7 @@ git commit -m "Update dependencies"
 
 **Files to ignore (.gitignore):**
 ```gitignore
-myconfig.json
+config.json
 *.key
 *.pem
 .venv/
@@ -214,7 +214,7 @@ logs/
 
 ### Security
 
-- Never commit `myconfig.json` to version control
+- Never commit `config.json` to version control
 - Use service accounts for automated runs
 - Rotate credentials periodically
 - Store private keys in key management systems

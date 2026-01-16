@@ -5,16 +5,59 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [3.0.9] - 2026-01-15
+## [3.0.9] - 2026-01-16
 
 **🎯 What's New in 3.0.9:**
+- **Data View Names** - Use human-readable names instead of IDs (e.g., `"Production Analytics"` vs `dv_12345`)
+- **Windows Support Improvements** - Comprehensive Windows-specific documentation and troubleshooting
+- **Config File Rename** - Clearer naming: `config.json` instead of `myconfig.json`
 - **Markdown Output Format** - Export SDRs as GitHub/Confluence-compatible markdown with tables, TOC, and collapsible sections
 - **Enhanced Error Messages** - Contextual, actionable error messages with step-by-step fix guidance and documentation links
-- **33 New Tests** - Comprehensive test coverage for both features (262 total tests)
+- **49 New Tests** - Comprehensive test coverage for all features (278 total tests)
 
-This release focuses on improving **documentation workflows** (markdown export) and **user experience** (helpful error messages).
+This release focuses on **ease of use** (name support, Windows compatibility), **documentation workflows** (markdown export), and **user experience** (helpful error messages).
 
 ### Added
+
+#### Data View Name Support
+- **Use Names Instead of IDs**: Specify data views by their human-readable name (e.g., `"Production Analytics"`) instead of ID (e.g., `dv_677ea9291244fd082f02dd42`)
+- **Automatic Name Resolution**: Tool automatically resolves names to IDs by fetching available data views
+- **Duplicate Name Handling**: If multiple data views share the same name, all matching views are processed
+- **Mixed Input Support**: Combine IDs and names in the same command (e.g., `cja_auto_sdr dv_12345 "Staging" "Test"`)
+- **Case-Sensitive Exact Matching**: Names must match exactly as they appear in CJA
+- **Enhanced CLI Help**: Updated command-line help to show both ID and name options
+- **Name Resolution Feedback**: Shows which names resolved to which IDs before processing
+- **16 New Tests**: Comprehensive test coverage for name resolution (`tests/test_name_resolution.py`)
+- **New Documentation**: Complete guide in `docs/DATA_VIEW_NAMES.md`
+- **Benefits**:
+  - Easier to remember and use
+  - More readable scripts and documentation
+  - Better for scheduled reports and CI/CD pipelines
+  - Reduces copy-paste errors with long IDs
+
+#### Windows Support Improvements
+- **Windows-Specific Troubleshooting**: New comprehensive section in `docs/TROUBLESHOOTING.md` covering:
+  - NumPy ImportError solutions (4 different approaches)
+  - `uv run` command alternatives for Windows
+  - PowerShell execution policy issues
+  - Path separator guidance
+  - Virtual environment activation for PowerShell, CMD, and Git Bash
+  - Windows diagnostic script (PowerShell equivalent)
+  - Common Windows commands reference table
+  - Recommended Windows setup with step-by-step guidance
+- **Windows Native Setup Guide**: New "Option 5" in `docs/INSTALLATION.md` for pure Python installation without `uv`
+- **Platform-Specific Examples**: All documentation now includes separate Windows PowerShell examples
+- **README Updates**: Windows-specific notes and alternatives throughout Quick Start section
+
+#### Configuration File Rename
+- **Clearer Naming**: Renamed `myconfig.json` to `config.json` for better clarity
+- **Updated Example File**: Renamed `.myconfig.json.example` to `config.json.example`
+- **Consistent Documentation**: All documentation and error messages updated to use `config.json`
+- **Sample Config Generator**: Updated to generate `config.sample.json` with clear instructions
+- **Benefits**:
+  - More standard naming convention
+  - Less confusion about whether "myconfig" is a placeholder
+  - Clearer intent as the configuration file
 
 #### Markdown Output Format
 - **New `--format markdown` option**: Export SDR as GitHub/Confluence-compatible markdown
@@ -70,16 +113,36 @@ This release focuses on improving **documentation workflows** (markdown export) 
 - **Network Operations**: All API calls provide enhanced error context on failure
 
 #### Testing
-- **33 New Tests**: 21 error message tests + 12 markdown output tests
+- **49 New Tests**: 16 name resolution tests + 21 error message tests + 12 markdown output tests
+- **Name Resolution Tests** (`tests/test_name_resolution.py`): ID detection, single/multiple name resolution, duplicate handling, error scenarios
 - **Integration Tests**: Verification of enhanced messages in retry and validation flows
 - **Markdown Output Tests**: Full coverage of markdown generation, escaping, collapsible sections, Unicode, and more
-- **Total Test Count**: Increased from 229 to 262 tests
+- **Total Test Count**: Increased from 229 to 278 tests (100% pass rate)
 
 ### Improved
-- **User Experience**: Errors now provide clear "Why this happened" and "How to fix it" sections
-- **Troubleshooting Time**: Reduced with direct links to relevant documentation
-- **Developer Onboarding**: Better guidance for common setup issues
-- **Support Burden**: Self-service error resolution reduces support requests
+- **User Experience**:
+  - Data views can now be referenced by memorable names instead of long IDs
+  - Errors now provide clear "Why this happened" and "How to fix it" sections
+  - Windows users have comprehensive platform-specific documentation
+  - Configuration file naming is more intuitive
+- **Documentation**: More readable commands in scripts, CI/CD pipelines, and documentation
+- **Troubleshooting Time**: Reduced with direct links to relevant documentation and platform-specific guides
+- **Developer Onboarding**: Better guidance for common setup issues across all platforms
+- **Support Burden**: Self-service error resolution and clear documentation reduce support requests
+- **Cross-Platform Support**: Equal support quality for Windows, macOS, and Linux users
+
+### Changed
+- **Configuration File Name**: `myconfig.json` → `config.json` (users should rename their existing file)
+- **Example Config File**: `.myconfig.json.example` → `config.json.example`
+- **Sample Config Output**: `myconfig.sample.json` → `config.sample.json`
+- **CLI Help Text**: Updated to reflect ID or name support for data views
+- **Documentation**: Updated throughout to use `config.json` naming
+
+### Backward Compatibility
+- **Full Backward Compatibility**: All existing commands and scripts continue to work
+- **ID-Based Commands**: All existing ID-based data view specifications work unchanged
+- **Config File Migration**: Users need to rename `myconfig.json` to `config.json` (simple `mv` command)
+- **No Breaking Changes**: All 278 tests pass, including legacy functionality
 
 ## [3.0.8] - 2026-01-15
 
@@ -102,10 +165,10 @@ This release focuses on improving **documentation workflows** (markdown export) 
   - `SECRET`: Client Secret
   - `SCOPES`: OAuth scopes
   - `SANDBOX`: Sandbox name (optional)
-- **Priority Order**: Environment variables take precedence over `myconfig.json`
+- **Priority Order**: Environment variables take precedence over `config.json`
 - **Optional python-dotenv**: Install `python-dotenv` to enable automatic `.env` file loading
 - **`.env.example`**: Template file for environment variable configuration
-- **Full Backwards Compatibility**: Existing `myconfig.json` configurations continue to work unchanged
+- **Full Backwards Compatibility**: Existing `config.json` configurations continue to work unchanged
 
 #### Batch Processing Improvements
 - **File Size in Batch Summary**: Each successful data view now shows its output file size
@@ -137,7 +200,7 @@ This release focuses on improving **documentation workflows** (markdown export) 
 - **pytest-cov Dependency**: Added as dev dependency for coverage reporting
 
 #### Developer Experience
-- **`.myconfig.json.example`**: New template file for config file setup (complements `.env.example`)
+- **`.config.json.example`**: New template file for config file setup (complements `.env.example`)
 - **JWT Deprecation Warning**: Config validation now warns when deprecated JWT fields (`tech_acct`, `private_key`, `pathToKey`) are detected, with migration guidance
 
 #### Error Handling Improvements

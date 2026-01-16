@@ -5,7 +5,7 @@ Complete command-line interface documentation for the CJA SDR Generator.
 ## Basic Syntax
 
 ```bash
-cja_auto_sdr [OPTIONS] DATA_VIEW_ID [DATA_VIEW_ID ...]
+cja_auto_sdr [OPTIONS] DATA_VIEW_ID_OR_NAME [DATA_VIEW_ID_OR_NAME ...]
 ```
 
 > **Running commands:** You have two equivalent options:
@@ -18,10 +18,10 @@ cja_auto_sdr [OPTIONS] DATA_VIEW_ID [DATA_VIEW_ID ...]
 
 ```bash
 # Hyphenated version (identical functionality)
-cja-auto-sdr [OPTIONS] DATA_VIEW_ID [...]
+cja-auto-sdr [OPTIONS] DATA_VIEW_ID_OR_NAME [...]
 
 # Direct Python invocation
-python cja_sdr_generator.py [OPTIONS] DATA_VIEW_ID [...]
+python cja_sdr_generator.py [OPTIONS] DATA_VIEW_ID_OR_NAME [...]
 ```
 
 ## Arguments
@@ -30,7 +30,9 @@ python cja_sdr_generator.py [OPTIONS] DATA_VIEW_ID [...]
 
 | Argument | Description |
 |----------|-------------|
-| `DATA_VIEW_ID` | One or more data view IDs (must start with `dv_`) |
+| `DATA_VIEW_ID_OR_NAME` | One or more data view IDs (e.g., `dv_12345`) or exact names (e.g., `"Production Analytics"`). If a name matches multiple data views, all will be processed. Use quotes for names with spaces. |
+
+**New in v3.0.9:** You can now specify data views by **name** in addition to ID. See [Data View Names Guide](DATA_VIEW_NAMES.md) for details.
 
 ## Options
 
@@ -63,7 +65,7 @@ python cja_sdr_generator.py [OPTIONS] DATA_VIEW_ID [...]
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `--config-file PATH` | Path to configuration file | myconfig.json |
+| `--config-file PATH` | Path to configuration file | config.json |
 | `--log-level LEVEL` | DEBUG, INFO, WARNING, ERROR, CRITICAL | INFO |
 | `--production` | Minimal logging for performance | False |
 
@@ -96,7 +98,7 @@ python cja_sdr_generator.py [OPTIONS] DATA_VIEW_ID [...]
 
 ### Environment Variables
 
-**Credentials (take precedence over myconfig.json):**
+**Credentials (take precedence over config.json):**
 
 | Variable | Description |
 |----------|-------------|
@@ -118,33 +120,43 @@ python cja_sdr_generator.py [OPTIONS] DATA_VIEW_ID [...]
 ### Single Data View
 
 ```bash
-# Basic usage
+# By ID
 cja_auto_sdr dv_677ea9291244fd082f02dd42
+
+# By name (v3.0.9+)
+cja_auto_sdr "Production Analytics"
 
 # With custom output directory
 cja_auto_sdr dv_12345 --output-dir ./reports
+cja_auto_sdr "Test Environment" --output-dir ./reports
 
 # With custom config file
-cja_auto_sdr dv_12345 --config-file ./prod_config.json
+cja_auto_sdr "Production Analytics" --config-file ./prod_config.json
 
 # With debug logging
-cja_auto_sdr dv_12345 --log-level DEBUG
+cja_auto_sdr "Staging" --log-level DEBUG
 ```
 
 ### Multiple Data Views
 
 ```bash
-# Automatic batch processing (detected from multiple IDs)
+# By IDs - automatic batch processing
 cja_auto_sdr dv_12345 dv_67890 dv_abcde
+
+# By names (v3.0.9+)
+cja_auto_sdr "Production" "Staging" "Test Environment"
+
+# Mix IDs and names
+cja_auto_sdr dv_12345 "Staging Analytics" dv_67890
 
 # Explicit batch mode
 cja_auto_sdr --batch dv_12345 dv_67890 dv_abcde
 
 # Custom worker count
-cja_auto_sdr --batch dv_12345 dv_67890 --workers 8
+cja_auto_sdr --batch "Production" "Staging" --workers 8
 
 # Continue on errors
-cja_auto_sdr --batch dv_* --continue-on-error
+cja_auto_sdr --batch "Prod" "Stage" "Test" --continue-on-error
 ```
 
 ### Discovery Commands

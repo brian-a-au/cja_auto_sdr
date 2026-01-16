@@ -5,6 +5,7 @@ __pycache__/
 htmlcov/
 
 # Credentials (DO NOT COMMIT)
+config.json
 myconfig.json
 .env
 *.key

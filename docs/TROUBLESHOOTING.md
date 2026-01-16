@@ -37,11 +37,11 @@ echo "=== Project Dependencies ==="
 uv pip list | grep -E "cjapy|pandas|openpyxl"
 echo ""
 echo "=== Configuration Check ==="
-if [ -f myconfig.json ]; then
-    echo "myconfig.json exists"
-    python -c "import json; json.load(open('myconfig.json')); print('JSON syntax: valid')" 2>&1 || echo "JSON syntax: INVALID"
+if [ -f config.json ]; then
+    echo "config.json exists"
+    python -c "import json; json.load(open('config.json')); print('JSON syntax: valid')" 2>&1 || echo "JSON syntax: INVALID"
 else
-    echo "myconfig.json NOT FOUND"
+    echo "config.json NOT FOUND"
 fi
 echo ""
 echo "=== Environment Variables ==="
@@ -95,8 +95,8 @@ uv run cja_auto_sdr --sample-config
 
 **Symptoms:**
 ```
-CRITICAL - Configuration file not found: myconfig.json
-FileNotFoundError: Config file not found: myconfig.json
+CRITICAL - Configuration file not found: config.json
+FileNotFoundError: Config file not found: config.json
 ```
 
 **Solutions:**
@@ -116,7 +116,7 @@ CRITICAL - Configuration file is not valid JSON: Expecting ',' delimiter: line 5
 **Solutions:**
 1. Validate JSON syntax:
    ```bash
-   python -c "import json; json.load(open('myconfig.json'))"
+   python -c "import json; json.load(open('config.json'))"
    ```
 2. Common JSON issues:
    - Missing commas between fields
@@ -132,7 +132,7 @@ CRITICAL - Missing required field: 'org_id'
 CRITICAL - Empty value for required field: 'client_id'
 ```
 
-**Required fields in myconfig.json:**
+**Required fields in config.json:**
 | Field | Type | Description |
 |-------|------|-------------|
 | `org_id` | string | Adobe Organization ID (ends with @AdobeOrg) |
@@ -180,10 +180,10 @@ PermissionError: Cannot read configuration file: Permission denied
 **Solutions:**
 ```bash
 # Check permissions
-ls -la myconfig.json
+ls -la config.json
 
 # Fix permissions
-chmod 600 myconfig.json
+chmod 600 config.json
 ```
 
 ### Environment Variable Configuration
@@ -222,7 +222,7 @@ cp .env.example .env
 # Edit .env with your values
 ```
 
-> **Note:** Environment variables take precedence over myconfig.json
+> **Note:** Environment variables take precedence over config.json
 
 ---
 
@@ -855,6 +855,298 @@ rm -rf .venv
 uv venv --python 3.14
 uv sync
 ```
+
+---
+
+## Windows-Specific Issues
+
+### NumPy ImportError on Windows
+
+**Symptoms:**
+```
+ImportError: Unable to import required dependencies:
+numpy:
+
+IMPORTANT: PLEASE READ THIS FOR ADVICE ON HOW TO SOLVE THIS ISSUE!
+
+Importing the numpy C-extensions failed. This error can happen for
+many reasons, often due to issues with your setup or how NumPy was
+installed.
+```
+
+**Cause:** NumPy's C-extensions require compatible binary wheels for Windows. This commonly occurs when:
+- Python was installed from the Microsoft Store
+- The virtual environment was created with an incompatible Python version
+- NumPy was installed without proper Windows build tools
+
+**Solutions:**
+
+**Solution 1: Use Python directly instead of uv (Recommended for Windows)**
+
+If `uv run` doesn't work, use Python directly:
+
+```powershell
+# Activate the virtual environment
+.venv\Scripts\activate
+
+# Install dependencies with pip
+pip install -e .
+
+# Run the tool directly
+python cja_sdr_generator.py --version
+python cja_sdr_generator.py dv_YOUR_DATA_VIEW_ID
+```
+
+**Solution 2: Reinstall Python and dependencies**
+
+```powershell
+# Remove existing virtual environment
+Remove-Item -Recurse -Force .venv
+
+# Create new virtual environment with Python 3.14+
+python -m venv .venv
+
+# Activate it
+.venv\Scripts\activate
+
+# Upgrade pip
+python -m pip install --upgrade pip
+
+# Install numpy with pip (not uv)
+pip install numpy>=2.2.0
+
+# Install other dependencies
+pip install cjapy>=0.2.4.post2 pandas>=2.3.3 xlsxwriter>=3.2.9 tqdm>=4.66.0
+
+# Verify numpy works
+python -c "import numpy; print(numpy.__version__)"
+
+# Install the tool
+pip install -e .
+```
+
+**Solution 3: Use pre-built binary wheels**
+
+```powershell
+# Download and install from PyPI with explicit binary wheel
+pip install --only-binary :all: numpy
+
+# Then install other dependencies
+pip install -e .
+```
+
+**Solution 4: Install Microsoft C++ Build Tools (if needed)**
+
+For some packages, you may need:
+1. Download [Microsoft C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
+2. Install "Desktop development with C++"
+3. Restart terminal and reinstall dependencies
+
+### uv run Command Not Working on Windows
+
+**Symptoms:**
+```powershell
+PS> uv run cja_auto_sdr --version
+# Command fails or doesn't recognize the script
+```
+
+**Cause:** The `uv` package manager may have issues with Windows PATH configuration or virtual environment activation.
+
+**Solutions:**
+
+**Option 1: Use Python directly (Most Reliable)**
+
+```powershell
+# Activate virtual environment first
+.venv\Scripts\activate
+
+# Then run commands without uv
+cja_auto_sdr --version
+cja_auto_sdr dv_12345
+
+# Or run the script directly
+python cja_sdr_generator.py --version
+python cja_sdr_generator.py dv_12345
+```
+
+**Option 2: Use full Python path**
+
+```powershell
+# Without activating venv
+.venv\Scripts\python.exe cja_sdr_generator.py --version
+.venv\Scripts\python.exe cja_sdr_generator.py dv_12345
+```
+
+**Option 3: Fix uv PATH (if you prefer using uv)**
+
+```powershell
+# Check if uv is in PATH
+where.exe uv
+
+# If not found, add to PATH manually:
+# 1. Press Win + X, select "System"
+# 2. Click "Advanced system settings"
+# 3. Click "Environment Variables"
+# 4. Add uv installation directory to PATH
+
+# Then restart PowerShell and try again
+uv --version
+uv run cja_auto_sdr --version
+```
+
+### PowerShell Execution Policy Issues
+
+**Symptoms:**
+```powershell
+.\install.ps1 : File cannot be loaded because running scripts is disabled on this system.
+```
+
+**Solution:**
+```powershell
+# Check current execution policy
+Get-ExecutionPolicy
+
+# Set execution policy (run as Administrator)
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+
+# Or bypass for a single session
+powershell -ExecutionPolicy Bypass -File .\script.ps1
+```
+
+### Path Separator Issues
+
+**Issue:** Documentation examples use Unix path separators `/` which may cause issues on Windows.
+
+**Solution:** Windows PowerShell and Command Prompt understand both forward slashes `/` and backslashes `\`. However, for consistency:
+
+```powershell
+# These all work on Windows:
+--output-dir ./reports     # Works
+--output-dir .\reports     # Works
+--output-dir C:\reports    # Works
+--output-dir C:/reports    # Works
+```
+
+### Virtual Environment Activation on Windows
+
+**Different shells require different activation:**
+
+**PowerShell:**
+```powershell
+.venv\Scripts\Activate.ps1
+# Or simply:
+.venv\Scripts\activate
+```
+
+**Command Prompt (cmd.exe):**
+```cmd
+.venv\Scripts\activate.bat
+```
+
+**Git Bash (on Windows):**
+```bash
+source .venv/Scripts/activate
+```
+
+### Windows Diagnostic Script
+
+The main diagnostic script in the troubleshooting guide is bash-only. Here's a Windows PowerShell equivalent:
+
+**Save as `diagnose.ps1`:**
+
+```powershell
+Write-Host "=== System Information ===" -ForegroundColor Cyan
+python --version
+uv --version 2>$null
+if ($LASTEXITCODE -ne 0) { Write-Host "uv: not installed" -ForegroundColor Yellow }
+
+Write-Host "`n=== Project Dependencies ===" -ForegroundColor Cyan
+if (Test-Path .venv\Scripts\python.exe) {
+    & .venv\Scripts\python.exe -m pip list | Select-String -Pattern "cjapy|pandas|numpy|xlsxwriter"
+} else {
+    Write-Host "Virtual environment not found" -ForegroundColor Red
+}
+
+Write-Host "`n=== Configuration Check ===" -ForegroundColor Cyan
+if (Test-Path config.json) {
+    Write-Host "config.json: exists" -ForegroundColor Green
+    try {
+        $config = Get-Content config.json | ConvertFrom-Json
+        Write-Host "JSON syntax: valid" -ForegroundColor Green
+    } catch {
+        Write-Host "JSON syntax: INVALID" -ForegroundColor Red
+    }
+} else {
+    Write-Host "config.json: NOT FOUND" -ForegroundColor Yellow
+}
+
+Write-Host "`n=== Environment Variables ===" -ForegroundColor Cyan
+if ($env:ORG_ID) { Write-Host "ORG_ID: set" -ForegroundColor Green } else { Write-Host "ORG_ID: not set" }
+if ($env:CLIENT_ID) { Write-Host "CLIENT_ID: set" -ForegroundColor Green } else { Write-Host "CLIENT_ID: not set" }
+if ($env:SECRET) { Write-Host "SECRET: set" -ForegroundColor Green } else { Write-Host "SECRET: not set" }
+if ($env:SCOPES) { Write-Host "SCOPES: set" -ForegroundColor Green } else { Write-Host "SCOPES: not set" }
+
+Write-Host "`n=== Recent Logs ===" -ForegroundColor Cyan
+if (Test-Path logs) {
+    Get-ChildItem logs -File | Sort-Object LastWriteTime -Descending | Select-Object -First 5 | Format-Table Name, Length, LastWriteTime
+} else {
+    Write-Host "No logs directory" -ForegroundColor Yellow
+}
+
+Write-Host "`n=== Python Installation Check ===" -ForegroundColor Cyan
+python -c "import sys; print(f'Python executable: {sys.executable}')"
+python -c "import sys; print(f'Python version: {sys.version}')"
+
+Write-Host "`n=== NumPy Check ===" -ForegroundColor Cyan
+python -c "import numpy; print(f'NumPy version: {numpy.__version__}'); print(f'NumPy location: {numpy.__file__}')" 2>&1
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "NumPy: Import failed - See Windows-Specific Issues section" -ForegroundColor Red
+}
+```
+
+**Run the diagnostic:**
+```powershell
+.\diagnose.ps1 > diagnostic_report.txt
+Get-Content diagnostic_report.txt
+```
+
+### Common Windows Commands Reference
+
+| Task | Unix/Mac | Windows PowerShell | Windows CMD |
+|------|----------|-------------------|-------------|
+| List files | `ls -la` | `Get-ChildItem` or `ls` | `dir` |
+| Change directory | `cd /path` | `cd C:\path` | `cd C:\path` |
+| Create directory | `mkdir -p dir` | `New-Item -ItemType Directory -Force dir` | `mkdir dir` |
+| Remove directory | `rm -rf dir` | `Remove-Item -Recurse -Force dir` | `rmdir /s /q dir` |
+| View file | `cat file.txt` | `Get-Content file.txt` or `cat file.txt` | `type file.txt` |
+| Find string | `grep pattern` | `Select-String pattern` | `findstr pattern` |
+| Environment variable | `export VAR=value` | `$env:VAR="value"` | `set VAR=value` |
+| Activate venv | `source .venv/bin/activate` | `.venv\Scripts\activate` | `.venv\Scripts\activate.bat` |
+
+### Recommended Windows Setup
+
+For the most reliable Windows experience:
+
+1. **Install Python from python.org (not Microsoft Store)**
+   - Download from [python.org/downloads](https://www.python.org/downloads/)
+   - During installation, check "Add Python to PATH"
+
+2. **Use PowerShell 7+ (not Windows PowerShell 5.1)**
+   - Download from [GitHub](https://github.com/PowerShell/PowerShell/releases)
+   - More Unix-like experience
+
+3. **Use Python virtual environments directly instead of uv**
+   ```powershell
+   python -m venv .venv
+   .venv\Scripts\activate
+   pip install -e .
+   ```
+
+4. **Run the tool using Python directly**
+   ```powershell
+   python cja_sdr_generator.py --version
+   python cja_sdr_generator.py dv_12345
+   ```
 
 ---
 

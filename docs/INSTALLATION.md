@@ -127,13 +127,93 @@ python -m venv .venv
 
 # Activate
 source .venv/bin/activate  # macOS/Linux
-# .venv\Scripts\activate   # Windows
+# .venv\Scripts\activate   # Windows PowerShell
 
 # Install dependencies
 pip install -r requirements.txt
 # Or manually:
 pip install cjapy>=0.2.4.post2 pandas>=2.3.3 xlsxwriter>=3.2.9 tqdm>=4.66.0
 ```
+
+### Option 5: Windows Native Setup (Recommended for Windows Users)
+
+If you encounter issues with `uv` on Windows (especially NumPy import errors), use this native Python approach:
+
+**Step 1: Verify Python Installation**
+
+```powershell
+# Check Python version (must be 3.14+)
+python --version
+
+# Verify Python is from python.org, not Microsoft Store
+python -c "import sys; print(sys.executable)"
+# Should show: C:\Users\YourName\AppData\Local\Programs\Python\...
+# NOT: C:\Users\YourName\AppData\Local\Microsoft\WindowsApps\...
+```
+
+> **Note:** If Python is from Microsoft Store, uninstall it and reinstall from [python.org](https://www.python.org/downloads/). Check "Add Python to PATH" during installation.
+
+**Step 2: Clone and Setup**
+
+```powershell
+# Clone the repository
+git clone https://github.com/your-org/cja_auto_sdr.git
+cd cja_auto_sdr
+
+# Create virtual environment
+python -m venv .venv
+
+# Activate virtual environment
+.venv\Scripts\activate
+
+# Upgrade pip
+python -m pip install --upgrade pip
+
+# Install dependencies
+pip install cjapy>=0.2.4.post2 pandas>=2.3.3 xlsxwriter>=3.2.9 tqdm>=4.66.0 numpy>=2.2.0
+
+# Install the tool in development mode
+pip install -e .
+```
+
+**Step 3: Verify Installation**
+
+```powershell
+# Test imports
+python -c "import numpy; print(f'NumPy: {numpy.__version__}')"
+python -c "import pandas; print(f'Pandas: {pandas.__version__}')"
+python -c "import cjapy; print('cjapy: OK')"
+
+# Test the tool
+python cja_sdr_generator.py --version
+# Or if the console script was installed:
+cja_auto_sdr --version
+```
+
+**Step 4: Run the Tool**
+
+```powershell
+# Option 1: Run the script directly (most reliable)
+python cja_sdr_generator.py --list-dataviews
+python cja_sdr_generator.py dv_YOUR_DATA_VIEW_ID
+
+# Option 2: Use the console script (if installation succeeded)
+cja_auto_sdr --list-dataviews
+cja_auto_sdr dv_YOUR_DATA_VIEW_ID
+
+# Option 3: Use full path to Python in venv
+.venv\Scripts\python.exe cja_sdr_generator.py --version
+```
+
+**Common Windows Issues:**
+
+| Issue | Solution |
+|-------|----------|
+| `uv run` doesn't work | Use `python cja_sdr_generator.py` instead |
+| NumPy ImportError | Reinstall with `pip install --only-binary :all: numpy` |
+| Permission denied | Run PowerShell as Administrator or use `Set-ExecutionPolicy RemoteSigned` |
+| Module not found | Ensure venv is activated: `.venv\Scripts\activate` |
+| Wrong Python version | Specify Python explicitly: `py -3.14 -m venv .venv` |
 
 ## Credential Configuration
 
@@ -172,11 +252,11 @@ See `.env.example` for a complete template.
 
 ### Option 2: Configuration File
 
-Create a `myconfig.json` file in the project root directory:
+Create a `config.json` file in the project root directory:
 
 ```bash
 # Copy the example template
-cp .myconfig.json.example myconfig.json
+cp config.json.example config.json
 
 # Or generate a sample config
 uv run cja_auto_sdr --sample-config
@@ -213,7 +293,7 @@ cja_auto_sdr/
 ├── tests/                    # Test suite
 ├── pyproject.toml            # Project configuration
 ├── uv.lock                   # Dependency lock file
-├── myconfig.json             # Your CJA credentials (DO NOT COMMIT)
+├── config.json             # Your CJA credentials (DO NOT COMMIT)
 ├── .env                      # Environment variables (DO NOT COMMIT)
 ├── cja_sdr_generator.py      # Main script
 └── README.md
@@ -227,7 +307,7 @@ Add to your `.gitignore`:
 
 ```gitignore
 # Credentials
-myconfig.json
+config.json
 .env
 
 # Generated files
@@ -238,7 +318,7 @@ logs/
 
 ### Credential Security
 
-- Never commit `myconfig.json` or `.env` to version control
+- Never commit `config.json` or `.env` to version control
 - Use service accounts for automated runs
 - Rotate credentials periodically
 - Restrict access to sensitive data views

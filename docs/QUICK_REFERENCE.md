@@ -24,7 +24,7 @@ cja_auto_sdr --validate-config
 |--------|---------|
 | `--output-dir PATH` | Save output to specific directory |
 | `--format FORMAT` | Output format: `excel`, `csv`, `json`, `html`, `all` |
-| `--config-file PATH` | Use custom config file (default: myconfig.json) |
+| `--config-file PATH` | Use custom config file (default: config.json) |
 | `--log-level LEVEL` | Set logging: `DEBUG`, `INFO`, `WARNING`, `ERROR` |
 | `--skip-validation` | Skip data quality checks (faster) |
 | `--continue-on-error` | Don't stop on failures in batch mode |
