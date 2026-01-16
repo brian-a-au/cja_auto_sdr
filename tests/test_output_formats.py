@@ -16,7 +16,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from cja_sdr_generator import (
     write_csv_output,
     write_json_output,
-    write_html_output
+    write_html_output,
+    write_markdown_output
 )
 
 
@@ -462,3 +463,262 @@ class TestEdgeCases:
             json_data = json.load(f)
         # JSON doesn't have 'LargeData' mapped to a specific key, check it exists somewhere
         assert json_data is not None
+
+
+class TestMarkdownOutput:
+    """Test Markdown output format generation"""
+
+    def test_markdown_output_creates_file(self, tmp_path, sample_data_dict, sample_metadata_dict):
+        """Test that Markdown output creates a file"""
+        logger = logging.getLogger("test")
+
+        output_path = write_markdown_output(
+            sample_data_dict,
+            sample_metadata_dict,
+            "test_dataview",
+            str(tmp_path),
+            logger
+        )
+
+        # Check file was created
+        assert os.path.exists(output_path)
+        assert output_path.endswith('.md')
+
+    def test_markdown_has_correct_structure(self, tmp_path, sample_data_dict, sample_metadata_dict):
+        """Test that Markdown output has required sections"""
+        logger = logging.getLogger("test")
+
+        output_path = write_markdown_output(
+            sample_data_dict,
+            sample_metadata_dict,
+            "test_dataview",
+            str(tmp_path),
+            logger
+        )
+
+        with open(output_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        # Check for required sections
+        assert '# 📊 CJA Solution Design Reference' in content
+        assert '## 📋 Metadata' in content
+        assert '## 📑 Table of Contents' in content
+        assert '## Metrics' in content
+        assert '## Dimensions' in content
+        assert '## Data Quality' in content
+
+    def test_markdown_tables_properly_formatted(self, tmp_path, sample_data_dict, sample_metadata_dict):
+        """Test that Markdown tables are properly formatted"""
+        logger = logging.getLogger("test")
+
+        output_path = write_markdown_output(
+            sample_data_dict,
+            sample_metadata_dict,
+            "test_dataview",
+            str(tmp_path),
+            logger
+        )
+
+        with open(output_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        # Check for table structure (pipe separated)
+        assert '|' in content
+        assert '| ---' in content  # Table separator
+        assert '| name |' in content or '| id |' in content
+
+    def test_markdown_escapes_special_characters(self, tmp_path):
+        """Test that Markdown escapes pipe characters and backticks"""
+        logger = logging.getLogger("test")
+
+        data_dict = {
+            'Test Data': pd.DataFrame([
+                {'name': 'Test | with pipe', 'value': 'Has `backtick`'},
+                {'name': 'Normal', 'value': 'Normal'}
+            ])
+        }
+        metadata_dict = {'key': 'value'}
+
+        output_path = write_markdown_output(data_dict, metadata_dict, "test", str(tmp_path), logger)
+
+        with open(output_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        # Check that special characters are escaped
+        assert '\\|' in content  # Escaped pipe
+        assert '\\`' in content  # Escaped backtick
+
+    def test_markdown_issue_summary(self, tmp_path, sample_data_dict, sample_metadata_dict):
+        """Test that Data Quality section includes issue summary"""
+        logger = logging.getLogger("test")
+
+        output_path = write_markdown_output(
+            sample_data_dict,
+            sample_metadata_dict,
+            "test_dataview",
+            str(tmp_path),
+            logger
+        )
+
+        with open(output_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        # Check for issue summary with severity counts
+        assert '### Issue Summary' in content
+        assert '| Severity | Count |' in content
+        # Should have severity emojis
+        assert any(emoji in content for emoji in ['🔴', '🟠', '🟡', '⚪', '🔵'])
+
+    def test_markdown_collapsible_sections(self, tmp_path):
+        """Test that large tables use collapsible sections"""
+        logger = logging.getLogger("test")
+
+        # Create large dataset (>50 rows)
+        large_df = pd.DataFrame({
+            'id': [f'id_{i}' for i in range(100)],
+            'name': [f'Name {i}' for i in range(100)]
+        })
+
+        data_dict = {'Large Table': large_df}
+        metadata_dict = {}
+
+        output_path = write_markdown_output(data_dict, metadata_dict, "test", str(tmp_path), logger)
+
+        with open(output_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        # Check for collapsible sections
+        assert '<details>' in content
+        assert '<summary>View 100 rows (click to expand)</summary>' in content
+        assert '</details>' in content
+
+    def test_markdown_small_tables_not_collapsed(self, tmp_path, sample_data_dict, sample_metadata_dict):
+        """Test that small tables are not collapsed"""
+        logger = logging.getLogger("test")
+
+        output_path = write_markdown_output(
+            sample_data_dict,
+            sample_metadata_dict,
+            "test_dataview",
+            str(tmp_path),
+            logger
+        )
+
+        with open(output_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        # Metrics and Dimensions should be small (2-3 rows), so shouldn't be collapsed
+        # Check that they exist in content but not within details tags
+        lines = content.split('\n')
+        in_metrics_section = False
+        found_metrics_table = False
+
+        for i, line in enumerate(lines):
+            if '## Metrics' in line:
+                in_metrics_section = True
+            elif in_metrics_section and '| id |' in line:
+                found_metrics_table = True
+                # Check nearby lines don't have <details>
+                context = '\n'.join(lines[max(0,i-5):min(len(lines),i+10)])
+                assert '<details>' not in context
+                break
+
+        assert found_metrics_table, "Metrics table not found in markdown output"
+
+    def test_markdown_handles_unicode(self, tmp_path):
+        """Test that Markdown handles Unicode characters"""
+        logger = logging.getLogger("test")
+
+        data_dict = {
+            'Unicode': pd.DataFrame([
+                {'name': '测试数据', 'value': 'Tëst'},
+                {'name': 'Тест', 'value': 'مرحبا'}
+            ])
+        }
+        metadata_dict = {'key': '日本語'}
+
+        output_path = write_markdown_output(data_dict, metadata_dict, "test", str(tmp_path), logger)
+
+        # Verify file was created and can be read
+        assert os.path.exists(output_path)
+
+        with open(output_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        # Verify Unicode is preserved
+        assert '测试数据' in content
+        assert '日本語' in content
+
+    def test_markdown_handles_empty_dataframes(self, tmp_path):
+        """Test that Markdown handles empty DataFrames"""
+        logger = logging.getLogger("test")
+
+        data_dict = {
+            'Empty Table': pd.DataFrame()
+        }
+        metadata_dict = {}
+
+        output_path = write_markdown_output(data_dict, metadata_dict, "test", str(tmp_path), logger)
+
+        with open(output_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        # Check for empty table message
+        assert '*No empty table found.*' in content or '*no empty table found.*' in content
+
+    def test_markdown_table_of_contents_links(self, tmp_path, sample_data_dict, sample_metadata_dict):
+        """Test that table of contents has working anchor links"""
+        logger = logging.getLogger("test")
+
+        output_path = write_markdown_output(
+            sample_data_dict,
+            sample_metadata_dict,
+            "test_dataview",
+            str(tmp_path),
+            logger
+        )
+
+        with open(output_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        # Check for TOC links
+        assert '[Metrics](#metrics)' in content
+        assert '[Dimensions](#dimensions)' in content
+        assert '[Data Quality](#data-quality)' in content
+
+    def test_markdown_footer(self, tmp_path, sample_data_dict, sample_metadata_dict):
+        """Test that Markdown includes footer"""
+        logger = logging.getLogger("test")
+
+        output_path = write_markdown_output(
+            sample_data_dict,
+            sample_metadata_dict,
+            "test_dataview",
+            str(tmp_path),
+            logger
+        )
+
+        with open(output_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        # Check for footer
+        assert '*Generated by CJA Auto SDR Generator*' in content
+
+    def test_markdown_row_counts(self, tmp_path, sample_data_dict, sample_metadata_dict):
+        """Test that Markdown shows row counts for each section"""
+        logger = logging.getLogger("test")
+
+        output_path = write_markdown_output(
+            sample_data_dict,
+            sample_metadata_dict,
+            "test_dataview",
+            str(tmp_path),
+            logger
+        )
+
+        with open(output_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        # Check for count messages
+        assert '*Total Metrics: 2 items*' in content
+        assert '*Total Dimensions: 3 items*' in content

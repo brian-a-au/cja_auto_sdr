@@ -2,7 +2,7 @@
 
 <img width="1024" height="572" alt="image" src="https://github.com/user-attachments/assets/54a43474-3fc6-4379-909c-452c19cdeac2" />
 
-**Version 3.0.8** - A production-ready Python tool that automates the creation of Solution Design Reference (SDR) documents from your Adobe Customer Journey Analytics implementation.
+**Version 3.0.9** - A production-ready Python tool that automates the creation of Solution Design Reference (SDR) documents from your Adobe Customer Journey Analytics implementation.
 
 ## What It Is
 
@@ -23,7 +23,7 @@ This project evolved from a [Jupyter notebook proof-of-concept](https://github.c
 | Speed | Sequential (~35s each) | 3-4x faster with batch processing |
 | Quality | Basic extraction | 8+ automated validation checks |
 | Reliability | Manual retry | Automatic retry with exponential backoff |
-| Output | Single Excel file | Excel, CSV, JSON, HTML formats |
+| Output | Single Excel file | Excel, CSV, JSON, HTML, Markdown formats |
 | Automation | Copy-paste workflow | Cron, CI/CD, script-ready |
 
 The notebook remains excellent for learning and ad-hoc exploration. Version 3.0 is for teams that need scheduled automation, multi-environment processing, and enterprise-grade reliability.
@@ -46,8 +46,9 @@ The notebook remains excellent for learning and ad-hoc exploration. Version 3.0 
 | **Quality** | 8+ Validation Checks | Detect duplicates, missing fields, null values, invalid IDs |
 | | Severity Classification | CRITICAL, HIGH, MEDIUM, LOW with color-coded Excel formatting |
 | | Quality Dashboard | Dedicated sheet with filtering, sorting, and actionable insights |
-| **Output** | Multiple Formats | Excel, CSV, JSON, HTML—or generate all at once |
+| **Output** | Multiple Formats | Excel, CSV, JSON, HTML, Markdown—or generate all at once |
 | | Professional Excel | 5 formatted sheets with conditional formatting, frozen headers, auto-filtering |
+| | Markdown for GitHub/Confluence | Tables, TOC, collapsible sections, emoji indicators for documentation workflows |
 | | File Size Display | Human-readable output size (KB, MB) in success messages |
 | **Reliability** | Automatic Retry | Exponential backoff with jitter for transient network failures |
 | | Continue-on-Error | Batch processing continues even if individual Data Views fail |
@@ -55,6 +56,7 @@ The notebook remains excellent for learning and ad-hoc exploration. Version 3.0 
 | **Usability** | Dry-Run Mode | Test configuration without generating reports |
 | | Discovery Commands | `--list-dataviews` and `--sample-config` for easy setup |
 | | Color-Coded Output | Green/yellow/red console feedback for instant status |
+| | Enhanced Error Messages | Contextual error messages with actionable fix suggestions and documentation links |
 | | Comprehensive Logging | Timestamped logs with rotation for audit trails |
 
 ### Who It's For
@@ -153,6 +155,7 @@ uv run cja_auto_sdr dv_YOUR_DATA_VIEW_ID
 | Custom output location | `cja_auto_sdr dv_12345 --output-dir ./reports` |
 | Validate only (no report) | `cja_auto_sdr dv_12345 --dry-run` |
 | Skip validation (faster) | `cja_auto_sdr dv_12345 --skip-validation` |
+| Export as Markdown | `cja_auto_sdr dv_12345 --format markdown` |
 | Generate all formats | `cja_auto_sdr dv_12345 --format all` |
 
 ## Documentation
@@ -190,12 +193,13 @@ cja_auto_sdr/
 │   ├── CLI_REFERENCE.md     # Command-line reference
 │   ├── INSTALLATION.md      # Setup instructions
 │   └── ...                  # Additional guides
-├── tests/                   # Test suite (229 tests)
+├── tests/                   # Test suite (262 tests)
 ├── sample_outputs/          # Example output files
 │   ├── excel/               # Sample Excel SDR
 │   ├── csv/                 # Sample CSV output
 │   ├── json/                # Sample JSON output
-│   └── html/                # Sample HTML output
+│   ├── html/                # Sample HTML output
+│   └── markdown/            # Sample Markdown output
 ├── logs/                    # Generated log files
 └── *.xlsx                   # Generated SDR files
 ```

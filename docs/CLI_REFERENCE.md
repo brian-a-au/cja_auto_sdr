@@ -56,7 +56,7 @@ python cja_sdr_generator.py [OPTIONS] DATA_VIEW_ID [...]
 | Option | Description | Default |
 |--------|-------------|---------|
 | `--output-dir PATH` | Output directory for generated files | Current directory |
-| `--format FORMAT` | Output format: excel, csv, json, html, all | excel |
+| `--format FORMAT` | Output format: excel, csv, json, html, markdown, all | excel |
 | `--max-issues N` | Limit issues to top N by severity (0=all) | 0 |
 
 ### Configuration
@@ -193,6 +193,9 @@ cja_auto_sdr dv_12345 --format json
 
 # HTML report
 cja_auto_sdr dv_12345 --format html
+
+# Markdown (GitHub/Confluence compatible)
+cja_auto_sdr dv_12345 --format markdown
 
 # All formats
 cja_auto_sdr dv_12345 --format all

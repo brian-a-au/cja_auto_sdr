@@ -20,10 +20,11 @@ tests/
 ├── test_retry.py                    # Retry with exponential backoff tests
 ├── test_utils.py                    # Utility function tests
 ├── test_validation_cache.py         # Validation caching tests
+├── test_error_messages.py           # Enhanced error message tests
 └── README.md                        # This file
 ```
 
-**Total: 229 comprehensive tests**
+**Total: 262 comprehensive tests**
 
 ## Running Tests
 
@@ -75,6 +76,9 @@ uv run pytest tests/test_retry.py
 
 # Test environment variable credentials
 uv run pytest tests/test_env_credentials.py
+
+# Test enhanced error messages
+uv run pytest tests/test_error_messages.py
 ```
 
 ### Run Specific Test Classes or Functions
@@ -132,6 +136,12 @@ uv run pytest --cov=cja_sdr_generator --cov-report=html --cov-report=term
 - **CSV output**: Tests CSV file generation and structure
 - **JSON output**: Tests JSON format and validity
 - **HTML output**: Tests HTML generation and styling
+- **Markdown output**: Tests GitHub/Confluence-compatible markdown generation
+  - Table formatting and escaping
+  - Collapsible sections for large tables
+  - Table of contents with anchor links
+  - Issue summary with emoji indicators
+  - Unicode support
 - **Cross-format consistency**: Tests data consistency across formats
 - **Unicode handling**: Tests special characters and encoding
 
@@ -180,6 +190,15 @@ uv run pytest --cov=cja_sdr_generator --cov-report=html --cov-report=term
 - **Max retries**: Tests retry limit enforcement
 - **Function wrapper**: Tests make_api_call_with_retry function
 - **Metadata preservation**: Tests functools.wraps behavior
+
+### Enhanced Error Message Tests (`test_error_messages.py`)
+- **HTTP error messages**: Tests all HTTP status code error messages (400, 401, 403, 404, 429, 500, 502, 503, 504)
+- **Network error messages**: Tests ConnectionError, TimeoutError, SSLError messages
+- **Configuration error messages**: Tests file not found, invalid JSON, missing credentials, invalid format
+- **Data view error messages**: Tests not found errors with and without available count
+- **Message formatting**: Tests error message structure, sections, and suggestions
+- **Documentation links**: Tests that all error messages include help links
+- **Integration**: Tests ErrorMessageHelper integration with retry mechanism and validation
 
 ## Test Fixtures
 

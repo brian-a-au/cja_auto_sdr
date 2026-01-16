@@ -33,7 +33,7 @@ except ImportError:
 
 # ==================== VERSION ====================
 
-__version__ = "3.0.8"
+__version__ = "3.0.9"
 
 # ==================== DEFAULT CONSTANTS ====================
 
@@ -166,6 +166,363 @@ DEFAULT_RETRY_CONFIG = {
     'jitter': True,             # Add randomization to prevent thundering herd
 }
 
+# ==================== ENHANCED ERROR MESSAGES ====================
+
+class ErrorMessageHelper:
+    """Provides contextual error messages with actionable suggestions"""
+
+    # Documentation links
+    DOCS_BASE = "https://github.com/your-org/cja_auto_sdr/blob/main/docs"
+    TROUBLESHOOTING_URL = f"{DOCS_BASE}/TROUBLESHOOTING.md"
+    QUICKSTART_URL = f"{DOCS_BASE}/QUICKSTART_GUIDE.md"
+
+    @staticmethod
+    def get_http_error_message(status_code: int, operation: str = "API call") -> str:
+        """Get detailed error message with suggestions for HTTP status codes"""
+        messages = {
+            400: {
+                "title": "Bad Request",
+                "reason": "The request was malformed or contains invalid parameters",
+                "suggestions": [
+                    "Verify the data view ID format (should start with 'dv_')",
+                    "Check that all required parameters are provided",
+                    "Review the API request structure",
+                ]
+            },
+            401: {
+                "title": "Authentication Failed",
+                "reason": "Your credentials are invalid or have expired",
+                "suggestions": [
+                    "Verify CLIENT_ID and SECRET in myconfig.json or environment variables",
+                    "Check that your ORG_ID ends with '@AdobeOrg'",
+                    "Ensure SCOPES includes: 'openid, AdobeID, additional_info.projectedProductContext'",
+                    "Regenerate credentials at https://developer.adobe.com/console/",
+                    f"See authentication setup: {ErrorMessageHelper.QUICKSTART_URL}#configure-credentials",
+                ]
+            },
+            403: {
+                "title": "Access Forbidden",
+                "reason": "You don't have permission to access this resource",
+                "suggestions": [
+                    "Verify your Adobe I/O project has CJA API access enabled",
+                    "Check that your user account has permission to access this data view",
+                    "Confirm the data view ID is correct (run --list-dataviews)",
+                    "Contact your Adobe administrator to grant CJA API permissions",
+                ]
+            },
+            404: {
+                "title": "Resource Not Found",
+                "reason": "The requested data view or resource does not exist",
+                "suggestions": [
+                    "Verify the data view ID is correct (double-check for typos)",
+                    "Run 'cja_auto_sdr --list-dataviews' to see available data views",
+                    "The data view may have been deleted or renamed",
+                    "Check that you're connected to the correct Adobe organization",
+                ]
+            },
+            429: {
+                "title": "Rate Limit Exceeded",
+                "reason": "Too many requests sent to the API",
+                "suggestions": [
+                    "Wait a few minutes before retrying",
+                    "Reduce the number of parallel workers (--workers 2)",
+                    "Use --max-retries with longer delays (--retry-max-delay 60)",
+                    "Process data views in smaller batches",
+                    "Enable caching to reduce API calls (--enable-cache)",
+                ]
+            },
+            500: {
+                "title": "Internal Server Error",
+                "reason": "Adobe's API service encountered an error",
+                "suggestions": [
+                    "This is typically a temporary issue - retry in a few minutes",
+                    "Increase retry attempts (--max-retries 5)",
+                    "Check Adobe Status page for known issues",
+                    "If persistent, contact Adobe Support with your request details",
+                ]
+            },
+            502: {
+                "title": "Bad Gateway",
+                "reason": "Upstream server error or network issue",
+                "suggestions": [
+                    "This is typically a temporary network issue",
+                    "Wait a few minutes and retry",
+                    "Increase retry attempts (--max-retries 5)",
+                ]
+            },
+            503: {
+                "title": "Service Unavailable",
+                "reason": "Adobe's API service is temporarily unavailable",
+                "suggestions": [
+                    "The service may be undergoing maintenance",
+                    "Wait 5-10 minutes and retry",
+                    "Check Adobe Status page: https://status.adobe.com/",
+                    "Use --max-retries 5 to automatically retry",
+                ]
+            },
+            504: {
+                "title": "Gateway Timeout",
+                "reason": "The request took too long to complete",
+                "suggestions": [
+                    "The data view may be very large - this is normal",
+                    "Increase timeout with --retry-max-delay 60",
+                    "Try processing during off-peak hours",
+                    "Consider using --skip-validation to reduce processing time",
+                ]
+            },
+        }
+
+        error_info = messages.get(status_code, {
+            "title": f"HTTP {status_code}",
+            "reason": "An unexpected HTTP error occurred",
+            "suggestions": [
+                "Check your network connection",
+                "Verify API credentials are correct",
+                "Review logs for more details",
+                f"See troubleshooting guide: {ErrorMessageHelper.TROUBLESHOOTING_URL}",
+            ]
+        })
+
+        output = [
+            f"{'='*60}",
+            f"HTTP {status_code}: {error_info['title']}",
+            f"{'='*60}",
+            f"Operation: {operation}",
+            "",
+            "Why this happened:",
+            f"  {error_info['reason']}",
+            "",
+            "How to fix it:",
+        ]
+
+        for i, suggestion in enumerate(error_info['suggestions'], 1):
+            output.append(f"  {i}. {suggestion}")
+
+        output.append("")
+        output.append(f"For more help: {ErrorMessageHelper.TROUBLESHOOTING_URL}")
+
+        return "\n".join(output)
+
+    @staticmethod
+    def get_network_error_message(error: Exception, operation: str = "operation") -> str:
+        """Get detailed message for network-related errors"""
+        error_type = type(error).__name__
+
+        messages = {
+            "ConnectionError": {
+                "reason": "Cannot establish connection to Adobe API servers",
+                "suggestions": [
+                    "Check your internet connection",
+                    "Verify you can reach adobe.io in your browser",
+                    "Check if you're behind a corporate firewall or proxy",
+                    "Temporarily disable VPN if you're using one",
+                    "Verify DNS is working (try: ping adobe.io)",
+                ]
+            },
+            "TimeoutError": {
+                "reason": "The request took too long and timed out",
+                "suggestions": [
+                    "Your network connection may be slow or unstable",
+                    "The data view may be very large (this is normal for large views)",
+                    "Increase timeout with --retry-max-delay 60",
+                    "Try processing during off-peak hours",
+                    "Use --max-retries 5 to automatically retry",
+                ]
+            },
+            "SSLError": {
+                "reason": "SSL/TLS certificate verification failed",
+                "suggestions": [
+                    "Your system's SSL certificates may be outdated",
+                    "Update certificates: pip install --upgrade certifi",
+                    "Check system date/time is correct (SSL certs are time-sensitive)",
+                    "Corporate firewalls may be interfering with SSL",
+                ]
+            },
+            "ConnectionResetError": {
+                "reason": "Connection was reset by the remote server",
+                "suggestions": [
+                    "This is usually a temporary network issue",
+                    "Wait a moment and retry",
+                    "Use --max-retries 5 to automatically handle this",
+                ]
+            },
+        }
+
+        error_info = messages.get(error_type, {
+            "reason": "A network error occurred",
+            "suggestions": [
+                "Check your internet connection",
+                "Verify network stability",
+                "Try again in a few moments",
+                f"See troubleshooting guide: {ErrorMessageHelper.TROUBLESHOOTING_URL}#network-errors",
+            ]
+        })
+
+        output = [
+            f"{'='*60}",
+            f"Network Error: {error_type}",
+            f"{'='*60}",
+            f"During: {operation}",
+            f"Error details: {str(error)}",
+            "",
+            "Why this happened:",
+            f"  {error_info['reason']}",
+            "",
+            "How to fix it:",
+        ]
+
+        for i, suggestion in enumerate(error_info['suggestions'], 1):
+            output.append(f"  {i}. {suggestion}")
+
+        output.append("")
+        output.append(f"For more help: {ErrorMessageHelper.TROUBLESHOOTING_URL}#network-errors")
+
+        return "\n".join(output)
+
+    @staticmethod
+    def get_config_error_message(error_type: str, details: str = "") -> str:
+        """Get detailed message for configuration errors"""
+        messages = {
+            "file_not_found": {
+                "title": "Configuration File Not Found",
+                "reason": "The myconfig.json file does not exist",
+                "suggestions": [
+                    "Create a configuration file:",
+                    "  Option 1: cja_auto_sdr --sample-config",
+                    "  Option 2: cp .myconfig.json.example myconfig.json",
+                    "",
+                    "Or use environment variables instead:",
+                    "  export ORG_ID='your_org_id@AdobeOrg'",
+                    "  export CLIENT_ID='your_client_id'",
+                    "  export SECRET='your_client_secret'",
+                    "  export SCOPES='openid, AdobeID, additional_info.projectedProductContext'",
+                    "",
+                    f"See setup guide: {ErrorMessageHelper.QUICKSTART_URL}",
+                ]
+            },
+            "invalid_json": {
+                "title": "Invalid JSON in Configuration File",
+                "reason": "The configuration file contains invalid JSON syntax",
+                "suggestions": [
+                    "Common JSON errors:",
+                    "  - Missing quotes around strings",
+                    "  - Trailing commas (not allowed in JSON)",
+                    "  - Missing closing braces or brackets",
+                    "  - Comments (not allowed in standard JSON)",
+                    "",
+                    "Validate your JSON:",
+                    "  - Use a JSON validator: https://jsonlint.com/",
+                    "  - Or check with: python -m json.tool myconfig.json",
+                    "",
+                    "Generate a fresh template:",
+                    "  cja_auto_sdr --sample-config",
+                ]
+            },
+            "missing_credentials": {
+                "title": "Missing Required Credentials",
+                "reason": "One or more required credential fields are missing",
+                "suggestions": [
+                    "Required fields in myconfig.json:",
+                    "  - org_id: Your Adobe Organization ID (ends with @AdobeOrg)",
+                    "  - client_id: OAuth Client ID from Adobe Developer Console",
+                    "  - secret: Client Secret from Adobe Developer Console",
+                    "  - scopes: API scopes (use provided default)",
+                    "",
+                    "Get credentials from:",
+                    "  https://developer.adobe.com/console/",
+                    "",
+                    f"See detailed setup: {ErrorMessageHelper.QUICKSTART_URL}#configure-credentials",
+                ]
+            },
+            "invalid_format": {
+                "title": "Invalid Credential Format",
+                "reason": "One or more credentials have an invalid format",
+                "suggestions": [
+                    "Check credential formats:",
+                    "  - org_id must end with '@AdobeOrg'",
+                    "  - client_id should be a long alphanumeric string",
+                    "  - secret should be a long alphanumeric string",
+                    "  - scopes should include: 'openid, AdobeID, additional_info.projectedProductContext'",
+                    "",
+                    "Verify you copied credentials correctly (no extra spaces or line breaks)",
+                    "Try regenerating credentials in Adobe Developer Console",
+                ]
+            },
+        }
+
+        error_info = messages.get(error_type, {
+            "title": "Configuration Error",
+            "reason": details or "A configuration error occurred",
+            "suggestions": [
+                "Run validation to check your config:",
+                "  cja_auto_sdr --validate-config",
+                "",
+                f"See troubleshooting: {ErrorMessageHelper.TROUBLESHOOTING_URL}#configuration-errors",
+            ]
+        })
+
+        output = [
+            f"{'='*60}",
+            f"{error_info['title']}",
+            f"{'='*60}",
+        ]
+
+        if details:
+            output.extend(["", f"Details: {details}", ""])
+
+        output.extend([
+            "Why this happened:",
+            f"  {error_info['reason']}",
+            "",
+            "How to fix it:",
+        ])
+
+        for suggestion in error_info['suggestions']:
+            if suggestion.startswith("  "):
+                output.append(suggestion)
+            else:
+                output.append(f"  {suggestion}")
+
+        return "\n".join(output)
+
+    @staticmethod
+    def get_data_view_error_message(data_view_id: str, available_count: int = None) -> str:
+        """Get detailed message for data view not found errors"""
+        output = [
+            f"{'='*60}",
+            "Data View Not Found",
+            f"{'='*60}",
+            f"Requested Data View: {data_view_id}",
+            "",
+            "Why this happened:",
+            "  The data view does not exist or you don't have access to it",
+            "",
+            "How to fix it:",
+            "  1. Check for typos in the data view ID",
+            "  2. Verify the ID format (should start with 'dv_')",
+            "  3. List available data views:",
+            "       cja_auto_sdr --list-dataviews",
+        ]
+
+        if available_count is not None:
+            output.append(f"  4. You have access to {available_count} data view(s)")
+            if available_count == 0:
+                output.extend([
+                    "",
+                    "No data views found. This usually means:",
+                    "  - Your API credentials don't have CJA access",
+                    "  - You're connected to the wrong Adobe organization",
+                    "  - No data views exist in this organization",
+                ])
+
+        output.extend([
+            "",
+            f"For more help: {ErrorMessageHelper.TROUBLESHOOTING_URL}#data-view-errors",
+        ])
+
+        return "\n".join(output)
+
+
 # Custom exception for retryable HTTP status codes
 class RetryableHTTPError(Exception):
     """Exception raised when API returns a retryable HTTP status code."""
@@ -249,8 +606,24 @@ def retry_with_backoff(
                     last_exception = e
 
                     if attempt == _max_retries:
-                        _logger.error(f"All {_max_retries + 1} attempts failed for {func.__name__}: {str(e)}")
-                        _logger.error("Troubleshooting: Check network connectivity, verify API credentials, or try again later")
+                        _logger.error(f"All {_max_retries + 1} attempts failed for {func.__name__}")
+
+                        # Provide enhanced error message based on exception type
+                        if isinstance(e, RetryableHTTPError):
+                            error_msg = ErrorMessageHelper.get_http_error_message(
+                                e.status_code,
+                                operation=func.__name__
+                            )
+                            _logger.error("\n" + error_msg)
+                        elif isinstance(e, (ConnectionError, TimeoutError, OSError)):
+                            error_msg = ErrorMessageHelper.get_network_error_message(
+                                e,
+                                operation=func.__name__
+                            )
+                            _logger.error("\n" + error_msg)
+                        else:
+                            _logger.error(f"Error: {str(e)}")
+                            _logger.error("Troubleshooting: Check network connectivity, verify API credentials, or try again later")
                         raise
 
                     # Calculate delay with exponential backoff
@@ -348,8 +721,24 @@ def make_api_call_with_retry(
             last_exception = e
 
             if attempt == max_retries:
-                _logger.error(f"All {max_retries + 1} attempts failed for {operation_name}: {str(e)}")
-                _logger.error("Troubleshooting: Check network connectivity, verify API credentials, or try again later")
+                _logger.error(f"All {max_retries + 1} attempts failed for {operation_name}")
+
+                # Provide enhanced error message based on exception type
+                if isinstance(e, RetryableHTTPError):
+                    error_msg = ErrorMessageHelper.get_http_error_message(
+                        e.status_code,
+                        operation=operation_name
+                    )
+                    _logger.error("\n" + error_msg)
+                elif isinstance(e, (ConnectionError, TimeoutError, OSError)):
+                    error_msg = ErrorMessageHelper.get_network_error_message(
+                        e,
+                        operation=operation_name
+                    )
+                    _logger.error("\n" + error_msg)
+                else:
+                    _logger.error(f"Error: {str(e)}")
+                    _logger.error("Troubleshooting: Check network connectivity, verify API credentials, or try again later")
                 raise
 
             delay = min(base_delay * (exponential_base ** attempt), max_delay)
@@ -920,8 +1309,11 @@ def validate_config_file(config_file: str, logger: logging.Logger) -> bool:
 
         # Check if file exists
         if not config_path.exists():
-            logger.error(f"Configuration file not found: {config_path.absolute()}")
-            logger.error(f"Please ensure '{config_file}' exists in the current directory")
+            error_msg = ErrorMessageHelper.get_config_error_message(
+                "file_not_found",
+                details=f"Looking for: {config_path.absolute()}"
+            )
+            logger.error("\n" + error_msg)
             return False
 
         # Check if file is readable
@@ -934,8 +1326,11 @@ def validate_config_file(config_file: str, logger: logging.Logger) -> bool:
             with open(config_path, 'r') as f:
                 config_data = json.load(f)
         except json.JSONDecodeError as e:
-            logger.error(f"Configuration file is not valid JSON: {str(e)}")
-            logger.error("Please check the file format and ensure it's properly formatted JSON")
+            error_msg = ErrorMessageHelper.get_config_error_message(
+                "invalid_json",
+                details=f"Line {e.lineno}, Column {e.colno}: {e.msg}"
+            )
+            logger.error("\n" + error_msg)
             return False
 
         # Validate it's a dictionary
@@ -997,6 +1392,21 @@ def validate_config_file(config_file: str, logger: logging.Logger) -> bool:
             logger.error("Configuration validation FAILED:")
             for error in validation_errors:
                 logger.error(f"  - {error}")
+            logger.error("")
+
+            # Provide enhanced error message if missing credentials
+            if any("Missing required field" in err for err in validation_errors):
+                error_msg = ErrorMessageHelper.get_config_error_message(
+                    "missing_credentials",
+                    details="One or more required fields are missing from your config file"
+                )
+                logger.error(error_msg)
+            elif any("Empty value" in err for err in validation_errors):
+                error_msg = ErrorMessageHelper.get_config_error_message(
+                    "invalid_format",
+                    details="One or more fields have empty or invalid values"
+                )
+                logger.error(error_msg)
             return False
 
         if validation_warnings:
@@ -1195,29 +1605,30 @@ def validate_data_view(cja: cjapy.CJA, data_view_id: str, logger: logging.Logger
         
         # Validate response
         if not dv_info:
-            logger.error(f"Data view '{data_view_id}' returned empty response")
-            logger.error("This typically means:")
-            logger.error("  - The data view does not exist")
-            logger.error("  - You don't have access to this data view")
-            logger.error("  - The data view ID is incorrect")
-            
-            # Try to list available data views to help user
-            logger.info("Attempting to list available data views...")
+            # Try to list available data views to provide context
+            available_count = None
             try:
                 available_dvs = cja.getDataViews()
-                if available_dvs and len(available_dvs) > 0:
-                    logger.info(f"You have access to {len(available_dvs)} data view(s):")
+                available_count = len(available_dvs) if available_dvs else 0
+
+                if available_count > 0:
+                    logger.info(f"You have access to {available_count} data view(s):")
                     for i, dv in enumerate(available_dvs[:10]):  # Show first 10
                         dv_id = dv.get('id', 'unknown')
                         dv_name = dv.get('name', 'unknown')
                         logger.info(f"  {i+1}. {dv_name} (ID: {dv_id})")
-                    if len(available_dvs) > 10:
-                        logger.info(f"  ... and {len(available_dvs) - 10} more")
-                else:
-                    logger.warning("No data views found - you may not have access to any data views")
+                    if available_count > 10:
+                        logger.info(f"  ... and {available_count - 10} more")
+                    logger.info("")
             except Exception as list_error:
-                logger.warning(f"Could not list available data views: {str(list_error)}")
-            
+                logger.debug(f"Could not list available data views: {str(list_error)}")
+
+            # Show enhanced error message
+            error_msg = ErrorMessageHelper.get_data_view_error_message(
+                data_view_id,
+                available_count=available_count
+            )
+            logger.error("\n" + error_msg)
             return False
         
         # Extract and validate data view details
@@ -2565,6 +2976,149 @@ def write_html_output(data_dict: Dict[str, pd.DataFrame], metadata_dict: Dict,
         logger.error(_format_error_msg("creating HTML file", error=e))
         raise
 
+
+def write_markdown_output(data_dict: Dict[str, pd.DataFrame], metadata_dict: Dict,
+                          base_filename: str, output_dir: str, logger: logging.Logger) -> str:
+    """
+    Write data to Markdown format for GitHub, Confluence, and other platforms
+
+    Features:
+    - GitHub-flavored markdown tables
+    - Table of contents with section links
+    - Collapsible sections for large tables
+    - Proper escaping of special characters
+    - Issue summary for Data Quality
+
+    Args:
+        data_dict: Dictionary mapping sheet names to DataFrames
+        metadata_dict: Metadata information
+        base_filename: Base filename without extension
+        output_dir: Output directory path
+        logger: Logger instance
+
+    Returns:
+        Path to Markdown output file
+    """
+    try:
+        logger.info("Generating Markdown output...")
+
+        def escape_markdown(text: str) -> str:
+            """Escape special markdown characters in table cells"""
+            if pd.isna(text) or text is None:
+                return ""
+            text = str(text)
+            # Escape pipe characters that would break tables
+            text = text.replace('|', '\\|')
+            # Escape backticks
+            text = text.replace('`', '\\`')
+            # Replace newlines with spaces in table cells
+            text = text.replace('\n', ' ')
+            text = text.replace('\r', ' ')
+            return text.strip()
+
+        def df_to_markdown_table(df: pd.DataFrame, sheet_name: str) -> str:
+            """Convert DataFrame to markdown table format"""
+            if df.empty:
+                return f"\n*No {sheet_name.lower()} found.*\n"
+
+            lines = []
+
+            # Header row
+            headers = [escape_markdown(col) for col in df.columns]
+            lines.append('| ' + ' | '.join(headers) + ' |')
+
+            # Separator row with left alignment
+            lines.append('| ' + ' | '.join(['---'] * len(headers)) + ' |')
+
+            # Data rows
+            for _, row in df.iterrows():
+                cells = [escape_markdown(row[col]) for col in df.columns]
+                lines.append('| ' + ' | '.join(cells) + ' |')
+
+            return '\n'.join(lines)
+
+        md_parts = []
+
+        # Title
+        md_parts.append("# 📊 CJA Solution Design Reference\n")
+
+        # Metadata section
+        md_parts.append("## 📋 Metadata\n")
+        if metadata_dict:
+            for key, value in metadata_dict.items():
+                md_parts.append(f"**{key}:** {escape_markdown(str(value))}")
+            md_parts.append("")
+
+        # Table of contents
+        md_parts.append("## 📑 Table of Contents\n")
+        toc_items = []
+        for sheet_name in data_dict.keys():
+            # Create anchor-safe links
+            anchor = sheet_name.lower().replace(' ', '-').replace('_', '-')
+            toc_items.append(f"- [{sheet_name}](#{anchor})")
+        md_parts.append('\n'.join(toc_items))
+        md_parts.append("\n---\n")
+
+        # Process each sheet
+        for sheet_name, df in data_dict.items():
+            md_parts.append(f"## {sheet_name}\n")
+
+            # Add special handling for Data Quality sheet
+            if sheet_name == 'Data Quality' and not df.empty and 'Severity' in df.columns:
+                # Add issue summary
+                severity_counts = df['Severity'].value_counts()
+                md_parts.append("### Issue Summary\n")
+                md_parts.append("| Severity | Count |")
+                md_parts.append("| --- | --- |")
+
+                severity_order = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO']
+                for sev in severity_order:
+                    count = severity_counts.get(sev, 0)
+                    if count > 0 or sev in ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']:
+                        emoji = {'CRITICAL': '🔴', 'HIGH': '🟠', 'MEDIUM': '🟡', 'LOW': '⚪', 'INFO': '🔵'}.get(sev, '')
+                        md_parts.append(f"| {emoji} {sev} | {count} |")
+                md_parts.append("")
+
+            # For large tables (>50 rows), use collapsible sections
+            if len(df) > 50:
+                md_parts.append(f"<details>")
+                md_parts.append(f"<summary>View {len(df)} rows (click to expand)</summary>\n")
+                md_parts.append(df_to_markdown_table(df, sheet_name))
+                md_parts.append("\n</details>\n")
+            else:
+                # For smaller tables, show directly
+                md_parts.append(df_to_markdown_table(df, sheet_name))
+                md_parts.append("")
+
+            # Add counts
+            md_parts.append(f"*Total {sheet_name}: {len(df)} items*\n")
+            md_parts.append("---\n")
+
+        # Footer
+        md_parts.append("---")
+        md_parts.append("*Generated by CJA Auto SDR Generator*")
+
+        # Write to file
+        markdown_file = os.path.join(output_dir, f"{base_filename}.md")
+        with open(markdown_file, 'w', encoding='utf-8') as f:
+            f.write('\n'.join(md_parts))
+
+        logger.info(f"✓ Markdown file created: {markdown_file}")
+        return markdown_file
+
+    except PermissionError as e:
+        logger.error(f"Permission denied creating Markdown file: {e}")
+        logger.error("Check write permissions for the output directory")
+        raise
+    except OSError as e:
+        logger.error(f"OS error creating Markdown file: {e}")
+        logger.error("Check disk space and path validity")
+        raise
+    except Exception as e:
+        logger.error(_format_error_msg("creating Markdown file", error=e))
+        raise
+
+
 # ==================== REFACTORED SINGLE DATAVIEW PROCESSING ====================
 
 def process_single_dataview(data_view_id: str, config_file: str = "myconfig.json",
@@ -2581,7 +3135,7 @@ def process_single_dataview(data_view_id: str, config_file: str = "myconfig.json
         config_file: Path to CJA config file (default: 'myconfig.json')
         output_dir: Directory to save output files (default: current directory)
         log_level: Logging level - one of DEBUG, INFO, WARNING, ERROR, CRITICAL (default: INFO)
-        output_format: Output format - one of excel, csv, json, html, all (default: excel)
+        output_format: Output format - one of excel, csv, json, html, markdown, all (default: excel)
         enable_cache: Enable validation result caching (default: False)
         cache_size: Maximum cached validation results, >= 1 (default: 1000)
         cache_ttl: Cache time-to-live in seconds, >= 1 (default: 3600)
@@ -2861,7 +3415,7 @@ def process_single_dataview(data_view_id: str, config_file: str = "myconfig.json
         base_filename = output_path.stem if isinstance(output_path, Path) else Path(output_path).stem
 
         # Determine which formats to generate
-        formats_to_generate = ['excel', 'csv', 'json', 'html'] if output_format == 'all' else [output_format]
+        formats_to_generate = ['excel', 'csv', 'json', 'html', 'markdown'] if output_format == 'all' else [output_format]
 
         output_files = []
 
@@ -2905,6 +3459,10 @@ def process_single_dataview(data_view_id: str, config_file: str = "myconfig.json
                 elif fmt == 'html':
                     html_output = write_html_output(data_dict, metadata_dict, base_filename, output_dir, logger)
                     output_files.append(html_output)
+
+                elif fmt == 'markdown':
+                    markdown_output = write_markdown_output(data_dict, metadata_dict, base_filename, output_dir, logger)
+                    output_files.append(markdown_output)
 
             if len(output_files) > 1:
                 logger.info(f"✓ SDR generation complete! {len(output_files)} files created")
@@ -3052,7 +3610,7 @@ class BatchProcessor:
         workers: Number of parallel workers, 1-256 (default: 4)
         continue_on_error: Continue if individual data views fail (default: False)
         log_level: Logging level - DEBUG, INFO, WARNING, ERROR, CRITICAL (default: INFO)
-        output_format: Output format - excel, csv, json, html, all (default: excel)
+        output_format: Output format - excel, csv, json, html, markdown, all (default: excel)
         enable_cache: Enable validation result caching (default: False)
         cache_size: Maximum cached validation results, >= 1 (default: 1000)
         cache_ttl: Cache time-to-live in seconds, >= 1 (default: 3600)
@@ -3509,6 +4067,9 @@ Examples:
   # Export as HTML
   python cja_sdr_generator.py dv_12345 --format html
 
+  # Export as Markdown (GitHub/Confluence)
+  python cja_sdr_generator.py dv_12345 --format markdown
+
   # Export in all formats
   python cja_sdr_generator.py dv_12345 --format all
 
@@ -3651,8 +4212,8 @@ Note:
         '--format',
         type=str,
         default='excel',
-        choices=['excel', 'csv', 'json', 'html', 'all'],
-        help='Output format: excel (default), csv, json, html, or all (generates all formats)'
+        choices=['excel', 'csv', 'json', 'html', 'markdown', 'all'],
+        help='Output format: excel (default), csv, json, html, markdown, or all (generates all formats)'
     )
 
     parser.add_argument(
