@@ -185,7 +185,7 @@ python cja_sdr_generator.py "Production Analytics"
 
 ### 5. Review Output
 
-- Generated Excel file: `SDR_[Name]_[Date].xlsx`
+- Generated Excel file: `CJA_DataView_[Name]_[ID]_SDR.xlsx`
 - Logs: `logs/` directory
 
 ## Common Use Cases
@@ -240,7 +240,7 @@ cja_auto_sdr/
 ├── cja_sdr_generator.py     # Main script
 ├── pyproject.toml           # Project configuration and dependencies
 ├── config.json            # Your credentials (DO NOT COMMIT)
-├── .config.json.example   # Config file template
+├── config.json.example    # Config file template
 ├── .env.example             # Environment variable template
 ├── docs/                    # Documentation
 │   ├── QUICKSTART_GUIDE.md  # Getting started guide

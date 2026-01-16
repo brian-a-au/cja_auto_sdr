@@ -213,7 +213,7 @@ cja_auto_sdr dv_YOUR_DATA_VIEW_ID
 | NumPy ImportError | Reinstall with `pip install --only-binary :all: numpy` |
 | Permission denied | Run PowerShell as Administrator or use `Set-ExecutionPolicy RemoteSigned` |
 | Module not found | Ensure venv is activated: `.venv\Scripts\activate` |
-| Wrong Python version | Specify Python explicitly: `py -3.14 -m venv .venv` |
+| Wrong Python version | Specify Python explicitly: `py -3.14 -m venv .venv` or higher |
 
 ## Credential Configuration
 
@@ -363,7 +363,7 @@ env = [
 ### Check Python Version
 
 ```bash
-python --version  # Should be 3.14+
+python --version  # Should be 3.14 or higher
 ```
 
 ### Check uv Installation

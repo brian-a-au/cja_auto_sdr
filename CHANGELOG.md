@@ -51,7 +51,7 @@ This release focuses on **ease of use** (name support, Windows compatibility), *
 
 #### Configuration File Rename
 - **Clearer Naming**: Renamed `myconfig.json` to `config.json` for better clarity
-- **Updated Example File**: Renamed `.myconfig.json.example` to `config.json.example`
+- **Updated Example File**: Renamed `myconfig.json.example` to `config.json.example`
 - **Consistent Documentation**: All documentation and error messages updated to use `config.json`
 - **Sample Config Generator**: Updated to generate `config.sample.json` with clear instructions
 - **Benefits**:
@@ -133,7 +133,7 @@ This release focuses on **ease of use** (name support, Windows compatibility), *
 
 ### Changed
 - **Configuration File Name**: `myconfig.json` → `config.json` (users should rename their existing file)
-- **Example Config File**: `.myconfig.json.example` → `config.json.example`
+- **Example Config File**: `myconfig.json.example` → `config.json.example`
 - **Sample Config Output**: `myconfig.sample.json` → `config.sample.json`
 - **CLI Help Text**: Updated to reflect ID or name support for data views
 - **Documentation**: Updated throughout to use `config.json` naming
@@ -200,7 +200,7 @@ This release focuses on **ease of use** (name support, Windows compatibility), *
 - **pytest-cov Dependency**: Added as dev dependency for coverage reporting
 
 #### Developer Experience
-- **`.config.json.example`**: New template file for config file setup (complements `.env.example`)
+- **`config.json.example`**: New template file for config file setup (complements `.env.example`)
 - **JWT Deprecation Warning**: Config validation now warns when deprecated JWT fields (`tech_acct`, `private_key`, `pathToKey`) are detected, with migration guidance
 
 #### Error Handling Improvements
@@ -590,7 +590,7 @@ if result is None:
 - **Version Update**: Updated from 0.1.0 to 3.0.0
 - **Modern Package Management**: Uses `uv` for fast, reliable dependency management
 - **pyproject.toml**: Standardized project configuration
-- **Python 3.14+ Required**: Updated to support latest Python version
+- **Python 3.14+ Required**: Updated to require latest Python version
 - **Lock Files**: Reproducible builds with `uv.lock`
 - **Optional Dev Dependencies**: pytest and testing tools as optional dev dependencies
 
@@ -734,7 +734,7 @@ Batch Processing (10 data views):
 1. **Update Python version**:
    ```bash
    # Ensure Python 3.14+ is installed
-   python --version  # Should be 3.14+
+   python --version  # Should be 3.14 or higher
    ```
 
 2. **Install uv**:

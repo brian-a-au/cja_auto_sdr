@@ -293,7 +293,7 @@ jobs:
 2. **Check Python version**:
 
    ```bash
-   python --version  # Should be 3.14+
+   python --version  # Should be 3.14 or higher
    ```
 
 3. **Clear pytest cache**:

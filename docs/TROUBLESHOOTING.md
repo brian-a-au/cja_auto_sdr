@@ -903,7 +903,7 @@ python cja_sdr_generator.py dv_YOUR_DATA_VIEW_ID
 # Remove existing virtual environment
 Remove-Item -Recurse -Force .venv
 
-# Create new virtual environment with Python 3.14+
+# Create new virtual environment with Python 3.14 or higher
 python -m venv .venv
 
 # Activate it
