@@ -4417,25 +4417,53 @@ def list_dataviews(config_file: str = "config.json") -> bool:
         print()
         print(f"Found {len(available_dvs)} accessible data view(s):")
         print()
-        print(f"{'ID':<45} {'Name':<40} {'Owner'}")
-        print("-" * 100)
 
+        # Calculate dynamic column widths to prevent truncation
+        max_id_width = len('ID')
+        max_name_width = len('Name')
+        max_owner_width = len('Owner')
+
+        # Prepare data and find maximum widths
+        display_data = []
         for dv in available_dvs:
             if isinstance(dv, dict):
                 dv_id = dv.get('id', 'N/A')
-                dv_name = dv.get('name', 'N/A')[:38]
+                dv_name = dv.get('name', 'N/A')
                 dv_owner = dv.get('owner', {})
-                owner_name = dv_owner.get('name', 'N/A') if isinstance(dv_owner, dict) else str(dv_owner)[:20]
-                print(f"{dv_id:<45} {dv_name:<40} {owner_name}")
+                owner_name = dv_owner.get('name', 'N/A') if isinstance(dv_owner, dict) else str(dv_owner)
+
+                display_data.append({
+                    'id': dv_id,
+                    'name': dv_name,
+                    'owner': owner_name
+                })
+
+                max_id_width = max(max_id_width, len(dv_id))
+                max_name_width = max(max_name_width, len(dv_name))
+                max_owner_width = max(max_owner_width, len(owner_name))
+
+        # Add padding
+        max_id_width += 2
+        max_name_width += 2
+        max_owner_width += 2
+
+        # Print header with dynamic widths
+        total_width = max_id_width + max_name_width + max_owner_width
+        print(f"{'ID':<{max_id_width}} {'Name':<{max_name_width}} {'Owner':<{max_owner_width}}")
+        print("-" * total_width)
+
+        # Print data
+        for item in display_data:
+            print(f"{item['id']:<{max_id_width}} {item['name']:<{max_name_width}} {item['owner']:<{max_owner_width}}")
 
         print()
-        print("=" * 100)
+        print("=" * total_width)
         print("Usage:")
         print("  python cja_sdr_generator.py <DATA_VIEW_ID>       # Use ID directly")
         print("  python cja_sdr_generator.py \"<DATA_VIEW_NAME>\"   # Use exact name (quotes recommended)")
         print()
         print("Note: If multiple data views share the same name, all will be processed.")
-        print("=" * 100)
+        print("=" * total_width)
 
         return True
 
