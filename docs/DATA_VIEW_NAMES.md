@@ -1,6 +1,6 @@
 # Using Data View Names
 
-**New in v3.0.9:** You can now specify data views by their **name** instead of just their ID.
+You can now specify data views by their **name** instead of just their ID.
 
 ## Overview
 
