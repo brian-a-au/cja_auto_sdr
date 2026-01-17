@@ -31,6 +31,14 @@ try:
 except ImportError:
     pass  # python-dotenv not installed
 
+# Attempt to load argcomplete for shell tab-completion (optional dependency)
+_ARGCOMPLETE_AVAILABLE = False
+try:
+    import argcomplete
+    _ARGCOMPLETE_AVAILABLE = True
+except ImportError:
+    pass  # argcomplete not installed
+
 # ==================== VERSION ====================
 
 __version__ = "3.0.9"
@@ -4294,6 +4302,10 @@ Requirements:
         metavar='N',
         help='Limit data quality issues to top N by severity (0 = show all, default: 0)'
     )
+
+    # Enable shell tab-completion if argcomplete is installed
+    if _ARGCOMPLETE_AVAILABLE:
+        argcomplete.autocomplete(parser)
 
     return parser.parse_args()
 

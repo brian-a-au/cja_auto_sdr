@@ -299,6 +299,65 @@ Throughput: 9.7 data views per minute
 | 3 | Authentication error |
 | 4 | Data view not found |
 
+## Shell Tab-Completion
+
+Enable tab-completion for all CLI options using the `argcomplete` package.
+
+### Installation
+
+```bash
+# Install the completion optional dependency
+pip install cja-auto-sdr[completion]
+
+# Or install argcomplete directly
+pip install argcomplete
+```
+
+### Activation
+
+**Bash (one-time setup):**
+
+```bash
+# Add to ~/.bashrc
+eval "$(register-python-argcomplete cja_auto_sdr)"
+```
+
+**Zsh (one-time setup):**
+
+```bash
+# Add to ~/.zshrc
+autoload -U bashcompinit
+bashcompinit
+eval "$(register-python-argcomplete cja_auto_sdr)"
+```
+
+**Global activation (all argcomplete-enabled scripts):**
+
+```bash
+# Bash
+activate-global-python-argcomplete
+
+# Then add to ~/.bashrc:
+source /etc/bash_completion.d/python-argcomplete
+```
+
+### Usage
+
+After activation, press Tab to auto-complete:
+
+```bash
+# Complete flags
+cja_auto_sdr --<TAB><TAB>
+--batch  --config-file  --dry-run  --format  --help  ...
+
+# Complete flag values
+cja_auto_sdr --format <TAB><TAB>
+excel  csv  json  html  markdown  all
+
+cja_auto_sdr --log-level <TAB><TAB>
+DEBUG  INFO  WARNING  ERROR  CRITICAL
+```
+
 ## See Also
 
 - [Installation Guide](INSTALLATION.md)

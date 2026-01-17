@@ -24,6 +24,9 @@ dev = [
 env = [
     "python-dotenv>=1.0.0",
 ]
+completion = [
+    "argcomplete>=3.0.0",
+]
 
 [build-system]
 requires = ["hatchling"]

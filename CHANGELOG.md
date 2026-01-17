@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Highlights
 - **Data View Names** - Use human-readable names instead of IDs (e.g., `"Production Analytics"` vs `dv_12345`)
+- **Shell Tab-Completion** - Optional bash/zsh tab-completion for all CLI flags and values via argcomplete
 - **Windows Support Improvements** - Comprehensive Windows-specific documentation and troubleshooting
 - **Config File Rename** - Clearer naming: `config.json` instead of `myconfig.json`
 - **Markdown Output Format** - Export SDRs as GitHub/Confluence-compatible markdown with tables, TOC, and collapsible sections
@@ -123,6 +124,15 @@ This release focuses on **ease of use** (name support, Windows compatibility), *
 - **Improved --format Help Text**: Clarified that `--format all` generates all formats simultaneously
 - **VALIDATION_SCHEMA Documentation**: Added detailed comments explaining the schema's purpose and usage
 - **Enhanced Property Docstrings**: Improved `file_size_formatted` docstring with example output
+
+#### Shell Tab-Completion Support
+- **argcomplete Integration**: Optional shell tab-completion for all CLI flags and values
+- **Bash/Zsh Support**: Works with both bash and zsh shells after one-time activation
+- **Flag Completion**: Tab-complete all `--` flags (e.g., `--format`, `--log-level`, `--workers`)
+- **Value Completion**: Tab-complete flag values (e.g., `--format <TAB>` shows `excel csv json html markdown all`)
+- **Optional Dependency**: Install with `pip install cja-auto-sdr[completion]` or `pip install argcomplete`
+- **Zero Overhead**: No performance impact if argcomplete is not installed
+- **Documentation**: Full setup instructions in `docs/CLI_REFERENCE.md`
 
 #### CLI Documentation Alignment
 - **CLI_REFERENCE.md**: Updated to match README guidance with three invocation methods:
