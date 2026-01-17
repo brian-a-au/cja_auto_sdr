@@ -13,9 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Config File Rename** - Clearer naming: `config.json` instead of `myconfig.json`
 - **Markdown Output Format** - Export SDRs as GitHub/Confluence-compatible markdown with tables, TOC, and collapsible sections
 - **Enhanced Error Messages** - Contextual, actionable error messages with step-by-step fix guidance and documentation links
-- **Comprehensive Test Coverage** - 397 total tests covering all core processing components
+- **Comprehensive Test Coverage** - 411 total tests covering all core processing components
+- **UX Enhancements** - Quiet mode progress bar suppression, retry env vars, improved help text
 
-This release focuses on **ease of use** (name support, Windows compatibility), **documentation workflows** (markdown export), and **user experience** (helpful error messages).
+This release focuses on **ease of use** (name support, Windows compatibility), **documentation workflows** (markdown export), and **user experience** (helpful error messages, better CLI).
 
 ### Added
 
@@ -112,8 +113,26 @@ This release focuses on **ease of use** (name support, Windows compatibility), *
 - **Data View Validation**: Not found errors include list of available data views
 - **Network Operations**: All API calls provide enhanced error context on failure
 
+#### UX Enhancements
+- **Progress Bars Respect Quiet Mode**: Progress bars in `ParallelAPIFetcher` and `DataQualityChecker` are now disabled when using `--quiet` flag for cleaner output in scripts and CI/CD pipelines
+- **Retry Configuration via Environment Variables**: Configure retry behavior through environment variables:
+  - `MAX_RETRIES` - Maximum API retry attempts (default: 3)
+  - `RETRY_BASE_DELAY` - Initial retry delay in seconds (default: 1.0)
+  - `RETRY_MAX_DELAY` - Maximum retry delay in seconds (default: 30.0)
+- **Python 3.14 Requirement in Help**: `--help` now displays Python version requirement in the epilog
+- **Improved --format Help Text**: Clarified that `--format all` generates all formats simultaneously
+- **VALIDATION_SCHEMA Documentation**: Added detailed comments explaining the schema's purpose and usage
+- **Enhanced Property Docstrings**: Improved `file_size_formatted` docstring with example output
+
+#### CLI Documentation Alignment
+- **CLI_REFERENCE.md**: Updated to match README guidance with three invocation methods:
+  - `uv run cja_auto_sdr ...` — works immediately on macOS/Linux, may have issues on Windows
+  - `cja_auto_sdr ...` — after activating the venv
+  - `python cja_sdr_generator.py ...` — run the script directly (most reliable on Windows)
+- **Consistent Version References**: All documentation updated to reference v3.0.9
+
 #### Testing
-- **168 New Tests**: Comprehensive test coverage expansion
+- **182 New Tests**: Comprehensive test coverage expansion
 - **Name Resolution Tests** (`tests/test_name_resolution.py`): ID detection, single/multiple name resolution, duplicate handling, error scenarios
 - **Parallel API Fetcher Tests** (`tests/test_parallel_api_fetcher.py`): Thread pool execution, API data fetching, error handling
 - **Batch Processor Tests** (`tests/test_batch_processor.py`): Worker coordination, result aggregation, summary output
@@ -122,7 +141,8 @@ This release focuses on **ease of use** (name support, Windows compatibility), *
 - **CJA Initialization Tests** (`tests/test_cja_initialization.py`): Config loading, credential validation, connection testing
 - **Integration Tests**: Verification of enhanced messages in retry and validation flows
 - **Markdown Output Tests**: Full coverage of markdown generation, escaping, collapsible sections, Unicode, and more
-- **Total Test Count**: 397 tests (100% pass rate)
+- **CLI Tests** (`tests/test_cli.py`): Expanded with 14 new tests for retry arguments (11) and --validate-config flag (3)
+- **Total Test Count**: 411 tests (100% pass rate)
 
 ### Improved
 - **User Experience**:
@@ -130,6 +150,8 @@ This release focuses on **ease of use** (name support, Windows compatibility), *
   - Errors now provide clear "Why this happened" and "How to fix it" sections
   - Windows users have comprehensive platform-specific documentation
   - Configuration file naming is more intuitive
+  - Progress bars no longer show when using `--quiet` flag
+  - Retry settings can be configured via environment variables for CI/CD pipelines
 - **Documentation**: More readable commands in scripts, CI/CD pipelines, and documentation
 - **Troubleshooting Time**: Reduced with direct links to relevant documentation and platform-specific guides
 - **Developer Onboarding**: Better guidance for common setup issues across all platforms
@@ -147,7 +169,7 @@ This release focuses on **ease of use** (name support, Windows compatibility), *
 - **Full Backward Compatibility**: All existing commands and scripts continue to work
 - **ID-Based Commands**: All existing ID-based data view specifications work unchanged
 - **Config File Migration**: Users need to rename `myconfig.json` to `config.json` (simple `mv` command)
-- **No Breaking Changes**: All 397 tests pass, including legacy functionality
+- **No Breaking Changes**: All 411 tests pass, including legacy functionality
 
 ## [3.0.8] - 2026-01-15
 
