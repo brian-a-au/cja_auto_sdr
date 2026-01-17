@@ -1,0 +1,4 @@
+Severity,Category,Type,Item Name,Issue,Details
+HIGH,Duplicates,Metrics,Page Views,Duplicate name found 2 times,This metrics name appears 2 times in the data view
+MEDIUM,Null Values,Dimensions,Product Category,"Null values in ""description"" field",Missing description for better documentation
+LOW,Missing Fields,Metrics,Conversion Rate,Missing description,Description field is empty

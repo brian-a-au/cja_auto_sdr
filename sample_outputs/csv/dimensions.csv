@@ -1,0 +1,3 @@
+id,name,type,title,description,dataType
+variables/evar1,Campaign,string,Marketing Campaign,Marketing campaign tracking code,string
+variables/evar2,Product Category,string,Product Category,Product category classification,string

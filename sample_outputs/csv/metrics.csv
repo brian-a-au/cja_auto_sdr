@@ -1,0 +1,4 @@
+id,name,type,title,description,dataType,precision
+metrics/pageviews,Page Views,int,Page Views,Total number of page views,integer,0
+metrics/visits,Visits,int,Visits,Total number of visits,integer,0
+metrics/revenue,Revenue,currency,Revenue,Total revenue in USD,decimal,2
