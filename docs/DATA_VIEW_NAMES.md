@@ -4,7 +4,7 @@ You can now specify data views by their **name** instead of just their ID.
 
 ## Overview
 
-Previously, you had to use data view IDs like `dv_677ea9291244fd082f02dd42`. Now you can use the data view name directly:
+Instead of Data View IDs like dv_677ea9291244fd082f02dd42, you can now use the Data View name directly:
 
 ```bash
 # Before (still works)
