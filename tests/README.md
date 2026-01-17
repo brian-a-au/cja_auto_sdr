@@ -30,7 +30,7 @@ tests/
 └── README.md                        # This file
 ```
 
-**Total: 397 comprehensive tests**
+**Total: 411 comprehensive tests**
 
 ## Running Tests
 
@@ -261,6 +261,13 @@ Test fixtures are defined in `conftest.py`:
 - **`sample_metrics_df`**: Sample metrics DataFrame for testing
 - **`sample_dimensions_df`**: Sample dimensions DataFrame with test data
 - **`temp_output_dir`**: Temporary directory for test outputs
+- **`large_sample_dataframe`**: Large DataFrame (500 rows) for performance testing
+- **`sample_data_dict`**: Complete data dictionary for output format testing
+- **`sample_metadata_dict`**: Metadata dictionary for output format testing
+- **`large_metrics_df`**: Large metrics DataFrame (1000 rows) for performance testing
+- **`large_dimensions_df`**: Large dimensions DataFrame (1000 rows) for performance testing
+- **`mock_env_credentials`**: Mock OAuth environment credentials
+- **`clean_env`**: Temporarily clears credential environment variables
 
 ## Writing New Tests
 
@@ -376,7 +383,7 @@ uv run pytest
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (397 tests total)
+- [x] Comprehensive test coverage (411 tests total)
 - [x] Parallel validation tests (test_parallel_validation.py)
 - [x] Validation caching tests (test_validation_cache.py)
 - [x] Early exit optimization tests (test_early_exit.py)
