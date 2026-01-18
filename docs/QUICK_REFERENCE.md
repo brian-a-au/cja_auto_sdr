@@ -2,7 +2,18 @@
 
 Single-page command cheat sheet for CJA SDR Generator v3.0.10.
 
-## Essential Commands
+## Two Main Modes
+
+| Mode | Purpose | Output |
+|------|---------|--------|
+| **SDR Generation** | Document a data view's dimensions, metrics, and calculated metrics | Excel, CSV, JSON, HTML, Markdown reports |
+| **Diff Comparison** | Compare two data views or snapshots to identify changes | Side-by-side comparison showing added, removed, and modified components |
+
+**SDR Generation** creates a Solution Design Reference—a comprehensive inventory of all components in a data view. Use this for documentation, audits, and onboarding.
+
+**Diff Comparison** identifies what changed between two data views or between a current state and a saved snapshot. Use this for change tracking, QA validation, and migration verification.
+
+## Essential Commands (SDR Generation)
 
 ```bash
 # Generate SDR for a single data view
@@ -21,7 +32,7 @@ cja_auto_sdr --list-dataviews
 cja_auto_sdr --validate-config
 ```
 
-## Diff Comparison Commands
+## Diff Comparison Commands (Diff Mode)
 
 ```bash
 # Compare two data views
@@ -51,14 +62,37 @@ cja_auto_sdr --diff dv_12345 dv_67890 --diff-labels "Before" "After"
 
 ## Common Options
 
+| Option | Purpose | Mode |
+|--------|---------|------|
+| `--output-dir PATH` | Save output to specific directory | Both |
+| `--format FORMAT` | Output format (see note below) | Both |
+| `--config-file PATH` | Use custom config file (default: config.json) | Both |
+| `--log-level LEVEL` | Set logging: `DEBUG`, `INFO`, `WARNING`, `ERROR` | Both |
+| `--skip-validation` | Skip data quality checks (faster) | SDR only |
+| `--continue-on-error` | Don't stop on failures in batch mode | SDR only |
+
+### Diff-Specific Options
+
 | Option | Purpose |
 |--------|---------|
-| `--output-dir PATH` | Save output to specific directory |
-| `--format FORMAT` | Output format: `excel`, `csv`, `json`, `html`, `all` |
-| `--config-file PATH` | Use custom config file (default: config.json) |
-| `--log-level LEVEL` | Set logging: `DEBUG`, `INFO`, `WARNING`, `ERROR` |
-| `--skip-validation` | Skip data quality checks (faster) |
-| `--continue-on-error` | Don't stop on failures in batch mode |
+| `--changes-only` | Hide unchanged components, show only differences |
+| `--diff-labels A B` | Custom labels for comparison columns (default: data view names) |
+| `--auto-snapshot` | Automatically save snapshots during diff for future comparisons |
+| `--warn-threshold PERCENT` | Exit with code 3 if change % exceeds threshold (for CI/CD) |
+| `--no-color` | Disable ANSI color codes in console output |
+| `--format-pr-comment` | Output in GitHub/GitLab PR comment format |
+
+### Format Support by Mode
+
+| Format | SDR | Diff |
+|--------|-----|------|
+| `excel` | ✅ (default) | ✅ |
+| `csv` | ✅ | ✅ |
+| `json` | ✅ | ✅ |
+| `html` | ✅ | ✅ |
+| `markdown` | ✅ | ✅ |
+| `console` | ❌ | ✅ (default) |
+| `all` | ✅ | ✅ |
 
 ## Quick Recipes
 
@@ -120,6 +154,7 @@ cja_auto_sdr dv_12345 --dry-run
 | CSV | `SDR_<name>_<date>.csv` | Flat component list |
 | JSON | `SDR_<name>_<date>.json` | Machine-readable format |
 | HTML | `SDR_<name>_<date>.html` | Browser-viewable report |
+| Markdown | `SDR_<name>_<date>.md` | Documentation-ready format |
 
 ## Exit Codes
 
