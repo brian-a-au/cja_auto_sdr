@@ -9,10 +9,10 @@
 
 ## Summary
 
-| Component | Production Analytics | Staging Analytics | Added | Removed | Modified |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| Metrics | 150 | 148 | +3 | -5 | ~7 |
-| Dimensions | 75 | 78 | +5 | -2 | ~4 |
+| Component | Production Analytics | Staging Analytics | Added | Removed | Modified | Unchanged | Changed |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Metrics | 150 | 148 | +3 | -5 | ~7 | 138 | 10.0% |
+| Dimensions | 75 | 78 | +5 | -2 | ~4 | 69 | 14.7% |
 
 **Total changes:** 26
 

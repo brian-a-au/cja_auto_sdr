@@ -4316,9 +4316,9 @@ def write_diff_console_output(diff_result: DiffResult, changes_only: bool = Fals
     # Calculate dynamic column widths based on label lengths
     src_width = max(8, len(diff_result.source_label))  # Min 8 for "Source"
     tgt_width = max(8, len(diff_result.target_label))  # Min 8 for "Target"
-    total_width = 20 + src_width + tgt_width + 10 + 10 + 10 + 12 + 6  # +6 for spacing
+    total_width = 20 + src_width + tgt_width + 10 + 10 + 10 + 12 + 12 + 7  # +7 for spacing
 
-    lines.append(f"{'':20s} {diff_result.source_label:>{src_width}s} {diff_result.target_label:>{tgt_width}s} {'Added':>10s} {'Removed':>10s} {'Modified':>10s} {'Changed':>12s}")
+    lines.append(f"{'':20s} {diff_result.source_label:>{src_width}s} {diff_result.target_label:>{tgt_width}s} {'Added':>10s} {'Removed':>10s} {'Modified':>10s} {'Unchanged':>12s} {'Changed':>12s}")
     lines.append("-" * total_width)
 
     # Metrics row with percentage (using ANSI-aware padding for colored strings)
@@ -4327,7 +4327,7 @@ def write_diff_console_output(diff_result: DiffResult, changes_only: bool = Fals
     removed_str = ANSIColors.red(f"-{summary.metrics_removed}", c) if summary.metrics_removed else f"-{summary.metrics_removed}"
     modified_str = ANSIColors.yellow(f"~{summary.metrics_modified}", c) if summary.metrics_modified else f"~{summary.metrics_modified}"
     lines.append(f"{'Metrics':20s} {summary.source_metrics_count:{src_width}d} {summary.target_metrics_count:{tgt_width}d} "
-                f"{ANSIColors.rjust(added_str, 10)} {ANSIColors.rjust(removed_str, 10)} {ANSIColors.rjust(modified_str, 10)} {metrics_pct:>12s}")
+                f"{ANSIColors.rjust(added_str, 10)} {ANSIColors.rjust(removed_str, 10)} {ANSIColors.rjust(modified_str, 10)} {summary.metrics_unchanged:>12d} {metrics_pct:>12s}")
 
     # Dimensions row with percentage (using ANSI-aware padding for colored strings)
     dims_pct = f"({summary.dimensions_change_percent:.1f}%)"
@@ -4335,7 +4335,7 @@ def write_diff_console_output(diff_result: DiffResult, changes_only: bool = Fals
     removed_str = ANSIColors.red(f"-{summary.dimensions_removed}", c) if summary.dimensions_removed else f"-{summary.dimensions_removed}"
     modified_str = ANSIColors.yellow(f"~{summary.dimensions_modified}", c) if summary.dimensions_modified else f"~{summary.dimensions_modified}"
     lines.append(f"{'Dimensions':20s} {summary.source_dimensions_count:{src_width}d} {summary.target_dimensions_count:{tgt_width}d} "
-                f"{ANSIColors.rjust(added_str, 10)} {ANSIColors.rjust(removed_str, 10)} {ANSIColors.rjust(modified_str, 10)} {dims_pct:>12s}")
+                f"{ANSIColors.rjust(added_str, 10)} {ANSIColors.rjust(removed_str, 10)} {ANSIColors.rjust(modified_str, 10)} {summary.dimensions_unchanged:>12d} {dims_pct:>12s}")
     lines.append("-" * total_width)
 
     if summary_only:
@@ -4630,14 +4630,14 @@ def write_diff_pr_comment_output(diff_result: DiffResult, changes_only: bool = F
     lines.append("")
 
     # Summary table
-    lines.append("| Component | Source | Target | Added | Removed | Modified | Changed |")
-    lines.append("|-----------|-------:|-------:|------:|--------:|---------:|--------:|")
+    lines.append("| Component | Source | Target | Added | Removed | Modified | Unchanged | Changed |")
+    lines.append("|-----------|-------:|-------:|------:|--------:|---------:|----------:|--------:|")
     lines.append(f"| Metrics | {summary.source_metrics_count} | {summary.target_metrics_count} | "
                 f"+{summary.metrics_added} | -{summary.metrics_removed} | ~{summary.metrics_modified} | "
-                f"{summary.metrics_change_percent:.1f}% |")
+                f"{summary.metrics_unchanged} | {summary.metrics_change_percent:.1f}% |")
     lines.append(f"| Dimensions | {summary.source_dimensions_count} | {summary.target_dimensions_count} | "
                 f"+{summary.dimensions_added} | -{summary.dimensions_removed} | ~{summary.dimensions_modified} | "
-                f"{summary.dimensions_change_percent:.1f}% |")
+                f"{summary.dimensions_unchanged} | {summary.dimensions_change_percent:.1f}% |")
     lines.append("")
 
     # Breaking changes warning
@@ -4836,9 +4836,13 @@ def write_diff_json_output(
                 "metrics_added": summary.metrics_added,
                 "metrics_removed": summary.metrics_removed,
                 "metrics_modified": summary.metrics_modified,
+                "metrics_unchanged": summary.metrics_unchanged,
+                "metrics_change_percent": summary.metrics_change_percent,
                 "dimensions_added": summary.dimensions_added,
                 "dimensions_removed": summary.dimensions_removed,
                 "dimensions_modified": summary.dimensions_modified,
+                "dimensions_unchanged": summary.dimensions_unchanged,
+                "dimensions_change_percent": summary.dimensions_change_percent,
                 "has_changes": summary.has_changes,
                 "total_changes": summary.total_changes
             },
@@ -4899,12 +4903,14 @@ def write_diff_markdown_output(
 
         # Summary table
         md_parts.append("## Summary\n")
-        md_parts.append(f"| Component | {diff_result.source_label} | {diff_result.target_label} | Added | Removed | Modified |")
-        md_parts.append("| --- | ---: | ---: | ---: | ---: | ---: |")
+        md_parts.append(f"| Component | {diff_result.source_label} | {diff_result.target_label} | Added | Removed | Modified | Unchanged | Changed |")
+        md_parts.append("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
         md_parts.append(f"| Metrics | {summary.source_metrics_count} | {summary.target_metrics_count} | "
-                       f"+{summary.metrics_added} | -{summary.metrics_removed} | ~{summary.metrics_modified} |")
+                       f"+{summary.metrics_added} | -{summary.metrics_removed} | ~{summary.metrics_modified} | "
+                       f"{summary.metrics_unchanged} | {summary.metrics_change_percent:.1f}% |")
         md_parts.append(f"| Dimensions | {summary.source_dimensions_count} | {summary.target_dimensions_count} | "
-                       f"+{summary.dimensions_added} | -{summary.dimensions_removed} | ~{summary.dimensions_modified} |")
+                       f"+{summary.dimensions_added} | -{summary.dimensions_removed} | ~{summary.dimensions_modified} | "
+                       f"{summary.dimensions_unchanged} | {summary.dimensions_change_percent:.1f}% |")
         md_parts.append("")
 
         if not summary.has_changes:
@@ -5201,6 +5207,8 @@ def write_diff_html_output(
                 <th>Added</th>
                 <th>Removed</th>
                 <th>Modified</th>
+                <th>Unchanged</th>
+                <th>Changed</th>
             </tr>
             <tr>
                 <td>Metrics</td>
@@ -5209,6 +5217,8 @@ def write_diff_html_output(
                 <td><span class="badge badge-added">+{summary.metrics_added}</span></td>
                 <td><span class="badge badge-removed">-{summary.metrics_removed}</span></td>
                 <td><span class="badge badge-modified">~{summary.metrics_modified}</span></td>
+                <td>{summary.metrics_unchanged}</td>
+                <td>{summary.metrics_change_percent:.1f}%</td>
             </tr>
             <tr>
                 <td>Dimensions</td>
@@ -5217,6 +5227,8 @@ def write_diff_html_output(
                 <td><span class="badge badge-added">+{summary.dimensions_added}</span></td>
                 <td><span class="badge badge-removed">-{summary.dimensions_removed}</span></td>
                 <td><span class="badge badge-modified">~{summary.dimensions_modified}</span></td>
+                <td>{summary.dimensions_unchanged}</td>
+                <td>{summary.dimensions_change_percent:.1f}%</td>
             </tr>
         </table>
 ''')
@@ -5335,7 +5347,9 @@ def write_diff_excel_output(
                 diff_result.target_label: [summary.target_metrics_count, summary.target_dimensions_count],
                 'Added': [summary.metrics_added, summary.dimensions_added],
                 'Removed': [summary.metrics_removed, summary.dimensions_removed],
-                'Modified': [summary.metrics_modified, summary.dimensions_modified]
+                'Modified': [summary.metrics_modified, summary.dimensions_modified],
+                'Unchanged': [summary.metrics_unchanged, summary.dimensions_unchanged],
+                'Changed %': [f"{summary.metrics_change_percent:.1f}%", f"{summary.dimensions_change_percent:.1f}%"]
             }
             summary_df = pd.DataFrame(summary_data)
             summary_df.to_excel(writer, sheet_name='Summary', index=False)
@@ -5435,7 +5449,9 @@ def write_diff_csv_output(
             'Target_Count': [summary.target_metrics_count, summary.target_dimensions_count],
             'Added': [summary.metrics_added, summary.dimensions_added],
             'Removed': [summary.metrics_removed, summary.dimensions_removed],
-            'Modified': [summary.metrics_modified, summary.dimensions_modified]
+            'Modified': [summary.metrics_modified, summary.dimensions_modified],
+            'Unchanged': [summary.metrics_unchanged, summary.dimensions_unchanged],
+            'Changed_Percent': [summary.metrics_change_percent, summary.dimensions_change_percent]
         }
         pd.DataFrame(summary_data).to_csv(
             os.path.join(csv_dir, 'summary.csv'), index=False

@@ -263,11 +263,11 @@ Generated: 2025-01-17 14:30:00
 ================================================================================
 
 SUMMARY
-                          Source       Target      Added    Removed   Modified
---------------------------------------------------------------------------------
-Metrics                      150          148         +3         -5         ~7
-Dimensions                    75           78         +5         -2         ~4
---------------------------------------------------------------------------------
+                          Source       Target      Added    Removed   Modified   Unchanged     Changed
+-------------------------------------------------------------------------------------------------------
+Metrics                      150          148         +3         -5         ~7         145     (10.0%)
+Dimensions                    75           78         +5         -2         ~4          68     (14.7%)
+-------------------------------------------------------------------------------------------------------
 
 METRICS CHANGES (15)
   [+] metrics/new_conversion_rate            "New Conversion Rate"
@@ -281,6 +281,89 @@ DIMENSIONS CHANGES (11)
 
 ================================================================================
 ```
+
+## Interpreting the Summary Table
+
+The summary table provides a quick overview of differences between two data views. Here's how to interpret each column and the underlying logic:
+
+### Summary Column Reference
+
+| Column | Description |
+|--------|-------------|
+| **Source** | Total component count in the source (first) data view |
+| **Target** | Total component count in the target (second) data view |
+| **Added** | Components that exist in target but NOT in source (new items) |
+| **Removed** | Components that exist in source but NOT in target (deleted items) |
+| **Modified** | Components that exist in BOTH but have different field values |
+| **Unchanged** | Components that are identical in both data views |
+| **Changed** | Percentage of components affected by any change |
+
+### Mathematical Relationships
+
+The columns follow these mathematical relationships:
+
+```
+Target = Source - Removed + Added
+
+Unchanged = Source - Removed - Modified
+         = Target - Added - Modified
+
+Total Changes = Added + Removed + Modified
+
+Changed % = (Total Changes / Source) × 100
+```
+
+### Example Interpretation
+
+```
+SUMMARY
+                     Adobestore (Stitched)   Adobe Store - Prod      Added    Removed   Modified   Unchanged     Changed
+-------------------------------------------------------------------------------------------------------------------------
+Metrics                                 33                   28        +17        -22        ~10           6    (148.5%)
+Dimensions                             120                   98        +48        -70        ~31          21    (124.2%)
+```
+
+**Reading the Metrics row:**
+- **Source (33)**: The source data view has 33 metrics
+- **Target (28)**: The target data view has 28 metrics
+- **Added (+17)**: 17 metrics exist in target that don't exist in source
+- **Removed (-22)**: 22 metrics exist in source that don't exist in target
+- **Modified (~10)**: 10 metrics exist in both but have different values
+- **Unchanged (6)**: 6 metrics are identical in both data views
+- **Changed (148.5%)**: 49 total changes (17+22+10) relative to 33 source components
+
+**Validation:**
+- Target = Source - Removed + Added → 28 = 33 - 22 + 17 ✓
+- Unchanged = Source - Removed - Modified → 6 = 33 - 22 - 10 ✓ (with 5 that became modified)
+
+### Understanding High Change Percentages
+
+A change percentage over 100% indicates significant restructuring:
+
+- **>100%**: More changes than original components (heavy additions or both adds and removes)
+- **~50-100%**: Substantial changes affecting half or more of components
+- **<25%**: Minor changes, mostly stable
+
+### Change Type Symbols
+
+In detailed output, changes are marked with symbols:
+
+| Symbol | Meaning | Color (console) |
+|--------|---------|-----------------|
+| `[+]` | Added | Green |
+| `[-]` | Removed | Red |
+| `[~]` | Modified | Yellow |
+
+### Format-Specific Summary Display
+
+The summary appears in all output formats with slight variations:
+
+- **Console**: Colored symbols and percentages with ANSI codes (use `--no-color` to disable)
+- **Markdown**: Plain text table suitable for documentation and PR comments
+- **HTML**: Styled table with color-coded cells
+- **Excel**: Dedicated Summary sheet with formatted columns
+- **CSV**: `_summary.csv` file with numeric values
+- **JSON**: `summary` object with all counts and percentages
 
 ## Snapshot Format
 
