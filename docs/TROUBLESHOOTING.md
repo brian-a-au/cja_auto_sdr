@@ -372,7 +372,7 @@ uv run cja_auto_sdr dv_12345
 
 ### Data View Name Resolution Errors
 
-Starting in v3.0.9, you can use data view **names** instead of IDs. However, name resolution has strict requirements.
+You can use data view **names** instead of IDs. However, name resolution has strict requirements.
 
 #### Name Not Found
 

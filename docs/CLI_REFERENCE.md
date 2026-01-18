@@ -161,7 +161,7 @@ cja-auto-sdr [OPTIONS] DATA_VIEW_ID_OR_NAME [...]
 # By ID
 cja_auto_sdr dv_677ea9291244fd082f02dd42
 
-# By name (v3.0.9+)
+# By name
 cja_auto_sdr "Production Analytics"
 
 # With custom output directory
@@ -181,7 +181,7 @@ cja_auto_sdr "Staging" --log-level DEBUG
 # By IDs - automatic batch processing
 cja_auto_sdr dv_12345 dv_67890 dv_abcde
 
-# By names (v3.0.9+)
+# By names
 cja_auto_sdr "Production" "Staging" "Test Environment"
 
 # Mix IDs and names
