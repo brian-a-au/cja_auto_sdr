@@ -168,12 +168,12 @@ This command:
 ```bash
 # Using uv run (works without activating venv)
 uv run cja_auto_sdr --version
-# Output: cja_sdr_generator.py version 3.0.9
+# Output: cja_sdr_generator.py version 3.0.10
 
 # Or activate the virtual environment first
 source .venv/bin/activate
 cja_auto_sdr --version
-# Output: cja_sdr_generator.py version 3.0.9
+# Output: cja_sdr_generator.py version 3.0.10
 ```
 
 **Windows (PowerShell):**
@@ -186,7 +186,7 @@ uv run cja_auto_sdr --version
 
 # Then run directly
 python cja_sdr_generator.py --version
-# Output: cja_sdr_generator.py version 3.0.9
+# Output: cja_sdr_generator.py version 3.0.10
 
 # Or use the console script if it was installed
 cja_auto_sdr --version
@@ -547,6 +547,23 @@ For large Data Views, see the [Performance Guide](PERFORMANCE.md):
 - Enable caching for repeated runs
 - Skip validation when not needed
 - Configure parallel workers
+
+### Compare Data Views
+
+Track changes between environments or over time with diff comparison:
+```bash
+# Compare two data views
+cja_auto_sdr --diff dv_12345 dv_67890
+
+# Save a baseline snapshot
+cja_auto_sdr dv_12345 --snapshot ./baseline.json
+```
+
+See [Data View Comparison](DIFF_COMPARISON.md) for more details.
+
+### Quick Reference
+
+Keep the [Quick Reference Card](QUICK_REFERENCE.md) handy for common commands and options.
 
 ---
 

@@ -11,11 +11,42 @@ cja_auto_sdr dv_12345
 # Process multiple data views in parallel
 cja_auto_sdr dv_12345 dv_67890 dv_abcde
 
+# Use data view names instead of IDs
+cja_auto_sdr "Production Analytics"
+
 # List all accessible data views
 cja_auto_sdr --list-dataviews
 
 # Validate config without processing
 cja_auto_sdr --validate-config
+```
+
+## Diff Comparison Commands
+
+```bash
+# Compare two data views
+cja_auto_sdr --diff dv_12345 dv_67890
+
+# Compare using names
+cja_auto_sdr --diff "Production" "Staging"
+
+# Save snapshot for later comparison
+cja_auto_sdr dv_12345 --snapshot ./baseline.json
+
+# Compare current state to snapshot
+cja_auto_sdr dv_12345 --diff-snapshot ./baseline.json
+
+# Compare two snapshots (no API calls)
+cja_auto_sdr --compare-snapshots ./old.json ./new.json
+
+# Auto-save snapshots during diff
+cja_auto_sdr --diff dv_12345 dv_67890 --auto-snapshot
+
+# Show only changes (hide unchanged)
+cja_auto_sdr --diff dv_12345 dv_67890 --changes-only
+
+# Custom labels in diff output
+cja_auto_sdr --diff dv_12345 dv_67890 --diff-labels "Before" "After"
 ```
 
 ## Common Options
@@ -94,12 +125,15 @@ cja_auto_sdr dv_12345 --dry-run
 
 | Code | Meaning |
 |------|---------|
-| 0 | Success |
+| 0 | Success (diff: no changes found) |
 | 1 | Error (config, API, or processing failure) |
+| 2 | Diff: changes found |
+| 3 | Diff: changes exceeded threshold |
 
 ## More Information
 
-- Full CLI docs: `docs/CLI_REFERENCE.md`
-- Troubleshooting: `docs/TROUBLESHOOTING.md`
-- Batch processing: `docs/BATCH_PROCESSING_GUIDE.md`
-- Data quality: `docs/DATA_QUALITY.md`
+- Full CLI docs: [CLI_REFERENCE.md](CLI_REFERENCE.md)
+- Diff comparison: [DIFF_COMPARISON.md](DIFF_COMPARISON.md)
+- Troubleshooting: [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
+- Batch processing: [BATCH_PROCESSING_GUIDE.md](BATCH_PROCESSING_GUIDE.md)
+- Data quality: [DATA_QUALITY.md](DATA_QUALITY.md)

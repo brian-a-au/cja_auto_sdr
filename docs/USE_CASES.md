@@ -55,35 +55,53 @@ Assist new team members in understanding CJA setup:
 
 ### Change Management
 
-Document configuration before and after changes:
-- Baseline current configuration
-- Compare versions over time
-- Track component additions/removals
-- Audit change impact
+Document configuration before and after changes using the **diff comparison** feature:
+- Baseline current configuration with snapshots
+- Compare versions over time with automated change detection
+- Track component additions, removals, and modifications
+- Audit change impact with detailed field-level diffs
 
 **Best for:** Release management, change control processes
 
 ```bash
-# Before change
-cja_auto_sdr dv_12345 --output-dir ./baseline
+# Save baseline snapshot before change
+cja_auto_sdr dv_12345 --snapshot ./baselines/pre-change.json
 
-# After change
-cja_auto_sdr dv_12345 --output-dir ./after_change
+# After change, compare against baseline
+cja_auto_sdr dv_12345 --diff-snapshot ./baselines/pre-change.json
+
+# Or compare two live data views
+cja_auto_sdr --diff dv_12345 dv_67890
+
+# Generate HTML report for stakeholders
+cja_auto_sdr --diff dv_12345 dv_67890 --format html --output-dir ./reports
 ```
 
 ### Multi-Environment Comparison
 
-Compare configurations across environments:
-- Generate SDRs for dev, staging, production
-- Identify configuration differences
-- Ensure consistency across environments
-- Plan promotion strategies
+Compare configurations across environments using **diff comparison**:
+- Directly compare dev, staging, and production data views
+- Identify configuration differences with field-level detail
+- Ensure consistency across environments before deployments
+- Detect environment drift automatically
 
 **Best for:** DevOps, environment management
 
 ```bash
-cja_auto_sdr dv_12345 dv_67890 dv_abcde \
-  --output-dir ./env_comparison
+# Compare production vs staging directly
+cja_auto_sdr --diff "Production Analytics" "Staging Analytics"
+
+# With custom labels in output
+cja_auto_sdr --diff dv_12345 dv_67890 --diff-labels "Production" "Staging"
+
+# Show only differences (hide unchanged components)
+cja_auto_sdr --diff dv_12345 dv_67890 --changes-only
+
+# Focus on specific change types
+cja_auto_sdr --diff dv_12345 dv_67890 --show-only added,removed
+
+# Generate all format reports for review
+cja_auto_sdr --diff dv_12345 dv_67890 --format all --output-dir ./env_comparison
 ```
 
 ### Compliance Documentation
@@ -98,13 +116,105 @@ Generate audit-ready documentation:
 
 ### Migration Planning
 
-Prepare for migrations or upgrades:
-- Document current state comprehensively
-- Identify components to migrate
-- Plan migration sequence
-- Validate post-migration configuration
+Prepare for migrations or upgrades with **snapshot comparison**:
+- Document current state with a baseline snapshot
+- Compare before and after migration states
+- Validate no unintended changes occurred
+- Generate diff reports for migration sign-off
 
 **Best for:** Platform migrations, major version upgrades
+
+```bash
+# Before migration: save snapshot
+cja_auto_sdr dv_12345 --snapshot ./migrations/pre-migration.json
+
+# Perform migration...
+
+# After migration: compare against baseline
+cja_auto_sdr dv_12345 --diff-snapshot ./migrations/pre-migration.json --format html
+
+# Compare two historical snapshots (no API calls needed)
+cja_auto_sdr --compare-snapshots ./migrations/pre-migration.json ./migrations/post-migration.json
+```
+
+### Data View Drift Detection (CI/CD)
+
+Integrate diff comparison into CI/CD pipelines to catch unexpected changes:
+- Automated detection of configuration drift
+- Exit codes for pipeline integration (0=no changes, 2=changes found, 3=threshold exceeded)
+- PR comments with change summaries
+- Fail builds when critical changes exceed thresholds
+
+**Best for:** DevOps, continuous integration, deployment gates
+
+```bash
+# Basic CI/CD drift check (exit code 2 if differences found)
+cja_auto_sdr --diff dv_12345 dv_67890 --quiet-diff
+echo "Exit code: $?"  # 0=identical, 2=different
+
+# Fail build if changes exceed 5%
+cja_auto_sdr --diff dv_12345 dv_67890 --warn-threshold 5 --quiet-diff
+
+# Generate PR comment format
+cja_auto_sdr --diff dv_12345 dv_67890 --format-pr-comment --diff-output pr-comment.md
+gh pr comment --body-file pr-comment.md
+
+# JSON output for programmatic processing
+cja_auto_sdr --diff dv_12345 dv_67890 --format json --diff-output changes.json
+```
+
+**GitHub Actions Example:**
+
+```yaml
+- name: Check for Data View Drift
+  run: |
+    cja_auto_sdr --diff ${{ secrets.PROD_DV }} ${{ secrets.STAGING_DV }} \
+      --warn-threshold 10 --quiet-diff
+  continue-on-error: true
+
+- name: Generate Diff Report
+  if: failure()
+  run: |
+    cja_auto_sdr --diff ${{ secrets.PROD_DV }} ${{ secrets.STAGING_DV }} \
+      --format-pr-comment --diff-output diff-report.md
+```
+
+### Automated Audit Trail
+
+Use **auto-snapshot** to maintain automatic audit trails without manual intervention:
+- Automatically save timestamped snapshots during any diff comparison
+- Configurable retention policies to manage storage
+- Build history of changes over time
+- Zero-friction audit compliance
+
+**Best for:** Compliance, audit trails, historical tracking
+
+```bash
+# Auto-save snapshots during diff (creates timestamped files)
+cja_auto_sdr --diff dv_12345 dv_67890 --auto-snapshot
+# Creates: ./snapshots/DataViewName_dv_12345_20260118_143022.json
+#          ./snapshots/DataViewName_dv_67890_20260118_143022.json
+
+# Custom snapshot directory
+cja_auto_sdr --diff dv_12345 dv_67890 --auto-snapshot --snapshot-dir ./audit-trail
+
+# With retention policy (keep only last 30 snapshots per data view)
+cja_auto_sdr --diff dv_12345 dv_67890 --auto-snapshot --keep-last 30
+
+# Works with diff-snapshot too (saves current state automatically)
+cja_auto_sdr dv_12345 --diff-snapshot ./baseline.json --auto-snapshot
+```
+
+**Scheduled Audit Trail (cron):**
+
+```bash
+# Weekly audit with automatic snapshot retention
+0 9 * * 1 cd /path/to/project && cja_auto_sdr \
+  --diff dv_12345 dv_67890 \
+  --auto-snapshot --keep-last 52 \
+  --snapshot-dir ./audit/weekly \
+  --format markdown --diff-output ./audit/weekly/latest-diff.md
+```
 
 ## Best Practices
 
@@ -242,7 +352,7 @@ cja_auto_sdr dv_12345 --enable-cache
 
 ### CI/CD Integration
 
-#### GitHub Actions
+#### GitHub Actions - SDR Generation
 
 ```yaml
 name: Generate SDR
@@ -272,13 +382,73 @@ jobs:
           cja_auto_sdr ${{ secrets.DATA_VIEW_ID }} \
             --output-dir ./artifacts
         env:
-          # Store config as secret
-          CJA_CONFIG: ${{ secrets.CJA_CONFIG }}
+          ORG_ID: ${{ secrets.ORG_ID }}
+          CLIENT_ID: ${{ secrets.CLIENT_ID }}
+          SECRET: ${{ secrets.SECRET }}
+          SCOPES: ${{ secrets.SCOPES }}
 
       - uses: actions/upload-artifact@v3
         with:
           name: sdr-reports
           path: ./artifacts/*.xlsx
+```
+
+#### GitHub Actions - Diff Comparison with PR Comment
+
+```yaml
+name: Data View Drift Check
+on:
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 6 * * *'  # Daily at 6 AM
+
+jobs:
+  drift-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.14'
+
+      - name: Install dependencies
+        run: pip install uv && uv sync
+
+      - name: Check for drift
+        id: drift
+        run: |
+          cja_auto_sdr --diff ${{ secrets.PROD_DV }} ${{ secrets.STAGING_DV }} \
+            --warn-threshold 5 \
+            --format-pr-comment --diff-output diff-report.md \
+            --auto-snapshot --snapshot-dir ./snapshots
+          echo "exit_code=$?" >> $GITHUB_OUTPUT
+        env:
+          ORG_ID: ${{ secrets.ORG_ID }}
+          CLIENT_ID: ${{ secrets.CLIENT_ID }}
+          SECRET: ${{ secrets.SECRET }}
+        continue-on-error: true
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request' && steps.drift.outputs.exit_code != '0'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('diff-report.md', 'utf8');
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+
+      - name: Upload snapshots
+        uses: actions/upload-artifact@v3
+        with:
+          name: snapshots
+          path: ./snapshots/*.json
 ```
 
 ### Output Organization
@@ -327,6 +497,7 @@ cja_auto_sdr dv_12345 \
 ## See Also
 
 - [CLI Reference](CLI_REFERENCE.md) - All command options
+- [Data View Comparison Guide](DIFF_COMPARISON.md) - Diff, snapshots, and CI/CD integration
 - [Performance Guide](PERFORMANCE.md) - Optimization tips
 - [Batch Processing Guide](BATCH_PROCESSING_GUIDE.md) - Multi-view processing
 - [Data Quality](DATA_QUALITY.md) - Understanding validation

@@ -32,14 +32,14 @@ tests/
 └── README.md                        # This file
 ```
 
-**Total: 551 comprehensive tests**
+**Total: 596 comprehensive tests**
 
 ### Test Count Breakdown
 
 | Test File | Tests | Coverage Area |
 |-----------|-------|---------------|
-| `test_diff_comparison.py` | 94 | Data view diff comparison feature |
-| `test_cli.py` | 71 | Command-line interface and argument parsing |
+| `test_diff_comparison.py` | 139 | Data view diff comparison feature |
+| `test_cli.py` | 76 | Command-line interface and argument parsing |
 | `test_edge_cases.py` | 39 | Edge cases, configuration dataclasses, custom exceptions |
 | `test_output_formats.py` | 32 | CSV, JSON, HTML, Markdown output generation |
 | `test_cja_initialization.py` | 32 | CJA connection and configuration validation |
@@ -59,7 +59,7 @@ tests/
 | `test_early_exit.py` | 11 | Early exit optimizations |
 | `test_data_quality.py` | 10 | Data quality validation logic |
 | `test_parallel_validation.py` | 8 | Parallel validation operations |
-| **Total** | **551** | **100% pass rate** |
+| **Total** | **596** | **100% pass rate** |
 
 ## Running Tests
 
@@ -442,7 +442,7 @@ uv run pytest
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (457 tests total)
+- [x] Comprehensive test coverage (596 tests total)
 - [x] Parallel validation tests (test_parallel_validation.py)
 - [x] Validation caching tests (test_validation_cache.py)
 - [x] Early exit optimization tests (test_early_exit.py)
@@ -457,7 +457,7 @@ uv run pytest
 - [x] Excel formatting tests (test_excel_formatting.py)
 - [x] CJA initialization tests (test_cja_initialization.py)
 - [x] Name resolution tests (test_name_resolution.py)
-- [x] Data view diff comparison tests (test_diff_comparison.py) - 44 tests covering snapshots, comparison logic, output formats, CLI arguments
+- [x] Data view diff comparison tests (test_diff_comparison.py) - 139 tests covering snapshots, comparison logic, output formats, CLI arguments, name resolution
 - [x] Edge case tests (test_edge_cases.py) - 39 tests covering custom exceptions, configuration dataclasses, OutputWriter Protocol, boundary conditions
 
 ## Future Enhancements

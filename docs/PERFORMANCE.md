@@ -13,6 +13,8 @@ The generator includes multiple optimization features:
 | Validation caching | 50-90% faster on cache hits |
 | Skip validation mode | 20-30% faster |
 | Production logging mode | 5-10% faster |
+| Name resolution caching | 5-minute API cache for data view listings |
+| Snapshot comparison | No API calls (instant for large datasets) |
 
 ## Batch Processing
 
@@ -225,6 +227,63 @@ Attempt 4: API call fails
   → Error raised, processing stops
 ```
 
+## Diff Comparison Performance
+
+### Comparison Types
+
+| Operation | API Calls | Performance |
+|-----------|-----------|-------------|
+| `--diff dv_12345 dv_67890` | 2 (fetch both data views) | ~5-10s |
+| `--diff-snapshot baseline.json` | 1 (fetch current state) | ~3-5s |
+| `--compare-snapshots A.json B.json` | 0 (pure file comparison) | <1s |
+
+### Snapshot-to-Snapshot Comparison
+
+The `--compare-snapshots` option requires **no API calls**, making it ideal for:
+- Offline historical analysis
+- CI/CD pipelines without API credentials
+- Comparing archived states
+- Batch comparisons of many snapshot pairs
+
+```bash
+# Instant comparison of two 500+ component data views
+cja_auto_sdr --compare-snapshots ./q1.json ./q2.json  # <1 second
+```
+
+### Name Resolution Caching
+
+When using data view names (instead of IDs), the tool caches the data view listing from the API for 5 minutes:
+
+**Benefits:**
+- Subsequent name lookups don't require API calls
+- Faster batch operations with names
+- Reduced API quota usage
+
+**Cache behavior:**
+```
+First call:   API call to fetch data view list → cache for 5 min
+Second call:  Cache hit (no API call)
+After 5 min:  Cache expired → fresh API call
+```
+
+**Optimization:** If processing many data views by name, run them together:
+```bash
+# Single API call for name resolution (cached)
+cja_auto_sdr "Prod" "Staging" "Test" "Dev"
+```
+
+### Auto-Snapshot Performance
+
+Auto-snapshot has minimal overhead:
+- Writes JSON files asynchronously after comparison
+- Retention policy cleanup is file-system only
+- No impact on comparison speed
+
+```bash
+# Same performance as regular diff
+cja_auto_sdr --diff dv_12345 dv_67890 --auto-snapshot --keep-last 10
+```
+
 ### Retryable vs Non-Retryable Errors
 
 **Retryable** (automatic retry):
@@ -292,6 +351,7 @@ Total Execution Time               :  10.75s
 ## See Also
 
 - [CLI Reference](CLI_REFERENCE.md) - Performance-related flags
+- [Data View Comparison Guide](DIFF_COMPARISON.md) - Diff, snapshots, and CI/CD integration
 - [Batch Processing Guide](BATCH_PROCESSING_GUIDE.md) - Detailed batch documentation
 - [Optimization Summary](OPTIMIZATION_SUMMARY.md) - Technical implementation details
 - [Stress Test Results](STRESS_TEST_RESULTS.md) - Benchmark data

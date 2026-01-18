@@ -7,7 +7,7 @@
 **Data View Name:** Sample Production Analytics
 **Total Metrics:** 25
 **Total Dimensions:** 15
-**Tool Version:** 3.0.9
+**Tool Version:** 3.0.10
 
 ## 📑 Table of Contents
 

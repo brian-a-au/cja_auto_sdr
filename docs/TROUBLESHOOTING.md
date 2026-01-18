@@ -9,6 +9,7 @@ Comprehensive solutions for issues with the CJA SDR Generator.
 - [Configuration Errors](#configuration-errors)
 - [Authentication & Connection Errors](#authentication--connection-errors)
 - [Data View Errors](#data-view-errors)
+- [Diff Comparison & Snapshot Errors](#diff-comparison--snapshot-errors)
 - [API & Network Errors](#api--network-errors)
 - [Retry Mechanism & Rate Limiting](#retry-mechanism--rate-limiting)
 - [Data Quality Issues](#data-quality-issues)
@@ -82,10 +83,23 @@ uv run cja_auto_sdr --sample-config
 
 | Exit Code | Meaning | Common Causes |
 |-----------|---------|---------------|
-| `0` | Success | Command completed successfully |
+| `0` | Success | Command completed successfully (diff: no changes found) |
 | `1` | General Error | Configuration errors, missing arguments, validation failures |
-| `1` | Missing Data View | No data view ID provided (except special modes) |
-| `1` | Invalid Arguments | Invalid worker count, cache settings, or retry parameters |
+| `2` | Diff: Changes Found | Diff comparison succeeded but differences were detected |
+| `3` | Diff: Threshold Exceeded | Changes exceeded `--warn-threshold` percentage |
+
+**Diff-specific exit codes** are designed for CI/CD integration:
+
+```bash
+# Check exit code after diff
+cja_auto_sdr --diff dv_12345 dv_67890 --quiet-diff
+case $? in
+  0) echo "No differences found" ;;
+  1) echo "Error occurred" ;;
+  2) echo "Differences detected (review needed)" ;;
+  3) echo "Too many changes (threshold exceeded)" ;;
+esac
+```
 
 ---
 
@@ -519,6 +533,150 @@ AttributeError: API method error - getMetrics may not be available
 ```bash
 uv add --upgrade cjapy
 ```
+
+---
+
+## Diff Comparison & Snapshot Errors
+
+### Snapshot File Not Found
+
+**Symptoms:**
+```
+ERROR - Snapshot file not found: ./snapshots/baseline.json
+FileNotFoundError: Snapshot file not found
+```
+
+**Solutions:**
+1. Check the file path is correct:
+   ```bash
+   ls -la ./snapshots/baseline.json
+   ```
+2. Verify you created a snapshot first:
+   ```bash
+   cja_auto_sdr dv_12345 --snapshot ./snapshots/baseline.json
+   ```
+
+### Invalid Snapshot File
+
+**Symptoms:**
+```
+ERROR - Invalid snapshot file: missing 'snapshot_version' field
+ERROR - Failed to parse snapshot JSON: Expecting value
+```
+
+**Causes:**
+- File is not a valid JSON
+- File was not created by this tool
+- File was corrupted or manually edited incorrectly
+
+**Solutions:**
+1. Verify the file is valid JSON:
+   ```bash
+   python -c "import json; json.load(open('./snapshots/baseline.json'))"
+   ```
+2. Create a fresh snapshot:
+   ```bash
+   cja_auto_sdr dv_12345 --snapshot ./snapshots/baseline.json
+   ```
+
+### Ambiguous Name Resolution in Diff Mode
+
+**Symptoms:**
+```
+ERROR - Ambiguous data view name 'Analytics' matches multiple data views
+ERROR - Diff operations require exactly one match per identifier
+```
+
+**Cause:** When using `--diff`, each identifier must resolve to exactly one data view. Unlike batch SDR generation (where duplicate names process all matches), diff requires unambiguous identifiers.
+
+**Solutions:**
+1. Use data view IDs instead of names:
+   ```bash
+   cja_auto_sdr --diff dv_12345 dv_67890
+   ```
+2. Run `--list-dataviews` to find unique identifiers:
+   ```bash
+   cja_auto_sdr --list-dataviews
+   ```
+
+### Fuzzy Name Suggestions
+
+**Symptoms:**
+```
+No data view found with name 'Prodction Analytics'
+Did you mean one of these?
+  - Production Analytics (edit distance: 1)
+  - Production Analytics v2 (edit distance: 4)
+```
+
+**Cause:** Name not found, but similar names exist. This suggests a typo.
+
+**Solution:** Check the suggested names and use the correct spelling with quotes:
+```bash
+cja_auto_sdr --diff "Production Analytics" "Staging Analytics"
+```
+
+### Compare-Snapshots File Errors
+
+**Symptoms:**
+```
+ERROR - First snapshot file not found: ./old.json
+ERROR - Second snapshot file not found: ./new.json
+```
+
+**Solution:** Verify both snapshot files exist before comparing:
+```bash
+ls -la ./old.json ./new.json
+cja_auto_sdr --compare-snapshots ./old.json ./new.json
+```
+
+### Auto-Snapshot Directory Errors
+
+**Symptoms:**
+```
+ERROR - Cannot create snapshot directory: Permission denied
+ERROR - Failed to save auto-snapshot: ./snapshots/DataView_dv_123_20260118.json
+```
+
+**Solutions:**
+1. Ensure the snapshot directory is writable:
+   ```bash
+   mkdir -p ./snapshots
+   chmod 755 ./snapshots
+   ```
+2. Use a different directory:
+   ```bash
+   cja_auto_sdr --diff dv_12345 dv_67890 --auto-snapshot --snapshot-dir ~/tmp/snapshots
+   ```
+
+### Retention Policy Not Deleting Old Snapshots
+
+**Symptoms:** Old snapshots accumulate even with `--keep-last N` set.
+
+**Cause:** Retention applies per data view, not globally. If you have 10 data views, `--keep-last 5` keeps 5 snapshots *per data view* (up to 50 total).
+
+**Verification:**
+```bash
+# Check snapshot counts per data view
+ls -la ./snapshots/ | grep "dv_12345" | wc -l
+ls -la ./snapshots/ | grep "dv_67890" | wc -l
+```
+
+### Diff Output File Errors
+
+**Symptoms:**
+```
+ERROR - Cannot write diff output: ./reports/diff.md
+PermissionError: Permission denied
+```
+
+**Solutions:**
+1. Ensure the output directory exists and is writable
+2. Check if the file is open in another application
+3. Use a different output path:
+   ```bash
+   cja_auto_sdr --diff dv_12345 dv_67890 --diff-output ~/Desktop/diff-report.md
+   ```
 
 ---
 
@@ -1377,6 +1535,18 @@ cat logs/$(ls -t logs/ | head -1)
 | `--max-retries cannot be negative` | Invalid retry count | Use 0 or positive |
 | `--retry-max-delay must be >= --retry-base-delay` | Invalid delay config | Ensure max >= base |
 
+### Diff Comparison Errors
+
+| Error Message | Cause | Solution |
+|---------------|-------|----------|
+| `Snapshot file not found: {path}` | Snapshot doesn't exist | Create snapshot first with `--snapshot` |
+| `Invalid snapshot file` | File not valid snapshot JSON | Recreate snapshot or check file |
+| `Ambiguous data view name` | Name matches multiple views | Use ID instead or be more specific |
+| `Did you mean one of these?` | Name typo detected | Check spelling, use suggested name |
+| `Diff requires exactly 2 data views` | Wrong number of args to `--diff` | Provide exactly 2 identifiers |
+| `Cannot create snapshot directory` | Permission denied | Check directory permissions |
+| `--format console` not supported for SDR | Console is diff-only | Use excel, csv, json, html, or markdown |
+
 ---
 
 ## Getting Help
@@ -1413,6 +1583,7 @@ If you encounter issues not covered here:
 
 - [Installation Guide](INSTALLATION.md) - Setup instructions
 - [CLI Reference](CLI_REFERENCE.md) - Complete command options
+- [Data View Comparison Guide](DIFF_COMPARISON.md) - Diff, snapshots, and CI/CD integration
 - [Performance Guide](PERFORMANCE.md) - Optimization options
 - [Data Quality Guide](DATA_QUALITY.md) - Understanding validation
 - [Batch Processing Guide](BATCH_PROCESSING_GUIDE.md) - Multi-data view processing
