@@ -41,7 +41,7 @@ By default, the following fields are compared to detect modifications:
 
 Use `--ignore-fields` to exclude specific fields from comparison (e.g., ignore description changes).
 
-### Extended Fields (v3.0.10+)
+### Extended Fields
 
 Use `--extended-fields` to include additional fields in comparison:
 
@@ -263,7 +263,7 @@ fi
 echo "Validation passed. Proceeding with deployment..."
 ```
 
-### Example: Threshold-Based CI/CD (v3.0.10+)
+### Example: Threshold-Based CI/CD
 
 ```bash
 #!/bin/bash
@@ -385,7 +385,7 @@ Use custom labels instead of data view names:
 cja_auto_sdr --diff dv_A dv_B --diff-labels "Production" "Staging"
 ```
 
-### Filter by Change Type (v3.0.10+)
+### Filter by Change Type
 
 Show only specific types of changes:
 
@@ -403,7 +403,7 @@ cja_auto_sdr --diff dv_A dv_B --show-only modified
 cja_auto_sdr --diff dv_A dv_B --show-only added,modified
 ```
 
-### Filter by Component Type (v3.0.10+)
+### Filter by Component Type
 
 Compare only metrics or only dimensions:
 
@@ -415,7 +415,7 @@ cja_auto_sdr --diff dv_A dv_B --metrics-only
 cja_auto_sdr --diff dv_A dv_B --dimensions-only
 ```
 
-### Side-by-Side View (v3.0.10+)
+### Side-by-Side View
 
 Display modified items in a side-by-side format for easier comparison:
 
@@ -437,7 +437,7 @@ Example side-by-side console output:
 └─────────────────────────────────────┴─────────────────────────────────────┘
 ```
 
-### Extended Field Comparison (v3.0.10+)
+### Extended Field Comparison
 
 Compare additional fields including attribution, format, and bucketing settings:
 
@@ -527,13 +527,13 @@ The diff comparison feature includes comprehensive unit tests in `tests/test_dif
 | `TestDeeplyNestedStructures` | 3 | Attribution settings, format configs |
 | `TestConcurrentComparison` | 1 | Thread safety with parallel comparisons |
 | `TestSnapshotVersionMigration` | 3 | Version compatibility, future versions |
-| `TestNewCLIArguments` | 5 | v3.0.10 CLI flags |
+| `TestNewCLIArguments` | 5 | CLI flags |
 | `TestDiffSummaryPercentages` | 5 | Percentage stats, natural language summary |
 | `TestColoredConsoleOutput` | 2 | ANSI color codes, --no-color flag |
 | `TestGroupByFieldOutput` | 1 | --group-by-field output mode |
 | `TestPRCommentOutput` | 2 | --format-pr-comment output |
 | `TestBreakingChangeDetection` | 3 | Type changes, removals detection |
-| `TestNewCLIFlags` | 7 | All new v3.0.10 CLI flags |
+| `TestNewCLIFlags` | 7 | All new CLI flags |
 
 **Total: 94 tests**
 
@@ -543,10 +543,8 @@ The diff comparison feature includes comprehensive unit tests in `tests/test_dif
 # Run all diff comparison tests
 python -m pytest tests/test_diff_comparison.py -v
 
-# Run specific test class
+# Run specific diff comparison class tests
 python -m pytest tests/test_diff_comparison.py::TestDataViewComparator -v
-
-# Run new v3.0.10 tests
 python -m pytest tests/test_diff_comparison.py::TestExtendedFieldComparison -v
 python -m pytest tests/test_diff_comparison.py::TestSideBySideOutput -v
 python -m pytest tests/test_diff_comparison.py::TestLargeDatasetPerformance -v
