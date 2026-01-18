@@ -4234,15 +4234,21 @@ def write_diff_console_output(diff_result: DiffResult, changes_only: bool = Fals
     # Summary table with percentages
     lines.append("")
     lines.append(ANSIColors.bold("SUMMARY", c))
-    lines.append(f"{'':20s} {diff_result.source_label:>12s} {diff_result.target_label:>12s} {'Added':>10s} {'Removed':>10s} {'Modified':>10s} {'Changed':>12s}")
-    lines.append("-" * 92)
+
+    # Calculate dynamic column widths based on label lengths
+    src_width = max(8, len(diff_result.source_label))  # Min 8 for "Source"
+    tgt_width = max(8, len(diff_result.target_label))  # Min 8 for "Target"
+    total_width = 20 + src_width + tgt_width + 10 + 10 + 10 + 12 + 6  # +6 for spacing
+
+    lines.append(f"{'':20s} {diff_result.source_label:>{src_width}s} {diff_result.target_label:>{tgt_width}s} {'Added':>10s} {'Removed':>10s} {'Modified':>10s} {'Changed':>12s}")
+    lines.append("-" * total_width)
 
     # Metrics row with percentage
     metrics_pct = f"({summary.metrics_change_percent:.1f}%)"
     added_str = ANSIColors.green(f"+{summary.metrics_added}", c) if summary.metrics_added else f"+{summary.metrics_added}"
     removed_str = ANSIColors.red(f"-{summary.metrics_removed}", c) if summary.metrics_removed else f"-{summary.metrics_removed}"
     modified_str = ANSIColors.yellow(f"~{summary.metrics_modified}", c) if summary.metrics_modified else f"~{summary.metrics_modified}"
-    lines.append(f"{'Metrics':20s} {summary.source_metrics_count:12d} {summary.target_metrics_count:12d} "
+    lines.append(f"{'Metrics':20s} {summary.source_metrics_count:{src_width}d} {summary.target_metrics_count:{tgt_width}d} "
                 f"{added_str:>10s} {removed_str:>10s} {modified_str:>10s} {metrics_pct:>12s}")
 
     # Dimensions row with percentage
@@ -4250,9 +4256,9 @@ def write_diff_console_output(diff_result: DiffResult, changes_only: bool = Fals
     added_str = ANSIColors.green(f"+{summary.dimensions_added}", c) if summary.dimensions_added else f"+{summary.dimensions_added}"
     removed_str = ANSIColors.red(f"-{summary.dimensions_removed}", c) if summary.dimensions_removed else f"-{summary.dimensions_removed}"
     modified_str = ANSIColors.yellow(f"~{summary.dimensions_modified}", c) if summary.dimensions_modified else f"~{summary.dimensions_modified}"
-    lines.append(f"{'Dimensions':20s} {summary.source_dimensions_count:12d} {summary.target_dimensions_count:12d} "
+    lines.append(f"{'Dimensions':20s} {summary.source_dimensions_count:{src_width}d} {summary.target_dimensions_count:{tgt_width}d} "
                 f"{added_str:>10s} {removed_str:>10s} {modified_str:>10s} {dims_pct:>12s}")
-    lines.append("-" * 92)
+    lines.append("-" * total_width)
 
     if summary_only:
         lines.append("")
@@ -4378,7 +4384,7 @@ def _format_side_by_side(
         diff: The ComponentDiff to format
         source_label: Label for source side
         target_label: Label for target side
-        col_width: Width of each column
+        col_width: Base width of each column (will be expanded if labels are longer)
 
     Returns:
         List of formatted lines for the side-by-side view
@@ -4386,6 +4392,9 @@ def _format_side_by_side(
     lines = []
     if diff.change_type != ChangeType.MODIFIED or not diff.changed_fields:
         return lines
+
+    # Calculate dynamic column width based on label lengths
+    col_width = max(col_width, len(source_label) + 2, len(target_label) + 2)
 
     # Header for this component
     lines.append(f"    ┌{'─' * (col_width + 2)}┬{'─' * (col_width + 2)}┐")
@@ -4397,14 +4406,17 @@ def _format_side_by_side(
         old_str = str(old_val) if old_val is not None else "(empty)"
         new_str = str(new_val) if new_val is not None else "(empty)"
 
-        # Truncate if needed
-        if len(old_str) > col_width - 2:
-            old_str = old_str[:col_width - 5] + "..."
-        if len(new_str) > col_width - 2:
-            new_str = new_str[:col_width - 5] + "..."
+        # Format as "field: value"
+        old_display = f"{field}: {old_str}"
+        new_display = f"{field}: {new_str}"
 
-        lines.append(f"    │ {field}:")
-        lines.append(f"    │   {old_str:<{col_width - 2}} │   {new_str:<{col_width - 2}} │")
+        # Truncate if needed
+        if len(old_display) > col_width:
+            old_display = old_display[:col_width - 3] + "..."
+        if len(new_display) > col_width:
+            new_display = new_display[:col_width - 3] + "..."
+
+        lines.append(f"    │ {old_display:<{col_width}} │ {new_display:<{col_width}} │")
 
     lines.append(f"    └{'─' * (col_width + 2)}┴{'─' * (col_width + 2)}┘")
 
