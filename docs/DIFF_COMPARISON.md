@@ -615,10 +615,10 @@ Changed % = (Total Changes / Source) × 100
 
 ```
 SUMMARY
-                     Adobestore (Stitched)   Adobe Store - Prod      Added    Removed   Modified   Unchanged     Changed
--------------------------------------------------------------------------------------------------------------------------
-Metrics                                 33                   28        +17        -22        ~10           1    (148.5%)
-Dimensions                             120                   98        +48        -70        ~31          21    (124.2%)
+                         Source Data View   Target Data View      Added    Removed   Modified   Unchanged     Changed
+----------------------------------------------------------------------------------------------------------------------
+Metrics                                33                 28        +17        -22        ~10           1    (148.5%)
+Dimensions                            120                 98        +48        -70        ~31          21    (124.2%)
 ```
 
 **Reading the Metrics row:**
