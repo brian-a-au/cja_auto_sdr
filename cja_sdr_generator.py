@@ -8118,8 +8118,8 @@ def handle_diff_command(source_id: str, target_id: str, config_file: str = "conf
                 print()
 
         # Compare
-        source_label = labels[0] if labels else source_snapshot.data_view_name
-        target_label = labels[1] if labels else target_snapshot.data_view_name
+        source_label = labels[0] if labels else "Source"
+        target_label = labels[1] if labels else "Target"
 
         comparator = DataViewComparator(
             logger,
