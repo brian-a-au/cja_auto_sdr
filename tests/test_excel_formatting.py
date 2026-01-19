@@ -352,9 +352,11 @@ class TestApplyExcelFormattingRowHeight:
 class TestApplyExcelFormattingErrorHandling:
     """Tests for error handling"""
 
+    @pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning")
     def test_logs_error_on_invalid_writer(self, mock_logger, tmp_path, sample_metrics_df):
         """Test that errors are logged when writer is invalid"""
         # Create a mock writer that will fail
+        # Note: Mock objects can trigger ZipFile.__del__ warnings during garbage collection
         mock_writer = Mock()
         mock_writer.book = Mock()
         mock_writer.book.add_format = Mock(side_effect=Exception("Format error"))
