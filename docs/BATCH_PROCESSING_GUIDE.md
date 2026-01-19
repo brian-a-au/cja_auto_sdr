@@ -115,7 +115,7 @@ cja_auto_sdr --batch \
 
 ### No Arguments Provided
 
-```bash
+```text
 $ cja_auto_sdr
 
 usage: cja_sdr_generator.py [-h] [--batch] ... DATA_VIEW_ID [DATA_VIEW_ID ...]
@@ -124,7 +124,7 @@ cja_sdr_generator.py: error: the following arguments are required: DATA_VIEW_ID
 
 ### Invalid Data View ID Format
 
-```bash
+```text
 $ cja_auto_sdr invalid_id test123
 
 ERROR: Invalid data view ID format: invalid_id, test123
@@ -134,7 +134,7 @@ ERROR: Invalid data view ID format: invalid_id, test123
 
 ### Help Output
 
-```bash
+```text
 $ cja_auto_sdr --help
 
 # Displays full help with all options and examples

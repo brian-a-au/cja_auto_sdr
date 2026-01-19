@@ -87,8 +87,10 @@ powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
 
 # Install project dependencies
 uv sync
+```
 
-# If uv doesn't work, use native Python instead (recommended for Windows):
+If uv doesn't work, use native Python instead (recommended for Windows):
+```text
 python -m venv .venv
 .venv\Scripts\activate
 pip install -e .

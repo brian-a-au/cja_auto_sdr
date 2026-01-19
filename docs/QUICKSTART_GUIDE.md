@@ -670,7 +670,7 @@ Error: Permission denied writing to ./output.xlsx
 ### Windows: "uv run" command doesn't work
 
 **Symptoms (Windows):**
-```powershell
+```text
 PS> uv run cja_auto_sdr --version
 # Command fails, hangs, or shows errors
 ```
@@ -703,7 +703,7 @@ Importing the numpy C-extensions failed.
 1. Ensure Python is from [python.org](https://www.python.org/downloads/), not Microsoft Store
 2. Reinstall NumPy with binary wheels:
 
-```powershell
+```text
 # Activate virtual environment
 .venv\Scripts\activate
 

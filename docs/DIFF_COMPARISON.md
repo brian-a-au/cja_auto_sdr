@@ -294,7 +294,7 @@ These appear with warnings in console/markdown output:
 
 **Example 1: Name standardization between environments**
 
-```bash
+```text
 $ cja_auto_sdr --diff "Production" "Staging" --show-only modified
 
 METRICS CHANGES (3)
@@ -305,7 +305,7 @@ METRICS CHANGES (3)
 
 **Example 2: Schema migration changes**
 
-```bash
+```text
 $ cja_auto_sdr --diff "Before Migration" "After Migration" --extended-fields --show-only modified
 
 METRICS CHANGES (5)
@@ -318,7 +318,7 @@ METRICS CHANGES (5)
 
 **Example 3: Detailed side-by-side review**
 
-```bash
+```text
 $ cja_auto_sdr --diff dv_12345 dv_67890 --side-by-side --show-only modified
 
 [~] metrics/conversion_rate "Conversion Rate"
@@ -336,7 +336,7 @@ $ cja_auto_sdr --diff dv_12345 dv_67890 --side-by-side --show-only modified
 
 When descriptions or other fields change from empty/null to having a value (or vice versa), the diff clearly shows `(empty)`:
 
-```bash
+```text
 $ cja_auto_sdr --diff "Production" "Staging" --show-only modified
 
 METRICS CHANGES (2)
@@ -562,18 +562,17 @@ The summary table provides a quick overview of differences between two data view
 
 ### Mathematical Relationships
 
-The columns follow these mathematical relationships:
+The summary columns are mathematically related. Understanding these relationships helps validate diff results.
 
-```
-Target = Source - Removed + Added
+| Relationship | Formula | Explanation |
+|--------------|---------|-------------|
+| Target count | `Target = Source - Removed + Added` | The target has what source had, minus removals, plus additions |
+| Unchanged count | `Unchanged = Source - Removed - Modified` | Source components that weren't removed or changed |
+| Unchanged (alt) | `Unchanged = Target - Added - Modified` | Target components that weren't added or changed |
+| Total changes | `Total Changes = Added + Removed + Modified` | Sum of all change types |
+| Change percentage | `Changed % = (Total Changes / Source) × 100` | Changes relative to source size |
 
-Unchanged = Source - Removed - Modified
-         = Target - Added - Modified
-
-Total Changes = Added + Removed + Modified
-
-Changed % = (Total Changes / Source) × 100
-```
+**Note:** Change percentage can exceed 100% when there are many additions combined with removals, indicating significant restructuring between the two data views.
 
 ### Example Interpretation
 

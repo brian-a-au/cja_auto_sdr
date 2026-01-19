@@ -391,7 +391,7 @@ You can use data view **names** instead of IDs. However, name resolution has str
 #### Name Not Found
 
 **Symptoms:**
-```bash
+```text
 ERROR - Data view name 'Production Analytics' not found in accessible data views
   → Remember: Name matching is CASE-SENSITIVE and requires EXACT match
   → Run 'cja_auto_sdr --list-dataviews' to see all available names
@@ -481,7 +481,7 @@ uv run cja_auto_sdr dv_677ea9291244fd082f02dd42
 
 If multiple data views share the same name, **all matching views will be processed**:
 
-```bash
+```text
 $ uv run cja_auto_sdr "Production"
 
 Resolving 1 data view name(s)...
@@ -1165,7 +1165,7 @@ installed.
 
 If `uv run` doesn't work, use Python directly:
 
-```powershell
+```text
 # Activate the virtual environment
 .venv\Scripts\activate
 
@@ -1179,7 +1179,7 @@ python cja_sdr_generator.py dv_YOUR_DATA_VIEW_ID
 
 **Solution 2: Reinstall Python and dependencies**
 
-```powershell
+```text
 # Remove existing virtual environment
 Remove-Item -Recurse -Force .venv
 
@@ -1207,7 +1207,7 @@ pip install -e .
 
 **Solution 3: Use pre-built binary wheels**
 
-```powershell
+```text
 # Download and install from PyPI with explicit binary wheel
 pip install --only-binary :all: numpy
 
@@ -1225,7 +1225,7 @@ For some packages, you may need:
 ### uv run Command Not Working on Windows
 
 **Symptoms:**
-```powershell
+```text
 PS> uv run cja_auto_sdr --version
 # Command fails or doesn't recognize the script
 ```
@@ -1277,7 +1277,7 @@ uv run cja_auto_sdr --version
 ### PowerShell Execution Policy Issues
 
 **Symptoms:**
-```powershell
+```text
 .\install.ps1 : File cannot be loaded because running scripts is disabled on this system.
 ```
 
@@ -1416,7 +1416,7 @@ For the most reliable Windows experience:
    - More Unix-like experience
 
 3. **Use Python virtual environments directly instead of uv**
-   ```powershell
+   ```text
    python -m venv .venv
    .venv\Scripts\activate
    pip install -e .

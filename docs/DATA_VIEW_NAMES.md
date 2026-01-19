@@ -66,7 +66,7 @@ cja_auto_sdr "Test (v2.0)"
 
 If multiple data views share the same name, all matching views will be processed:
 
-```bash
+```text
 $ cja_auto_sdr "Production"
 
 Resolving 1 data view name(s)...
@@ -138,7 +138,7 @@ cja_auto_sdr Production Analytics  # Shell interprets as two separate arguments
 
 ### Name Not Found
 
-```bash
+```text
 $ cja_auto_sdr "NonexistentView"
 
 ERROR: No valid data views found

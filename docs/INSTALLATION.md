@@ -141,7 +141,7 @@ If you encounter issues with `uv` on Windows (especially NumPy import errors), u
 
 **Step 1: Verify Python Installation**
 
-```powershell
+```text
 # Check Python version (must be 3.14+)
 python --version
 
@@ -155,7 +155,7 @@ python -c "import sys; print(sys.executable)"
 
 **Step 2: Clone and Setup**
 
-```powershell
+```text
 # Clone the repository
 git clone https://github.com/your-org/cja_auto_sdr.git
 cd cja_auto_sdr
@@ -178,7 +178,7 @@ pip install -e .
 
 **Step 3: Verify Installation**
 
-```powershell
+```text
 # Test imports
 python -c "import numpy; print(f'NumPy: {numpy.__version__}')"
 python -c "import pandas; print(f'Pandas: {pandas.__version__}')"
@@ -192,7 +192,7 @@ cja_auto_sdr --version
 
 **Step 4: Run the Tool**
 
-```powershell
+```text
 # Option 1: Run the script directly (most reliable)
 python cja_sdr_generator.py --list-dataviews
 python cja_sdr_generator.py dv_YOUR_DATA_VIEW_ID
