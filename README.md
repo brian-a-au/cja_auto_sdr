@@ -267,7 +267,7 @@ cja_auto_sdr/
 │   ├── DIFF_COMPARISON.md   # Data view comparison guide
 │   ├── INSTALLATION.md      # Setup instructions
 │   └── ...                  # Additional guides
-├── tests/                   # Test suite (596 tests)
+├── tests/                   # Test suite (623 tests)
 ├── sample_outputs/          # Example output files
 │   ├── excel/               # Sample Excel SDR
 │   ├── csv/                 # Sample CSV output

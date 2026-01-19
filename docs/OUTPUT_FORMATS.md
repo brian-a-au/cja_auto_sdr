@@ -42,6 +42,30 @@ cja_auto_sdr dv_12345 --format all
 cja_auto_sdr --batch dv_12345 dv_67890 --format csv --workers 4
 ```
 
+### Output Routing with `--output`
+
+Use `--output` to specify the output file path, or write directly to stdout:
+
+```bash
+# Write JSON to specific file
+cja_auto_sdr dv_12345 --format json --output ./reports/sdr.json
+
+# Write to stdout (JSON/CSV only) for piping
+cja_auto_sdr --list-dataviews --output -
+cja_auto_sdr --list-dataviews --output stdout
+
+# Pipe to other tools
+cja_auto_sdr --list-dataviews --output - | jq '.dataViews[].id'
+
+# Stats to stdout for scripting
+cja_auto_sdr dv_12345 --stats --output -
+
+# CSV stats to file
+cja_auto_sdr dv_12345 --stats --format csv --output stats.csv
+```
+
+> **Note:** When using `--output -` or `--output stdout`, the `--quiet` flag is automatically enabled to prevent decorative output from mixing with the data.
+
 ---
 
 ## Format Details

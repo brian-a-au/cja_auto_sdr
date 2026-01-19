@@ -12,13 +12,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Snapshot-to-Snapshot Comparison** - Compare two snapshot files directly without API calls
 - **Auto-Snapshot on Diff** - Automatically save timestamped snapshots during diff comparisons for audit trails
 - **Smart Name Resolution** - Fuzzy matching suggestions for typos, interactive disambiguation for duplicates
+- **UX Quick Wins** - `--open` flag, `--stats` mode, `--output -` for stdout, machine-readable `--list-dataviews`
 - **Comprehensive Type Hints** - Full type annotations for improved IDE support and static analysis
 - **Configuration Dataclasses** - Centralized, testable configuration with `SDRConfig`, `RetryConfig`, `CacheConfig`, `LogConfig`, `WorkerConfig`
 - **Custom Exception Hierarchy** - Better error handling with `CJASDRError`, `ConfigurationError`, `APIError`, `ValidationError`, `OutputError`
 - **OutputWriter Protocol** - Standardized interface for output format writers
-- **Expanded Test Coverage** - 596 total tests (+183 new: 139 diff comparison + 39 edge cases + 5 format validation)
+- **Expanded Test Coverage** - 623 total tests (+210 new: 139 diff comparison + 39 edge cases + 5 format validation + 27 UX features)
 
-This release introduces the **Data View Diff Comparison** feature for change tracking and CI/CD integration, **Auto-Snapshot** for automatic audit trails, plus **code maintainability** improvements (type hints, centralized configuration) and **developer experience** enhancements (better exceptions, standardized interfaces) while maintaining full backward compatibility.
+This release introduces the **Data View Diff Comparison** feature for change tracking and CI/CD integration, **Auto-Snapshot** for automatic audit trails, **UX Quick Wins** for better developer experience, plus **code maintainability** improvements (type hints, centralized configuration) and **developer experience** enhancements (better exceptions, standardized interfaces) while maintaining full backward compatibility.
 
 ### Added
 
@@ -56,6 +57,81 @@ cja_auto_sdr dv_123 --diff-snapshot baseline.json --auto-snapshot
 - Filename generation (4 tests): with/without name, special chars, truncation
 - Retention policy (5 tests): keep all, delete old, per-data-view, empty/nonexistent dirs
 - CLI arguments (7 tests): defaults, custom values, all flags together
+
+#### UX Quick Wins (Developer Experience)
+Four new features to improve daily workflows and scripting integration.
+
+##### Auto-Open Generated Files (`--open`)
+Open generated SDR files automatically in the default application after creation.
+
+- **Cross-Platform Support**: Works on macOS (`open`), Linux (`xdg-open`), and Windows (`os.startfile`)
+- **Batch Mode Support**: Opens all successfully generated files when processing multiple data views
+- **Graceful Fallback**: HTML files fall back to `webbrowser` module if system commands fail
+
+```bash
+# Generate SDR and open immediately
+cja_auto_sdr dv_12345 --open
+
+# Batch processing - opens all successful files
+cja_auto_sdr dv_1 dv_2 dv_3 --open
+```
+
+##### Stdout Output for Piping (`--output -`)
+Write JSON or CSV output directly to stdout for Unix-style piping and scripting.
+
+- **`--output -`** or **`--output stdout`**: Write to standard output instead of a file
+- **Implicit Quiet Mode**: Automatically suppresses decorative output when writing to stdout
+- **Pipeline Friendly**: Enables `cja_auto_sdr ... | jq ...` workflows
+
+```bash
+# Pipe data view list to jq for processing
+cja_auto_sdr --list-dataviews --output - | jq '.dataViews[].id'
+
+# Get stats as JSON to stdout
+cja_auto_sdr dv_12345 --stats --output -
+
+# CSV output for spreadsheet import
+cja_auto_sdr --list-dataviews --format csv --output - > dataviews.csv
+```
+
+##### Quick Statistics Mode (`--stats`)
+Get quick metrics and dimension counts without generating full SDR reports.
+
+- **Fast Overview**: Shows metrics count, dimensions count, and totals for each data view
+- **Multiple Data Views**: Process multiple data views in one command with aggregated totals
+- **Multiple Formats**: Table (default), JSON, or CSV output
+
+```bash
+# Quick stats for a single data view
+cja_auto_sdr dv_12345 --stats
+
+# Stats for multiple data views with JSON output
+cja_auto_sdr dv_1 dv_2 dv_3 --stats --format json
+```
+
+##### Machine-Readable `--list-dataviews`
+Enhanced `--list-dataviews` with JSON and CSV output formats for scripting.
+
+- **`--format json`**: Output data views as JSON with `dataViews` array and `count`
+- **`--format csv`**: Output as CSV with `id,name,owner` columns
+- **Stdout Support**: Use `--output -` to pipe to other tools
+
+```bash
+# JSON output for scripting
+cja_auto_sdr --list-dataviews --format json
+
+# JSON to stdout for piping
+cja_auto_sdr --list-dataviews --output - | jq '.dataViews[] | select(.name | contains("Prod"))'
+```
+
+**27 New Tests** for UX features in `tests/test_ux_features.py`:
+- `--open` flag registration and cross-platform behavior (7 tests)
+- `--output` argument handling (3 tests)
+- `--stats` mode CLI parsing (5 tests)
+- `--list-dataviews` format options (3 tests)
+- `show_stats()` function with JSON/CSV/table output (3 tests)
+- `list_dataviews()` function with JSON/CSV output (3 tests)
+- Combined feature usage (3 tests)
 
 #### Comprehensive Type Hints
 - **Function Signatures**: All key functions now have complete type annotations
@@ -211,7 +287,7 @@ Compare two data views or track changes over time with snapshots. This feature i
   - Filename generation tests (4 tests)
   - Retention policy tests (5 tests)
   - CLI argument parsing tests (7 tests)
-- **Total Test Count**: 413 (v3.0.9) → 596 (v3.0.10) = +183 tests (100% pass rate)
+- **Total Test Count**: 413 (v3.0.9) → 623 (v3.0.10) = +210 tests (100% pass rate)
 
 ### Fixed
 
@@ -234,7 +310,7 @@ Compare two data views or track changes over time with snapshots. This feature i
 
 ### Backward Compatibility
 - **Full Backward Compatibility**: All existing code continues to work unchanged
-- **No Breaking Changes**: All 596 tests pass
+- **No Breaking Changes**: All 623 tests pass
 - **DEFAULT_RETRY_CONFIG Dict**: Still available as a dict for legacy code
 - **Configuration Migration**: Existing configurations work without changes
 
@@ -985,7 +1061,7 @@ Batch Processing (10 data views):
 | Validation Caching | No | Yes (50-90% faster on cache hits) |
 | Early Exit Optimization | No | Yes (15-20% faster on errors) |
 | Logging Optimization | No | Yes (5-10% faster with --production) |
-| Tests | None | 596 comprehensive tests |
+| Tests | None | 623 comprehensive tests |
 | Documentation | Basic | 5 detailed guides |
 | Performance Tracking | No | Yes, built-in with cache statistics |
 | Parallel Processing | No | Yes, configurable workers + concurrent validation |

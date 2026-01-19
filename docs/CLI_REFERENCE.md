@@ -39,6 +39,7 @@ cja-auto-sdr [OPTIONS] DATA_VIEW_ID_OR_NAME [...]
 | `-h, --help` | Show help message and exit | - |
 | `--version` | Show program version and exit | - |
 | `-q, --quiet` | Suppress output except errors | False |
+| `--open` | Open generated file(s) in default application after creation | False |
 
 ### Processing
 
@@ -54,7 +55,9 @@ cja-auto-sdr [OPTIONS] DATA_VIEW_ID_OR_NAME [...]
 | Option | Description | Default |
 |--------|-------------|---------|
 | `--output-dir PATH` | Output directory for generated files | Current directory |
+| `--output PATH` | Output file path. Use `-` or `stdout` to write to stdout (JSON/CSV only). Implies `--quiet` for stdout | - |
 | `--format FORMAT` | Output format (see table below) | excel (SDR), console (diff) |
+| `--stats` | Show quick statistics (metrics/dimensions count) without generating full SDR report | False |
 | `--max-issues N` | Limit issues to top N by severity (0=all) | 0 |
 
 **Format Availability by Mode:**
@@ -86,7 +89,7 @@ cja-auto-sdr [OPTIONS] DATA_VIEW_ID_OR_NAME [...]
 | `--dry-run` | Validate config without generating reports | False |
 | `--validate-only` | Alias for --dry-run | False |
 | `--validate-config` | Validate config and API connectivity (no data view required) | False |
-| `--list-dataviews` | List accessible data views and exit | False |
+| `--list-dataviews` | List accessible data views and exit. Supports `--format json/csv` and `--output -` for machine-readable output | False |
 | `--sample-config` | Generate sample config file and exit | False |
 
 ### Caching
@@ -206,11 +209,49 @@ cja_auto_sdr --validate-config
 # List all accessible data views
 cja_auto_sdr --list-dataviews
 
+# List data views in JSON format (for scripting)
+cja_auto_sdr --list-dataviews --format json
+
+# List data views to stdout for piping
+cja_auto_sdr --list-dataviews --output - | jq '.dataViews[].id'
+
 # Generate sample configuration
 cja_auto_sdr --sample-config
 
 # Validate config without generating report
 cja_auto_sdr dv_12345 --dry-run
+```
+
+### Quick Statistics
+
+```bash
+# Quick stats for a single data view (no full report generated)
+cja_auto_sdr dv_12345 --stats
+
+# Stats for multiple data views
+cja_auto_sdr dv_1 dv_2 dv_3 --stats
+
+# Stats in JSON format
+cja_auto_sdr dv_12345 --stats --format json
+
+# Stats to stdout for scripting
+cja_auto_sdr dv_12345 --stats --output -
+
+# Stats in CSV format to file
+cja_auto_sdr dv_12345 --stats --format csv --output stats.csv
+```
+
+### Auto-Open Generated Files
+
+```bash
+# Generate SDR and open immediately in default app
+cja_auto_sdr dv_12345 --open
+
+# Generate Excel and open
+cja_auto_sdr dv_12345 --format excel --open
+
+# Batch processing - opens all successful files
+cja_auto_sdr dv_1 dv_2 dv_3 --open
 ```
 
 ### Performance Optimization

@@ -29,10 +29,11 @@ tests/
 ├── test_validation_cache.py         # Validation caching tests
 ├── test_diff_comparison.py          # Data view diff comparison tests
 ├── test_edge_cases.py               # Edge cases and configuration tests
+├── test_ux_features.py              # UX enhancement features tests (--open, --stats, --output)
 └── README.md                        # This file
 ```
 
-**Total: 596 comprehensive tests**
+**Total: 623 comprehensive tests**
 
 ### Test Count Breakdown
 
@@ -59,7 +60,8 @@ tests/
 | `test_early_exit.py` | 11 | Early exit optimizations |
 | `test_data_quality.py` | 10 | Data quality validation logic |
 | `test_parallel_validation.py` | 8 | Parallel validation operations |
-| **Total** | **596** | **100% pass rate** |
+| `test_ux_features.py` | 27 | UX features: --open, --stats, --output, --list-dataviews formats |
+| **Total** | **623** | **100% pass rate** |
 
 ## Running Tests
 
@@ -442,7 +444,7 @@ uv run pytest
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (596 tests total)
+- [x] Comprehensive test coverage (623 tests total)
 - [x] Parallel validation tests (test_parallel_validation.py)
 - [x] Validation caching tests (test_validation_cache.py)
 - [x] Early exit optimization tests (test_early_exit.py)

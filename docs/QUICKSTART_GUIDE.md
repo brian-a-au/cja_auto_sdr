@@ -317,6 +317,12 @@ Available Data Views:
 - You can see which Data Views you have access to
 - You have the Data View IDs needed for the next step
 
+> **Tip:** For scripting, use `--format json` or `--output -` to get machine-readable output:
+> ```bash
+> cja_auto_sdr --list-dataviews --format json
+> cja_auto_sdr --list-dataviews --output - | jq '.dataViews[].id'
+> ```
+
 ### 4.2 Choose a Data View
 
 From the list above, note the **ID** of the Data View you want to document. It looks like:
@@ -430,6 +436,39 @@ The generated file is in the current directory:
 ls -la *.xlsx
 # Output: CJA_DataView_Production_Analytics_dv_677ea9291244fd082f02dd42_SDR.xlsx
 ```
+
+> **Tip:** Use `--open` to automatically open the file after generation:
+> ```bash
+> cja_auto_sdr dv_677ea9291244fd082f02dd42 --open
+> ```
+
+### 5.4 Quick Stats (Optional)
+
+Before generating a full report, you can quickly check what's in a data view:
+
+```bash
+cja_auto_sdr dv_677ea9291244fd082f02dd42 --stats
+```
+
+**Output:**
+```
+============================================================
+DATA VIEW STATISTICS
+============================================================
+
+ID                             Name                          Metrics     Dims    Total
+------------------------------------------------------------------------------------------
+dv_677ea9291244fd082f02dd42    Production Analytics               145      287      432
+------------------------------------------------------------------------------------------
+TOTAL                                                              145      287      432
+
+============================================================
+```
+
+This is useful for:
+- Quickly verifying you have access to a data view
+- Checking the size before generating a full report
+- Scripting (use `--format json --output -` for machine-readable output)
 
 ---
 

@@ -25,6 +25,9 @@ import tempfile
 import atexit
 import uuid
 import textwrap
+import webbrowser
+import platform
+import subprocess
 
 # Attempt to load python-dotenv if available (optional dependency)
 _DOTENV_AVAILABLE = False
@@ -404,6 +407,40 @@ def format_file_size(size_bytes: int) -> str:
             return f"{size:.1f} {unit}" if unit != 'B' else f"{size} {unit}"
         size /= 1024
     return f"{size:.1f} TB"
+
+
+def open_file_in_default_app(file_path: Union[str, Path]) -> bool:
+    """
+    Open a file in the default application for its type.
+
+    Works cross-platform (macOS, Linux, Windows).
+
+    Args:
+        file_path: Path to the file to open
+
+    Returns:
+        True if successful, False otherwise
+    """
+    file_path = str(file_path)
+    try:
+        system = platform.system()
+        if system == 'Darwin':  # macOS
+            subprocess.run(['open', file_path], check=True)
+        elif system == 'Windows':
+            os.startfile(file_path)  # type: ignore[attr-defined]
+        else:  # Linux and others
+            subprocess.run(['xdg-open', file_path], check=True)
+        return True
+    except Exception:
+        # Fallback to webbrowser for HTML files
+        if file_path.endswith('.html'):
+            try:
+                webbrowser.open(f'file://{os.path.abspath(file_path)}')
+                return True
+            except Exception:
+                pass
+        return False
+
 
 # ==================== CONSOLE COLORS ====================
 
@@ -6633,8 +6670,25 @@ Examples:
   python cja_sdr_generator.py --diff dv_A dv_B --auto-snapshot --snapshot-dir ./history
   python cja_sdr_generator.py --diff dv_A dv_B --auto-snapshot --keep-last 10
 
+  # --- Quick UX Features ---
+
+  # Quick stats without full report
+  python cja_sdr_generator.py dv_12345 --stats
+  python cja_sdr_generator.py dv_1 dv_2 dv_3 --stats
+
+  # Stats in JSON format for scripting
+  python cja_sdr_generator.py dv_12345 --stats --format json
+  python cja_sdr_generator.py dv_12345 --stats --output -    # Output to stdout
+
+  # Open file after generation
+  python cja_sdr_generator.py dv_12345 --open
+
+  # List data views in JSON format (for scripting/piping)
+  python cja_sdr_generator.py --list-dataviews --format json
+  python cja_sdr_generator.py --list-dataviews --output -    # JSON to stdout
+
 Note:
-  At least one data view ID must be provided (except for --list-dataviews, --sample-config).
+  At least one data view ID must be provided (except for --list-dataviews, --sample-config, --stats).
   Use 'python cja_sdr_generator.py --help' to see all options.
 
 Exit Codes:
@@ -6808,6 +6862,29 @@ Requirements:
         default=0,
         metavar='N',
         help='Limit data quality issues to top N by severity (0 = show all, default: 0)'
+    )
+
+    # ==================== UX ENHANCEMENT ARGUMENTS ====================
+
+    parser.add_argument(
+        '--open',
+        action='store_true',
+        help='Open the generated file(s) in the default application after creation'
+    )
+
+    parser.add_argument(
+        '--stats',
+        action='store_true',
+        help='Show quick statistics about data view(s) without generating full reports. '
+             'Displays counts of metrics, dimensions, and basic info'
+    )
+
+    parser.add_argument(
+        '--output',
+        type=str,
+        metavar='PATH',
+        help='Output file path. Use "-" or "stdout" to write to standard output (JSON/CSV only). '
+             'For stdout, implies --quiet to suppress other output'
     )
 
     # ==================== DIFF COMPARISON ARGUMENTS ====================
@@ -7325,54 +7402,63 @@ def resolve_data_view_names(identifiers: List[str], config_file: str = "config.j
 
 # ==================== LIST DATA VIEWS ====================
 
-def list_dataviews(config_file: str = "config.json") -> bool:
+def list_dataviews(config_file: str = "config.json", output_format: str = "table",
+                   output_file: Optional[str] = None) -> bool:
     """
     List all accessible data views and exit
 
     Args:
         config_file: Path to CJA configuration file
+        output_format: Output format - "table" (default), "json", or "csv"
+        output_file: Optional file path to write output (or "-" for stdout)
 
     Returns:
         True if successful, False otherwise
     """
-    print()
-    print("=" * 60)
-    print("LISTING ACCESSIBLE DATA VIEWS")
-    print("=" * 60)
-    print()
+    is_stdout = output_file in ('-', 'stdout')
+    is_machine_readable = output_format in ('json', 'csv') or is_stdout
 
-    # Validate config file first
-    print(f"Using configuration: {config_file}")
-    print()
+    # For machine-readable output, suppress decorative text
+    if not is_machine_readable:
+        print()
+        print("=" * 60)
+        print("LISTING ACCESSIBLE DATA VIEWS")
+        print("=" * 60)
+        print()
+        print(f"Using configuration: {config_file}")
+        print()
 
     try:
         cjapy.importConfigFile(config_file)
         cja = cjapy.CJA()
 
         # Get all data views
-        print("Connecting to CJA API...")
+        if not is_machine_readable:
+            print("Connecting to CJA API...")
         available_dvs = cja.getDataViews()
 
         if available_dvs is None or (hasattr(available_dvs, '__len__') and len(available_dvs) == 0):
-            print()
-            print(ConsoleColors.warning("No data views found or no access to any data views."))
-            print()
+            if is_machine_readable:
+                if output_format == 'json':
+                    output_data = json.dumps({"dataViews": [], "count": 0}, indent=2)
+                else:  # csv
+                    output_data = "id,name,owner\n"
+                if is_stdout:
+                    print(output_data)
+                elif output_file:
+                    with open(output_file, 'w') as f:
+                        f.write(output_data)
+            else:
+                print()
+                print(ConsoleColors.warning("No data views found or no access to any data views."))
+                print()
             return True
 
         # Convert to list if DataFrame
         if isinstance(available_dvs, pd.DataFrame):
             available_dvs = available_dvs.to_dict('records')
 
-        print()
-        print(f"Found {len(available_dvs)} accessible data view(s):")
-        print()
-
-        # Calculate dynamic column widths to prevent truncation
-        max_id_width = len('ID')
-        max_name_width = len('Name')
-        max_owner_width = len('Owner')
-
-        # Prepare data and find maximum widths
+        # Prepare data
         display_data = []
         for dv in available_dvs:
             if isinstance(dv, dict):
@@ -7387,49 +7473,86 @@ def list_dataviews(config_file: str = "config.json") -> bool:
                     'owner': owner_name
                 })
 
-                max_id_width = max(max_id_width, len(dv_id))
-                max_name_width = max(max_name_width, len(dv_name))
-                max_owner_width = max(max_owner_width, len(owner_name))
+        # Output based on format
+        if output_format == 'json' or (is_stdout and output_format != 'csv'):
+            output_data = json.dumps({
+                "dataViews": display_data,
+                "count": len(display_data)
+            }, indent=2)
+            if is_stdout:
+                print(output_data)
+            elif output_file:
+                with open(output_file, 'w') as f:
+                    f.write(output_data)
+            else:
+                print(output_data)
+        elif output_format == 'csv':
+            lines = ["id,name,owner"]
+            for item in display_data:
+                # Escape quotes and commas in CSV
+                name = item['name'].replace('"', '""')
+                owner = item['owner'].replace('"', '""')
+                lines.append(f'{item["id"]},"{name}","{owner}"')
+            output_data = '\n'.join(lines)
+            if is_stdout:
+                print(output_data)
+            elif output_file:
+                with open(output_file, 'w') as f:
+                    f.write(output_data)
+            else:
+                print(output_data)
+        else:
+            # Table format (default)
+            print()
+            print(f"Found {len(available_dvs)} accessible data view(s):")
+            print()
 
-        # Add padding
-        max_id_width += 2
-        max_name_width += 2
-        max_owner_width += 2
+            # Calculate dynamic column widths
+            max_id_width = max(len('ID'), max(len(item['id']) for item in display_data)) + 2
+            max_name_width = max(len('Name'), max(len(item['name']) for item in display_data)) + 2
+            max_owner_width = max(len('Owner'), max(len(item['owner']) for item in display_data)) + 2
 
-        # Print header with dynamic widths
-        total_width = max_id_width + max_name_width + max_owner_width
-        print(f"{'ID':<{max_id_width}} {'Name':<{max_name_width}} {'Owner':<{max_owner_width}}")
-        print("-" * total_width)
+            total_width = max_id_width + max_name_width + max_owner_width
+            print(f"{'ID':<{max_id_width}} {'Name':<{max_name_width}} {'Owner':<{max_owner_width}}")
+            print("-" * total_width)
 
-        # Print data
-        for item in display_data:
-            print(f"{item['id']:<{max_id_width}} {item['name']:<{max_name_width}} {item['owner']:<{max_owner_width}}")
+            for item in display_data:
+                print(f"{item['id']:<{max_id_width}} {item['name']:<{max_name_width}} {item['owner']:<{max_owner_width}}")
 
-        print()
-        print("=" * total_width)
-        print("Usage:")
-        print("  python cja_sdr_generator.py <DATA_VIEW_ID>       # Use ID directly")
-        print("  python cja_sdr_generator.py \"<DATA_VIEW_NAME>\"   # Use exact name (quotes recommended)")
-        print()
-        print("Note: If multiple data views share the same name, all will be processed.")
-        print("=" * total_width)
+            print()
+            print("=" * total_width)
+            print("Usage:")
+            print("  python cja_sdr_generator.py <DATA_VIEW_ID>       # Use ID directly")
+            print("  python cja_sdr_generator.py \"<DATA_VIEW_NAME>\"   # Use exact name (quotes recommended)")
+            print()
+            print("Note: If multiple data views share the same name, all will be processed.")
+            print("=" * total_width)
 
         return True
 
     except FileNotFoundError:
-        print(ConsoleColors.error(f"ERROR: Configuration file '{config_file}' not found"))
-        print()
-        print("Generate a sample configuration file with:")
-        print("  python cja_sdr_generator.py --sample-config")
+        if is_machine_readable:
+            error_json = json.dumps({"error": f"Configuration file '{config_file}' not found"})
+            print(error_json, file=sys.stderr if is_stdout else sys.stdout)
+        else:
+            print(ConsoleColors.error(f"ERROR: Configuration file '{config_file}' not found"))
+            print()
+            print("Generate a sample configuration file with:")
+            print("  python cja_sdr_generator.py --sample-config")
         return False
 
     except (KeyboardInterrupt, SystemExit):
-        print()
-        print(ConsoleColors.warning("Operation cancelled."))
+        if not is_machine_readable:
+            print()
+            print(ConsoleColors.warning("Operation cancelled."))
         raise
 
     except Exception as e:
-        print(ConsoleColors.error(f"ERROR: Failed to connect to CJA API: {str(e)}"))
+        if is_machine_readable:
+            error_json = json.dumps({"error": f"Failed to connect to CJA API: {str(e)}"})
+            print(error_json, file=sys.stderr if is_stdout else sys.stdout)
+        else:
+            print(ConsoleColors.error(f"ERROR: Failed to connect to CJA API: {str(e)}"))
         return False
 
 
@@ -7659,6 +7782,165 @@ def validate_config_only(config_file: str = "config.json") -> bool:
     print("=" * 60)
 
     return all_passed
+
+
+# ==================== STATS COMMAND ====================
+
+def show_stats(data_views: List[str], config_file: str = "config.json",
+               output_format: str = "table", output_file: Optional[str] = None,
+               quiet: bool = False) -> bool:
+    """
+    Show quick statistics about data view(s) without generating full reports.
+
+    Args:
+        data_views: List of data view IDs to get stats for
+        config_file: Path to CJA configuration file
+        output_format: Output format - "table" (default), "json", or "csv"
+        output_file: Optional file path to write output (or "-" for stdout)
+        quiet: Suppress decorative output
+
+    Returns:
+        True if successful, False otherwise
+    """
+    is_stdout = output_file in ('-', 'stdout')
+    is_machine_readable = output_format in ('json', 'csv') or is_stdout
+
+    if not is_machine_readable and not quiet:
+        print()
+        print("=" * 60)
+        print("DATA VIEW STATISTICS")
+        print("=" * 60)
+        print()
+
+    try:
+        cjapy.importConfigFile(config_file)
+        cja = cjapy.CJA()
+
+        stats_data = []
+
+        for dv_id in data_views:
+            try:
+                # Get data view info
+                dv_info = cja.getDataView(dv_id)
+                dv_name = dv_info.get('name', 'Unknown') if isinstance(dv_info, dict) else 'Unknown'
+
+                # Get metrics and dimensions
+                metrics_df = cja.getMetrics(dv_id)
+                dimensions_df = cja.getDimensions(dv_id)
+
+                metrics_count = len(metrics_df) if metrics_df is not None and not metrics_df.empty else 0
+                dimensions_count = len(dimensions_df) if dimensions_df is not None and not dimensions_df.empty else 0
+
+                # Get owner info
+                owner_info = dv_info.get('owner', {}) if isinstance(dv_info, dict) else {}
+                owner_name = owner_info.get('name', 'N/A') if isinstance(owner_info, dict) else 'N/A'
+
+                # Get description
+                description = dv_info.get('description', '') if isinstance(dv_info, dict) else ''
+
+                stats_data.append({
+                    'id': dv_id,
+                    'name': dv_name,
+                    'owner': owner_name,
+                    'metrics': metrics_count,
+                    'dimensions': dimensions_count,
+                    'total_components': metrics_count + dimensions_count,
+                    'description': description[:100] + '...' if len(description) > 100 else description
+                })
+
+            except Exception as e:
+                stats_data.append({
+                    'id': dv_id,
+                    'name': 'ERROR',
+                    'owner': 'N/A',
+                    'metrics': 0,
+                    'dimensions': 0,
+                    'total_components': 0,
+                    'description': f'Error: {str(e)}'
+                })
+
+        # Output based on format
+        if output_format == 'json' or (is_stdout and output_format != 'csv'):
+            output_data = json.dumps({
+                "stats": stats_data,
+                "count": len(stats_data),
+                "totals": {
+                    "metrics": sum(s['metrics'] for s in stats_data),
+                    "dimensions": sum(s['dimensions'] for s in stats_data),
+                    "components": sum(s['total_components'] for s in stats_data)
+                }
+            }, indent=2)
+            if is_stdout:
+                print(output_data)
+            elif output_file:
+                with open(output_file, 'w') as f:
+                    f.write(output_data)
+            else:
+                print(output_data)
+        elif output_format == 'csv':
+            lines = ["id,name,owner,metrics,dimensions,total_components"]
+            for item in stats_data:
+                name = item['name'].replace('"', '""')
+                owner = item['owner'].replace('"', '""')
+                lines.append(f'{item["id"]},"{name}","{owner}",{item["metrics"]},{item["dimensions"]},{item["total_components"]}')
+            output_data = '\n'.join(lines)
+            if is_stdout:
+                print(output_data)
+            elif output_file:
+                with open(output_file, 'w') as f:
+                    f.write(output_data)
+            else:
+                print(output_data)
+        else:
+            # Table format
+            if stats_data:
+                # Calculate column widths
+                max_id_width = max(len('ID'), max(len(s['id']) for s in stats_data)) + 2
+                max_name_width = min(40, max(len('Name'), max(len(s['name']) for s in stats_data)) + 2)
+
+                # Print header
+                header = f"{'ID':<{max_id_width}} {'Name':<{max_name_width}} {'Metrics':>8} {'Dims':>8} {'Total':>8}"
+                print(header)
+                print("-" * len(header))
+
+                # Print data
+                for item in stats_data:
+                    name = item['name'][:max_name_width-2] + '..' if len(item['name']) > max_name_width-2 else item['name']
+                    print(f"{item['id']:<{max_id_width}} {name:<{max_name_width}} {item['metrics']:>8} {item['dimensions']:>8} {item['total_components']:>8}")
+
+                # Print totals
+                print("-" * len(header))
+                total_metrics = sum(s['metrics'] for s in stats_data)
+                total_dims = sum(s['dimensions'] for s in stats_data)
+                total_all = sum(s['total_components'] for s in stats_data)
+                print(f"{'TOTAL':<{max_id_width}} {'':<{max_name_width}} {total_metrics:>8} {total_dims:>8} {total_all:>8}")
+
+            print()
+            print("=" * 60)
+
+        return True
+
+    except FileNotFoundError:
+        if is_machine_readable:
+            error_json = json.dumps({"error": f"Configuration file '{config_file}' not found"})
+            print(error_json, file=sys.stderr if is_stdout else sys.stdout)
+        else:
+            print(ConsoleColors.error(f"ERROR: Configuration file '{config_file}' not found"))
+        return False
+
+    except (KeyboardInterrupt, SystemExit):
+        if not is_machine_readable:
+            print()
+            print(ConsoleColors.warning("Operation cancelled."))
+        raise
+
+    except Exception as e:
+        if is_machine_readable:
+            error_json = json.dumps({"error": f"Failed to get stats: {str(e)}"})
+            print(error_json, file=sys.stderr if is_stdout else sys.stdout)
+        else:
+            print(ConsoleColors.error(f"ERROR: Failed to get stats: {str(e)}"))
+        return False
 
 
 # ==================== DIFF AND SNAPSHOT COMMAND HANDLERS ====================
@@ -8262,6 +8544,11 @@ def main():
     DEFAULT_RETRY_CONFIG['base_delay'] = args.retry_base_delay
     DEFAULT_RETRY_CONFIG['max_delay'] = args.retry_max_delay
 
+    # Handle --output for stdout - implies quiet mode
+    output_to_stdout = getattr(args, 'output', None) in ('-', 'stdout')
+    if output_to_stdout:
+        args.quiet = True
+
     # Handle --sample-config mode (no data view required)
     if args.sample_config:
         success = generate_sample_config()
@@ -8269,7 +8556,18 @@ def main():
 
     # Handle --list-dataviews mode (no data view required)
     if args.list_dataviews:
-        success = list_dataviews(args.config_file)
+        # Determine format for list output
+        list_format = 'table'
+        if args.format in ('json', 'csv'):
+            list_format = args.format
+        elif output_to_stdout:
+            list_format = 'json'  # Default to JSON for stdout
+
+        success = list_dataviews(
+            args.config_file,
+            output_format=list_format,
+            output_file=getattr(args, 'output', None)
+        )
         sys.exit(0 if success else 1)
 
     # Handle --validate-config mode (no data view required)
@@ -8279,6 +8577,37 @@ def main():
 
     # Get data views from arguments
     data_view_inputs = args.data_views
+
+    # Handle --stats mode (requires data views)
+    if getattr(args, 'stats', False):
+        if not data_view_inputs:
+            print(ConsoleColors.error("ERROR: --stats requires at least one data view ID or name"), file=sys.stderr)
+            sys.exit(1)
+
+        # Resolve data view names first
+        temp_logger = logging.getLogger('name_resolution')
+        temp_logger.setLevel(logging.WARNING)
+        resolved_ids, _ = resolve_data_view_names(data_view_inputs, args.config_file, temp_logger)
+
+        if not resolved_ids:
+            print(ConsoleColors.error("ERROR: No valid data views found"), file=sys.stderr)
+            sys.exit(1)
+
+        # Determine format for stats output
+        stats_format = 'table'
+        if args.format in ('json', 'csv'):
+            stats_format = args.format
+        elif output_to_stdout:
+            stats_format = 'json'
+
+        success = show_stats(
+            resolved_ids,
+            config_file=args.config_file,
+            output_format=stats_format,
+            output_file=getattr(args, 'output', None),
+            quiet=args.quiet
+        )
+        sys.exit(0 if success else 1)
 
     # Parse ignore_fields if provided
     ignore_fields = None
@@ -8693,6 +9022,22 @@ def main():
         print()
         print(ConsoleColors.bold(f"Total runtime: {total_runtime:.1f}s"))
 
+        # Handle --open flag for batch mode (open all successful files)
+        if getattr(args, 'open', False) and results.get('successful'):
+            files_to_open = []
+            for success_info in results['successful']:
+                if isinstance(success_info, dict) and success_info.get('output_file'):
+                    files_to_open.append(success_info['output_file'])
+                elif hasattr(success_info, 'output_file') and success_info.output_file:
+                    files_to_open.append(success_info.output_file)
+
+            if files_to_open:
+                print()
+                print(f"Opening {len(files_to_open)} file(s)...")
+                for file_path in files_to_open:
+                    if not open_file_in_default_app(file_path):
+                        print(ConsoleColors.warning(f"  Could not open: {file_path}"))
+
         # Exit with error code if any failed (unless continue-on-error)
         if results['failed'] and not args.continue_on_error:
             sys.exit(1)
@@ -8728,6 +9073,13 @@ def main():
             print(f"  Metrics: {result.metrics_count}, Dimensions: {result.dimensions_count}")
             if result.dq_issues_count > 0:
                 print(ConsoleColors.warning(f"  Data Quality Issues: {result.dq_issues_count}"))
+
+            # Handle --open flag for single mode
+            if getattr(args, 'open', False) and result.output_file:
+                print()
+                print("Opening file...")
+                if not open_file_in_default_app(result.output_file):
+                    print(ConsoleColors.warning(f"  Could not open: {result.output_file}"))
         else:
             print(ConsoleColors.error(f"FAILED: {result.error_message}"))
 

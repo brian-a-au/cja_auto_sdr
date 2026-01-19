@@ -19,14 +19,23 @@ Single-page command cheat sheet for CJA SDR Generator v3.0.10.
 # Generate SDR for a single data view
 cja_auto_sdr dv_12345
 
+# Generate and open file immediately
+cja_auto_sdr dv_12345 --open
+
 # Process multiple data views in parallel
 cja_auto_sdr dv_12345 dv_67890 dv_abcde
 
 # Use data view names instead of IDs
 cja_auto_sdr "Production Analytics"
 
+# Quick stats (no full report)
+cja_auto_sdr dv_12345 --stats
+
 # List all accessible data views
 cja_auto_sdr --list-dataviews
+
+# List data views as JSON (for scripting)
+cja_auto_sdr --list-dataviews --format json
 
 # Validate config without processing
 cja_auto_sdr --validate-config
@@ -65,7 +74,10 @@ cja_auto_sdr --diff dv_12345 dv_67890 --diff-labels "Before" "After"
 | Option | Purpose | Mode |
 |--------|---------|------|
 | `--output-dir PATH` | Save output to specific directory | Both |
+| `--output PATH` | Output file path; use `-` for stdout (JSON/CSV) | Both |
 | `--format FORMAT` | Output format (see note below) | Both |
+| `--open` | Open generated file(s) in default application | SDR |
+| `--stats` | Quick statistics only (no full report) | SDR |
 | `--config-file PATH` | Use custom config file (default: config.json) | Both |
 | `--log-level LEVEL` | Set logging: `DEBUG`, `INFO`, `WARNING`, `ERROR` | Both |
 | `--skip-validation` | Skip data quality checks (faster) | SDR only |
@@ -99,6 +111,18 @@ cja_auto_sdr --diff dv_12345 dv_67890 --diff-labels "Before" "After"
 ```bash
 # Fast processing (skip validation)
 cja_auto_sdr dv_12345 --skip-validation
+
+# Generate and open immediately
+cja_auto_sdr dv_12345 --open
+
+# Quick stats check before full generation
+cja_auto_sdr dv_12345 --stats
+
+# Stats as JSON to stdout (for scripting)
+cja_auto_sdr dv_12345 --stats --output -
+
+# List data views and pipe to jq
+cja_auto_sdr --list-dataviews --output - | jq '.dataViews[].name'
 
 # All output formats
 cja_auto_sdr dv_12345 --format all
