@@ -9,7 +9,7 @@ import pandas as pd
 
 # Import the functions we're testing
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from cja_sdr_generator import is_data_view_id, resolve_data_view_names
+from cja_sdr_generator import is_data_view_id, resolve_data_view_names, _data_view_cache
 
 
 class TestDataViewIDDetection:
@@ -42,6 +42,9 @@ class TestDataViewNameResolution:
         """Set up test fixtures"""
         self.logger = logging.getLogger('test')
         self.logger.setLevel(logging.DEBUG)
+
+        # Clear the cache to ensure tests are isolated
+        _data_view_cache.clear()
 
         # Mock data views
         self.mock_dataviews = [
