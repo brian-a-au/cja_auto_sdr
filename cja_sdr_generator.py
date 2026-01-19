@@ -1565,6 +1565,425 @@ class SnapshotManager:
         return f"{data_view_id}_{timestamp}.json"
 
 
+# ==================== GIT INTEGRATION ====================
+
+def is_git_repository(path: Path) -> bool:
+    """Check if the given path is inside a Git repository.
+
+    Args:
+        path: Directory path to check
+
+    Returns:
+        True if path is inside a Git repository
+    """
+    try:
+        result = subprocess.run(
+            ['git', 'rev-parse', '--git-dir'],
+            cwd=str(path),
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        return result.returncode == 0
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return False
+
+
+def git_get_user_info() -> Tuple[str, str]:
+    """Get Git user name and email from config.
+
+    Returns:
+        Tuple of (name, email), with fallbacks if not configured
+    """
+    name = "CJA SDR Generator"
+    email = ""
+
+    try:
+        result = subprocess.run(
+            ['git', 'config', 'user.name'],
+            capture_output=True, text=True, timeout=5
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            name = result.stdout.strip()
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        pass
+
+    try:
+        result = subprocess.run(
+            ['git', 'config', 'user.email'],
+            capture_output=True, text=True, timeout=5
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            email = result.stdout.strip()
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        pass
+
+    return name, email
+
+
+def save_git_friendly_snapshot(
+    snapshot: DataViewSnapshot,
+    output_dir: Path,
+    quality_issues: List[Dict] = None,
+    logger: logging.Logger = None
+) -> Dict[str, Path]:
+    """Save snapshot in Git-friendly format (separate JSON files).
+
+    Creates a directory structure optimized for Git diffs:
+    - metrics.json: Sorted list of metrics
+    - dimensions.json: Sorted list of dimensions
+    - metadata.json: Data view metadata and quality summary
+
+    Args:
+        snapshot: DataViewSnapshot to save
+        output_dir: Directory to save files (will create subdir for data view)
+        quality_issues: Optional list of quality issues to include
+        logger: Optional logger
+
+    Returns:
+        Dict mapping file type to saved file path
+    """
+    logger = logger or logging.getLogger(__name__)
+
+    # Create data view directory
+    safe_name = "".join(c if c.isalnum() or c in '-_' else '_' for c in snapshot.data_view_name)
+    safe_name = safe_name[:50] if safe_name else snapshot.data_view_id
+    dv_dir = output_dir / f"{safe_name}_{snapshot.data_view_id}"
+    dv_dir.mkdir(parents=True, exist_ok=True)
+
+    saved_files = {}
+
+    # Sort metrics by ID for consistent diffs
+    metrics_sorted = sorted(snapshot.metrics, key=lambda x: x.get('id', ''))
+    metrics_file = dv_dir / "metrics.json"
+    with open(metrics_file, 'w', encoding='utf-8') as f:
+        json.dump(metrics_sorted, f, indent=2, ensure_ascii=False, default=str)
+    saved_files['metrics'] = metrics_file
+    logger.debug(f"Saved {len(metrics_sorted)} metrics to {metrics_file}")
+
+    # Sort dimensions by ID for consistent diffs
+    dimensions_sorted = sorted(snapshot.dimensions, key=lambda x: x.get('id', ''))
+    dimensions_file = dv_dir / "dimensions.json"
+    with open(dimensions_file, 'w', encoding='utf-8') as f:
+        json.dump(dimensions_sorted, f, indent=2, ensure_ascii=False, default=str)
+    saved_files['dimensions'] = dimensions_file
+    logger.debug(f"Saved {len(dimensions_sorted)} dimensions to {dimensions_file}")
+
+    # Create metadata file
+    metadata = {
+        'snapshot_version': snapshot.snapshot_version,
+        'created_at': snapshot.created_at,
+        'data_view_id': snapshot.data_view_id,
+        'data_view_name': snapshot.data_view_name,
+        'owner': snapshot.owner,
+        'description': snapshot.description,
+        'tool_version': __version__,
+        'summary': {
+            'metrics_count': len(snapshot.metrics),
+            'dimensions_count': len(snapshot.dimensions),
+            'total_components': len(snapshot.metrics) + len(snapshot.dimensions)
+        }
+    }
+
+    # Add quality summary if provided
+    if quality_issues:
+        severity_counts = {}
+        for issue in quality_issues:
+            sev = issue.get('Severity', 'UNKNOWN')
+            severity_counts[sev] = severity_counts.get(sev, 0) + 1
+        metadata['quality'] = {
+            'total_issues': len(quality_issues),
+            'by_severity': severity_counts
+        }
+
+    metadata_file = dv_dir / "metadata.json"
+    with open(metadata_file, 'w', encoding='utf-8') as f:
+        json.dump(metadata, f, indent=2, ensure_ascii=False, default=str)
+    saved_files['metadata'] = metadata_file
+    logger.debug(f"Saved metadata to {metadata_file}")
+
+    return saved_files
+
+
+def generate_git_commit_message(
+    data_view_id: str,
+    data_view_name: str,
+    metrics_count: int,
+    dimensions_count: int,
+    quality_issues: List[Dict] = None,
+    diff_result: 'DiffResult' = None,
+    custom_message: str = None
+) -> str:
+    """Generate a descriptive Git commit message for SDR snapshot.
+
+    Args:
+        data_view_id: Data view ID
+        data_view_name: Data view name
+        metrics_count: Number of metrics
+        dimensions_count: Number of dimensions
+        quality_issues: Optional list of quality issues
+        diff_result: Optional diff result (for change summary)
+        custom_message: Optional custom message to prepend
+
+    Returns:
+        Formatted commit message
+    """
+    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M')
+
+    # Subject line
+    if custom_message:
+        subject = f"[{data_view_id}] {custom_message}"
+    else:
+        subject = f"[{data_view_id}] SDR snapshot {timestamp}"
+
+    lines = [subject, ""]
+
+    # Data view info
+    lines.append(f"Data View: {data_view_name}")
+    lines.append(f"ID: {data_view_id}")
+    lines.append(f"Components: {metrics_count} metrics, {dimensions_count} dimensions")
+    lines.append("")
+
+    # Change summary if diff available
+    if diff_result and diff_result.summary.has_changes:
+        summary = diff_result.summary
+        lines.append("Changes:")
+        if summary.metrics_added > 0:
+            lines.append(f"  + {summary.metrics_added} metrics added")
+        if summary.metrics_removed > 0:
+            lines.append(f"  - {summary.metrics_removed} metrics removed")
+        if summary.metrics_modified > 0:
+            lines.append(f"  ~ {summary.metrics_modified} metrics modified")
+        if summary.dimensions_added > 0:
+            lines.append(f"  + {summary.dimensions_added} dimensions added")
+        if summary.dimensions_removed > 0:
+            lines.append(f"  - {summary.dimensions_removed} dimensions removed")
+        if summary.dimensions_modified > 0:
+            lines.append(f"  ~ {summary.dimensions_modified} dimensions modified")
+        lines.append("")
+
+    # Quality summary
+    if quality_issues:
+        severity_counts = {}
+        for issue in quality_issues:
+            sev = issue.get('Severity', 'UNKNOWN')
+            severity_counts[sev] = severity_counts.get(sev, 0) + 1
+
+        lines.append("Quality:")
+        for sev in ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO']:
+            count = severity_counts.get(sev, 0)
+            if count > 0:
+                lines.append(f"  {sev}: {count}")
+        lines.append("")
+
+    # Footer
+    lines.append(f"Generated by CJA SDR Generator v{__version__}")
+
+    return "\n".join(lines)
+
+
+def git_commit_snapshot(
+    snapshot_dir: Path,
+    data_view_id: str,
+    data_view_name: str,
+    metrics_count: int,
+    dimensions_count: int,
+    quality_issues: List[Dict] = None,
+    diff_result: 'DiffResult' = None,
+    custom_message: str = None,
+    push: bool = False,
+    logger: logging.Logger = None
+) -> Tuple[bool, str]:
+    """Commit snapshot files to Git with auto-generated message.
+
+    Args:
+        snapshot_dir: Directory containing the snapshot files
+        data_view_id: Data view ID
+        data_view_name: Data view name
+        metrics_count: Number of metrics
+        dimensions_count: Number of dimensions
+        quality_issues: Optional quality issues for commit message
+        diff_result: Optional diff result for change summary
+        custom_message: Optional custom message to include
+        push: Whether to push after committing
+        logger: Optional logger
+
+    Returns:
+        Tuple of (success, commit_sha or error message)
+    """
+    logger = logger or logging.getLogger(__name__)
+
+    # Check if Git is available
+    if not is_git_repository(snapshot_dir):
+        return False, f"Not a Git repository: {snapshot_dir}"
+
+    try:
+        # Stage the snapshot files
+        logger.info(f"Staging snapshot files in {snapshot_dir}")
+        result = subprocess.run(
+            ['git', 'add', '.'],
+            cwd=str(snapshot_dir),
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        if result.returncode != 0:
+            return False, f"git add failed: {result.stderr}"
+
+        # Check if there are changes to commit
+        result = subprocess.run(
+            ['git', 'diff', '--cached', '--quiet'],
+            cwd=str(snapshot_dir),
+            capture_output=True,
+            timeout=10
+        )
+        if result.returncode == 0:
+            logger.info("No changes to commit (snapshot unchanged)")
+            return True, "no_changes"
+
+        # Generate commit message
+        commit_message = generate_git_commit_message(
+            data_view_id=data_view_id,
+            data_view_name=data_view_name,
+            metrics_count=metrics_count,
+            dimensions_count=dimensions_count,
+            quality_issues=quality_issues,
+            diff_result=diff_result,
+            custom_message=custom_message
+        )
+
+        # Commit
+        logger.info("Committing snapshot to Git")
+        result = subprocess.run(
+            ['git', 'commit', '-m', commit_message],
+            cwd=str(snapshot_dir),
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        if result.returncode != 0:
+            return False, f"git commit failed: {result.stderr}"
+
+        # Get commit SHA
+        result = subprocess.run(
+            ['git', 'rev-parse', 'HEAD'],
+            cwd=str(snapshot_dir),
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        commit_sha = result.stdout.strip()[:8] if result.returncode == 0 else "unknown"
+
+        logger.info(f"Committed snapshot: {commit_sha}")
+
+        # Push if requested
+        if push:
+            logger.info("Pushing to remote")
+            result = subprocess.run(
+                ['git', 'push'],
+                cwd=str(snapshot_dir),
+                capture_output=True,
+                text=True,
+                timeout=60
+            )
+            if result.returncode != 0:
+                logger.warning(f"git push failed: {result.stderr}")
+                return True, f"{commit_sha} (push failed: {result.stderr.strip()})"
+            logger.info("Pushed to remote successfully")
+
+        return True, commit_sha
+
+    except subprocess.TimeoutExpired:
+        return False, "Git operation timed out"
+    except FileNotFoundError:
+        return False, "Git not found - ensure Git is installed and in PATH"
+    except Exception as e:
+        return False, f"Git error: {str(e)}"
+
+
+def git_init_snapshot_repo(
+    directory: Path,
+    logger: logging.Logger = None
+) -> Tuple[bool, str]:
+    """Initialize a new Git repository for snapshots.
+
+    Args:
+        directory: Directory to initialize
+        logger: Optional logger
+
+    Returns:
+        Tuple of (success, message)
+    """
+    logger = logger or logging.getLogger(__name__)
+
+    try:
+        directory.mkdir(parents=True, exist_ok=True)
+
+        if is_git_repository(directory):
+            return True, "Already a Git repository"
+
+        logger.info(f"Initializing Git repository in {directory}")
+        result = subprocess.run(
+            ['git', 'init'],
+            cwd=str(directory),
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        if result.returncode != 0:
+            return False, f"git init failed: {result.stderr}"
+
+        # Create .gitignore
+        gitignore = directory / ".gitignore"
+        gitignore.write_text("# CJA SDR Snapshots\n*.log\n*.tmp\n.DS_Store\n")
+
+        # Create README
+        readme = directory / "README.md"
+        readme.write_text(f"""# CJA SDR Snapshots
+
+This repository contains Solution Design Reference (SDR) snapshots from Adobe Customer Journey Analytics.
+
+## Structure
+
+```
+<data_view_name>_<data_view_id>/
+├── metrics.json      # All metrics (sorted by ID)
+├── dimensions.json   # All dimensions (sorted by ID)
+└── metadata.json     # Data view info and quality summary
+```
+
+## Usage
+
+View history:
+```bash
+git log --oneline
+```
+
+Compare versions:
+```bash
+git diff HEAD~1 HEAD -- <data_view_dir>/metrics.json
+```
+
+---
+Generated by CJA SDR Generator v{__version__}
+""")
+
+        # Initial commit
+        subprocess.run(['git', 'add', '.'], cwd=str(directory), capture_output=True, timeout=30)
+        subprocess.run(
+            ['git', 'commit', '-m', 'Initialize SDR snapshot repository'],
+            cwd=str(directory),
+            capture_output=True,
+            timeout=30
+        )
+
+        logger.info(f"Initialized Git repository: {directory}")
+        return True, "Repository initialized"
+
+    except Exception as e:
+        return False, f"Initialization failed: {str(e)}"
+
+
 # ==================== DATA VIEW COMPARATOR ====================
 
 class DataViewComparator:
@@ -7124,6 +7543,46 @@ Requirements:
              'Used with --auto-snapshot'
     )
 
+    # ==================== GIT INTEGRATION ARGUMENTS ====================
+
+    git_group = parser.add_argument_group('Git Integration', 'Options for version-controlled snapshots')
+
+    git_group.add_argument(
+        '--git-commit',
+        action='store_true',
+        help='Save snapshot in Git-friendly format and commit to Git repository. '
+             'Creates separate JSON files (metrics.json, dimensions.json, metadata.json) '
+             'for easy diffing in Git'
+    )
+
+    git_group.add_argument(
+        '--git-push',
+        action='store_true',
+        help='Push to remote after committing (requires --git-commit)'
+    )
+
+    git_group.add_argument(
+        '--git-message',
+        type=str,
+        metavar='MESSAGE',
+        help='Custom message for Git commit (used with --git-commit)'
+    )
+
+    git_group.add_argument(
+        '--git-dir',
+        type=str,
+        default='./sdr-snapshots',
+        metavar='DIR',
+        help='Directory for Git-tracked snapshots (default: ./sdr-snapshots). '
+             'Will be initialized as Git repo if not already'
+    )
+
+    git_group.add_argument(
+        '--git-init',
+        action='store_true',
+        help='Initialize a new Git repository for snapshots at --git-dir location'
+    )
+
     # Enable shell tab-completion if argcomplete is installed
     if _ARGCOMPLETE_AVAILABLE:
         argcomplete.autocomplete(parser)
@@ -8632,6 +9091,28 @@ def main():
         success = generate_sample_config()
         sys.exit(0 if success else 1)
 
+    # Handle --git-init mode (no data view required)
+    if getattr(args, 'git_init', False):
+        git_dir = Path(getattr(args, 'git_dir', './sdr-snapshots'))
+        print(f"Initializing Git repository at: {git_dir}")
+        success, message = git_init_snapshot_repo(git_dir)
+        if success:
+            print(ConsoleColors.success(f"SUCCESS: {message}"))
+            print(f"  Directory: {git_dir.absolute()}")
+            print()
+            print("Next steps:")
+            print(f"  1. Run SDR generation with --git-commit to save and commit snapshots")
+            print(f"  2. Add a remote: cd {git_dir} && git remote add origin <url>")
+            print(f"  3. Use --git-push to push commits to remote")
+        else:
+            print(ConsoleColors.error(f"FAILED: {message}"))
+        sys.exit(0 if success else 1)
+
+    # Validate Git argument combinations
+    if getattr(args, 'git_push', False) and not getattr(args, 'git_commit', False):
+        print(ConsoleColors.error("ERROR: --git-push requires --git-commit"), file=sys.stderr)
+        sys.exit(1)
+
     # Handle --list-dataviews mode (no data view required)
     if args.list_dataviews:
         # Determine format for list output
@@ -9151,6 +9632,76 @@ def main():
             print(f"  Metrics: {result.metrics_count}, Dimensions: {result.dimensions_count}")
             if result.dq_issues_count > 0:
                 print(ConsoleColors.warning(f"  Data Quality Issues: {result.dq_issues_count}"))
+
+            # Handle --git-commit for single mode
+            if getattr(args, 'git_commit', False):
+                print()
+                git_dir = Path(getattr(args, 'git_dir', './sdr-snapshots'))
+
+                # Initialize repo if needed
+                if not is_git_repository(git_dir):
+                    print(f"Initializing Git repository at: {git_dir}")
+                    init_success, init_msg = git_init_snapshot_repo(git_dir)
+                    if not init_success:
+                        print(ConsoleColors.error(f"Git init failed: {init_msg}"))
+                    else:
+                        print(ConsoleColors.success(f"  Repository initialized"))
+
+                # Create snapshot for Git
+                snapshot = DataViewSnapshot(
+                    data_view_id=result.data_view_id,
+                    data_view_name=result.data_view_name,
+                    metrics=result.metrics_data if hasattr(result, 'metrics_data') else [],
+                    dimensions=result.dimensions_data if hasattr(result, 'dimensions_data') else []
+                )
+
+                # If we don't have the raw data in result, we need to fetch it
+                # For now, we'll create a minimal snapshot from available info
+                if not snapshot.metrics and not snapshot.dimensions:
+                    # Re-fetch data for Git snapshot
+                    print("Fetching data for Git snapshot...")
+                    try:
+                        temp_logger = logging.getLogger('git_snapshot')
+                        temp_logger.setLevel(logging.WARNING)
+                        cja = initialize_cja(args.config_file, temp_logger)
+                        if cja:
+                            snapshot_mgr = SnapshotManager(temp_logger)
+                            snapshot = snapshot_mgr.create_snapshot(cja, result.data_view_id, quiet=True)
+                    except Exception as e:
+                        print(ConsoleColors.warning(f"  Could not fetch snapshot data: {e}"))
+
+                # Save Git-friendly snapshot
+                print(f"Saving snapshot to: {git_dir}")
+                saved_files = save_git_friendly_snapshot(
+                    snapshot=snapshot,
+                    output_dir=git_dir,
+                    quality_issues=result.dq_issues if hasattr(result, 'dq_issues') else None
+                )
+
+                # Commit to Git
+                git_push = getattr(args, 'git_push', False)
+                git_message = getattr(args, 'git_message', None)
+
+                commit_success, commit_result = git_commit_snapshot(
+                    snapshot_dir=git_dir,
+                    data_view_id=result.data_view_id,
+                    data_view_name=result.data_view_name,
+                    metrics_count=result.metrics_count,
+                    dimensions_count=result.dimensions_count,
+                    quality_issues=result.dq_issues if hasattr(result, 'dq_issues') else None,
+                    custom_message=git_message,
+                    push=git_push
+                )
+
+                if commit_success:
+                    if commit_result == "no_changes":
+                        print(ConsoleColors.info("  No changes to commit (snapshot unchanged)"))
+                    else:
+                        print(ConsoleColors.success(f"  Committed: {commit_result}"))
+                        if git_push:
+                            print(ConsoleColors.success("  Pushed to remote"))
+                else:
+                    print(ConsoleColors.error(f"  Git commit failed: {commit_result}"))
 
             # Handle --open flag for single mode
             if getattr(args, 'open', False) and result.output_file:
