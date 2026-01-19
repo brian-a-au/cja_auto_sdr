@@ -200,6 +200,8 @@ python cja_sdr_generator.py "Production Analytics"
 | Export as Excel (default) | `cja_auto_sdr dv_12345 --format excel` |
 | Export as CSV | `cja_auto_sdr dv_12345 --format csv` |
 | Export as JSON | `cja_auto_sdr dv_12345 --format json` |
+| Export as HTML | `cja_auto_sdr dv_12345 --format html` |
+| Export as Markdown | `cja_auto_sdr dv_12345 --format markdown` |
 | Generate all formats | `cja_auto_sdr dv_12345 --format all` |
 | **Quick Stats & Discovery** | |
 | Quick stats (no full report) | `cja_auto_sdr dv_12345 --stats` |
