@@ -87,6 +87,245 @@ metrics/bounce_rate (Bounce Rate) -->  metrics/bounce_rate (Bounce %)     = MODI
 (not present)                     -->  metrics/new_metric (New Metric)    = ADDED
 ```
 
+## Modified Detection In-Depth
+
+The "modified" change type requires special attention as it indicates components that exist in both data views but have different field values. This section explains the detection logic, output formats, and how to interpret modifications.
+
+### How Modified Detection Works
+
+A component is classified as **modified** when:
+1. The component exists in **both** source and target (matched by unique ID)
+2. At least **one compared field** has a different value between source and target
+
+The detection follows this process:
+
+```
+1. Match components by ID (e.g., "metrics/pageviews")
+   ├── ID exists only in source → REMOVED
+   ├── ID exists only in target → ADDED
+   └── ID exists in both → Compare fields
+                            ├── All fields identical → UNCHANGED
+                            └── Any field differs → MODIFIED
+```
+
+### Field Comparison Algorithm
+
+For each matched component, the tool compares field values using this logic:
+
+```python
+# Pseudocode for modification detection
+for each field in compare_fields:
+    if field in ignore_fields:
+        skip  # User excluded this field
+
+    source_value = source_component.get(field)
+    target_value = target_component.get(field)
+
+    # Normalize values for accurate comparison
+    source_normalized = normalize(source_value)
+    target_normalized = normalize(target_value)
+
+    if source_normalized != target_normalized:
+        mark as changed: field → (source_value, target_value)
+
+if any fields changed:
+    component is MODIFIED with list of changed_fields
+else:
+    component is UNCHANGED
+```
+
+### Value Normalization
+
+Before comparison, values are normalized to ensure accurate detection:
+
+| Original Value | Normalized Value | Purpose |
+|---------------|------------------|---------|
+| `None` | `""` (empty string) | Treat null and empty consistently |
+| `"  text  "` | `"text"` | Ignore leading/trailing whitespace |
+| `{"b": 2, "a": 1}` | `{"a": 1, "b": 2}` | Sort dict keys for consistent comparison |
+| `[item1, item2]` | Recursively normalized | Handle nested arrays |
+
+This normalization ensures that:
+- `description: null` equals `description: ""`
+- `name: "Page Views "` equals `name: "Page Views"`
+- Nested objects with different key ordering compare correctly
+
+### Modified Output Formats
+
+#### Console Output (Default)
+
+Modified items display the changed field with before/after values:
+
+```
+METRICS CHANGES (3)
+  [~] metrics/pageviews                    description: 'Old description' -> 'New description'
+  [~] metrics/bounce_rate                  name: 'Bounce Rate' -> 'Bounce %', type: 'decimal' -> 'int'
+  [~] metrics/conversion                   title: 'Conv Rate' -> 'Conversion Rate'
+```
+
+Key elements:
+- `[~]` - Modified indicator (yellow in colored output)
+- Component ID and name
+- Changed fields with `'old value' -> 'new value'` format
+- Multiple field changes shown comma-separated
+
+#### Side-by-Side Output (`--side-by-side`)
+
+For detailed inspection of modifications:
+
+```
+┌─────────────────────────────────────┬─────────────────────────────────────┐
+│ Production                          │ Staging                             │
+├─────────────────────────────────────┼─────────────────────────────────────┤
+│ name: Bounce Rate                   │ name: Bounce %                      │
+│ description: The bounce rate metric │ description: Percentage of bounces  │
+│ type: decimal                       │ type: int                           │
+└─────────────────────────────────────┴─────────────────────────────────────┘
+```
+
+This view:
+- Shows only fields that differ
+- Presents source (left) and target (right) side by side
+- Uses custom labels from `--diff-labels` if provided
+- Available in console and markdown formats
+
+#### JSON Output
+
+Modified items include full `changed_fields` details:
+
+```json
+{
+  "id": "metrics/bounce_rate",
+  "name": "Bounce %",
+  "change_type": "modified",
+  "changed_fields": {
+    "name": ["Bounce Rate", "Bounce %"],
+    "type": ["decimal", "int"]
+  },
+  "source_data": { /* full source component */ },
+  "target_data": { /* full target component */ }
+}
+```
+
+The `changed_fields` object maps each changed field to a tuple of `[source_value, target_value]`.
+
+### Filtering to Modified Only
+
+Use `--show-only modified` to focus exclusively on modifications:
+
+```bash
+cja_auto_sdr --diff dv_12345 dv_67890 --show-only modified
+```
+
+This hides added, removed, and unchanged items—useful for reviewing what changed without the noise of new or deleted components.
+
+### Modified with Extended Fields
+
+With `--extended-fields`, modification detection expands to 20+ additional fields:
+
+```bash
+cja_auto_sdr --diff dv_12345 dv_67890 --extended-fields --show-only modified
+```
+
+Example output showing attribution changes:
+
+```
+METRICS CHANGES (2)
+  [~] metrics/revenue    attribution: {'model': 'lastTouch'} -> {'model': 'linear'}
+  [~] metrics/orders     lookbackWindow: '30' -> '90'
+```
+
+### Nested Structure Comparison
+
+Extended fields like `attribution`, `bucketing`, and `persistence` contain nested objects. The comparison handles these recursively:
+
+```
+Source attribution:                    Target attribution:
+{                                      {
+  "model": "lastTouch",        →         "model": "linear",
+  "lookbackWindow": 30                   "lookbackWindow": 30
+}                                      }
+
+Result: attribution field marked as MODIFIED
+        Shows: {'model': 'lastTouch', ...} -> {'model': 'linear', ...}
+```
+
+### Ignoring Specific Field Modifications
+
+Use `--ignore-fields` to exclude certain fields from modification detection:
+
+```bash
+# Ignore description changes (only detect name, type, etc. changes)
+cja_auto_sdr --diff dv_12345 dv_67890 --ignore-fields description
+
+# Ignore multiple fields
+cja_auto_sdr --diff dv_12345 dv_67890 --ignore-fields description,title
+```
+
+This is useful when:
+- Description updates are frequent but not meaningful
+- Title formatting differs between environments
+- You want to focus on structural changes (type, schemaPath)
+
+### Breaking Change Detection
+
+Certain modifications are flagged as "breaking changes" in the output:
+
+| Field | Why Breaking |
+|-------|--------------|
+| `type` | Data type change may break downstream reports |
+| `schemaPath` | Schema mapping change affects data collection |
+
+These appear with warnings in console/markdown output:
+
+```
+⚠️ BREAKING CHANGES DETECTED
+  - metrics/pageviews: type changed from 'int' to 'string'
+  - dimensions/page: schemaPath changed
+```
+
+### Practical Examples
+
+**Example 1: Name standardization between environments**
+
+```bash
+$ cja_auto_sdr --diff "Production" "Staging" --show-only modified
+
+METRICS CHANGES (3)
+  [~] metrics/page_views    name: 'Page Views' -> 'Pageviews'
+  [~] metrics/bounce_rate   name: 'Bounce Rate' -> 'Bounce %'
+  [~] metrics/avg_time      name: 'Avg. Time on Page' -> 'Average Time on Page'
+```
+
+**Example 2: Schema migration changes**
+
+```bash
+$ cja_auto_sdr --diff "Before Migration" "After Migration" --extended-fields --show-only modified
+
+METRICS CHANGES (5)
+  [~] metrics/revenue       attribution: {'model': 'lastTouch'} -> {'model': 'linear'}
+  [~] metrics/orders        type: 'int' -> 'decimal', precision: '0' -> '2'
+
+⚠️ BREAKING CHANGES DETECTED
+  - metrics/orders: type changed from 'int' to 'decimal'
+```
+
+**Example 3: Detailed side-by-side review**
+
+```bash
+$ cja_auto_sdr --diff dv_12345 dv_67890 --side-by-side --show-only modified
+
+[~] metrics/conversion_rate "Conversion Rate"
+┌─────────────────────────────────────┬─────────────────────────────────────┐
+│ Production                          │ Staging                             │
+├─────────────────────────────────────┼─────────────────────────────────────┤
+│ description: Conversion rate for    │ description: Rate of conversions    │
+│   all visitors                      │   from qualified traffic            │
+│ type: decimal                       │ type: percentage                    │
+│ precision: 2                        │ precision: 1                        │
+└─────────────────────────────────────┴─────────────────────────────────────┘
+```
+
 ## Quick Start
 
 ### Compare Two Live Data Views
