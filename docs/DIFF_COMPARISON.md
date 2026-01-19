@@ -154,6 +154,40 @@ This normalization ensures that:
 
 **Display Format:** Empty/null/NaN values are displayed as `(empty)` in diff output for clarity.
 
+### Handling Multiple Modified Items
+
+When a diff contains multiple modified components, each modified component is displayed as a **separate row** in the output. This provides a clear, scannable list of all modifications.
+
+#### Multiple Components Modified
+
+Each modified metric or dimension gets its own line with its ID, name, and changed fields:
+
+```
+METRICS CHANGES (7)
+  [~] metrics/pageviews        description: 'Total page views count' -> 'Total page views count (updated)'
+  [~] metrics/visits           type: 'int' -> 'long'
+  [~] metrics/bounce_rate      description: 'Bounce rate' -> 'Bounce rate percentage'
+  [~] metrics/conversion_rate  name: 'Conversion Rate' -> 'CVR'
+  [~] metrics/revenue          type: 'decimal' -> 'currency'
+  [~] metrics/orders           description: '(empty)' -> 'Total order count'
+  [~] metrics/cart_adds        description: 'Cart additions' -> 'Shopping cart additions'
+```
+
+#### Multiple Fields Changed on Same Component
+
+When a single component has **multiple fields** that differ between source and target, all changed fields are displayed together on the same line, separated by semicolons:
+
+```
+METRICS CHANGES (2)
+  [~] metrics/bounce_rate      name: 'Bounce Rate' -> 'Bounce %'; type: 'decimal' -> 'int'; description: 'Old' -> 'New'
+  [~] metrics/conversion       title: 'Conv Rate' -> 'Conversion Rate'; precision: '2' -> '4'
+```
+
+This compact format allows you to see at a glance:
+- Which components changed
+- What specific fields changed within each component
+- The before and after values for each field
+
 ### Modified Output Formats
 
 #### Console Output (Default)
@@ -172,48 +206,115 @@ Key elements:
 - `[~]` - Modified indicator (yellow in colored output)
 - Component ID and name
 - Changed fields with `'old value' -> 'new value'` format
-- Multiple field changes shown semicolon-separated
+- Multiple field changes on the same component shown semicolon-separated
 - Empty/null/NaN values displayed as `(empty)`
 
 #### Side-by-Side Output (`--side-by-side`)
 
-For detailed inspection of modifications:
+For detailed inspection of modifications, each modified component gets its own side-by-side comparison box. When multiple components are modified, you see multiple boxes:
 
-```
-┌─────────────────────────────────────┬─────────────────────────────────────┐
-│ Production                          │ Staging                             │
-├─────────────────────────────────────┼─────────────────────────────────────┤
-│ name: Bounce Rate                   │ name: Bounce %                      │
-│ description: The bounce rate metric │ description: Percentage of bounces  │
-│ type: decimal                       │ type: int                           │
-└─────────────────────────────────────┴─────────────────────────────────────┘
+```text
+[~] metrics/bounce_rate "Bounce Rate"
+    ┌─────────────────────────────────────┬─────────────────────────────────────┐
+    │ Production                          │ Staging                             │
+    ├─────────────────────────────────────┼─────────────────────────────────────┤
+    │ name: Bounce Rate                   │ name: Bounce %                      │
+    │ description: The bounce rate metric │ description: Percentage of bounces  │
+    │ type: decimal                       │ type: int                           │
+    └─────────────────────────────────────┴─────────────────────────────────────┘
+
+[~] metrics/conversion_rate "Conversion Rate"
+    ┌─────────────────────────────────────┬─────────────────────────────────────┐
+    │ Production                          │ Staging                             │
+    ├─────────────────────────────────────┼─────────────────────────────────────┤
+    │ description: Conversion rate for    │ description: Rate of conversions    │
+    │   all visitors                      │   from qualified traffic            │
+    │ type: decimal                       │ type: percentage                    │
+    │ precision: 2                        │ precision: 1                        │
+    └─────────────────────────────────────┴─────────────────────────────────────┘
 ```
 
 This view:
-- Shows only fields that differ
+
+- Each modified component gets a separate labeled box
+- Shows only fields that differ within each component
 - Presents source (left) and target (right) side by side
+- Long values are automatically wrapped within the box
 - Uses custom labels from `--diff-labels` if provided
 - Available in console and markdown formats
 
 #### JSON Output
 
-Modified items include full `changed_fields` details:
+In JSON format, all modified items appear in the `metric_diffs` and `dimension_diffs` arrays. Each modified component includes full `changed_fields` details:
 
 ```json
 {
-  "id": "metrics/bounce_rate",
-  "name": "Bounce %",
-  "change_type": "modified",
-  "changed_fields": {
-    "name": ["Bounce Rate", "Bounce %"],
-    "type": ["decimal", "int"]
-  },
-  "source_data": { /* full source component */ },
-  "target_data": { /* full target component */ }
+  "metric_diffs": [
+    {
+      "id": "metrics/bounce_rate",
+      "name": "Bounce %",
+      "change_type": "modified",
+      "changed_fields": {
+        "name": ["Bounce Rate", "Bounce %"],
+        "type": ["decimal", "int"]
+      },
+      "source_data": { "...full source component..." },
+      "target_data": { "...full target component..." }
+    },
+    {
+      "id": "metrics/conversion_rate",
+      "name": "CVR",
+      "change_type": "modified",
+      "changed_fields": {
+        "name": ["Conversion Rate", "CVR"],
+        "description": ["Old description", "New description"]
+      },
+      "source_data": { "...full source component..." },
+      "target_data": { "...full target component..." }
+    }
+  ]
 }
 ```
 
-The `changed_fields` object maps each changed field to a tuple of `[source_value, target_value]`.
+The `changed_fields` object maps each changed field to a tuple of `[source_value, target_value]`. When a component has multiple fields changed, all appear in the same `changed_fields` object.
+
+#### Grouped by Field Output (`--group-by-field`)
+
+When you have many modified components, it can be helpful to see changes grouped by **which field changed** rather than by component. Use `--group-by-field` to reorganize the output:
+
+```text
+================================================================================
+DATA VIEW COMPARISON - GROUPED BY FIELD
+================================================================================
+Source: Production Analytics
+Target: Staging Analytics
+================================================================================
+
+CHANGES BY FIELD
+
+description (5 changes):
+  - metrics/pageviews: 'Total page views count' -> 'Total page views count (updated)'
+  - metrics/bounce_rate: 'Bounce rate' -> 'Bounce rate percentage'
+  - metrics/orders: '(empty)' -> 'Total order count'
+  - metrics/cart_adds: 'Cart additions' -> 'Shopping cart additions'
+  - dimensions/campaign: 'Campaign name' -> 'Marketing campaign identifier'
+
+type (4 changes):
+  - metrics/visits: 'int' -> 'long'
+  - metrics/revenue: 'decimal' -> 'currency'
+  - dimensions/device_type: 'string' -> 'enum'
+  - dimensions/referrer: 'string' -> 'url'
+
+name (2 changes):
+  - metrics/conversion_rate: 'Conversion Rate' -> 'CVR'
+  - dimensions/page: 'Page' -> 'Page URL'
+```
+
+This view is particularly useful when:
+
+- You want to see all `type` changes together (potential breaking changes)
+- You're auditing `description` updates across many components
+- You need to review `name` standardization efforts
 
 ### Filtering to Modified Only
 
