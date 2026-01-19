@@ -562,17 +562,54 @@ The summary table provides a quick overview of differences between two data view
 
 ### Mathematical Relationships
 
-The summary columns are mathematically related. Understanding these relationships helps validate diff results.
+The summary columns are mathematically related. Understanding these relationships helps validate diff results and interpret what happened between two data views.
 
-| Relationship | Formula | Explanation |
-|--------------|---------|-------------|
-| Target count | `Target = Source - Removed + Added` | The target has what source had, minus removals, plus additions |
-| Unchanged count | `Unchanged = Source - Removed - Modified` | Source components that weren't removed or changed |
-| Unchanged (alt) | `Unchanged = Target - Added - Modified` | Target components that weren't added or changed |
-| Total changes | `Total Changes = Added + Removed + Modified` | Sum of all change types |
-| Change percentage | `Changed % = (Total Changes / Source) × 100` | Changes relative to source size |
+#### How Components Flow Between Data Views
 
-**Note:** Change percentage can exceed 100% when there are many additions combined with removals, indicating significant restructuring between the two data views.
+Think of the source data view's components as being sorted into buckets:
+
+```
+Source Components (33 total)
+    │
+    ├── Removed (22) ──────────────────────► Gone from target
+    │
+    ├── Modified (10) ─────────────────────► Still in target, but changed
+    │
+    └── Unchanged (1) ─────────────────────► Still in target, identical
+                                                      │
+                              Added (17) ─────────────┤
+                              (new in target)         │
+                                                      ▼
+                                            Target Components (28 total)
+```
+
+#### Key Formulas
+
+**1. Target count** — How many components end up in the target:
+```
+Target = Source - Removed + Added
+   28  =   33   -   22    +  17   ✓
+```
+
+**2. Unchanged count** — Components that exist in both and are identical:
+```
+Unchanged = Source - Removed - Modified
+    1     =   33   -   22    -   10      ✓
+```
+
+**3. Total changes** — Sum of all change types:
+```
+Total Changes = Added + Removed + Modified
+     49       =  17   +   22    +   10
+```
+
+**4. Change percentage** — Changes relative to source size:
+```
+Changed % = (Total Changes / Source) × 100
+  148.5%  = (     49       /   33  ) × 100
+```
+
+> **Why can Changed % exceed 100%?** When you have both many removals AND many additions, the total changes can exceed the original component count. A 148.5% change rate means the data view underwent significant restructuring—not just edits, but wholesale replacement of components.
 
 ### Example Interpretation
 
@@ -580,22 +617,25 @@ The summary columns are mathematically related. Understanding these relationship
 SUMMARY
                      Adobestore (Stitched)   Adobe Store - Prod      Added    Removed   Modified   Unchanged     Changed
 -------------------------------------------------------------------------------------------------------------------------
-Metrics                                 33                   28        +17        -22        ~10           6    (148.5%)
+Metrics                                 33                   28        +17        -22        ~10           1    (148.5%)
 Dimensions                             120                   98        +48        -70        ~31          21    (124.2%)
 ```
 
 **Reading the Metrics row:**
-- **Source (33)**: The source data view has 33 metrics
-- **Target (28)**: The target data view has 28 metrics
-- **Added (+17)**: 17 metrics exist in target that don't exist in source
-- **Removed (-22)**: 22 metrics exist in source that don't exist in target
-- **Modified (~10)**: 10 metrics exist in both but have different values
-- **Unchanged (6)**: 6 metrics are identical in both data views
-- **Changed (148.5%)**: 49 total changes (17+22+10) relative to 33 source components
 
-**Validation:**
-- Target = Source - Removed + Added → 28 = 33 - 22 + 17 ✓
-- Unchanged = Source - Removed - Modified → 6 = 33 - 22 - 10 ✓ (with 5 that became modified)
+| Column | Value | Meaning |
+|--------|-------|---------|
+| Source | 33 | The first data view has 33 metrics |
+| Target | 28 | The second data view has 28 metrics |
+| Added | +17 | 17 metrics are new in target (didn't exist in source) |
+| Removed | -22 | 22 metrics from source are gone in target |
+| Modified | ~10 | 10 metrics exist in both but have different field values |
+| Unchanged | 1 | Only 1 metric is identical in both data views |
+| Changed | 148.5% | 49 total changes relative to 33 source metrics |
+
+**Validation check:**
+- Target = 33 - 22 + 17 = **28** ✓
+- Unchanged = 33 - 22 - 10 = **1** ✓
 
 ### Understanding High Change Percentages
 
