@@ -137,6 +137,16 @@ cja-auto-sdr [OPTIONS] DATA_VIEW_ID_OR_NAME [...]
 | `--snapshot-dir DIR` | Directory for auto-saved snapshots | ./snapshots |
 | `--keep-last N` | Retention: keep only last N snapshots per data view (0=all) | 0 |
 
+### Git Integration
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--git-init` | Initialize a new Git repository for snapshots | - |
+| `--git-commit` | Save snapshot and commit to Git after SDR generation | False |
+| `--git-push` | Push to remote repository after committing | False |
+| `--git-message MSG` | Custom commit message (auto-generated if not provided) | - |
+| `--git-dir DIR` | Directory for Git snapshots | ./sdr-snapshots |
+
 ### Environment Variables
 
 **Credentials (take precedence over config.json):**
@@ -389,6 +399,29 @@ cja_auto_sdr --diff dv_12345 dv_67890 --auto-snapshot --keep-last 10
 cja_auto_sdr dv_12345 --diff-snapshot ./baseline.json --auto-snapshot
 ```
 
+### Git Integration
+
+```bash
+# Initialize a new Git repository for snapshots (one-time setup)
+cja_auto_sdr --git-init
+cja_auto_sdr --git-init --git-dir ./my-snapshots
+
+# Generate SDR and commit to Git
+cja_auto_sdr dv_12345 --git-commit
+
+# Generate with custom commit message
+cja_auto_sdr dv_12345 --git-commit --git-message "Pre-release snapshot"
+
+# Generate, commit, and push to remote
+cja_auto_sdr dv_12345 --git-commit --git-push
+
+# Multiple data views with Git commits
+cja_auto_sdr dv_prod dv_staging dv_dev --git-commit
+
+# Custom Git directory
+cja_auto_sdr dv_12345 --git-commit --git-dir ./my-snapshots
+```
+
 ## Output Files
 
 ### Excel Workbook
@@ -527,3 +560,4 @@ DEBUG  INFO  WARNING  ERROR  CRITICAL
 - [Output Formats](OUTPUT_FORMATS.md)
 - [Performance Guide](PERFORMANCE.md)
 - [Data View Comparison Guide](DIFF_COMPARISON.md)
+- [Git Integration Guide](GIT_INTEGRATION.md)

@@ -1,0 +1,22 @@
+{
+  "snapshot_version": "1.0",
+  "created_at": "2026-01-19T10:30:00.000000",
+  "data_view_id": "dv_12345",
+  "data_view_name": "Production Analytics",
+  "owner": "analytics-team",
+  "description": "Main production data view for customer analytics",
+  "tool_version": "3.0.11",
+  "summary": {
+    "metrics_count": 5,
+    "dimensions_count": 5,
+    "total_components": 10
+  },
+  "quality": {
+    "total_issues": 2,
+    "by_severity": {
+      "HIGH": 0,
+      "MEDIUM": 1,
+      "LOW": 1
+    }
+  }
+}

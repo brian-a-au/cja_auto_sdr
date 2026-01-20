@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Comprehensive stress test for v3.0.10 features
+Comprehensive stress test for v3.0.11 features
 
 Tests all major code paths including:
 - Validation caching
@@ -360,7 +360,7 @@ def test_concurrent_cache_access():
 def main():
     """Run all stress tests"""
     print("\n" + "=" * 70)
-    print("  CJA SDR Generator v3.0.10 - Comprehensive Stress Test")
+    print("  CJA SDR Generator v3.0.11 - Comprehensive Stress Test")
     print("=" * 70)
     print("\nTesting all major features:")
     print("  • Validation Result Caching (50-90% improvement)")
@@ -431,7 +431,7 @@ def main():
     print(f"\nOverall: {passed}/{total} tests passed ({passed/total*100:.0f}%)")
 
     if passed == total:
-        print("\n✓ ALL STRESS TESTS PASSED - v3.0.10 is production-ready!")
+        print("\n✓ ALL STRESS TESTS PASSED - v3.0.11 is production-ready!")
         return 0
     else:
         print(f"\n⚠ {total - passed} test(s) failed - review output above")

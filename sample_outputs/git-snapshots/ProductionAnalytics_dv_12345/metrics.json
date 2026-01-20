@@ -1,0 +1,32 @@
+[
+  {
+    "id": "cm_cart_abandons",
+    "name": "Cart Abandons",
+    "type": "integer",
+    "description": "Number of times users abandoned their cart"
+  },
+  {
+    "id": "cm_orders",
+    "name": "Orders",
+    "type": "integer",
+    "description": "Total number of completed orders"
+  },
+  {
+    "id": "cm_page_views",
+    "name": "Page Views",
+    "type": "integer",
+    "description": "Total page views across all pages"
+  },
+  {
+    "id": "cm_revenue",
+    "name": "Revenue",
+    "type": "currency",
+    "description": "Total revenue in USD"
+  },
+  {
+    "id": "cm_sessions",
+    "name": "Sessions",
+    "type": "integer",
+    "description": "Total number of user sessions"
+  }
+]

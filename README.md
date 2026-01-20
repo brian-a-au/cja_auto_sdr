@@ -45,6 +45,9 @@ A **Solution Design Reference (SDR)** is the essential documentation that bridge
 | | Auto-Snapshot on Diff | Automatically save timestamped snapshots during comparisons for audit trails |
 | | CI/CD Integration | Exit codes for pipeline automation (2=changes found, 3=threshold exceeded) |
 | | Smart Name Resolution | Fuzzy matching suggestions for typos, interactive disambiguation for duplicates |
+| **Git Integration** | Version-Controlled Snapshots | Save SDR snapshots in Git-friendly format with auto-commit |
+| | Audit Trail | Full history of every data view configuration change |
+| | Team Collaboration | Share snapshots via Git repositories with PR-based review workflows |
 | **Developer UX** | Quick Stats Mode | Get metrics/dimensions count instantly with `--stats` (no full report) |
 | | Machine-Readable Discovery | `--list-dataviews --format json` for scripting integration |
 | | Dry-Run Mode | Test configuration without generating reports |
@@ -222,6 +225,11 @@ python cja_sdr_generator.py "Production Analytics"
 | Compare two snapshots | `cja_auto_sdr --compare-snapshots ./old.json ./new.json` |
 | Auto-save snapshots | `cja_auto_sdr --diff dv_1 dv_2 --auto-snapshot` |
 | With retention policy | `cja_auto_sdr --diff dv_1 dv_2 --auto-snapshot --keep-last 10` |
+| **Git Integration** | |
+| Initialize Git repo | `cja_auto_sdr --git-init --git-dir ./sdr-snapshots` |
+| Generate and commit | `cja_auto_sdr dv_12345 --git-commit` |
+| Commit with custom message | `cja_auto_sdr dv_12345 --git-commit --git-message "Weekly audit"` |
+| Commit and push | `cja_auto_sdr dv_12345 --git-commit --git-push` |
 
 ## Documentation
 
@@ -239,6 +247,7 @@ python cja_sdr_generator.py "Production Analytics"
 | [Batch Processing](docs/BATCH_PROCESSING_GUIDE.md) | Multi-data view processing guide |
 | [Data View Names](docs/DATA_VIEW_NAMES.md) | Using Data View names instead of IDs |
 | [Data View Comparison](docs/DIFF_COMPARISON.md) | Compare data views, snapshots, CI/CD integration |
+| [Git Integration](docs/GIT_INTEGRATION.md) | Version-controlled snapshots, audit trails, team collaboration |
 | [Testing](tests/README.md) | Running and writing tests |
 
 ## Requirements
@@ -260,20 +269,22 @@ cja_auto_sdr/
 ├── config.json              # Your credentials (DO NOT COMMIT)
 ├── config.json.example      # Config file template
 ├── .env.example             # Environment variable template
-├── docs/                    # Documentation (14 guides)
+├── docs/                    # Documentation (15 guides)
 │   ├── QUICKSTART_GUIDE.md  # Getting started guide
 │   ├── CLI_REFERENCE.md     # Command-line reference
 │   ├── DIFF_COMPARISON.md   # Data view comparison guide
+│   ├── GIT_INTEGRATION.md   # Git integration guide
 │   ├── INSTALLATION.md      # Setup instructions
 │   └── ...                  # Additional guides
-├── tests/                   # Test suite (623 tests)
+├── tests/                   # Test suite (651 tests)
 ├── sample_outputs/          # Example output files
 │   ├── excel/               # Sample Excel SDR
 │   ├── csv/                 # Sample CSV output
 │   ├── json/                # Sample JSON output
 │   ├── html/                # Sample HTML output
 │   ├── markdown/            # Sample Markdown output
-│   └── diff/                # Sample diff comparison outputs
+│   ├── diff/                # Sample diff comparison outputs
+│   └── git-snapshots/       # Sample Git integration snapshots
 ├── logs/                    # Generated log files
 └── *.xlsx                   # Generated SDR files
 ```

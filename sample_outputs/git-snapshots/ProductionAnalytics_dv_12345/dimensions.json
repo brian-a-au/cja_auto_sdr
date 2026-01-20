@@ -1,0 +1,32 @@
+[
+  {
+    "id": "dim_browser",
+    "name": "Browser",
+    "type": "string",
+    "description": "User's web browser"
+  },
+  {
+    "id": "dim_campaign",
+    "name": "Campaign",
+    "type": "string",
+    "description": "Marketing campaign identifier"
+  },
+  {
+    "id": "dim_country",
+    "name": "Country",
+    "type": "string",
+    "description": "User's country based on geolocation"
+  },
+  {
+    "id": "dim_device_type",
+    "name": "Device Type",
+    "type": "string",
+    "description": "Type of device (desktop, mobile, tablet)"
+  },
+  {
+    "id": "dim_page_name",
+    "name": "Page Name",
+    "type": "string",
+    "description": "Name of the page viewed"
+  }
+]

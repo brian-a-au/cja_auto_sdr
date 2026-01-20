@@ -786,7 +786,7 @@ Snapshots are saved as JSON files with the following structure:
     { "id": "dimensions/page", "name": "Page", "type": "string", ... }
   ],
   "metadata": {
-    "tool_version": "3.0.10",
+    "tool_version": "3.0.11",
     "metrics_count": 150,
     "dimensions_count": 75
   }

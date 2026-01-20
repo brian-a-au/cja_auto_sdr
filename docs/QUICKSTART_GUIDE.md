@@ -168,12 +168,12 @@ This command:
 ```bash
 # Using uv run (works without activating venv)
 uv run cja_auto_sdr --version
-# Output: cja_sdr_generator.py version 3.0.10
+# Output: cja_sdr_generator.py version 3.0.11
 
 # Or activate the virtual environment first
 source .venv/bin/activate
 cja_auto_sdr --version
-# Output: cja_sdr_generator.py version 3.0.10
+# Output: cja_sdr_generator.py version 3.0.11
 ```
 
 **Windows (PowerShell):**
@@ -186,7 +186,7 @@ uv run cja_auto_sdr --version
 
 # Then run directly
 python cja_sdr_generator.py --version
-# Output: cja_sdr_generator.py version 3.0.10
+# Output: cja_sdr_generator.py version 3.0.11
 
 # Or use the console script if it was installed
 cja_auto_sdr --version
