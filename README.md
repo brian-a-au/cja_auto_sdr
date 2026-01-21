@@ -39,14 +39,14 @@ A **Solution Design Reference** is the essential documentation that bridges your
 | **Reliability** | Automatic Retry | Exponential backoff with jitter for transient network failures |
 | | Continue-on-Error | Batch processing continues even if individual Data Views fail |
 | | Pre-flight Validation | Validates config and connectivity before processing |
-| **Comparison** | Data View Diff | Compare two data views to identify added, removed, and modified components |
+| **Comparison** | Data View Diff | Compare two Data Views to identify added, removed, and modified components |
 | | Snapshot Support | Save and compare against baseline snapshots for change tracking |
 | | Snapshot-to-Snapshot | Compare two snapshot files directly without API calls |
 | | Auto-Snapshot on Diff | Automatically save timestamped snapshots during comparisons for audit trails |
 | | CI/CD Integration | Exit codes for pipeline automation (2=changes found, 3=threshold exceeded) |
 | | Smart Name Resolution | Fuzzy matching suggestions for typos, interactive disambiguation for duplicates |
 | **Git Integration** | Version-Controlled Snapshots | Save SDR snapshots in Git-friendly format with auto-commit |
-| | Audit Trail | Full history of every data view configuration change |
+| | Audit Trail | Full history of every Data View configuration change |
 | | Team Collaboration | Share snapshots via Git repositories with PR-based review workflows |
 | **Developer UX** | Quick Stats Mode | Get metrics/dimensions count instantly with `--stats` (no full report) |
 | | Machine-Readable Discovery | `--list-dataviews --format json` for scripting integration |
@@ -179,7 +179,7 @@ python cja_sdr_generator.py dv_YOUR_DATA_VIEW_ID
 python cja_sdr_generator.py "Production Analytics"
 ```
 
-> **Tip:** You can specify Data Views by **name** in addition to ID. If multiple data views share the same name, all matching views will be processed.
+> **Tip:** You can specify Data Views by **name** in addition to ID. If multiple Data Views share the same name, all matching views will be processed.
 
 ### 5. Review Output
 
@@ -211,7 +211,7 @@ python cja_sdr_generator.py "Production Analytics"
 | **Quick Stats & Discovery** | |
 | Quick stats (no full report) | `cja_auto_sdr dv_12345 --stats` |
 | Stats as JSON | `cja_auto_sdr dv_12345 --stats --format json` |
-| List data views | `cja_auto_sdr --list-dataviews` |
+| List Data Views | `cja_auto_sdr --list-dataviews` |
 | List as JSON (for scripting) | `cja_auto_sdr --list-dataviews --format json` |
 | Pipe to other tools | `cja_auto_sdr --list-dataviews --output - \| jq '.dataViews[]'` |
 | Validate config only | `cja_auto_sdr --validate-config` |
@@ -244,9 +244,9 @@ python cja_sdr_generator.py "Production Analytics"
 | [Troubleshooting](docs/TROUBLESHOOTING.md) | Common errors and solutions |
 | [Use Cases & Best Practices](docs/USE_CASES.md) | Automation, scheduling, workflows |
 | [Output Formats](docs/OUTPUT_FORMATS.md) | Format specifications and examples |
-| [Batch Processing](docs/BATCH_PROCESSING_GUIDE.md) | Multi-data view processing guide |
+| [Batch Processing](docs/BATCH_PROCESSING_GUIDE.md) | Multi-Data View processing guide |
 | [Data View Names](docs/DATA_VIEW_NAMES.md) | Using Data View names instead of IDs |
-| [Data View Comparison](docs/DIFF_COMPARISON.md) | Compare data views, snapshots, CI/CD integration |
+| [Data View Comparison](docs/DIFF_COMPARISON.md) | Compare Data Views, snapshots, CI/CD integration |
 | [Git Integration](docs/GIT_INTEGRATION.md) | Version-controlled snapshots, audit trails, team collaboration |
 | [Testing](tests/README.md) | Running and writing tests |
 
