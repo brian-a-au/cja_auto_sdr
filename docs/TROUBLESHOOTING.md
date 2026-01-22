@@ -16,6 +16,7 @@ Comprehensive solutions for issues with the CJA SDR Generator.
 - [Output & File Errors](#output--file-errors)
 - [Batch Processing Issues](#batch-processing-issues)
 - [Validation Cache Issues](#validation-cache-issues)
+- [Git & Repository Issues](#git--repository-issues)
 - [Performance Issues](#performance-issues)
 - [Dependency Issues](#dependency-issues)
 - [Debug Mode & Logging](#debug-mode--logging)
@@ -1038,6 +1039,60 @@ uv run cja_auto_sdr dv_12345 --enable-cache --clear-cache
 ERROR: --cache-size must be at least 1
 ERROR: --cache-ttl must be at least 1 second
 ```
+
+---
+
+## Git & Repository Issues
+
+### GitHub Authentication Failed When Cloning
+
+**Symptoms:**
+```
+remote: Invalid username or token. Password authentication is not supported for Git operations.
+```
+
+**Cause:** GitHub removed support for password authentication in August 2021. You cannot use your GitHub account password to clone repositories over HTTPS.
+
+**Solutions:**
+
+**Option 1: Use a Personal Access Token (PAT) — Recommended**
+
+1. Go to GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic)
+2. Click "Generate new token (classic)"
+3. Give it a name and select the `repo` scope
+4. Copy the generated token
+5. When cloning, use the token as your password:
+   ```bash
+   git clone https://github.com/your-org/cja_auto_sdr.git
+   # Username: your-github-username
+   # Password: paste-your-token-here
+   ```
+
+**Option 2: Use SSH instead of HTTPS**
+
+1. Generate an SSH key if you don't have one:
+   ```bash
+   ssh-keygen -t ed25519 -C "your_email@example.com"
+   ```
+2. Add the public key to GitHub (Settings → SSH and GPG keys)
+3. Clone using SSH URL:
+   ```bash
+   git clone git@github.com:your-org/cja_auto_sdr.git
+   ```
+
+**Option 3: Use GitHub CLI**
+
+1. Install GitHub CLI: https://cli.github.com/
+2. Authenticate:
+   ```bash
+   gh auth login
+   ```
+3. Clone the repository:
+   ```bash
+   gh repo clone your-org/cja_auto_sdr
+   ```
+
+**Windows-specific note:** If using Git Credential Manager, it should prompt you for authentication automatically and can store your PAT securely.
 
 ---
 
