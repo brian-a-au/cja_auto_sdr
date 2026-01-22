@@ -363,7 +363,7 @@ env = [
 ### Check Python Version
 
 ```bash
-python --version  # Should be 3.14 or higher
+python3 --version  # Should be 3.14 or higher
 ```
 
 ### Check uv Installation

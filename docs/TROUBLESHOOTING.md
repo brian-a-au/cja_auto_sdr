@@ -31,7 +31,7 @@ Run this script to gather system information:
 ```bash
 #!/bin/bash
 echo "=== System Information ==="
-python --version
+python3 --version
 uv --version
 echo ""
 echo "=== Project Dependencies ==="
@@ -1573,7 +1573,7 @@ If you encounter issues not covered here:
 5. **When reporting issues, include:**
    - Complete error message
    - Relevant log entries (anonymize credentials)
-   - Python version: `python --version`
+   - Python version: `python3 --version`
    - uv version: `uv --version`
    - cjapy version: `uv pip show cjapy`
 

@@ -1222,7 +1222,7 @@ Batch Processing (10 data views):
 1. **Update Python version**:
    ```bash
    # Ensure Python 3.14+ is installed
-   python --version  # Should be 3.14 or higher
+   python3 --version  # Should be 3.14 or higher
    ```
 
 2. **Install uv**:

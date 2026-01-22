@@ -7200,7 +7200,7 @@ Exit Codes:
   2 - Success with differences found (diff mode only)
 
 Requirements:
-  Python 3.14 or higher required. Verify with: python --version
+  Python 3.14 or higher required. Verify with: python3 --version
         '''
     )
 
