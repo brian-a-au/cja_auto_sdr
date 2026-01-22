@@ -424,6 +424,10 @@ brew install git
 
 # Install Git (Ubuntu)
 sudo apt-get install git
+
+# Install Git (Windows) - choose one:
+winget install --id Git.Git -e --source winget   # Windows Package Manager
+# Or download from: https://git-scm.com/download/win
 ```
 
 ### "Push failed"

@@ -225,7 +225,7 @@ Throughput: 4.8 data views per minute
 
 ## Scheduled Processing
 
-### Cron Job Example
+### Linux/macOS (Cron Job)
 
 ```bash
 # Add to crontab (crontab -e)
@@ -245,6 +245,33 @@ Throughput: 4.8 data views per minute
   --output-dir /weekly_reports/$(date +\%Y_week_\%V) \
   --continue-on-error
 ```
+
+### Windows (Task Scheduler)
+
+```powershell
+# Create a scheduled task to run nightly at 2 AM
+$action = New-ScheduledTaskAction -Execute "python" `
+  -Argument "cja_sdr_generator.py --batch dv_12345 dv_67890 dv_abcde --output-dir C:\reports --continue-on-error --log-level WARNING" `
+  -WorkingDirectory "C:\path\to\project"
+$trigger = New-ScheduledTaskTrigger -Daily -At 2am
+Register-ScheduledTask -Action $action -Trigger $trigger -TaskName "CJA SDR Nightly" -Description "Generate CJA SDR reports"
+
+# Or create a weekly task for Sunday at midnight
+$weeklyAction = New-ScheduledTaskAction -Execute "python" `
+  -Argument "cja_sdr_generator.py --batch dv_12345 dv_67890 --workers 8 --output-dir C:\weekly_reports --continue-on-error" `
+  -WorkingDirectory "C:\path\to\project"
+$weeklyTrigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Sunday -At 12am
+Register-ScheduledTask -Action $weeklyAction -Trigger $weeklyTrigger -TaskName "CJA SDR Weekly"
+```
+
+**Alternatively via Task Scheduler GUI:**
+1. Open Task Scheduler (search "Task Scheduler" in Start menu)
+2. Click "Create Basic Task..."
+3. Set schedule (Daily/Weekly)
+4. Action: "Start a program"
+5. Program: `python` (or full path to Python)
+6. Arguments: `cja_sdr_generator.py --batch dv_12345 --output-dir C:\reports`
+7. Start in: `C:\path\to\project`
 
 ## Best Practices
 
