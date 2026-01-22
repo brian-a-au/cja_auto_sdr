@@ -34,10 +34,19 @@ Before starting, ensure you have:
 
 ### Verify Python Installation
 
+**macOS/Linux:**
 ```bash
 python3 --version
 # Output: Python 3.14.x or higher
 ```
+
+**Windows (PowerShell):**
+```powershell
+python --version
+# Output: Python 3.14.x or higher
+```
+
+> **Note:** On macOS and Linux, use `python3` to ensure you're using Python 3. On Windows, the command is typically just `python`. You can also use `py --version` on Windows if the Python Launcher is installed.
 
 If Python isn't installed or is an older version, visit [python.org](https://www.python.org/downloads/) to download the latest version.
 
@@ -432,8 +441,15 @@ Applying formatting...
 
 The generated file is in the current directory:
 
+**macOS/Linux:**
 ```bash
 ls -la *.xlsx
+# Output: CJA_DataView_Production_Analytics_dv_677ea9291244fd082f02dd42_SDR.xlsx
+```
+
+**Windows (PowerShell):**
+```powershell
+Get-ChildItem *.xlsx
 # Output: CJA_DataView_Production_Analytics_dv_677ea9291244fd082f02dd42_SDR.xlsx
 ```
 

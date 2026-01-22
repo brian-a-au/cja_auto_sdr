@@ -61,6 +61,8 @@ chmod +x diagnose.sh
 ./diagnose.sh > diagnostic_report.txt
 ```
 
+> **Windows Users:** See the [Windows Diagnostic Script](#windows-diagnostic-script) section for a PowerShell equivalent.
+
 ### Quick Validation Commands
 
 ```bash
@@ -967,8 +969,11 @@ uv run cja_auto_sdr dv_1 dv_2 dv_3 --continue-on-error
 # Reduce workers (default: 4)
 uv run cja_auto_sdr dv_1 dv_2 dv_3 --workers 2
 
-# Check logs for rate limiting
+# Check logs for rate limiting (macOS/Linux)
 grep "429\|rate limit" logs/*.log
+
+# Check logs for rate limiting (Windows PowerShell)
+# Select-String -Path logs\*.log -Pattern "429|rate limit"
 ```
 
 ### Worker Count Validation Errors
@@ -1463,6 +1468,7 @@ uv run cja_auto_sdr dv_12345 --log-level DEBUG
 
 ### Searching Logs
 
+**macOS/Linux:**
 ```bash
 # Find all errors
 grep -i "error\|critical" logs/*.log
@@ -1478,6 +1484,24 @@ grep -i "429\|rate limit\|retry" logs/*.log
 
 # View latest log
 cat logs/$(ls -t logs/ | head -1)
+```
+
+**Windows (PowerShell):**
+```powershell
+# Find all errors
+Select-String -Path logs\*.log -Pattern "error|critical"
+
+# Find warnings
+Select-String -Path logs\*.log -Pattern "warning"
+
+# Find specific data view
+Select-String -Path logs\*.log -Pattern "dv_12345"
+
+# Find rate limiting issues
+Select-String -Path logs\*.log -Pattern "429|rate limit|retry"
+
+# View latest log
+Get-Content (Get-ChildItem logs\*.log | Sort-Object LastWriteTime -Descending | Select-Object -First 1)
 ```
 
 ---

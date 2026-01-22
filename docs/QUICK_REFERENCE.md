@@ -139,8 +139,11 @@ cja_auto_sdr dv_* --workers 8 --continue-on-error
 # Production mode (minimal logging)
 cja_auto_sdr dv_12345 --production
 
-# Custom output directory
+# Custom output directory (macOS/Linux)
 cja_auto_sdr dv_12345 --output-dir ./reports/$(date +%Y%m%d)
+
+# Custom output directory (Windows PowerShell)
+cja_auto_sdr dv_12345 --output-dir ./reports/$(Get-Date -Format "yyyyMMdd")
 ```
 
 ## Environment Variables

@@ -44,11 +44,20 @@ uv --version
 
 **Step 1: Choose an installation location**
 
+**macOS/Linux:**
 ```bash
 # Examples of where to install:
 cd ~/projects          # A projects folder in your home directory
 cd ~/Documents         # Your documents folder
 cd /opt                # System-wide location (may need sudo)
+```
+
+**Windows (PowerShell):**
+```powershell
+# Examples of where to install:
+cd $HOME\projects              # A projects folder in your home directory
+cd $HOME\Documents             # Your documents folder
+cd C:\projects                 # A dedicated projects folder
 ```
 
 **Step 2: Clone the repository**
