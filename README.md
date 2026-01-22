@@ -269,7 +269,7 @@ cja_auto_sdr/
 ├── config.json              # Your credentials (DO NOT COMMIT)
 ├── config.json.example      # Config file template
 ├── .env.example             # Environment variable template
-├── docs/                    # Documentation (15 guides)
+├── docs/                    # Documentation (13 guides)
 │   ├── QUICKSTART_GUIDE.md  # Getting started guide
 │   ├── CLI_REFERENCE.md     # Command-line reference
 │   ├── DIFF_COMPARISON.md   # Data view comparison guide
