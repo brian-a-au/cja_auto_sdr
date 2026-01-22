@@ -138,10 +138,8 @@ python -m venv .venv
 source .venv/bin/activate  # macOS/Linux
 # .venv\Scripts\activate   # Windows PowerShell
 
-# Install dependencies
-pip install -r requirements.txt
-# Or manually:
-pip install cjapy>=0.2.4.post2 pandas>=2.3.3 xlsxwriter>=3.2.9 tqdm>=4.66.0
+# Install dependencies from pyproject.toml
+pip install .
 ```
 
 ### Option 5: Windows Native Setup (Recommended for Windows Users)
