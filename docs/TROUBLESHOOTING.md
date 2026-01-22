@@ -36,7 +36,7 @@ python3 --version
 uv --version
 echo ""
 echo "=== Project Dependencies ==="
-uv pip list | grep -E "cjapy|pandas|openpyxl"
+uv pip list | grep -E "cjapy|pandas|xlsxwriter"
 echo ""
 echo "=== Configuration Check ==="
 if [ -f config.json ]; then
@@ -1142,7 +1142,7 @@ uv run cja_auto_sdr dv_1 dv_2 dv_3 --workers 2 --retry-base-delay 1.5
 ```
 ModuleNotFoundError: No module named 'cjapy'
 ModuleNotFoundError: No module named 'pandas'
-ModuleNotFoundError: No module named 'openpyxl'
+ModuleNotFoundError: No module named 'xlsxwriter'
 ```
 
 **Solutions:**
@@ -1154,7 +1154,7 @@ uv sync
 uv sync --reinstall
 
 # Verify installation
-uv pip list | grep -E "cjapy|pandas|openpyxl"
+uv pip list | grep -E "cjapy|pandas|xlsxwriter"
 ```
 
 ### Version Conflicts
