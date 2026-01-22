@@ -753,9 +753,16 @@ If you're still stuck:
 1. **Check the logs:** `logs/SDR_Generation_*.log` contains detailed error information
 2. **Enable debug mode:** Add `--log-level DEBUG` for verbose output
 3. **Review documentation:**
-   - [Troubleshooting Guide](TROUBLESHOOTING.md)
-   - [CLI Reference](CLI_REFERENCE.md)
-4. **Report issues:** [GitHub Issues](https://github.com/brian-a-au/cja_auto_sdr/issues)
+   - [Troubleshooting Guide](TROUBLESHOOTING.md) - Comprehensive error reference
+   - [CLI Reference](CLI_REFERENCE.md) - All command options
+4. **Topic-specific troubleshooting:**
+   - [Windows Issues](TROUBLESHOOTING.md#windows-specific-issues) - NumPy, uv, PowerShell
+   - [Data View Names](DATA_VIEW_NAMES.md#error-handling) - Case sensitivity, name resolution
+   - [Output Formats](OUTPUT_FORMATS.md#troubleshooting) - CSV encoding, large JSON files
+   - [Batch Processing](BATCH_PROCESSING_GUIDE.md#troubleshooting) - Rate limiting, worker issues
+   - [Git Integration](GIT_INTEGRATION.md#troubleshooting) - Push failures, repository setup
+   - [Diff Comparison](DIFF_COMPARISON.md#troubleshooting) - Snapshot errors
+5. **Report issues:** [GitHub Issues](https://github.com/brian-a-au/cja_auto_sdr/issues)
 
 ---
 
