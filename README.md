@@ -166,7 +166,7 @@ uv run cja_auto_sdr "Production Analytics"
 ```
 
 **Windows (if uv run doesn't work):**
-```powershell
+```text
 # Activate virtual environment first
 .venv\Scripts\activate
 

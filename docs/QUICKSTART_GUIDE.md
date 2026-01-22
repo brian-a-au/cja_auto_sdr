@@ -41,7 +41,7 @@ python3 --version
 ```
 
 **Windows (PowerShell):**
-```powershell
+```text
 python --version
 # Output: Python 3.14.x or higher
 ```
@@ -186,7 +186,7 @@ cja_auto_sdr --version
 ```
 
 **Windows (PowerShell):**
-```powershell
+```text
 # Try uv run first
 uv run cja_auto_sdr --version
 
@@ -293,7 +293,7 @@ uv run cja_auto_sdr --list-dataviews
 ```
 
 **Windows (PowerShell):**
-```powershell
+```text
 # If uv run works:
 uv run cja_auto_sdr --list-dataviews
 
@@ -349,7 +349,7 @@ uv run cja_auto_sdr dv_YOUR_DATA_VIEW_ID --dry-run
 ```
 
 **Windows (PowerShell):**
-```powershell
+```text
 python cja_sdr_generator.py dv_YOUR_DATA_VIEW_ID --dry-run
 ```
 
@@ -693,7 +693,7 @@ PS> uv run cja_auto_sdr --version
 
 **Solution:** Use Python directly instead:
 
-```powershell
+```text
 # Activate virtual environment
 .venv\Scripts\activate
 

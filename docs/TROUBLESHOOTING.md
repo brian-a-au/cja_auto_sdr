@@ -1241,7 +1241,7 @@ PS> uv run cja_auto_sdr --version
 
 **Option 1: Use Python directly (Most Reliable)**
 
-```powershell
+```text
 # Activate virtual environment first
 .venv\Scripts\activate
 
@@ -1256,7 +1256,7 @@ python cja_sdr_generator.py dv_12345
 
 **Option 2: Use full Python path**
 
-```powershell
+```text
 # Without activating venv
 .venv\Scripts\python.exe cja_sdr_generator.py --version
 .venv\Scripts\python.exe cja_sdr_generator.py dv_12345
@@ -1264,7 +1264,7 @@ python cja_sdr_generator.py dv_12345
 
 **Option 3: Fix uv PATH (if you prefer using uv)**
 
-```powershell
+```text
 # Check if uv is in PATH
 where.exe uv
 
@@ -1304,7 +1304,7 @@ powershell -ExecutionPolicy Bypass -File .\script.ps1
 
 **Solution:** Windows PowerShell and Command Prompt understand both forward slashes `/` and backslashes `\`. However, for consistency:
 
-```powershell
+```text
 # These all work on Windows:
 --output-dir ./reports     # Works
 --output-dir .\reports     # Works
@@ -1428,7 +1428,7 @@ For the most reliable Windows experience:
    ```
 
 4. **Run the tool using Python directly**
-   ```powershell
+   ```text
    python cja_sdr_generator.py --version
    python cja_sdr_generator.py dv_12345
    ```
