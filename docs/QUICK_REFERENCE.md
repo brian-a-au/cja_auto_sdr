@@ -13,6 +13,18 @@ Single-page command cheat sheet for CJA SDR Generator v3.0.11.
 
 **Diff Comparison** identifies what changed between two data views or between a current state and a saved snapshot. Use this for change tracking, QA validation, and migration verification.
 
+## Running Commands
+
+You have three equivalent options:
+
+| Method | Command | Notes |
+|--------|---------|-------|
+| **uv run** | `uv run cja_auto_sdr ...` | Works immediately on macOS/Linux, may have issues on Windows |
+| **Activated venv** | `cja_auto_sdr ...` | After activating: `source .venv/bin/activate` (Unix) or `.venv\Scripts\activate` (Windows) |
+| **Direct script** | `python cja_sdr_generator.py ...` | Most reliable on Windows |
+
+This guide uses `uv run`. Windows users should substitute with `python cja_sdr_generator.py`. The command examples below omit the prefix for brevity.
+
 ## Essential Commands (SDR Generation)
 
 ```bash
