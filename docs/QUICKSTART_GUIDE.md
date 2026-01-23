@@ -182,6 +182,18 @@ cja_auto_sdr 3.0.11
 
 > **Important:** All commands in this guide assume you're in the `cja_auto_sdr` directory. If you see "command not found", make sure you're in the right directory and have run `uv sync`.
 
+### Running Commands
+
+You have three equivalent options:
+
+| Method | Command | Notes |
+|--------|---------|-------|
+| **uv run** | `uv run cja_auto_sdr ...` | Works immediately on macOS/Linux, may have issues on Windows |
+| **Activated venv** | `cja_auto_sdr ...` | After activating: `source .venv/bin/activate` (Unix) or `.venv\Scripts\activate` (Windows) |
+| **Direct script** | `python cja_sdr_generator.py ...` | Most reliable on Windows |
+
+This guide uses `uv run`. Windows users should substitute with `python cja_sdr_generator.py`. The command examples below omit the prefix for brevity.
+
 **Alternative: Manual activation**
 
 If you prefer traditional virtual environment activation:
