@@ -116,6 +116,7 @@ cja-auto-sdr [OPTIONS] DATA_VIEW_ID_OR_NAME [...]
 | `--diff` | Compare two data views. Requires exactly 2 data view IDs/names | False |
 | `--snapshot FILE` | Save a data view snapshot to JSON file | - |
 | `--diff-snapshot FILE` | Compare data view against a saved snapshot | - |
+| `--compare-with-prev` | Compare data view against its most recent snapshot in --snapshot-dir | False |
 | `--compare-snapshots A B` | Compare two snapshot files directly (no API calls) | - |
 | `--changes-only` | Only show changed items (hide unchanged) | False |
 | `--summary` | Show summary statistics only | False |

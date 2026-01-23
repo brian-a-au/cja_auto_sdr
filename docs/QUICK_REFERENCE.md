@@ -68,6 +68,9 @@ cja_auto_sdr dv_12345 --snapshot ./baseline.json
 # Compare current state to snapshot
 cja_auto_sdr dv_12345 --diff-snapshot ./baseline.json
 
+# Compare against most recent snapshot (auto-finds it)
+cja_auto_sdr dv_12345 --compare-with-prev
+
 # Compare two snapshots (no API calls)
 cja_auto_sdr --compare-snapshots ./old.json ./new.json
 
@@ -100,6 +103,7 @@ cja_auto_sdr --diff dv_12345 dv_67890 --diff-labels "Before" "After"
 | Option | Purpose |
 |--------|---------|
 | `--changes-only` | Hide unchanged components, show only differences |
+| `--compare-with-prev` | Compare against most recent snapshot in --snapshot-dir |
 | `--diff-labels A B` | Custom labels for comparison columns (default: data view names) |
 | `--auto-snapshot` | Automatically save snapshots during diff for future comparisons |
 | `--warn-threshold PERCENT` | Exit with code 3 if change % exceeds threshold (for CI/CD) |

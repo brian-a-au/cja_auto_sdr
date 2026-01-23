@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Highlights
 - **Git Integration (New)** - Version-controlled SDR snapshots for audit trails, change tracking, and team collaboration
+- **`--compare-with-prev` (New)** - One-command diff against most recent snapshot
+- **Diff Summary Totals** - At-a-glance change counts in diff output
 - **Performance Optimizations** - Vectorized markdown table generation, Excel format caching, lazy logging
 - **`--group-by-field-limit`** - Control truncation in grouped diff output
 
@@ -97,6 +99,82 @@ cja_auto_sdr dv_prod dv_staging dv_dev --git-commit
 **New Documentation:**
 - [Git Integration Guide](docs/GIT_INTEGRATION.md) - Comprehensive guide with examples, best practices, CI/CD integration, and troubleshooting
 
+#### Compare With Previous Snapshot (New Feature)
+
+**`--compare-with-prev`**: Automatically find and compare against the most recent snapshot for a data view.
+
+Instead of manually specifying snapshot paths:
+```bash
+# Before: Required knowing the exact snapshot path
+cja_auto_sdr dv_12345 --diff-snapshot ./snapshots/dv_12345_20260120_103045.json
+```
+
+Now you can simply:
+```bash
+# After: Automatically finds the most recent snapshot
+cja_auto_sdr dv_12345 --compare-with-prev
+```
+
+**Features:**
+- Searches `--snapshot-dir` (default: `./snapshots`) for snapshots matching the data view ID
+- Automatically selects the most recent snapshot by timestamp
+- Works with both data view IDs and names
+- Combines seamlessly with other diff options (`--changes-only`, `--format`, etc.)
+
+**Usage Examples:**
+```bash
+# Compare against most recent snapshot in default directory
+cja_auto_sdr dv_12345 --compare-with-prev
+
+# Compare against most recent snapshot in custom directory
+cja_auto_sdr dv_12345 --compare-with-prev --snapshot-dir ./my_snapshots
+
+# With other diff options
+cja_auto_sdr dv_12345 --compare-with-prev --changes-only --format markdown
+```
+
+**New Method:**
+- `SnapshotManager.get_most_recent_snapshot()`: Find the most recent snapshot for a specific data view in a directory
+
+**5 New Tests** for `--compare-with-prev`:
+- `test_compare_with_prev_flag_default`: Verifies default is False
+- `test_compare_with_prev_flag_enabled`: Verifies flag can be enabled
+- `test_compare_with_prev_with_snapshot_dir`: Verifies works with custom snapshot directory
+- `test_get_most_recent_snapshot_returns_latest`: Verifies correct snapshot selection
+- `test_get_most_recent_snapshot_filters_by_data_view`: Verifies filtering by data view ID
+
+#### Diff Summary Totals
+
+Enhanced diff output now includes total change counts across all component types for quick at-a-glance summaries.
+
+**Console Output:**
+```
+================================================================================
+Total: 4 added, 6 removed, 3 modified
+  Metrics: 3 added, 2 removed, 1 modified
+  Dimensions: 1 added, 4 removed, 2 modified
+================================================================================
+```
+
+**New `DiffSummary` Properties:**
+- `total_added`: Sum of metrics_added + dimensions_added
+- `total_removed`: Sum of metrics_removed + dimensions_removed
+- `total_modified`: Sum of metrics_modified + dimensions_modified
+- `total_summary`: Human-readable string (e.g., "4 added, 6 removed, 3 modified")
+
+**Updated Output Formats:**
+- **Console**: Color-coded totals in footer (green for added, red for removed, yellow for modified)
+- **Markdown**: Uses `total_summary` in summary section
+- **JSON**: Includes `total_added`, `total_removed`, `total_modified`, `total_summary` fields
+
+**9 New Tests** for diff summary totals:
+- `test_total_added`: Verifies total_added calculation
+- `test_total_removed`: Verifies total_removed calculation
+- `test_total_modified`: Verifies total_modified calculation
+- `test_total_summary_with_changes`: Verifies formatted summary string
+- `test_total_summary_no_changes`: Verifies "No changes" output
+- `test_total_summary_partial_changes`: Verifies only non-zero values shown
+
 #### Performance Optimizations
 
 **Vectorized Markdown Table Generation:**
@@ -135,13 +213,13 @@ cja_auto_sdr --diff dv_12345 dv_67890 --group-by-field --group-by-field-limit 25
 - `test_parse_group_by_field_limit_default`: CLI default value test
 
 ### Changed
-- **Test Count**: 623 → 658 tests (+28 Git integration tests, +6 group-by-field-limit tests)
+- **Test Count**: 623 → 672 tests (+28 Git integration tests, +6 group-by-field-limit tests, +14 compare-with-prev and diff summary tests)
 - **Documentation**: 14 → 15 guides (new Git Integration guide)
 
 ### Backward Compatibility
 - **Full Backward Compatibility**: All existing commands continue to work unchanged
-- **No Breaking Changes**: All 658 tests pass
-- **Git Integration Optional**: New Git features are opt-in via CLI flags
+- **No Breaking Changes**: All 672 tests pass
+- **New Features Optional**: Git integration and `--compare-with-prev` are opt-in via CLI flags
 
 ---
 

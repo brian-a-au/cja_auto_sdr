@@ -220,6 +220,23 @@ cja_auto_sdr dv_12345 --diff-snapshot ./baseline.json --auto-snapshot
   --format markdown --diff-output ./audit/weekly/latest-diff.md
 ```
 
+### Quick Comparison Against Previous State
+
+Use `--compare-with-prev` for one-command comparisons against the most recent snapshot:
+
+```bash
+# Build up snapshot history over time with auto-snapshot
+cja_auto_sdr --diff dv_12345 dv_12345 --auto-snapshot
+
+# Later: compare current state to most recent snapshot
+cja_auto_sdr dv_12345 --compare-with-prev
+
+# With custom snapshot directory
+cja_auto_sdr dv_12345 --compare-with-prev --snapshot-dir ./audit-trail
+```
+
+This eliminates the need to track snapshot filenames—the tool automatically finds and uses the most recent one.
+
 ## Best Practices
 
 ### Scheduling

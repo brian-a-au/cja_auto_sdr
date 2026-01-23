@@ -1802,6 +1802,73 @@ class TestDiffSummaryPercentages:
         summary = DiffSummary()
         assert summary.natural_language_summary == "No changes detected"
 
+    def test_total_added(self, logger):
+        """Test total_added property sums across all component types"""
+        from cja_sdr_generator import DiffSummary
+
+        summary = DiffSummary(
+            metrics_added=5,
+            dimensions_added=3
+        )
+        assert summary.total_added == 8
+
+    def test_total_removed(self, logger):
+        """Test total_removed property sums across all component types"""
+        from cja_sdr_generator import DiffSummary
+
+        summary = DiffSummary(
+            metrics_removed=2,
+            dimensions_removed=4
+        )
+        assert summary.total_removed == 6
+
+    def test_total_modified(self, logger):
+        """Test total_modified property sums across all component types"""
+        from cja_sdr_generator import DiffSummary
+
+        summary = DiffSummary(
+            metrics_modified=3,
+            dimensions_modified=7
+        )
+        assert summary.total_modified == 10
+
+    def test_total_summary_with_changes(self, logger):
+        """Test total_summary property returns formatted string"""
+        from cja_sdr_generator import DiffSummary
+
+        summary = DiffSummary(
+            metrics_added=3,
+            metrics_removed=2,
+            metrics_modified=1,
+            dimensions_added=1,
+            dimensions_removed=4,
+            dimensions_modified=2
+        )
+        total_summary = summary.total_summary
+        assert "4 added" in total_summary  # 3 + 1
+        assert "6 removed" in total_summary  # 2 + 4
+        assert "3 modified" in total_summary  # 1 + 2
+
+    def test_total_summary_no_changes(self, logger):
+        """Test total_summary returns 'No changes' when empty"""
+        from cja_sdr_generator import DiffSummary
+
+        summary = DiffSummary()
+        assert summary.total_summary == "No changes"
+
+    def test_total_summary_partial_changes(self, logger):
+        """Test total_summary only shows non-zero values"""
+        from cja_sdr_generator import DiffSummary
+
+        summary = DiffSummary(
+            metrics_added=5,
+            dimensions_added=2
+        )
+        total_summary = summary.total_summary
+        assert "7 added" in total_summary
+        assert "removed" not in total_summary
+        assert "modified" not in total_summary
+
 
 class TestColoredConsoleOutput:
     """Tests for ANSI color-coded console output"""
@@ -3050,3 +3117,135 @@ class TestAutoSnapshotCLIArguments:
             assert args.auto_snapshot is True
             assert args.snapshot_dir == './history'
             assert args.keep_last == 5
+
+    def test_compare_with_prev_flag_default(self):
+        """Test that --compare-with-prev defaults to False"""
+        from cja_sdr_generator import parse_arguments
+        from unittest.mock import patch
+        import sys
+
+        with patch.object(sys, 'argv', ['prog', 'dv_123']):
+            args = parse_arguments()
+            assert args.compare_with_prev is False
+
+    def test_compare_with_prev_flag_enabled(self):
+        """Test that --compare-with-prev can be enabled"""
+        from cja_sdr_generator import parse_arguments
+        from unittest.mock import patch
+        import sys
+
+        with patch.object(sys, 'argv', ['prog', 'dv_123', '--compare-with-prev']):
+            args = parse_arguments()
+            assert args.compare_with_prev is True
+
+    def test_compare_with_prev_with_snapshot_dir(self):
+        """Test --compare-with-prev works with --snapshot-dir"""
+        from cja_sdr_generator import parse_arguments
+        from unittest.mock import patch
+        import sys
+
+        with patch.object(sys, 'argv', [
+            'prog', 'dv_123', '--compare-with-prev', '--snapshot-dir', './my_snapshots'
+        ]):
+            args = parse_arguments()
+            assert args.compare_with_prev is True
+            assert args.snapshot_dir == './my_snapshots'
+
+
+class TestGetMostRecentSnapshot:
+    """Tests for SnapshotManager.get_most_recent_snapshot method"""
+
+    def test_get_most_recent_snapshot_returns_latest(self):
+        """Test that get_most_recent_snapshot returns the most recent snapshot"""
+        from cja_sdr_generator import SnapshotManager, DataViewSnapshot
+        import time
+
+        manager = SnapshotManager()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create older snapshot
+            old_snapshot = DataViewSnapshot(
+                data_view_id="dv_test",
+                data_view_name="Test View",
+                created_at="2024-01-01T10:00:00",
+                metrics=[],
+                dimensions=[]
+            )
+            old_path = os.path.join(tmpdir, "old_snapshot.json")
+            manager.save_snapshot(old_snapshot, old_path)
+
+            # Create newer snapshot
+            new_snapshot = DataViewSnapshot(
+                data_view_id="dv_test",
+                data_view_name="Test View",
+                created_at="2024-06-01T10:00:00",
+                metrics=[],
+                dimensions=[]
+            )
+            new_path = os.path.join(tmpdir, "new_snapshot.json")
+            manager.save_snapshot(new_snapshot, new_path)
+
+            # Get most recent
+            result = manager.get_most_recent_snapshot(tmpdir, "dv_test")
+            assert result == new_path
+
+    def test_get_most_recent_snapshot_filters_by_data_view(self):
+        """Test that get_most_recent_snapshot only returns snapshots for specified data view"""
+        from cja_sdr_generator import SnapshotManager, DataViewSnapshot
+
+        manager = SnapshotManager()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create snapshot for dv_other
+            other_snapshot = DataViewSnapshot(
+                data_view_id="dv_other",
+                data_view_name="Other View",
+                created_at="2024-06-01T10:00:00",
+                metrics=[],
+                dimensions=[]
+            )
+            other_path = os.path.join(tmpdir, "other_snapshot.json")
+            manager.save_snapshot(other_snapshot, other_path)
+
+            # Create snapshot for dv_test (older)
+            test_snapshot = DataViewSnapshot(
+                data_view_id="dv_test",
+                data_view_name="Test View",
+                created_at="2024-01-01T10:00:00",
+                metrics=[],
+                dimensions=[]
+            )
+            test_path = os.path.join(tmpdir, "test_snapshot.json")
+            manager.save_snapshot(test_snapshot, test_path)
+
+            # Should return dv_test snapshot, not dv_other (even though dv_other is newer)
+            result = manager.get_most_recent_snapshot(tmpdir, "dv_test")
+            assert result == test_path
+
+    def test_get_most_recent_snapshot_returns_none_if_no_snapshots(self):
+        """Test that get_most_recent_snapshot returns None when no snapshots exist"""
+        from cja_sdr_generator import SnapshotManager
+
+        manager = SnapshotManager()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = manager.get_most_recent_snapshot(tmpdir, "dv_nonexistent")
+            assert result is None
+
+    def test_get_most_recent_snapshot_returns_none_for_empty_dir(self):
+        """Test that get_most_recent_snapshot returns None for empty directory"""
+        from cja_sdr_generator import SnapshotManager
+
+        manager = SnapshotManager()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = manager.get_most_recent_snapshot(tmpdir, "dv_test")
+            assert result is None
+
+    def test_get_most_recent_snapshot_returns_none_for_nonexistent_dir(self):
+        """Test that get_most_recent_snapshot returns None for non-existent directory"""
+        from cja_sdr_generator import SnapshotManager
+
+        manager = SnapshotManager()
+        result = manager.get_most_recent_snapshot("/nonexistent/path", "dv_test")
+        assert result is None

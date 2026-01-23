@@ -488,6 +488,37 @@ cja_auto_sdr dv_12345 --diff-snapshot ./snapshots/baseline.json
 cja_auto_sdr "Production Analytics" --diff-snapshot ./snapshots/baseline.json
 ```
 
+### Compare With Previous Snapshot (Quick Comparison)
+
+Use `--compare-with-prev` to automatically find and compare against the most recent snapshot for a data view—no need to remember snapshot paths:
+
+```bash
+# Compare against most recent snapshot (looks in ./snapshots by default)
+cja_auto_sdr dv_12345 --compare-with-prev
+
+# Compare against most recent snapshot in custom directory
+cja_auto_sdr dv_12345 --compare-with-prev --snapshot-dir ./my_snapshots
+
+# Works with other diff options
+cja_auto_sdr dv_12345 --compare-with-prev --changes-only --format markdown
+cja_auto_sdr "Production Analytics" --compare-with-prev --extended-fields
+```
+
+**How it works:**
+1. Searches `--snapshot-dir` (default: `./snapshots`) for snapshot files
+2. Filters to snapshots matching the specified data view ID
+3. Selects the most recent snapshot by creation timestamp
+4. Runs the comparison automatically
+
+**Workflow:**
+```bash
+# First time: create initial snapshot with auto-snapshot
+cja_auto_sdr dv_12345 --diff dv_12345 dv_12345 --auto-snapshot
+
+# Later: quick comparison against that snapshot
+cja_auto_sdr dv_12345 --compare-with-prev
+```
+
 ### Compare Two Snapshots Directly
 
 Compare two previously saved snapshot files without any API calls—useful for offline analysis, historical comparisons, or when API access is unavailable:
@@ -576,6 +607,7 @@ To minimize API calls during name resolution, data view listings are cached for 
 | `--diff` | Compare two data views. Requires exactly 2 data view IDs/names. |
 | `--snapshot FILE` | Save a data view snapshot to a JSON file. |
 | `--diff-snapshot FILE` | Compare a data view against a saved snapshot. |
+| `--compare-with-prev` | Compare against most recent snapshot in --snapshot-dir. |
 | `--compare-snapshots A B` | Compare two snapshot files directly (no API calls needed). |
 | `--changes-only` | Only show changed items (hide unchanged components). |
 | `--summary` | Show summary statistics only (no detailed changes). |
@@ -654,7 +686,13 @@ DIMENSIONS CHANGES (11)
   [~] dimensions/device_type                 type: 'string' -> 'enum'
 
 ================================================================================
+Total: 8 added, 7 removed, 11 modified
+  Metrics: 3 added, 5 removed, 7 modified
+  Dimensions: 5 added, 2 removed, 4 modified
+================================================================================
 ```
+
+The footer provides at-a-glance totals across all component types, with color-coded values in the terminal (green for added, red for removed, yellow for modified).
 
 ## Interpreting the Summary Table
 

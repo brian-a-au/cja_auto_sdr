@@ -1271,6 +1271,37 @@ class DiffSummary:
 
         return "; ".join(parts)
 
+    @property
+    def total_added(self) -> int:
+        """Total items added across all component types"""
+        return self.metrics_added + self.dimensions_added
+
+    @property
+    def total_removed(self) -> int:
+        """Total items removed across all component types"""
+        return self.metrics_removed + self.dimensions_removed
+
+    @property
+    def total_modified(self) -> int:
+        """Total items modified across all component types"""
+        return self.metrics_modified + self.dimensions_modified
+
+    @property
+    def total_summary(self) -> str:
+        """One-line summary of total changes: '3 added, 2 removed, 5 modified'"""
+        if not self.has_changes:
+            return "No changes"
+
+        parts = []
+        if self.total_added:
+            parts.append(f"{self.total_added} added")
+        if self.total_removed:
+            parts.append(f"{self.total_removed} removed")
+        if self.total_modified:
+            parts.append(f"{self.total_modified} modified")
+
+        return ", ".join(parts) if parts else "No changes"
+
 
 @dataclass
 class DiffResult:
@@ -1507,6 +1538,27 @@ class SnapshotManager:
                     continue
 
         return sorted(snapshots, key=lambda x: x.get('created_at', ''), reverse=True)
+
+    def get_most_recent_snapshot(self, directory: str, data_view_id: str) -> Optional[str]:
+        """
+        Get the filepath of the most recent snapshot for a specific data view.
+
+        Args:
+            directory: Directory to search for snapshots
+            data_view_id: Data view ID to filter by
+
+        Returns:
+            Filepath of the most recent snapshot, or None if no snapshots found
+        """
+        all_snapshots = self.list_snapshots(directory)
+        # Filter to only snapshots for this data view
+        dv_snapshots = [s for s in all_snapshots if s.get('data_view_id') == data_view_id]
+
+        if not dv_snapshots:
+            return None
+
+        # Already sorted by created_at (newest first) from list_snapshots
+        return dv_snapshots[0].get('filepath')
 
     def apply_retention_policy(self, directory: str, data_view_id: str, keep_last: int) -> List[str]:
         """
@@ -4941,11 +4993,22 @@ def write_diff_console_output(diff_result: DiffResult, changes_only: bool = Fals
         else:
             lines.append("  No changes")
 
-    # Footer with natural language summary
+    # Footer with total summary
     lines.append("")
     lines.append("=" * 80)
     if summary.has_changes:
-        lines.append(ANSIColors.cyan(f"Summary: {summary.natural_language_summary}", c))
+        # Build color-coded total summary line
+        total_parts = []
+        if summary.total_added:
+            total_parts.append(ANSIColors.green(f"{summary.total_added} added", c))
+        if summary.total_removed:
+            total_parts.append(ANSIColors.red(f"{summary.total_removed} removed", c))
+        if summary.total_modified:
+            total_parts.append(ANSIColors.yellow(f"{summary.total_modified} modified", c))
+        total_line = ", ".join(total_parts)
+        lines.append(ANSIColors.bold(f"Total: {total_line}", c))
+        lines.append(f"  Metrics: {summary.metrics_added} added, {summary.metrics_removed} removed, {summary.metrics_modified} modified")
+        lines.append(f"  Dimensions: {summary.dimensions_added} added, {summary.dimensions_removed} removed, {summary.dimensions_modified} modified")
     else:
         lines.append(ANSIColors.green("✓ No differences found", c))
     lines.append("=" * 80)
@@ -5416,7 +5479,11 @@ def write_diff_json_output(
                 "dimensions_unchanged": summary.dimensions_unchanged,
                 "dimensions_change_percent": summary.dimensions_change_percent,
                 "has_changes": summary.has_changes,
-                "total_changes": summary.total_changes
+                "total_changes": summary.total_changes,
+                "total_added": summary.total_added,
+                "total_removed": summary.total_removed,
+                "total_modified": summary.total_modified,
+                "total_summary": summary.total_summary
             },
             "metric_diffs": [serialize_component_diff(d) for d in metric_diffs],
             "dimension_diffs": [serialize_component_diff(d) for d in dimension_diffs]
@@ -5486,9 +5553,9 @@ def write_diff_markdown_output(
         md_parts.append("")
 
         if not summary.has_changes:
-            md_parts.append("**No differences found.**\n")
+            md_parts.append("**✓ No differences found.**\n")
         else:
-            md_parts.append(f"**Total changes:** {summary.total_changes}\n")
+            md_parts.append(f"**Total: {summary.total_summary}**\n")
 
         # Metrics changes
         metric_changes = [d for d in diff_result.metric_diffs if d.change_type != ChangeType.UNCHANGED]
@@ -7412,6 +7479,12 @@ Requirements:
         type=str,
         metavar='FILE',
         help='Compare data view against a saved snapshot file'
+    )
+
+    diff_group.add_argument(
+        '--compare-with-prev',
+        action='store_true',
+        help='Compare data view against its most recent snapshot in --snapshot-dir (default: ./snapshots)'
     )
 
     diff_group.add_argument(
@@ -9397,6 +9470,55 @@ def main():
             quiet=args.quiet
         )
         sys.exit(0 if success else 1)
+
+    # Handle --compare-with-prev mode (find most recent snapshot and compare)
+    if getattr(args, 'compare_with_prev', False):
+        if len(data_view_inputs) != 1:
+            print(ConsoleColors.error("ERROR: --compare-with-prev requires exactly 1 data view ID or name"), file=sys.stderr)
+            print("Usage: cja_auto_sdr DATA_VIEW --compare-with-prev", file=sys.stderr)
+            sys.exit(1)
+
+        # Resolve name to ID if needed
+        temp_logger = logging.getLogger('name_resolution')
+        temp_logger.setLevel(logging.WARNING)
+        resolved_ids, _ = resolve_data_view_names(data_view_inputs, args.config_file, temp_logger)
+
+        if not resolved_ids:
+            print(ConsoleColors.error(f"ERROR: Could not resolve data view: '{data_view_inputs[0]}'"), file=sys.stderr)
+            sys.exit(1)
+        if len(resolved_ids) > 1:
+            # Ambiguous - try interactive selection if in terminal
+            dv_name = data_view_inputs[0]
+            options = [(dv_id, f"{dv_name} ({dv_id})") for dv_id in resolved_ids]
+            selected = prompt_for_selection(
+                options,
+                f"Name '{dv_name}' matches {len(resolved_ids)} data views. Please select one:"
+            )
+            if selected:
+                resolved_ids = [selected]
+            else:
+                print(ConsoleColors.error(f"ERROR: Name '{dv_name}' is ambiguous - matches {len(resolved_ids)} data views:"), file=sys.stderr)
+                for dv_id in resolved_ids:
+                    print(f"  • {dv_id}", file=sys.stderr)
+                print("\nPlease specify the exact data view ID instead of the name.", file=sys.stderr)
+                sys.exit(1)
+
+        # Find most recent snapshot
+        snapshot_dir = getattr(args, 'snapshot_dir', './snapshots')
+        snapshot_mgr = SnapshotManager()
+        prev_snapshot = snapshot_mgr.get_most_recent_snapshot(snapshot_dir, resolved_ids[0])
+
+        if not prev_snapshot:
+            print(ConsoleColors.error(f"ERROR: No previous snapshots found for data view '{resolved_ids[0]}' in {snapshot_dir}"), file=sys.stderr)
+            print(f"Create a snapshot first with: cja_auto_sdr {resolved_ids[0]} --snapshot {snapshot_dir}/baseline.json", file=sys.stderr)
+            print(f"Or use --auto-snapshot with --diff to automatically save snapshots.", file=sys.stderr)
+            sys.exit(1)
+
+        if not args.quiet:
+            print(f"Comparing against previous snapshot: {prev_snapshot}")
+
+        # Set diff_snapshot and let the existing handler process it
+        args.diff_snapshot = prev_snapshot
 
     # Handle --diff-snapshot mode (compare against a saved snapshot)
     if hasattr(args, 'diff_snapshot') and args.diff_snapshot:
