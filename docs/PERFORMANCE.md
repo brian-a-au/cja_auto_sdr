@@ -375,6 +375,7 @@ cja_auto_sdr dv_12345 --log-format json
 
 ## See Also
 
+- [Configuration Guide](CONFIGURATION.md) - Environment variables for CI/CD optimization
 - [CLI Reference](CLI_REFERENCE.md) - Performance-related flags
 - [Data View Comparison Guide](DIFF_COMPARISON.md) - Diff, snapshots, and CI/CD integration
 - [Batch Processing Guide](BATCH_PROCESSING_GUIDE.md) - Detailed batch documentation

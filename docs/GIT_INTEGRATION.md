@@ -480,6 +480,7 @@ cja_auto_sdr dv_prod --format excel --git-commit
 
 ## See Also
 
+- [Configuration Guide](CONFIGURATION.md) - Environment variables for CI/CD pipelines
 - [Diff Comparison Guide](DIFF_COMPARISON.md) - Compare data views and track changes
 - [CLI Reference](CLI_REFERENCE.md) - Complete command-line reference
 - [Batch Processing Guide](BATCH_PROCESSING_GUIDE.md) - Process multiple data views

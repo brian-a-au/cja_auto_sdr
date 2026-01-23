@@ -424,5 +424,6 @@ uv sync --reinstall
 
 ## Next Steps
 
+- [Configuration Guide](CONFIGURATION.md) - Detailed config.json and environment variable reference
 - [CLI Reference](CLI_REFERENCE.md) - Learn all command-line options
 - [Troubleshooting](TROUBLESHOOTING.md) - If you encounter issues

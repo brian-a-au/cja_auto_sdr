@@ -83,6 +83,8 @@ cja-auto-sdr [OPTIONS] DATA_VIEW_ID_OR_NAME [...]
 | `--log-format FORMAT` | Log output format: `text` (human-readable) or `json` (structured logging for Splunk, ELK, CloudWatch) | text |
 | `--production` | Minimal logging for performance | False |
 
+> See the [Configuration Guide](CONFIGURATION.md) for details on config.json format, environment variables, and validation rules.
+
 ### Validation & Testing
 
 | Option | Description | Default |
@@ -561,6 +563,7 @@ DEBUG  INFO  WARNING  ERROR  CRITICAL
 ## See Also
 
 - [Quick Reference Card](QUICK_REFERENCE.md) - Single-page command cheat sheet
+- [Configuration Guide](CONFIGURATION.md) - config.json, environment variables, validation rules
 - [Installation Guide](INSTALLATION.md)
 - [Batch Processing Guide](BATCH_PROCESSING_GUIDE.md)
 - [Output Formats](OUTPUT_FORMATS.md)

@@ -231,6 +231,7 @@ See [Performance Guide](PERFORMANCE.md) for optimization options.
 
 ## See Also
 
+- [Configuration Guide](CONFIGURATION.md) - Setup and validation commands
 - [CLI Reference](CLI_REFERENCE.md) - Validation-related options
 - [Performance Guide](PERFORMANCE.md) - Validation caching
 - [Output Formats](OUTPUT_FORMATS.md) - Data Quality sheet format

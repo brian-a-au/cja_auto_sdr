@@ -518,6 +518,7 @@ cja_auto_sdr dv_12345 \
 
 ## See Also
 
+- [Configuration Guide](CONFIGURATION.md) - config.json, environment variables, multi-environment setup
 - [CLI Reference](CLI_REFERENCE.md) - All command options
 - [Data View Comparison Guide](DIFF_COMPARISON.md) - Diff, snapshots, and CI/CD integration
 - [Performance Guide](PERFORMANCE.md) - Optimization tips

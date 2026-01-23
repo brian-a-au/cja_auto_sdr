@@ -462,6 +462,7 @@ cja_auto_sdr --diff "Production" "Staging" --auto-snapshot --keep-last 10
 
 ## See Also
 
+- [Configuration Guide](CONFIGURATION.md) - config.json and environment variables
 - [CLI Reference](CLI_REFERENCE.md) - Complete command-line options
 - [Diff Comparison Guide](DIFF_COMPARISON.md) - Full diff comparison documentation
 - [Batch Processing Guide](BATCH_PROCESSING_GUIDE.md) - Processing multiple data views

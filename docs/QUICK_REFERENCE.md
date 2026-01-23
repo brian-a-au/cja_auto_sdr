@@ -215,6 +215,7 @@ cja_auto_sdr dv_12345 --dry-run
 
 ## More Information
 
+- Configuration: [CONFIGURATION.md](CONFIGURATION.md) - config.json, environment variables
 - Full CLI docs: [CLI_REFERENCE.md](CLI_REFERENCE.md)
 - Diff comparison: [DIFF_COMPARISON.md](DIFF_COMPARISON.md)
 - Troubleshooting: [TROUBLESHOOTING.md](TROUBLESHOOTING.md)

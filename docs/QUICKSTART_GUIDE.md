@@ -725,6 +725,7 @@ If you're still stuck:
 1. **Check the logs:** `logs/SDR_Generation_*.log` contains detailed error information
 2. **Enable debug mode:** Add `--log-level DEBUG` for verbose output
 3. **Review documentation:**
+   - [Configuration Guide](CONFIGURATION.md) - Detailed config.json and environment variable reference
    - [Troubleshooting Guide](TROUBLESHOOTING.md) - Comprehensive error reference
    - [CLI Reference](CLI_REFERENCE.md) - All command options
 4. **Topic-specific troubleshooting:**

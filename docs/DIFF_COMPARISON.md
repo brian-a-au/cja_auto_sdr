@@ -1219,6 +1219,7 @@ python -m pytest tests/test_diff_comparison.py --cov=cja_sdr_generator --cov-rep
 
 ## See Also
 
+- [Configuration Guide](CONFIGURATION.md) - Environment variables for CI/CD pipelines
 - [CLI Reference](CLI_REFERENCE.md) - Complete command reference
 - [Output Formats](OUTPUT_FORMATS.md) - Detailed format documentation
 - [Troubleshooting](TROUBLESHOOTING.md) - Common issues and solutions

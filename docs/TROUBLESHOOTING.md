@@ -108,6 +108,8 @@ esac
 
 ## Configuration Errors
 
+> For complete configuration reference, see the [Configuration Guide](CONFIGURATION.md).
+
 ### Configuration File Not Found
 
 **Symptoms:**
@@ -1684,6 +1686,7 @@ If you encounter issues not covered here:
 
 ## See Also
 
+- [Configuration Guide](CONFIGURATION.md) - config.json, environment variables, validation rules
 - [Installation Guide](INSTALLATION.md) - Setup instructions
 - [CLI Reference](CLI_REFERENCE.md) - Complete command options
 - [Data View Comparison Guide](DIFF_COMPARISON.md) - Diff, snapshots, and CI/CD integration
