@@ -26,10 +26,10 @@ This guide assumes you're starting from scratch and walks through every step wit
 
 Before starting, ensure you have:
 
-- [ ] **Adobe CJA Access** - An active CJA subscription with at least one Data View
+- [ ] **Adobe CJA Access** - Access to Adobe CJA with at least one Data View configured
 - [ ] **Adobe Developer Console Access** - Permission to create API integrations
-- [ ] **Python 3.14+** - Check with `python3 --version`
-- [ ] **Terminal/Command Line** - Basic familiarity with running commands
+- [ ] **Python 3.14+** - Check with `python3 --version` ([download Python](https://www.python.org/downloads/) if needed)
+- [ ] **Terminal/Command Line** - Basic familiarity with running commands ([terminal basics guide](https://developer.mozilla.org/en-US/docs/Learn/Tools_and_testing/Understanding_client-side_tools/Command_line))
 - [ ] **20 minutes** - Most time is spent on Adobe Developer Console setup
 
 ### Verify Python Installation
@@ -103,7 +103,7 @@ After setup, you'll see your credentials. You need these four values:
 
 ### 2.1 Install uv Package Manager
 
-`uv` is a modern Python package manager that's faster and more reliable than pip.
+[`uv`](https://docs.astral.sh/uv/) is a modern Python package manager that's faster and more reliable than pip. ([What's a package manager?](https://realpython.com/what-is-pip/) - pip concepts apply to uv)
 
 **macOS/Linux:**
 ```bash
@@ -138,7 +138,7 @@ cd cja_auto_sdr
 
 **Alternative: Download ZIP**
 
-If you don't have git or prefer a download:
+If you don't have [git](https://guides.github.com/introduction/git-handbook/) or prefer a download:
 1. Download the ZIP from the repository
 2. Extract to your preferred location
 3. Open terminal and navigate to the extracted folder:
@@ -167,7 +167,7 @@ Installed 15 packages in 0.8s
 ```
 
 This command:
-- Creates a virtual environment in `.venv/`
+- Creates a [virtual environment](https://realpython.com/python-virtual-environments-a-primer/) in `.venv/` (isolates project dependencies)
 - Installs all required packages
 - Installs the `cja_auto_sdr` command
 
@@ -179,7 +179,7 @@ This command:
 uv run cja_auto_sdr --version
 # Output: cja_auto_sdr 3.0.11
 
-# Or activate the virtual environment first
+# Or activate the virtual environment first (what's activating? see link above)
 source .venv/bin/activate
 cja_auto_sdr --version
 # Output: cja_auto_sdr 3.0.11
@@ -213,7 +213,7 @@ You have two options for configuring credentials:
 
 ### Option A: Environment Variables (Recommended for CI/CD)
 
-Create a `.env` file in the project root:
+Create a `.env` file in the project root ([what are environment variables?](https://www.twilio.com/en-us/blog/how-to-set-environment-variables-html)):
 
 ```bash
 ORG_ID=YOUR_ORG_ID@AdobeOrg
@@ -242,7 +242,7 @@ cp config.json.example config.json
 uv run cja_auto_sdr --sample-config
 ```
 
-Or create it manually:
+Or create it manually ([JSON syntax guide](https://developer.mozilla.org/en-US/docs/Learn/JavaScript/Objects/JSON) - use double quotes, no trailing commas):
 
 ```json
 {
