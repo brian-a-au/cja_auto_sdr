@@ -1,6 +1,6 @@
 # Quick Reference Card
 
-Single-page command cheat sheet for CJA SDR Generator v3.0.13.
+Single-page command cheat sheet for CJA SDR Generator v3.0.14.
 
 ## Two Main Modes
 
@@ -49,6 +49,9 @@ cja_auto_sdr --list-dataviews
 # List data views as JSON (for scripting)
 cja_auto_sdr --list-dataviews --format json
 
+# Interactively select data views from a list
+cja_auto_sdr --interactive
+
 # Validate config without processing
 cja_auto_sdr --validate-config
 ```
@@ -93,6 +96,7 @@ cja_auto_sdr --diff dv_12345 dv_67890 --diff-labels "Before" "After"
 | `--format FORMAT` | Output format (see note below) | Both |
 | `--open` | Open generated file(s) in default application | SDR |
 | `--stats` | Quick statistics only (no full report) | SDR |
+| `--interactive`, `-i` | Interactively select data views from a numbered list | Both |
 | `--config-file PATH` | Use custom config file (default: config.json) | Both |
 | `--log-level LEVEL` | Set logging: `DEBUG`, `INFO`, `WARNING`, `ERROR` | Both |
 | `--log-format FORMAT` | Log output: `text` (default) or `json` (structured) | Both |
@@ -114,15 +118,23 @@ cja_auto_sdr --diff dv_12345 dv_67890 --diff-labels "Before" "After"
 
 ### Format Support by Mode
 
-| Format | SDR | Diff |
-|--------|-----|------|
-| `excel` | ✅ (default) | ✅ |
-| `csv` | ✅ | ✅ |
-| `json` | ✅ | ✅ |
-| `html` | ✅ | ✅ |
-| `markdown` | ✅ | ✅ |
-| `console` | ❌ | ✅ (default) |
-| `all` | ✅ | ✅ |
+| Format | SDR | Diff | Description |
+|--------|-----|------|-------------|
+| `excel` | ✅ (default) | ✅ | Excel workbook |
+| `csv` | ✅ | ✅ | Comma-separated values |
+| `json` | ✅ | ✅ | JSON for integrations |
+| `html` | ✅ | ✅ | Browser-viewable |
+| `markdown` | ✅ | ✅ | Documentation-ready |
+| `console` | ❌ | ✅ (default) | Terminal output |
+| `all` | ✅ | ✅ | All formats |
+
+### Format Aliases (Shortcuts)
+
+| Alias | Generates | Use Case |
+|-------|-----------|----------|
+| `reports` | excel + markdown | Documentation and sharing |
+| `data` | csv + json | Data pipelines and integrations |
+| `ci` | json + markdown | CI/CD logs and PR comments |
 
 ## Quick Recipes
 

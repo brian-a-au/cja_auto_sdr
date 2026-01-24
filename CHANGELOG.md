@@ -5,6 +5,158 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.14] - 2026-01-23
+
+### Highlights
+- **Format Auto-Detection** - Infer output format from file extension (`--output report.json` automatically uses JSON)
+- **Quick Config Status** - New `--config-status` flag shows credentials and environment without API calls
+- **Accessibility Color Theme** - `--color-theme accessible` uses blue/orange instead of green/red for colorblind users
+- **Snapshot Metadata Display** - Diff comparisons show file sizes, dates, and component counts
+- **Interactive Data View Selection** - New `--interactive` / `-i` flag to select data views from a numbered list
+- **Format Aliases** - Shortcuts for common format combinations: `reports`, `data`, `ci`
+- **Performance Timings** - New `--show-timings` flag displays detailed operation timing breakdown
+- **SDR Component Filtering** - Extended `--metrics-only` / `--dimensions-only` to work with SDR generation
+
+This release focuses on **developer experience**, **accessibility**, and **usability enhancements**.
+
+### Added
+
+#### Format Auto-Detection from File Extension
+Automatically infer output format from the `--output` file path extension.
+
+```bash
+# Format inferred from extension - no --format needed
+cja_auto_sdr dv_12345 --output report.json   # Uses JSON format
+cja_auto_sdr dv_12345 --output report.xlsx   # Uses Excel format
+cja_auto_sdr dv_12345 --output report.md     # Uses Markdown format
+
+# Explicit --format still takes precedence
+cja_auto_sdr dv_12345 --output data.txt --format csv  # Uses CSV despite .txt extension
+```
+
+**Supported Extensions:**
+- `.xlsx`, `.xls` → Excel
+- `.csv` → CSV
+- `.json` → JSON
+- `.html`, `.htm` → HTML
+- `.md`, `.markdown` → Markdown
+
+#### Quick Config Status (`--config-status`)
+Display current configuration status without making API calls.
+
+```bash
+cja_auto_sdr --config-status
+```
+
+Output shows:
+- Credential source (environment variables or config file)
+- Which credentials are configured (ORG_ID, CLIENT_ID, SECRET, SCOPES)
+- Masked credential values for verification
+- Environment details (Python version, working directory)
+
+Useful for debugging configuration issues without waiting for API authentication.
+
+#### Accessibility Color Theme (`--color-theme`)
+Choose between color themes for diff output to accommodate colorblind users.
+
+```bash
+# Default theme (green/red/yellow)
+cja_auto_sdr --diff dv_1 dv_2
+
+# Accessible theme (blue/orange/cyan)
+cja_auto_sdr --diff dv_1 dv_2 --color-theme accessible
+```
+
+**Available Themes:**
+- `default` - Green for added, red for removed, yellow for modified
+- `accessible` - Blue for added, orange for removed, cyan for modified
+
+#### Snapshot Metadata Display
+When comparing snapshots, displays file metadata for context.
+
+```bash
+cja_auto_sdr --compare-snapshots old.json new.json
+```
+
+Output includes:
+- File sizes (e.g., "42.5 KB")
+- Last modified dates
+- Component counts (metrics and dimensions)
+- Data view names and IDs
+
+#### Interactive Data View Selection (`--interactive` / `-i`)
+Interactively select data views from a numbered list instead of specifying IDs.
+
+```bash
+cja_auto_sdr --interactive
+# or
+cja_auto_sdr -i
+```
+
+Displays available data views with numbers, allowing selection by entering the number. Supports selecting multiple data views by entering comma-separated numbers.
+
+#### Format Aliases
+Shortcuts for common format combinations.
+
+```bash
+# Generate Excel + Markdown (documentation use case)
+cja_auto_sdr dv_12345 --format reports
+
+# Generate CSV + JSON (data pipeline use case)
+cja_auto_sdr dv_12345 --format data
+
+# Generate JSON + Markdown (CI/CD use case)
+cja_auto_sdr dv_12345 --format ci
+```
+
+**Alias Mappings:**
+- `reports` → Excel + Markdown
+- `data` → CSV + JSON
+- `ci` → JSON + Markdown
+
+#### Performance Timings (`--show-timings`)
+Display detailed timing breakdown for each operation.
+
+```bash
+cja_auto_sdr dv_12345 --show-timings
+```
+
+Shows timing for:
+- API calls (getDataView, getMetrics, getDimensions)
+- Data validation
+- Output file generation
+- Total processing time
+
+Useful for identifying performance bottlenecks with large data views.
+
+#### SDR Component Filtering
+Extended `--metrics-only` and `--dimensions-only` flags to work with SDR generation (previously diff-only).
+
+```bash
+# Generate SDR with only metrics
+cja_auto_sdr dv_12345 --metrics-only
+
+# Generate SDR with only dimensions
+cja_auto_sdr dv_12345 --dimensions-only
+```
+
+### Tests
+- **706 tests passing** (up from 671 in v3.0.12)
+- 35 new tests covering all new features:
+  - Format auto-detection tests (12 tests)
+  - Config status flag tests (2 tests)
+  - Color theme tests (9 tests)
+  - Interactive flag tests (3 tests)
+  - SDR component filtering tests (3 tests)
+  - Format alias tests (4 tests)
+  - Show timings flag tests (2 tests)
+
+### Documentation
+- Updated Quick Reference with new options
+- Added format aliases and accessibility theme examples
+
+---
+
 ## [3.0.13] - 2026-01-23
 
 ### Changed
@@ -1448,7 +1600,7 @@ Batch Processing (10 data views):
 | Validation Caching | No | Yes (50-90% faster on cache hits) |
 | Early Exit Optimization | No | Yes (15-20% faster on errors) |
 | Logging Optimization | No | Yes (5-10% faster with --production) |
-| Tests | None | 658 comprehensive tests |
+| Tests | None | 706 comprehensive tests |
 | Documentation | Basic | 13 detailed guides |
 | Performance Tracking | No | Yes, built-in with cache statistics |
 | Parallel Processing | No | Yes, configurable workers + concurrent validation |

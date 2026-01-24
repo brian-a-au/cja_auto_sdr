@@ -93,6 +93,7 @@ cja-auto-sdr [OPTIONS] DATA_VIEW_ID_OR_NAME [...]
 | `--validate-only` | Alias for --dry-run | False |
 | `--validate-config` | Validate config and API connectivity (no data view required) | False |
 | `--list-dataviews` | List accessible data views and exit. Supports `--format json/csv` and `--output -` for machine-readable output | False |
+| `-i, --interactive` | Interactively select data views from a numbered list. Supports single selection, ranges (1-5), or "all" | False |
 | `--sample-config` | Generate sample config file and exit | False |
 
 ### Caching
@@ -255,6 +256,27 @@ cja_auto_sdr dv_12345 --stats --output -
 # Stats in CSV format to file
 cja_auto_sdr dv_12345 --stats --format csv --output stats.csv
 ```
+
+### Interactive Data View Selection
+
+```bash
+# Launch interactive selection mode
+cja_auto_sdr --interactive
+
+# Interactive selection with custom output format
+cja_auto_sdr --interactive --format markdown
+
+# Interactive selection with specific output directory
+cja_auto_sdr --interactive --output-dir ./reports
+```
+
+**Selection Syntax:**
+- Single: `3` (selects #3)
+- Multiple: `1,3,5` (selects #1, #3, #5)
+- Range: `1-5` (selects #1 through #5)
+- Combined: `1,3-5,7` (selects #1, #3, #4, #5, #7)
+- All: `all` or `a` (selects all data views)
+- Cancel: `q` or `quit` (exit without selection)
 
 ### Auto-Open Generated Files
 
@@ -563,6 +585,7 @@ DEBUG  INFO  WARNING  ERROR  CRITICAL
 ## See Also
 
 - [Quick Reference Card](QUICK_REFERENCE.md) - Single-page command cheat sheet
+- [Shell Completion Guide](SHELL_COMPLETION.md) - Enable tab-completion for bash/zsh
 - [Configuration Guide](CONFIGURATION.md) - config.json, environment variables, validation rules
 - [Installation Guide](INSTALLATION.md)
 - [Batch Processing Guide](BATCH_PROCESSING_GUIDE.md)

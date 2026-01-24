@@ -565,7 +565,10 @@ class TestProcessSingleDataviewWorker:
             False,           # quiet
             False,           # skip_validation
             0,               # max_issues
-            False            # clear_cache
+            False,           # clear_cache
+            False,           # show_timings
+            False,           # metrics_only
+            False            # dimensions_only
         )
 
         result = process_single_dataview_worker(args)
@@ -573,7 +576,7 @@ class TestProcessSingleDataviewWorker:
         assert result == expected_result
         mock_process.assert_called_once_with(
             "dv_test_12345", "config.json", "/output", "INFO", "text", "excel",
-            False, 1000, 3600, False, False, 0, False
+            False, 1000, 3600, False, False, 0, False, False, False, False
         )
 
 

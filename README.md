@@ -213,6 +213,7 @@ python cja_sdr_generator.py "Production Analytics"
 | Stats as JSON | `cja_auto_sdr dv_12345 --stats --format json` |
 | List Data Views | `cja_auto_sdr --list-dataviews` |
 | List as JSON (for scripting) | `cja_auto_sdr --list-dataviews --format json` |
+| Interactive selection | `cja_auto_sdr --interactive` |
 | Pipe to other tools | `cja_auto_sdr --list-dataviews --output - \| jq '.dataViews[]'` |
 | Validate config only | `cja_auto_sdr --validate-config` |
 | **Diff Comparison** (default: console output) | |
@@ -240,6 +241,7 @@ python cja_sdr_generator.py "Production Analytics"
 | [Installation Guide](docs/INSTALLATION.md) | Detailed setup instructions, authentication options |
 | [Configuration Guide](docs/CONFIGURATION.md) | config.json, environment variables, validation rules |
 | [CLI Reference](docs/CLI_REFERENCE.md) | Complete command-line options and examples |
+| [Shell Completion](docs/SHELL_COMPLETION.md) | Enable tab-completion for bash/zsh |
 | [Data Quality](docs/DATA_QUALITY.md) | Validation checks, severity levels, understanding issues |
 | [Performance](docs/PERFORMANCE.md) | Optimization options, caching, batch processing |
 | [Troubleshooting](docs/TROUBLESHOOTING.md) | Common errors and solutions |
@@ -278,7 +280,7 @@ cja_auto_sdr/
 │   ├── GIT_INTEGRATION.md   # Git integration guide
 │   ├── INSTALLATION.md      # Setup instructions
 │   └── ...                  # Additional guides
-├── tests/                   # Test suite (658 tests)
+├── tests/                   # Test suite (706 tests)
 ├── sample_outputs/          # Example output files
 │   ├── excel/               # Sample Excel SDR
 │   ├── csv/                 # Sample CSV output

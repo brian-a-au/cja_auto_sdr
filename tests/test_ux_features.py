@@ -1,5 +1,5 @@
 """
-Tests for Phase 1 UX Enhancement Features (v3.0.11)
+Tests for UX Enhancement Features (v3.0.14)
 
 Tests for:
 - --open flag (auto-open generated files)
@@ -338,6 +338,266 @@ class TestVersionUpdated:
     """Test that version is correct"""
 
     def test_version_is_3_0_13(self):
-        """Test that version is 3.0.13"""
+        """Test that version is 3.0.14"""
         from cja_sdr_generator import __version__
-        assert __version__ == "3.0.13"
+        assert __version__ == "3.0.14"
+
+
+class TestFormatAutoDetection:
+    """Tests for auto-detecting format from file extension"""
+
+    def test_infer_format_xlsx(self):
+        """Test xlsx extension infers excel format"""
+        from cja_sdr_generator import infer_format_from_path
+        assert infer_format_from_path('report.xlsx') == 'excel'
+
+    def test_infer_format_xls(self):
+        """Test xls extension infers excel format"""
+        from cja_sdr_generator import infer_format_from_path
+        assert infer_format_from_path('report.xls') == 'excel'
+
+    def test_infer_format_csv(self):
+        """Test csv extension infers csv format"""
+        from cja_sdr_generator import infer_format_from_path
+        assert infer_format_from_path('data.csv') == 'csv'
+
+    def test_infer_format_json(self):
+        """Test json extension infers json format"""
+        from cja_sdr_generator import infer_format_from_path
+        assert infer_format_from_path('output.json') == 'json'
+
+    def test_infer_format_html(self):
+        """Test html extension infers html format"""
+        from cja_sdr_generator import infer_format_from_path
+        assert infer_format_from_path('report.html') == 'html'
+
+    def test_infer_format_htm(self):
+        """Test htm extension infers html format"""
+        from cja_sdr_generator import infer_format_from_path
+        assert infer_format_from_path('report.htm') == 'html'
+
+    def test_infer_format_md(self):
+        """Test md extension infers markdown format"""
+        from cja_sdr_generator import infer_format_from_path
+        assert infer_format_from_path('doc.md') == 'markdown'
+
+    def test_infer_format_markdown(self):
+        """Test markdown extension infers markdown format"""
+        from cja_sdr_generator import infer_format_from_path
+        assert infer_format_from_path('doc.markdown') == 'markdown'
+
+    def test_infer_format_unknown_extension(self):
+        """Test unknown extension returns None"""
+        from cja_sdr_generator import infer_format_from_path
+        assert infer_format_from_path('file.txt') is None
+        assert infer_format_from_path('file.pdf') is None
+
+    def test_infer_format_stdout(self):
+        """Test stdout markers return None"""
+        from cja_sdr_generator import infer_format_from_path
+        assert infer_format_from_path('-') is None
+        assert infer_format_from_path('stdout') is None
+
+    def test_infer_format_empty(self):
+        """Test empty/None returns None"""
+        from cja_sdr_generator import infer_format_from_path
+        assert infer_format_from_path('') is None
+        assert infer_format_from_path(None) is None
+
+    def test_infer_format_case_insensitive(self):
+        """Test extension matching is case insensitive"""
+        from cja_sdr_generator import infer_format_from_path
+        assert infer_format_from_path('REPORT.XLSX') == 'excel'
+        assert infer_format_from_path('Data.JSON') == 'json'
+
+
+class TestConfigStatusFlag:
+    """Tests for --config-status flag"""
+
+    def test_config_status_flag_registered(self):
+        """Test that --config-status flag is available"""
+        with patch('sys.argv', ['cja_sdr_generator.py', '--config-status']):
+            args = parse_arguments()
+            assert hasattr(args, 'config_status')
+            assert args.config_status is True
+
+    def test_config_status_default_false(self):
+        """Test that --config-status defaults to False"""
+        with patch('sys.argv', ['cja_sdr_generator.py', 'dv_12345']):
+            args = parse_arguments()
+            assert args.config_status is False
+
+
+class TestColorThemeFlag:
+    """Tests for --color-theme flag"""
+
+    def test_color_theme_flag_registered(self):
+        """Test that --color-theme flag is available"""
+        with patch('sys.argv', ['cja_sdr_generator.py', '--diff', 'dv_A', 'dv_B', '--color-theme', 'accessible']):
+            args = parse_arguments()
+            assert hasattr(args, 'color_theme')
+            assert args.color_theme == 'accessible'
+
+    def test_color_theme_default(self):
+        """Test that --color-theme defaults to 'default'"""
+        with patch('sys.argv', ['cja_sdr_generator.py', 'dv_12345']):
+            args = parse_arguments()
+            assert args.color_theme == 'default'
+
+    def test_color_theme_choices(self):
+        """Test that only valid choices are accepted"""
+        # Valid choice
+        with patch('sys.argv', ['cja_sdr_generator.py', '--diff', 'dv_A', 'dv_B', '--color-theme', 'default']):
+            args = parse_arguments()
+            assert args.color_theme == 'default'
+
+        # Invalid choice should raise
+        with patch('sys.argv', ['cja_sdr_generator.py', '--diff', 'dv_A', 'dv_B', '--color-theme', 'invalid']):
+            with pytest.raises(SystemExit):
+                parse_arguments()
+
+
+class TestConsoleColorsTheme:
+    """Tests for ConsoleColors theme functionality"""
+
+    def test_set_theme_default(self):
+        """Test setting default theme"""
+        from cja_sdr_generator import ConsoleColors
+        ConsoleColors.set_theme('default')
+        assert ConsoleColors._theme == 'default'
+
+    def test_set_theme_accessible(self):
+        """Test setting accessible theme"""
+        from cja_sdr_generator import ConsoleColors
+        ConsoleColors.set_theme('accessible')
+        assert ConsoleColors._theme == 'accessible'
+        # Reset to default for other tests
+        ConsoleColors.set_theme('default')
+
+    def test_set_theme_invalid(self):
+        """Test that invalid theme raises ValueError"""
+        from cja_sdr_generator import ConsoleColors
+        with pytest.raises(ValueError):
+            ConsoleColors.set_theme('invalid_theme')
+
+    def test_diff_added_method_exists(self):
+        """Test diff_added method exists and works"""
+        from cja_sdr_generator import ConsoleColors
+        result = ConsoleColors.diff_added('test')
+        assert 'test' in result
+
+    def test_diff_removed_method_exists(self):
+        """Test diff_removed method exists and works"""
+        from cja_sdr_generator import ConsoleColors
+        result = ConsoleColors.diff_removed('test')
+        assert 'test' in result
+
+    def test_diff_modified_method_exists(self):
+        """Test diff_modified method exists and works"""
+        from cja_sdr_generator import ConsoleColors
+        result = ConsoleColors.diff_modified('test')
+        assert 'test' in result
+
+
+class TestInteractiveFlag:
+    """Tests for --interactive flag"""
+
+    def test_interactive_flag_registered(self):
+        """Test that --interactive flag is available"""
+        with patch('sys.argv', ['cja_sdr_generator.py', '--interactive']):
+            args = parse_arguments()
+            assert hasattr(args, 'interactive')
+            assert args.interactive is True
+
+    def test_interactive_short_flag(self):
+        """Test that -i short flag works"""
+        with patch('sys.argv', ['cja_sdr_generator.py', '-i']):
+            args = parse_arguments()
+            assert args.interactive is True
+
+    def test_interactive_default_false(self):
+        """Test that --interactive defaults to False"""
+        with patch('sys.argv', ['cja_sdr_generator.py', 'dv_12345']):
+            args = parse_arguments()
+            assert args.interactive is False
+
+
+class TestMetricsDimensionsOnlyForSDR:
+    """Tests for --metrics-only and --dimensions-only flags in SDR mode"""
+
+    def test_metrics_only_flag_available(self):
+        """Test that --metrics-only works with SDR mode"""
+        with patch('sys.argv', ['cja_sdr_generator.py', 'dv_12345', '--metrics-only']):
+            args = parse_arguments()
+            assert args.metrics_only is True
+
+    def test_dimensions_only_flag_available(self):
+        """Test that --dimensions-only works with SDR mode"""
+        with patch('sys.argv', ['cja_sdr_generator.py', 'dv_12345', '--dimensions-only']):
+            args = parse_arguments()
+            assert args.dimensions_only is True
+
+    def test_both_flags_default_false(self):
+        """Test that both flags default to False"""
+        with patch('sys.argv', ['cja_sdr_generator.py', 'dv_12345']):
+            args = parse_arguments()
+            assert args.metrics_only is False
+            assert args.dimensions_only is False
+
+
+class TestFormatAliases:
+    """Tests for format aliases (reports, data, ci)"""
+
+    def test_format_alias_reports(self):
+        """Test 'reports' format alias is accepted"""
+        with patch('sys.argv', ['cja_sdr_generator.py', 'dv_12345', '--format', 'reports']):
+            args = parse_arguments()
+            assert args.format == 'reports'
+
+    def test_format_alias_data(self):
+        """Test 'data' format alias is accepted"""
+        with patch('sys.argv', ['cja_sdr_generator.py', 'dv_12345', '--format', 'data']):
+            args = parse_arguments()
+            assert args.format == 'data'
+
+    def test_format_alias_ci(self):
+        """Test 'ci' format alias is accepted"""
+        with patch('sys.argv', ['cja_sdr_generator.py', 'dv_12345', '--format', 'ci']):
+            args = parse_arguments()
+            assert args.format == 'ci'
+
+    def test_should_generate_format_with_alias(self):
+        """Test should_generate_format works with aliases"""
+        from cja_sdr_generator import should_generate_format
+
+        # 'reports' alias = excel + markdown
+        assert should_generate_format('reports', 'excel') is True
+        assert should_generate_format('reports', 'markdown') is True
+        assert should_generate_format('reports', 'csv') is False
+
+        # 'data' alias = csv + json
+        assert should_generate_format('data', 'csv') is True
+        assert should_generate_format('data', 'json') is True
+        assert should_generate_format('data', 'excel') is False
+
+        # 'ci' alias = json + markdown
+        assert should_generate_format('ci', 'json') is True
+        assert should_generate_format('ci', 'markdown') is True
+        assert should_generate_format('ci', 'excel') is False
+
+
+class TestShowTimingsFlag:
+    """Tests for --show-timings flag"""
+
+    def test_show_timings_flag_registered(self):
+        """Test that --show-timings flag is available"""
+        with patch('sys.argv', ['cja_sdr_generator.py', 'dv_12345', '--show-timings']):
+            args = parse_arguments()
+            assert hasattr(args, 'show_timings')
+            assert args.show_timings is True
+
+    def test_show_timings_default_false(self):
+        """Test that --show-timings defaults to False"""
+        with patch('sys.argv', ['cja_sdr_generator.py', 'dv_12345']):
+            args = parse_arguments()
+            assert args.show_timings is False

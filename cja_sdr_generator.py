@@ -49,7 +49,65 @@ except ImportError:
 
 # ==================== VERSION ====================
 
-__version__ = "3.0.13"
+__version__ = "3.0.14"
+
+# ==================== FORMAT ALIASES ====================
+
+# Shorthand format aliases for common output combinations
+FORMAT_ALIASES = {
+    'reports': ['excel', 'markdown'],  # Documentation: Excel + Markdown
+    'data': ['csv', 'json'],            # Data pipelines: CSV + JSON
+    'ci': ['json', 'markdown'],         # CI/CD logs: JSON + Markdown
+}
+
+# File extension to format mapping for auto-detection
+EXTENSION_TO_FORMAT = {
+    '.xlsx': 'excel',
+    '.xls': 'excel',
+    '.csv': 'csv',
+    '.json': 'json',
+    '.html': 'html',
+    '.htm': 'html',
+    '.md': 'markdown',
+    '.markdown': 'markdown',
+}
+
+
+def infer_format_from_path(output_path: str) -> Optional[str]:
+    """
+    Infer output format from file extension.
+
+    Args:
+        output_path: The output file path
+
+    Returns:
+        Format string if recognized extension, None otherwise
+    """
+    if not output_path or output_path in ('-', 'stdout'):
+        return None
+    ext = os.path.splitext(output_path)[1].lower()
+    return EXTENSION_TO_FORMAT.get(ext)
+
+
+def should_generate_format(output_format: str, target_format: str) -> bool:
+    """
+    Check if a specific format should be generated based on the output_format setting.
+
+    Args:
+        output_format: The format requested by user (e.g., 'all', 'reports', 'excel')
+        target_format: The specific format to check (e.g., 'excel', 'json')
+
+    Returns:
+        True if target_format should be generated
+    """
+    if output_format == target_format:
+        return True
+    if output_format == 'all':
+        return target_format in ['excel', 'csv', 'json', 'html', 'markdown']
+    if output_format in FORMAT_ALIASES:
+        return target_format in FORMAT_ALIASES[output_format]
+    return False
+
 
 # ==================== CUSTOM EXCEPTIONS ====================
 
@@ -498,20 +556,50 @@ class ConsoleColors:
 
     Auto-detects TTY support and handles Windows compatibility.
     Use this class for general CLI output formatting.
+
+    Supports multiple color themes for accessibility:
+    - default: Green/red (standard)
+    - accessible: Blue/orange (deuteranopia/protanopia friendly)
     """
-    # Colors
+    # Base colors
     GREEN = '\033[92m'
     RED = '\033[91m'
     YELLOW = '\033[93m'
     BLUE = '\033[94m'
     CYAN = '\033[96m'
+    ORANGE = '\033[38;5;208m'  # Extended 256-color orange
     BOLD = '\033[1m'
     RESET = '\033[0m'
     # Regex to strip ANSI escape codes for visible length calculation
     ANSI_ESCAPE = re.compile(r'\033\[[0-9;]*m')
 
+    # Color themes for accessibility
+    THEMES = {
+        'default': {
+            'added': GREEN,      # Green for additions
+            'removed': RED,      # Red for removals
+            'modified': YELLOW,  # Yellow for modifications
+        },
+        'accessible': {
+            'added': BLUE,       # Blue for additions (accessible)
+            'removed': ORANGE,   # Orange for removals (accessible)
+            'modified': CYAN,    # Cyan for modifications
+        }
+    }
+
+    # Current theme (default)
+    _theme = 'default'
+
     # Disable colors if not a TTY or on Windows without ANSI support
     _enabled = sys.stdout.isatty() and (os.name != 'nt' or os.environ.get('TERM'))
+
+    @classmethod
+    def set_theme(cls, theme: str) -> None:
+        """Set the color theme. Valid themes: default, accessible"""
+        if theme in cls.THEMES:
+            cls._theme = theme
+        else:
+            raise ValueError(f"Unknown theme: {theme}. Valid themes: {', '.join(cls.THEMES.keys())}")
 
     @classmethod
     def is_enabled(cls) -> bool:
@@ -569,6 +657,30 @@ class ConsoleColors:
     def status(cls, success: bool, text: str) -> str:
         """Format text based on success/failure status"""
         return cls.success(text) if success else cls.error(text)
+
+    @classmethod
+    def diff_added(cls, text: str) -> str:
+        """Format text for 'added' items (theme-aware)"""
+        if cls._enabled:
+            color = cls.THEMES[cls._theme]['added']
+            return f"{color}{text}{cls.RESET}"
+        return text
+
+    @classmethod
+    def diff_removed(cls, text: str) -> str:
+        """Format text for 'removed' items (theme-aware)"""
+        if cls._enabled:
+            color = cls.THEMES[cls._theme]['removed']
+            return f"{color}{text}{cls.RESET}"
+        return text
+
+    @classmethod
+    def diff_modified(cls, text: str) -> str:
+        """Format text for 'modified' items (theme-aware)"""
+        if cls._enabled:
+            color = cls.THEMES[cls._theme]['modified']
+            return f"{color}{text}{cls.RESET}"
+        return text
 
     @classmethod
     def visible_len(cls, text: str) -> int:
@@ -6578,7 +6690,7 @@ def write_diff_output(
     console_output = None
 
     # Handle group-by-field output mode
-    if group_by_field and output_format in ['console', 'all']:
+    if group_by_field and should_generate_format(output_format, 'console'):
         console_output = write_diff_grouped_by_field_output(diff_result, use_color, group_by_field_limit)
         print(console_output)
         if output_format == 'console':
@@ -6590,34 +6702,34 @@ def write_diff_output(
         print(console_output)
         return console_output
 
-    if output_format in ['console', 'all'] and not group_by_field:
+    if should_generate_format(output_format, 'console') and not group_by_field:
         console_output = write_diff_console_output(diff_result, changes_only, summary_only, side_by_side, use_color)
         print(console_output)
 
     if output_format == 'console':
         return console_output
 
-    if output_format in ['json', 'all']:
+    if should_generate_format(output_format, 'json'):
         output_files.append(write_diff_json_output(
             diff_result, base_filename, output_dir, logger, changes_only
         ))
 
-    if output_format in ['markdown', 'all']:
+    if should_generate_format(output_format, 'markdown'):
         output_files.append(write_diff_markdown_output(
             diff_result, base_filename, output_dir, logger, changes_only, side_by_side
         ))
 
-    if output_format in ['html', 'all']:
+    if should_generate_format(output_format, 'html'):
         output_files.append(write_diff_html_output(
             diff_result, base_filename, output_dir, logger, changes_only
         ))
 
-    if output_format in ['excel', 'all']:
+    if should_generate_format(output_format, 'excel'):
         output_files.append(write_diff_excel_output(
             diff_result, base_filename, output_dir, logger, changes_only
         ))
 
-    if output_format in ['csv', 'all']:
+    if should_generate_format(output_format, 'csv'):
         output_files.append(write_diff_csv_output(
             diff_result, base_filename, output_dir, logger, changes_only
         ))
@@ -6640,7 +6752,10 @@ def process_single_dataview(
     quiet: bool = False,
     skip_validation: bool = False,
     max_issues: int = 0,
-    clear_cache: bool = False
+    clear_cache: bool = False,
+    show_timings: bool = False,
+    metrics_only: bool = False,
+    dimensions_only: bool = False
 ) -> ProcessingResult:
     """
     Process a single data view and generate SDR in specified format(s)
@@ -6659,6 +6774,7 @@ def process_single_dataview(
         skip_validation: Skip data quality validation for faster processing (default: False)
         max_issues: Limit data quality issues to top N by severity, >= 0; 0 = all (default: 0)
         clear_cache: Clear validation cache before processing (default: False)
+        show_timings: Display performance timing breakdown after processing (default: False)
 
     Returns:
         ProcessingResult with processing details including success status, metrics/dimensions count,
@@ -6931,7 +7047,12 @@ def process_single_dataview(
         base_filename = output_path.stem if isinstance(output_path, Path) else Path(output_path).stem
 
         # Determine which formats to generate
-        formats_to_generate = ['excel', 'csv', 'json', 'html', 'markdown'] if output_format == 'all' else [output_format]
+        if output_format == 'all':
+            formats_to_generate = ['excel', 'csv', 'json', 'html', 'markdown']
+        elif output_format in FORMAT_ALIASES:
+            formats_to_generate = FORMAT_ALIASES[output_format]
+        else:
+            formats_to_generate = [output_format]
 
         output_files = []
 
@@ -6949,9 +7070,12 @@ def process_single_dataview(
                             (metadata_df, 'Metadata'),
                             (data_quality_df, 'Data Quality'),
                             (lookup_df, 'DataView'),
-                            (metrics, 'Metrics'),
-                            (dimensions, 'Dimensions')
                         ]
+                        # Add component sheets based on filters
+                        if not dimensions_only:
+                            sheets_to_write.append((metrics, 'Metrics'))
+                        if not metrics_only:
+                            sheets_to_write.append((dimensions, 'Dimensions'))
 
                         for sheet_data, sheet_name in sheets_to_write:
                             try:
@@ -7010,6 +7134,10 @@ def process_single_dataview(
 
             logger.info("Script execution completed successfully")
             logger.info(perf_tracker.get_summary())
+
+            # Display timing summary on stdout if requested
+            if show_timings:
+                print(perf_tracker.get_summary())
 
             duration = time.time() - start_time
 
@@ -7106,14 +7234,15 @@ def process_single_dataview_worker(args: tuple) -> ProcessingResult:
 
     Args:
         args: Tuple of (data_view_id, config_file, output_dir, log_level, log_format, output_format,
-                       enable_cache, cache_size, cache_ttl, quiet, skip_validation, max_issues, clear_cache)
+                       enable_cache, cache_size, cache_ttl, quiet, skip_validation, max_issues, clear_cache,
+                       show_timings, metrics_only, dimensions_only)
 
     Returns:
         ProcessingResult
     """
-    data_view_id, config_file, output_dir, log_level, log_format, output_format, enable_cache, cache_size, cache_ttl, quiet, skip_validation, max_issues, clear_cache = args
+    data_view_id, config_file, output_dir, log_level, log_format, output_format, enable_cache, cache_size, cache_ttl, quiet, skip_validation, max_issues, clear_cache, show_timings, metrics_only, dimensions_only = args
     return process_single_dataview(data_view_id, config_file, output_dir, log_level, log_format, output_format,
-                                   enable_cache, cache_size, cache_ttl, quiet, skip_validation, max_issues, clear_cache)
+                                   enable_cache, cache_size, cache_ttl, quiet, skip_validation, max_issues, clear_cache, show_timings, metrics_only, dimensions_only)
 
 # ==================== BATCH PROCESSOR CLASS ====================
 
@@ -7139,16 +7268,23 @@ class BatchProcessor:
         skip_validation: Skip data quality validation (default: False)
         max_issues: Limit issues to top N by severity, >= 0; 0 = all (default: 0)
         clear_cache: Clear validation cache before processing (default: False)
+        show_timings: Display performance timing for each data view (default: False)
+        metrics_only: Only include metrics in output (default: False)
+        dimensions_only: Only include dimensions in output (default: False)
     """
 
     def __init__(self, config_file: str = "config.json", output_dir: str = ".",
                  workers: int = 4, continue_on_error: bool = False, log_level: str = "INFO",
                  log_format: str = "text", output_format: str = "excel", enable_cache: bool = False,
                  cache_size: int = 1000, cache_ttl: int = 3600, quiet: bool = False,
-                 skip_validation: bool = False, max_issues: int = 0, clear_cache: bool = False):
+                 skip_validation: bool = False, max_issues: int = 0, clear_cache: bool = False,
+                 show_timings: bool = False, metrics_only: bool = False, dimensions_only: bool = False):
         self.config_file = config_file
         self.output_dir = output_dir
         self.clear_cache = clear_cache
+        self.show_timings = show_timings
+        self.metrics_only = metrics_only
+        self.dimensions_only = dimensions_only
         self.workers = workers
         self.continue_on_error = continue_on_error
         self.log_level = log_level
@@ -7209,7 +7345,8 @@ class BatchProcessor:
         worker_args = [
             (dv_id, self.config_file, self.output_dir, self.log_level, self.log_format,
              self.output_format, self.enable_cache, self.cache_size, self.cache_ttl, self.quiet,
-             self.skip_validation, self.max_issues, self.clear_cache)
+             self.skip_validation, self.max_issues, self.clear_cache, self.show_timings,
+             self.metrics_only, self.dimensions_only)
             for dv_id in data_view_ids
         ]
 
@@ -7812,8 +7949,8 @@ Requirements:
         '--format',
         type=str,
         default=None,
-        choices=['console', 'excel', 'csv', 'json', 'html', 'markdown', 'all'],
-        help='Output format: console, excel, csv, json, html, markdown, or all. Default: excel for SDR generation, console for diff'
+        choices=['console', 'excel', 'csv', 'json', 'html', 'markdown', 'all', 'reports', 'data', 'ci'],
+        help='Output format: excel, csv, json, html, markdown, all, or aliases (reports=excel+markdown, data=csv+json, ci=json+markdown). Default: excel for SDR, console for diff'
     )
 
     parser.add_argument(
@@ -7854,6 +7991,13 @@ Requirements:
     )
 
     parser.add_argument(
+        '--config-status',
+        action='store_true',
+        help='Show configuration status (source, fields, masked credentials) without API call. '
+             'Faster than --validate-config for quick troubleshooting'
+    )
+
+    parser.add_argument(
         '--max-issues',
         type=int,
         default=0,
@@ -7862,6 +8006,12 @@ Requirements:
     )
 
     # ==================== UX ENHANCEMENT ARGUMENTS ====================
+
+    parser.add_argument(
+        '--show-timings',
+        action='store_true',
+        help='Display performance timing breakdown after processing (API calls, validation, output generation)'
+    )
 
     parser.add_argument(
         '--open',
@@ -7874,6 +8024,14 @@ Requirements:
         action='store_true',
         help='Show quick statistics about data view(s) without generating full reports. '
              'Displays counts of metrics, dimensions, and basic info'
+    )
+
+    parser.add_argument(
+        '--interactive', '-i',
+        action='store_true',
+        help='Interactively select data views from a numbered list. '
+             'Supports single selection (e.g., "3"), multiple (e.g., "1,3,5"), '
+             'ranges (e.g., "1-5"), or "all" to select all'
     )
 
     parser.add_argument(
@@ -7959,13 +8117,13 @@ Requirements:
     diff_group.add_argument(
         '--metrics-only',
         action='store_true',
-        help='Only compare metrics (exclude dimensions from diff)'
+        help='Only include metrics (exclude dimensions). Works for both SDR generation and diff comparison'
     )
 
     diff_group.add_argument(
         '--dimensions-only',
         action='store_true',
-        help='Only compare dimensions (exclude metrics from diff)'
+        help='Only include dimensions (exclude metrics). Works for both SDR generation and diff comparison'
     )
 
     diff_group.add_argument(
@@ -7985,6 +8143,14 @@ Requirements:
         '--no-color',
         action='store_true',
         help='Disable ANSI color codes in console output'
+    )
+
+    diff_group.add_argument(
+        '--color-theme',
+        type=str,
+        choices=['default', 'accessible'],
+        default='default',
+        help='Color theme for diff output: "default" (green/red) or "accessible" (blue/orange for accessibility)'
     )
 
     diff_group.add_argument(
@@ -8617,6 +8783,190 @@ def list_dataviews(config_file: str = "config.json", output_format: str = "table
         return False
 
 
+# ==================== INTERACTIVE DATA VIEW SELECTION ====================
+
+def interactive_select_dataviews(config_file: str = "config.json") -> List[str]:
+    """
+    Interactively select data views from a numbered list.
+
+    Supports selection formats:
+    - Single number: "3"
+    - Multiple numbers: "1,3,5"
+    - Range: "1-5"
+    - Combined: "1,3-5,7"
+    - All: "all" or "a"
+
+    Args:
+        config_file: Path to CJA configuration file
+
+    Returns:
+        List of selected data view IDs, or empty list on error/cancel
+    """
+    print()
+    print("=" * 60)
+    print("INTERACTIVE DATA VIEW SELECTION")
+    print("=" * 60)
+    print()
+    print(f"Using configuration: {config_file}")
+    print()
+
+    try:
+        cjapy.importConfigFile(config_file)
+        cja = cjapy.CJA()
+
+        print("Fetching available data views...")
+        available_dvs = cja.getDataViews()
+
+        if available_dvs is None or (hasattr(available_dvs, '__len__') and len(available_dvs) == 0):
+            print()
+            print(ConsoleColors.warning("No data views found or no access to any data views."))
+            return []
+
+        # Convert to list if DataFrame
+        if isinstance(available_dvs, pd.DataFrame):
+            available_dvs = available_dvs.to_dict('records')
+
+        # Build display data
+        display_data = []
+        for dv in available_dvs:
+            if isinstance(dv, dict):
+                dv_id = dv.get('id', 'N/A')
+                dv_name = dv.get('name', 'N/A')
+                dv_owner = dv.get('owner', {})
+                owner_name = dv_owner.get('name', 'N/A') if isinstance(dv_owner, dict) else str(dv_owner)
+                display_data.append({
+                    'id': dv_id,
+                    'name': dv_name,
+                    'owner': owner_name
+                })
+
+        if not display_data:
+            print(ConsoleColors.warning("No data views available."))
+            return []
+
+        # Calculate column widths
+        num_width = len(str(len(display_data))) + 2
+        max_id_width = max(len('ID'), max(len(item['id']) for item in display_data)) + 2
+        max_name_width = max(len('Name'), max(len(item['name']) for item in display_data)) + 2
+        max_owner_width = max(len('Owner'), max(len(item['owner']) for item in display_data)) + 2
+
+        total_width = num_width + max_id_width + max_name_width + max_owner_width
+
+        print()
+        print(f"Found {len(display_data)} accessible data view(s):")
+        print()
+        print(f"{'#':<{num_width}} {'ID':<{max_id_width}} {'Name':<{max_name_width}} {'Owner':<{max_owner_width}}")
+        print("-" * total_width)
+
+        for idx, item in enumerate(display_data, 1):
+            print(f"{idx:<{num_width}} {item['id']:<{max_id_width}} {item['name']:<{max_name_width}} {item['owner']:<{max_owner_width}}")
+
+        print()
+        print("-" * total_width)
+        print("Selection options:")
+        print("  Single:   3         (selects #3)")
+        print("  Multiple: 1,3,5     (selects #1, #3, #5)")
+        print("  Range:    1-5       (selects #1 through #5)")
+        print("  Combined: 1,3-5,7   (selects #1, #3, #4, #5, #7)")
+        print("  All:      all or a  (selects all data views)")
+        print("  Cancel:   q or quit (exit without selection)")
+        print()
+
+        while True:
+            try:
+                selection = input("Enter selection: ").strip().lower()
+            except EOFError:
+                print()
+                print(ConsoleColors.warning("No input available (non-interactive terminal)."))
+                return []
+
+            if not selection:
+                print("Please enter a selection.")
+                continue
+
+            if selection in ('q', 'quit', 'exit', 'cancel'):
+                print(ConsoleColors.warning("Selection cancelled."))
+                return []
+
+            # Parse selection
+            selected_indices = set()
+
+            if selection in ('all', 'a', '*'):
+                selected_indices = set(range(1, len(display_data) + 1))
+            else:
+                # Parse comma-separated parts
+                parts = selection.replace(' ', '').split(',')
+                valid = True
+                for part in parts:
+                    if not part:
+                        continue
+                    if '-' in part:
+                        # Range like "1-5"
+                        try:
+                            range_parts = part.split('-')
+                            if len(range_parts) != 2:
+                                raise ValueError("Invalid range format")
+                            start = int(range_parts[0])
+                            end = int(range_parts[1])
+                            if start > end:
+                                start, end = end, start
+                            for i in range(start, end + 1):
+                                selected_indices.add(i)
+                        except ValueError:
+                            print(ConsoleColors.error(f"Invalid range: '{part}'. Use format like '1-5'."))
+                            valid = False
+                            break
+                    else:
+                        # Single number
+                        try:
+                            num = int(part)
+                            selected_indices.add(num)
+                        except ValueError:
+                            print(ConsoleColors.error(f"Invalid number: '{part}'."))
+                            valid = False
+                            break
+
+                if not valid:
+                    continue
+
+            # Validate indices
+            invalid_indices = [i for i in selected_indices if i < 1 or i > len(display_data)]
+            if invalid_indices:
+                print(ConsoleColors.error(f"Invalid selection(s): {invalid_indices}. Valid range: 1-{len(display_data)}"))
+                continue
+
+            if not selected_indices:
+                print("No valid selections. Please try again.")
+                continue
+
+            # Convert indices to IDs
+            selected_ids = [display_data[i - 1]['id'] for i in sorted(selected_indices)]
+
+            print()
+            print(f"Selected {len(selected_ids)} data view(s):")
+            for idx in sorted(selected_indices):
+                item = display_data[idx - 1]
+                print(f"  {idx}. {item['name']} ({item['id']})")
+
+            return selected_ids
+
+    except FileNotFoundError:
+        print(ConsoleColors.error(f"ERROR: Configuration file '{config_file}' not found"))
+        print()
+        print("Generate a sample configuration file with:")
+        print("  cja_auto_sdr --sample-config")
+        return []
+
+    except (KeyboardInterrupt, SystemExit):
+        print()
+        print(ConsoleColors.warning("Operation cancelled."))
+        return []
+
+    except Exception as e:
+        print(ConsoleColors.error(f"ERROR: Failed to connect to CJA API: {str(e)}"))
+        return []
+
+
 # ==================== SAMPLE CONFIG GENERATOR ====================
 
 def generate_sample_config(output_path: str = "config.sample.json") -> bool:
@@ -8664,6 +9014,114 @@ def generate_sample_config(output_path: str = "config.sample.json") -> bool:
     except (PermissionError, OSError, IOError) as e:
         print(ConsoleColors.error(f"ERROR: Failed to create sample config: {str(e)}"))
         return False
+
+
+# ==================== CONFIG STATUS ====================
+
+def show_config_status(config_file: str = "config.json") -> bool:
+    """
+    Show configuration status without connecting to API.
+
+    Displays:
+        - Active configuration source (env vars vs config file)
+        - Fields that are set (with masked sensitive values)
+        - Quick troubleshooting information
+
+    Args:
+        config_file: Path to CJA configuration file
+
+    Returns:
+        True if valid configuration found, False otherwise
+    """
+    print()
+    print("=" * 60)
+    print("CONFIGURATION STATUS")
+    print("=" * 60)
+    print()
+
+    config_source = None
+    config_data = {}
+
+    # Check environment variables first
+    env_credentials = load_credentials_from_env()
+    if env_credentials and validate_env_credentials(env_credentials, logging.getLogger(__name__)):
+        config_source = "Environment variables"
+        config_data = env_credentials
+    else:
+        # Check config file
+        config_path = Path(config_file)
+        if config_path.exists():
+            try:
+                with open(config_file, 'r') as f:
+                    config_data = json.load(f)
+                config_source = f"Config file: {config_path.resolve()}"
+            except json.JSONDecodeError:
+                print(ConsoleColors.error(f"ERROR: {config_file} is not valid JSON"))
+                return False
+            except Exception as e:
+                print(ConsoleColors.error(f"ERROR: Cannot read {config_file}: {e}"))
+                return False
+        else:
+            print(ConsoleColors.error(f"ERROR: No configuration found"))
+            print()
+            print("Options:")
+            print(f"  1. Create config file: {config_file}")
+            print("  2. Set environment variables: ORG_ID, CLIENT_ID, SECRET, SCOPES")
+            print()
+            print("Generate a sample config with:")
+            print("  cja_auto_sdr --sample-config")
+            return False
+
+    print(f"Source: {config_source}")
+    print()
+    print("Credentials:")
+
+    # Define field display order and metadata
+    fields = [
+        ('org_id', 'ORG_ID', True, False),      # (key, display_name, required, sensitive)
+        ('client_id', 'CLIENT_ID', True, True),
+        ('secret', 'SECRET', True, True),
+        ('scopes', 'SCOPES', False, False),
+        ('sandbox', 'SANDBOX', False, False),
+    ]
+
+    all_required_set = True
+    for key, display_name, required, sensitive in fields:
+        value = config_data.get(key, '')
+        if value:
+            if sensitive:
+                # Mask sensitive values
+                if len(value) > 8:
+                    masked = value[:4] + '*' * (len(value) - 8) + value[-4:]
+                else:
+                    masked = '*' * len(value)
+                display_value = masked
+            else:
+                display_value = value
+            status = ConsoleColors.success("✓")
+            print(f"  {status} {display_name}: {display_value}")
+        else:
+            if required:
+                status = ConsoleColors.error("✗")
+                print(f"  {status} {display_name}: not set (required)")
+                all_required_set = False
+            else:
+                print(f"  - {display_name}: not set (optional)")
+
+    print()
+    if all_required_set:
+        print(ConsoleColors.success("Configuration is complete."))
+        print()
+        print("To verify API connectivity, run:")
+        print("  cja_auto_sdr --validate-config")
+    else:
+        print(ConsoleColors.error("Configuration is incomplete."))
+        print()
+        print("See documentation:")
+        print("  https://github.com/brian-a-au/cja_auto_sdr/blob/main/docs/CONFIGURATION.md")
+
+    print()
+    return all_required_set
 
 
 # ==================== VALIDATE CONFIG ====================
@@ -9533,6 +9991,31 @@ def handle_compare_snapshots_command(source_file: str, target_file: str,
             print(f"Comparing: {source_label} vs {target_label}")
             print()
 
+            # Show snapshot metadata
+            print("Snapshot Details:")
+            print("-" * 40)
+
+            # Source snapshot info
+            source_size = os.path.getsize(source_file)
+            source_size_str = f"{source_size:,} bytes" if source_size < 1024 else f"{source_size/1024:.1f} KB"
+            print(f"  Source:")
+            print(f"    File: {Path(source_file).name} ({source_size_str})")
+            print(f"    Created: {source_snapshot.created_at}")
+            print(f"    Data View: {source_snapshot.data_view_name} ({source_snapshot.data_view_id})")
+            print(f"    Metrics: {len(source_snapshot.metrics):,} | Dimensions: {len(source_snapshot.dimensions):,}")
+
+            # Target snapshot info
+            target_size = os.path.getsize(target_file)
+            target_size_str = f"{target_size:,} bytes" if target_size < 1024 else f"{target_size/1024:.1f} KB"
+            print(f"  Target:")
+            print(f"    File: {Path(target_file).name} ({target_size_str})")
+            print(f"    Created: {target_snapshot.created_at}")
+            print(f"    Data View: {target_snapshot.data_view_name} ({target_snapshot.data_view_id})")
+            print(f"    Metrics: {len(target_snapshot.metrics):,} | Dimensions: {len(target_snapshot.dimensions):,}")
+
+            print("-" * 40)
+            print()
+
         # Compare snapshots
         comparator = DataViewComparator(
             logger,
@@ -9663,6 +10146,20 @@ def main():
     if output_to_stdout:
         args.quiet = True
 
+    # Auto-detect format from output file extension if --format not explicitly set
+    output_path = getattr(args, 'output', None)
+    if output_path and not args.format:
+        inferred_format = infer_format_from_path(output_path)
+        if inferred_format:
+            args.format = inferred_format
+            if not args.quiet:
+                print(f"Auto-detected format '{inferred_format}' from output file extension")
+
+    # Set color theme for diff output (accessible accessibility)
+    color_theme = getattr(args, 'color_theme', 'default')
+    if color_theme and color_theme != 'default':
+        ConsoleColors.set_theme(color_theme)
+
     # Handle --exit-codes mode (no data view required)
     if getattr(args, 'exit_codes', False):
         print("=" * 60)
@@ -9747,6 +10244,11 @@ def main():
         )
         sys.exit(0 if success else 1)
 
+    # Handle --config-status mode (no data view required, no API call)
+    if getattr(args, 'config_status', False):
+        success = show_config_status(args.config_file)
+        sys.exit(0 if success else 1)
+
     # Handle --validate-config mode (no data view required)
     if args.validate_config:
         success = validate_config_only(args.config_file)
@@ -9754,6 +10256,17 @@ def main():
 
     # Get data views from arguments
     data_view_inputs = args.data_views
+
+    # Handle --interactive mode (select data views interactively)
+    if getattr(args, 'interactive', False):
+        if data_view_inputs:
+            print(ConsoleColors.warning("Note: --interactive ignores any data view IDs provided on command line"))
+        selected_ids = interactive_select_dataviews(args.config_file)
+        if not selected_ids:
+            print("No data views selected. Exiting.")
+            sys.exit(0)
+        data_view_inputs = selected_ids
+        print()
 
     # Handle --stats mode (requires data views)
     if getattr(args, 'stats', False):
@@ -10223,6 +10736,11 @@ def main():
         print("  cja_auto_sdr --diff dv_A dv_B --format json  # JSON output")
         sys.exit(1)
 
+    # Check for conflicting component filter options
+    if getattr(args, 'metrics_only', False) and getattr(args, 'dimensions_only', False):
+        print(ConsoleColors.error("ERROR: Cannot use both --metrics-only and --dimensions-only"), file=sys.stderr)
+        sys.exit(1)
+
     # Process data views
     if args.batch or len(data_views) > 1:
         # Batch mode - parallel processing
@@ -10252,7 +10770,10 @@ def main():
             quiet=args.quiet,
             skip_validation=args.skip_validation,
             max_issues=args.max_issues,
-            clear_cache=args.clear_cache
+            clear_cache=args.clear_cache,
+            show_timings=args.show_timings,
+            metrics_only=getattr(args, 'metrics_only', False),
+            dimensions_only=getattr(args, 'dimensions_only', False)
         )
 
         results = processor.process_batch(data_views)
@@ -10301,7 +10822,10 @@ def main():
             quiet=args.quiet,
             skip_validation=args.skip_validation,
             max_issues=args.max_issues,
-            clear_cache=args.clear_cache
+            clear_cache=args.clear_cache,
+            show_timings=args.show_timings,
+            metrics_only=getattr(args, 'metrics_only', False),
+            dimensions_only=getattr(args, 'dimensions_only', False)
         )
 
         # Print final status with color and total runtime
