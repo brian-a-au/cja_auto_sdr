@@ -476,6 +476,21 @@ cja_auto_sdr --diff dv_12345 "Staging Analytics"
 cja_auto_sdr --diff "Production Analytics" dv_67890
 ```
 
+### Using Profiles for Multi-Organization Comparisons
+
+When comparing data views across different Adobe Organizations, use profiles:
+
+```bash
+# Compare using a specific organization's credentials
+cja_auto_sdr --profile client-a --diff dv_12345 dv_67890
+
+# Save snapshot from one org, compare in another (requires separate runs)
+cja_auto_sdr --profile prod-org --snapshot ./snapshots/prod-baseline.json dv_12345
+cja_auto_sdr --profile staging-org --diff-snapshot ./snapshots/prod-baseline.json dv_67890
+```
+
+> **Note:** Each `--diff` command uses a single set of credentials. To compare data views from different organizations, save a snapshot from one org, then compare against it using credentials from another org.
+
 ### Save and Compare Against Snapshots
 
 ```bash
@@ -604,6 +619,7 @@ To minimize API calls during name resolution, data view listings are cached for 
 
 | Option | Description |
 |--------|-------------|
+| `--profile NAME` / `-p` | Use named profile from `~/.cja/orgs/<NAME>/` for credentials. |
 | `--diff` | Compare two data views. Requires exactly 2 data view IDs/names. |
 | `--snapshot FILE` | Save a data view snapshot to a JSON file. |
 | `--diff-snapshot FILE` | Compare a data view against a saved snapshot. |
@@ -835,7 +851,7 @@ Snapshots are saved as JSON files with the following structure:
     { "id": "dimensions/page", "name": "Page", "type": "string", ... }
   ],
   "metadata": {
-    "tool_version": "3.0.14",
+    "tool_version": "3.0.15",
     "metrics_count": 150,
     "dimensions_count": 75
   }

@@ -242,7 +242,7 @@ def clean_env():
     """Fixture to temporarily clear credential environment variables"""
     # Save current env vars
     saved = {}
-    credential_vars = ['ORG_ID', 'CLIENT_ID', 'SECRET', 'SCOPES', 'SANDBOX']
+    credential_vars = ['ORG_ID', 'CLIENT_ID', 'SECRET', 'SCOPES', 'SANDBOX', 'CJA_PROFILE', 'CJA_HOME']
     for k in credential_vars:
         if k in os.environ:
             saved[k] = os.environ.pop(k)
@@ -250,5 +250,74 @@ def clean_env():
     yield
 
     # Restore env vars
+    for k, v in saved.items():
+        os.environ[k] = v
+
+
+@pytest.fixture
+def mock_profile_credentials():
+    """Create mock profile credentials"""
+    return {
+        'org_id': 'profile_org@AdobeOrg',
+        'client_id': 'profile_client_id_12345678',
+        'secret': 'profile_secret_12345678',
+        'scopes': 'openid, AdobeID, additional_info.projectedProductContext'
+    }
+
+
+@pytest.fixture
+def temp_profiles_dir(tmp_path):
+    """Create a temporary profiles directory with test profiles"""
+    profiles_dir = tmp_path / '.cja' / 'orgs'
+    profiles_dir.mkdir(parents=True)
+
+    # Create client-a profile with config.json
+    client_a = profiles_dir / 'client-a'
+    client_a.mkdir()
+    config_a = {
+        'org_id': 'clienta@AdobeOrg',
+        'client_id': 'client_a_id_12345678',
+        'secret': 'client_a_secret_12345678',
+        'scopes': 'openid'
+    }
+    (client_a / 'config.json').write_text(json.dumps(config_a))
+
+    # Create client-b profile with .env
+    client_b = profiles_dir / 'client-b'
+    client_b.mkdir()
+    env_content = """
+ORG_ID=clientb@AdobeOrg
+CLIENT_ID=client_b_id_12345678
+SECRET=client_b_secret_12345678
+SCOPES=openid
+"""
+    (client_b / '.env').write_text(env_content)
+
+    # Create mixed profile with both config.json and .env
+    mixed = profiles_dir / 'mixed'
+    mixed.mkdir()
+    config_mixed = {
+        'org_id': 'mixed_json@AdobeOrg',
+        'client_id': 'mixed_client_id',
+        'secret': 'mixed_secret',
+        'scopes': 'openid'
+    }
+    (mixed / 'config.json').write_text(json.dumps(config_mixed))
+    (mixed / '.env').write_text('ORG_ID=mixed_env@AdobeOrg')  # Override org_id
+
+    return tmp_path / '.cja'
+
+
+@pytest.fixture
+def clean_profile_env():
+    """Fixture to temporarily clear profile-related environment variables"""
+    saved = {}
+    profile_vars = ['CJA_PROFILE', 'CJA_HOME']
+    for k in profile_vars:
+        if k in os.environ:
+            saved[k] = os.environ.pop(k)
+
+    yield
+
     for k, v in saved.items():
         os.environ[k] = v

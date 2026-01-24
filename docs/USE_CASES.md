@@ -220,6 +220,50 @@ cja_auto_sdr dv_12345 --diff-snapshot ./baseline.json --auto-snapshot
   --format markdown --diff-output ./audit/weekly/latest-diff.md
 ```
 
+### Multi-Organization Management
+
+Manage SDR documentation across multiple Adobe Organizations without manual config file switching:
+
+**Best for:** Agencies, consultants, enterprises with regional orgs, multi-brand companies
+
+```bash
+# One-time setup: Create profiles for each organization
+cja_auto_sdr --profile-add client-a
+cja_auto_sdr --profile-add client-b
+cja_auto_sdr --profile-add internal
+
+# List all profiles
+cja_auto_sdr --profile-list
+
+# Generate SDR for different organizations
+cja_auto_sdr --profile client-a "Production Analytics" --format excel
+cja_auto_sdr --profile client-b "Main Data View" --format excel
+
+# Test profile connectivity before use
+cja_auto_sdr --profile-test client-a
+
+# Set default profile for a session
+export CJA_PROFILE=client-a
+cja_auto_sdr --list-dataviews  # Uses client-a credentials
+```
+
+**Batch processing across organizations:**
+
+```bash
+#!/bin/bash
+# generate_all_clients.sh
+
+for profile in client-a client-b client-c; do
+  echo "Processing $profile..."
+  cja_auto_sdr --profile "$profile" --list-dataviews --format json \
+    | jq -r '.dataViews[].id' \
+    | xargs -I {} cja_auto_sdr --profile "$profile" {} \
+        --output-dir "./reports/$profile/$(date +%Y%m%d)"
+done
+```
+
+See the [Profile Management](CONFIGURATION.md#profile-management) section in the Configuration Guide for full documentation.
+
 ### Quick Comparison Against Previous State
 
 Use `--compare-with-prev` for one-command comparisons against the most recent snapshot:

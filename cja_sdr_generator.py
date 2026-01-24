@@ -21,6 +21,7 @@ import os
 import random
 import functools
 from dataclasses import dataclass, field
+from abc import ABC, abstractmethod
 import tempfile
 import atexit
 import uuid
@@ -49,7 +50,7 @@ except ImportError:
 
 # ==================== VERSION ====================
 
-__version__ = "3.0.14"
+__version__ = "3.0.15"
 
 # ==================== FORMAT ALIASES ====================
 
@@ -200,6 +201,65 @@ class OutputError(CJASDRError):
         self.output_format = output_format
         self.original_error = original_error
         super().__init__(message, details)
+
+
+class ProfileError(CJASDRError):
+    """Base exception for profile-related errors.
+
+    Used when operations involving credential profiles fail.
+    """
+
+    def __init__(self, message: str, profile_name: Optional[str] = None,
+                 details: Optional[str] = None):
+        self.profile_name = profile_name
+        super().__init__(message, details)
+
+
+class ProfileNotFoundError(ProfileError):
+    """Raised when a profile directory doesn't exist.
+
+    Examples:
+        - Profile directory not found in ~/.cja/orgs/
+        - Neither config.json nor .env exists in profile directory
+    """
+    pass
+
+
+class ProfileConfigError(ProfileError):
+    """Raised when a profile has invalid configuration.
+
+    Examples:
+        - Invalid JSON in config.json
+        - Missing required credentials
+        - Invalid profile name format
+    """
+    pass
+
+
+class CredentialSourceError(CJASDRError):
+    """Exception raised when credential loading fails from any source.
+
+    Provides consistent error handling across all credential sources
+    (profiles, environment variables, config files).
+
+    Attributes:
+        source: Name of the credential source (e.g., "profile", "env", "config_file")
+        reason: Why the credential loading failed
+    """
+
+    def __init__(self, message: str, source: str,
+                 reason: Optional[str] = None, details: Optional[str] = None):
+        self.source = source
+        self.reason = reason
+        super().__init__(message, details)
+
+    def __str__(self) -> str:
+        parts = [f"[{self.source}] {self.message}"]
+        if self.reason:
+            parts.append(f"Reason: {self.reason}")
+        if self.details:
+            parts.append(self.details)
+        return " - ".join(parts)
 
 
 # ==================== CONFIGURATION DATACLASSES ====================
@@ -3017,7 +3077,7 @@ class ValidationCache:
         if debug_enabled:
             self.logger.debug(f"Cache EVICT: LRU entry removed (total evictions: {self._evictions})")
 
-    def get_statistics(self) -> Dict[str, any]:
+    def get_statistics(self) -> Dict[str, Any]:
         """
         Get cache performance statistics
 
@@ -3068,6 +3128,562 @@ class ValidationCache:
         if estimated_time_saved > 0.1:
             self.logger.info(f"  - Estimated time saved: {estimated_time_saved:.2f}s")
 
+# ==================== PROFILE MANAGEMENT ====================
+
+def get_cja_home() -> Path:
+    """Get CJA home directory (~/.cja or $CJA_HOME).
+
+    Returns:
+        Path to CJA home directory
+    """
+    cja_home = os.environ.get('CJA_HOME')
+    if cja_home:
+        return Path(cja_home).expanduser()
+    return Path.home() / '.cja'
+
+
+def get_profiles_dir() -> Path:
+    """Get profiles directory (~/.cja/orgs/).
+
+    Returns:
+        Path to profiles directory
+    """
+    return get_cja_home() / 'orgs'
+
+
+def get_profile_path(profile_name: str) -> Path:
+    """Get path to a specific profile directory.
+
+    Args:
+        profile_name: Name of the profile
+
+    Returns:
+        Path to profile directory
+    """
+    return get_profiles_dir() / profile_name
+
+
+def validate_profile_name(name: str) -> Tuple[bool, Optional[str]]:
+    """Validate profile name (alphanumeric, dashes, underscores only).
+
+    Args:
+        name: Profile name to validate
+
+    Returns:
+        Tuple of (is_valid, error_message). error_message is None if valid.
+    """
+    if not name:
+        return False, "Profile name cannot be empty"
+
+    if not re.match(r'^[a-zA-Z0-9][a-zA-Z0-9_-]*$', name):
+        return False, (
+            f"Profile name '{name}' is invalid. "
+            "Must start with alphanumeric and contain only letters, numbers, dashes, and underscores."
+        )
+
+    if len(name) > 64:
+        return False, f"Profile name '{name}' is too long (max 64 characters)"
+
+    return True, None
+
+
+def load_profile_config_json(profile_path: Path) -> Optional[Dict[str, str]]:
+    """Load credentials from profile's config.json.
+
+    Args:
+        profile_path: Path to profile directory
+
+    Returns:
+        Dictionary with credentials if config.json exists and is valid, None otherwise
+    """
+    config_file = profile_path / 'config.json'
+    if not config_file.exists():
+        return None
+
+    try:
+        with open(config_file, 'r') as f:
+            config = json.load(f)
+        if isinstance(config, dict):
+            return {k: str(v).strip() for k, v in config.items() if v}
+        return None
+    except (json.JSONDecodeError, IOError):
+        return None
+
+
+def load_profile_dotenv(profile_path: Path) -> Optional[Dict[str, str]]:
+    """Load credentials from profile's .env file.
+
+    Args:
+        profile_path: Path to profile directory
+
+    Returns:
+        Dictionary with credentials if .env exists and is valid, None otherwise
+    """
+    env_file = profile_path / '.env'
+    if not env_file.exists():
+        return None
+
+    credentials = {}
+    try:
+        with open(env_file, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith('#'):
+                    continue
+                if '=' in line:
+                    key, _, value = line.partition('=')
+                    key = key.strip()
+                    value = value.strip().strip('"').strip("'")
+                    if key and value:
+                        # Map env var names to config field names
+                        config_key = key.lower()
+                        # Use CREDENTIAL_FIELDS for allowed fields (single source of truth)
+                        if config_key in CREDENTIAL_FIELDS['all']:
+                            credentials[config_key] = value
+    except IOError:
+        return None
+
+    return credentials if credentials else None
+
+
+def load_profile_credentials(profile_name: str, logger: logging.Logger) -> Optional[Dict[str, str]]:
+    """Load and merge credentials from profile (config.json + .env).
+
+    Precedence within profile:
+    1. .env values override config.json values
+    2. Matches existing behavior (env vars > config file)
+
+    Args:
+        profile_name: Name of the profile to load
+        logger: Logger instance
+
+    Returns:
+        Dictionary with merged credentials, or None if profile not found
+
+    Raises:
+        ProfileNotFoundError: If profile directory doesn't exist
+        ProfileConfigError: If profile has no valid configuration
+    """
+    # Validate profile name
+    is_valid, error_msg = validate_profile_name(profile_name)
+    if not is_valid:
+        raise ProfileConfigError(error_msg, profile_name=profile_name)
+
+    profile_path = get_profile_path(profile_name)
+
+    if not profile_path.exists():
+        raise ProfileNotFoundError(
+            f"Profile '{profile_name}' not found",
+            profile_name=profile_name,
+            details=f"Expected directory: {profile_path}"
+        )
+
+    if not profile_path.is_dir():
+        raise ProfileConfigError(
+            f"Profile path is not a directory",
+            profile_name=profile_name,
+            details=str(profile_path)
+        )
+
+    # Load config.json first
+    credentials = load_profile_config_json(profile_path) or {}
+    json_source = bool(credentials)
+
+    # Override with .env values
+    env_credentials = load_profile_dotenv(profile_path)
+    if env_credentials:
+        credentials.update(env_credentials)
+
+    if not credentials:
+        raise ProfileConfigError(
+            f"Profile '{profile_name}' has no configuration",
+            profile_name=profile_name,
+            details=f"Expected config.json or .env in {profile_path}"
+        )
+
+    if json_source and env_credentials:
+        logger.debug(f"Profile '{profile_name}': merged config.json with .env overrides")
+    elif json_source:
+        logger.debug(f"Profile '{profile_name}': loaded from config.json")
+    else:
+        logger.debug(f"Profile '{profile_name}': loaded from .env")
+
+    return credentials
+
+
+def resolve_active_profile(cli_profile: Optional[str] = None) -> Optional[str]:
+    """Resolve active profile: --profile > CJA_PROFILE > None.
+
+    Args:
+        cli_profile: Profile name from --profile CLI argument
+
+    Returns:
+        Active profile name, or None if no profile is active
+    """
+    if cli_profile:
+        return cli_profile
+    return os.environ.get('CJA_PROFILE')
+
+
+def list_profiles(output_format: str = 'table') -> bool:
+    """List all profiles with status indicators.
+
+    Args:
+        output_format: Output format - "table" (default) or "json"
+
+    Returns:
+        True if successful, False otherwise
+    """
+    profiles_dir = get_profiles_dir()
+
+    if not profiles_dir.exists():
+        if output_format == 'json':
+            print(json.dumps({"profiles": [], "count": 0}, indent=2))
+        else:
+            print()
+            print("No profiles directory found.")
+            print(f"Expected: {profiles_dir}")
+            print()
+            print("To create profiles, run:")
+            print(f"  cja_auto_sdr --profile-add <profile-name>")
+            print()
+        return True
+
+    profiles = []
+    active_profile = os.environ.get('CJA_PROFILE')
+
+    for item in sorted(profiles_dir.iterdir()):
+        if not item.is_dir():
+            continue
+
+        profile_name = item.name
+        has_config_json = (item / 'config.json').exists()
+        has_env = (item / '.env').exists()
+        is_active = profile_name == active_profile
+
+        if has_config_json or has_env:
+            config_source = []
+            if has_config_json:
+                config_source.append('config.json')
+            if has_env:
+                config_source.append('.env')
+
+            profiles.append({
+                'name': profile_name,
+                'active': is_active,
+                'sources': config_source,
+                'path': str(item)
+            })
+
+    if output_format == 'json':
+        print(json.dumps({
+            "profiles": profiles,
+            "count": len(profiles),
+            "active": active_profile
+        }, indent=2))
+    else:
+        print()
+        print("=" * 60)
+        print("AVAILABLE PROFILES")
+        print("=" * 60)
+        print()
+
+        if not profiles:
+            print("No profiles found.")
+            print()
+            print("To create a profile, run:")
+            print("  cja_auto_sdr --profile-add <profile-name>")
+        else:
+            print(f"{'Profile':<25} {'Sources':<20} {'Status'}")
+            print("-" * 60)
+            for p in profiles:
+                status = "[active]" if p['active'] else ""
+                sources = ", ".join(p['sources'])
+                marker = "●" if p['active'] else " "
+                print(f"{marker} {p['name']:<23} {sources:<20} {status}")
+
+            print()
+            print(f"Total: {len(profiles)} profile(s)")
+            print()
+            print("Usage:")
+            print("  cja_auto_sdr --profile <name> --list-dataviews")
+            print("  export CJA_PROFILE=<name>")
+
+        print()
+
+    return True
+
+
+def add_profile_interactive(profile_name: str) -> bool:
+    """Interactively create a new profile.
+
+    Args:
+        profile_name: Name for the new profile
+
+    Returns:
+        True if profile created successfully, False otherwise
+    """
+    # Validate profile name
+    is_valid, error_msg = validate_profile_name(profile_name)
+    if not is_valid:
+        print(f"Error: {error_msg}")
+        return False
+
+    profile_path = get_profile_path(profile_name)
+
+    if profile_path.exists():
+        print(f"Profile '{profile_name}' already exists at: {profile_path}")
+        print()
+        response = input("Overwrite? [y/N]: ").strip().lower()
+        if response != 'y':
+            print("Aborted.")
+            return False
+
+    # Create profile directory
+    try:
+        profile_path.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        print(f"Error creating profile directory: {e}")
+        return False
+
+    print()
+    print("=" * 60)
+    print(f"CREATING PROFILE: {profile_name}")
+    print("=" * 60)
+    print()
+    print("Enter your Adobe OAuth credentials.")
+    print("(Get these from Adobe Developer Console → Project → Credentials)")
+    print()
+
+    try:
+        org_id = input("Organization ID (ends with @AdobeOrg): ").strip()
+        if not org_id:
+            print("Error: Organization ID is required")
+            return False
+
+        client_id = input("Client ID: ").strip()
+        if not client_id:
+            print("Error: Client ID is required")
+            return False
+
+        # Use getpass for secret if available
+        try:
+            import getpass
+            secret = getpass.getpass("Client Secret: ").strip()
+        except Exception:
+            secret = input("Client Secret: ").strip()
+
+        if not secret:
+            print("Error: Client Secret is required")
+            return False
+
+        scopes = input("OAuth Scopes (from Developer Console): ").strip()
+        if not scopes:
+            print("Error: OAuth Scopes are required")
+            return False
+
+    except (KeyboardInterrupt, EOFError):
+        print("\nAborted.")
+        return False
+
+    # Create config.json
+    config = {
+        "org_id": org_id,
+        "client_id": client_id,
+        "secret": secret,
+        "scopes": scopes
+    }
+
+    config_file = profile_path / 'config.json'
+    try:
+        with open(config_file, 'w') as f:
+            json.dump(config, f, indent=2)
+        # Set restrictive permissions
+        config_file.chmod(0o600)
+    except IOError as e:
+        print(f"Error writing config file: {e}")
+        return False
+
+    print()
+    print(f"Profile '{profile_name}' created successfully!")
+    print(f"  Location: {profile_path}")
+    print()
+    print("Test your profile:")
+    print(f"  cja_auto_sdr --profile-test {profile_name}")
+    print()
+    print("Use your profile:")
+    print(f"  cja_auto_sdr --profile {profile_name} --list-dataviews")
+    print()
+
+    return True
+
+
+def mask_sensitive_value(value: str, show_chars: int = 4) -> str:
+    """Mask sensitive values for display.
+
+    Args:
+        value: The value to mask
+        show_chars: Number of characters to show at start and end
+
+    Returns:
+        Masked value string
+    """
+    if not value:
+        return "(empty)"
+
+    if len(value) <= show_chars * 2:
+        return "*" * len(value)
+
+    return f"{value[:show_chars]}{'*' * (len(value) - show_chars * 2)}{value[-show_chars:]}"
+
+
+def show_profile(profile_name: str) -> bool:
+    """Display profile config with masked secrets.
+
+    Args:
+        profile_name: Name of the profile to show
+
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        logger = logging.getLogger('profile_show')
+        logger.setLevel(logging.WARNING)
+        credentials = load_profile_credentials(profile_name, logger)
+    except ProfileNotFoundError as e:
+        print(f"Error: {e}")
+        return False
+    except ProfileConfigError as e:
+        print(f"Error: {e}")
+        return False
+
+    profile_path = get_profile_path(profile_name)
+
+    print()
+    print("=" * 60)
+    print(f"PROFILE: {profile_name}")
+    print("=" * 60)
+    print()
+    print(f"Location: {profile_path}")
+    print()
+
+    # Show sources
+    sources = []
+    if (profile_path / 'config.json').exists():
+        sources.append('config.json')
+    if (profile_path / '.env').exists():
+        sources.append('.env')
+    print(f"Sources: {', '.join(sources)}")
+    print()
+
+    # Show credentials with masked values
+    print("Credentials:")
+    print("-" * 40)
+
+    sensitive_fields = {'secret', 'client_id'}
+
+    for key in ['org_id', 'client_id', 'secret', 'scopes', 'sandbox']:
+        if key in credentials:
+            value = credentials[key]
+            if key in sensitive_fields:
+                display_value = mask_sensitive_value(value)
+            else:
+                display_value = value
+            print(f"  {key}: {display_value}")
+
+    print()
+    return True
+
+
+def test_profile(profile_name: str) -> bool:
+    """Test profile credentials and API connectivity.
+
+    Args:
+        profile_name: Name of the profile to test
+
+    Returns:
+        True if test successful, False otherwise
+    """
+    print()
+    print("=" * 60)
+    print(f"TESTING PROFILE: {profile_name}")
+    print("=" * 60)
+    print()
+
+    # Load credentials
+    try:
+        logger = logging.getLogger('profile_test')
+        logger.setLevel(logging.WARNING)
+        credentials = load_profile_credentials(profile_name, logger)
+    except ProfileNotFoundError as e:
+        print(f"FAILED: {e}")
+        return False
+    except ProfileConfigError as e:
+        print(f"FAILED: {e}")
+        return False
+
+    print("1. Profile found and loaded")
+
+    # Validate credentials
+    issues = ConfigValidator.validate_all(credentials, logger)
+    if issues:
+        print("2. Credential validation: WARNINGS")
+        for issue in issues:
+            print(f"   - {issue}")
+    else:
+        print("2. Credential validation: OK")
+
+    # Test API connectivity
+    print("3. Testing API connectivity...")
+
+    try:
+        # Create temp config file
+        temp_config = tempfile.NamedTemporaryFile(
+            mode='w',
+            suffix='.json',
+            delete=False,
+            prefix='cja_profile_test_'
+        )
+        json.dump(credentials, temp_config)
+        temp_config.close()
+
+        try:
+            cjapy.importConfigFile(temp_config.name)
+            cja = cjapy.CJA()
+            dataviews = cja.getDataViews()
+
+            if dataviews is not None:
+                count = len(dataviews) if hasattr(dataviews, '__len__') else 0
+                print(f"   API connection: SUCCESS")
+                print(f"   Data views accessible: {count}")
+                print()
+                print("Profile test: PASSED")
+                print()
+                return True
+            else:
+                print("   API connection: OK (no data views found)")
+                print()
+                print("Profile test: PASSED")
+                print()
+                return True
+
+        finally:
+            os.unlink(temp_config.name)
+
+    except Exception as e:
+        print(f"   API connection: FAILED")
+        print(f"   Error: {e}")
+        print()
+        print("Profile test: FAILED")
+        print()
+        print("Common issues:")
+        print("  - Invalid client_id or secret")
+        print("  - Incorrect OAuth scopes")
+        print("  - API project not provisioned for CJA")
+        print()
+        return False
+
+
 # ==================== CONFIG SCHEMA ====================
 
 # Configuration schema definition for validation
@@ -3104,6 +3720,29 @@ ENV_VAR_MAPPING = {
 
 # Additional environment variables (non-credential settings)
 # OUTPUT_DIR - Output directory for generated files (used by --output-dir)
+
+
+# ==================== CREDENTIAL FIELDS (Single Source of Truth) ====================
+
+# Derive allowed credential fields from CONFIG_SCHEMA
+# This ensures consistency across all credential loading sources
+def _get_credential_fields() -> Dict[str, set]:
+    """Get credential field sets derived from CONFIG_SCHEMA.
+
+    Returns:
+        Dictionary with 'required', 'optional', and 'all' field sets.
+    """
+    required = set(CONFIG_SCHEMA['base_required_fields'].keys())
+    optional = set(CONFIG_SCHEMA['optional_fields'].keys())
+    return {
+        'required': required,
+        'optional': optional,
+        'all': required | optional,
+    }
+
+
+# Module-level constant for credential fields
+CREDENTIAL_FIELDS = _get_credential_fields()
 
 
 # ==================== CONFIG VALIDATION HELPERS ====================
@@ -3259,6 +3898,401 @@ class ConfigValidator:
         return issues
 
 
+def validate_credentials(
+    credentials: Dict[str, str],
+    logger: logging.Logger,
+    strict: bool = False,
+    source: str = "unknown"
+) -> Tuple[bool, List[str]]:
+    """Unified validation for credentials from any source.
+
+    Provides consistent validation across profiles, environment variables,
+    and config files using CONFIG_SCHEMA and ConfigValidator.
+
+    Args:
+        credentials: Dictionary of credentials to validate
+        logger: Logger instance
+        strict: If True, fail on any issue. If False, return issues list but may pass.
+        source: Name of credential source for logging (e.g., "profile", "env", "config_file")
+
+    Returns:
+        Tuple of (is_valid, issues). is_valid is True if credentials are usable.
+    """
+    issues = []
+
+    # Check required fields are present and non-empty
+    for field in CREDENTIAL_FIELDS['required']:
+        if field not in credentials:
+            issues.append(f"Missing required field: '{field}'")
+        elif not credentials[field] or not str(credentials[field]).strip():
+            issues.append(f"Empty value for required field: '{field}'")
+
+    # Run detailed validation with ConfigValidator
+    validation_issues = ConfigValidator.validate_all(credentials, logger)
+    issues.extend(validation_issues)
+
+    # Check for scopes (warning, not error)
+    if 'scopes' not in credentials or not credentials.get('scopes', '').strip():
+        logger.warning(
+            f"Credentials from {source} missing OAuth scopes - "
+            "recommend setting scopes (copy from Adobe Developer Console)"
+        )
+
+    # Filter credentials to known fields only
+    unknown_fields = set(credentials.keys()) - CREDENTIAL_FIELDS['all']
+    if unknown_fields:
+        logger.debug(f"Ignoring unknown fields from {source}: {', '.join(unknown_fields)}")
+
+    is_valid = len(issues) == 0 if strict else all(
+        "Missing required field" not in issue and "Empty value" not in issue
+        for issue in issues
+    )
+
+    if issues:
+        for issue in issues:
+            logger.warning(f"Credential validation ({source}): {issue}")
+
+    return is_valid, issues
+
+
+def normalize_credential_value(value: Any) -> str:
+    """Normalize a credential value consistently across all sources.
+
+    Handles stripping whitespace and quotes from values.
+
+    Args:
+        value: The value to normalize (can be any type)
+
+    Returns:
+        Normalized string value
+    """
+    if value is None:
+        return ""
+    s = str(value).strip()
+    # Remove surrounding quotes (common in .env files)
+    if len(s) >= 2 and ((s.startswith('"') and s.endswith('"')) or
+                         (s.startswith("'") and s.endswith("'"))):
+        s = s[1:-1]
+    return s
+
+
+def filter_credentials(credentials: Dict[str, Any]) -> Dict[str, str]:
+    """Filter and normalize credentials to known fields only.
+
+    Args:
+        credentials: Raw credentials dictionary
+
+    Returns:
+        Filtered dictionary with only known credential fields, normalized values
+    """
+    return {
+        k: normalize_credential_value(v)
+        for k, v in credentials.items()
+        if k in CREDENTIAL_FIELDS['all'] and v
+    }
+
+
+# ==================== CREDENTIAL LOADERS ====================
+
+class CredentialLoader(ABC):
+    """Abstract base class for loading credentials from different sources.
+
+    Provides consistent interface and error handling for all credential sources.
+    """
+
+    @property
+    @abstractmethod
+    def source_name(self) -> str:
+        """Return the name of this credential source."""
+        pass
+
+    def load(self, logger: logging.Logger) -> Optional[Dict[str, str]]:
+        """Load credentials, handling errors gracefully.
+
+        Args:
+            logger: Logger instance
+
+        Returns:
+            Dictionary of credentials if successful, None otherwise
+        """
+        try:
+            creds = self._load_impl(logger)
+            if creds:
+                return filter_credentials(creds)
+            return None
+        except (IOError, json.JSONDecodeError) as e:
+            logger.debug(f"Failed to load credentials from {self.source_name}: {e}")
+            return None
+
+    @abstractmethod
+    def _load_impl(self, logger: logging.Logger) -> Optional[Dict[str, Any]]:
+        """Implementation-specific loading logic.
+
+        Args:
+            logger: Logger instance
+
+        Returns:
+            Raw credentials dictionary, or None if not available
+        """
+        pass
+
+
+class JsonFileCredentialLoader(CredentialLoader):
+    """Load credentials from a JSON file."""
+
+    def __init__(self, file_path: Path):
+        self.file_path = file_path
+
+    @property
+    def source_name(self) -> str:
+        return f"json:{self.file_path.name}"
+
+    def _load_impl(self, logger: logging.Logger) -> Optional[Dict[str, Any]]:
+        if not self.file_path.exists():
+            return None
+
+        with open(self.file_path, 'r') as f:
+            config = json.load(f)
+
+        if isinstance(config, dict):
+            return config
+        return None
+
+
+class DotenvCredentialLoader(CredentialLoader):
+    """Load credentials from a .env file."""
+
+    def __init__(self, file_path: Path):
+        self.file_path = file_path
+
+    @property
+    def source_name(self) -> str:
+        return f"dotenv:{self.file_path.name}"
+
+    def _load_impl(self, logger: logging.Logger) -> Optional[Dict[str, Any]]:
+        if not self.file_path.exists():
+            return None
+
+        credentials = {}
+        with open(self.file_path, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith('#'):
+                    continue
+                if '=' in line:
+                    key, _, value = line.partition('=')
+                    key = key.strip().lower()
+                    value = value.strip()
+                    # Remove quotes
+                    if value and len(value) >= 2:
+                        if (value.startswith('"') and value.endswith('"')) or \
+                           (value.startswith("'") and value.endswith("'")):
+                            value = value[1:-1]
+                    if key and value:
+                        credentials[key] = value
+
+        return credentials if credentials else None
+
+
+class EnvironmentCredentialLoader(CredentialLoader):
+    """Load credentials from environment variables."""
+
+    @property
+    def source_name(self) -> str:
+        return "environment"
+
+    def _load_impl(self, logger: logging.Logger) -> Optional[Dict[str, Any]]:
+        credentials = {}
+        for config_key, env_var in ENV_VAR_MAPPING.items():
+            value = os.environ.get(env_var)
+            if value and value.strip():
+                credentials[config_key] = value.strip()
+
+        return credentials if credentials else None
+
+
+# ==================== CREDENTIAL RESOLVER ====================
+
+class CredentialResolver:
+    """Resolves credentials using priority-based strategy.
+
+    Priority order:
+    1. Profile credentials (if --profile or CJA_PROFILE specified)
+    2. Environment variables
+    3. Configuration file
+
+    This class consolidates the credential loading logic that was previously
+    scattered throughout initialize_cja().
+    """
+
+    def __init__(self, logger: logging.Logger):
+        self.logger = logger
+
+    def resolve(
+        self,
+        profile: Optional[str] = None,
+        config_file: Union[str, Path] = "config.json"
+    ) -> Tuple[Dict[str, str], str]:
+        """Resolve credentials following priority order.
+
+        Args:
+            profile: Profile name to load (optional)
+            config_file: Path to config file (fallback)
+
+        Returns:
+            Tuple of (credentials, source_name)
+
+        Raises:
+            CredentialSourceError: If no valid credentials found
+        """
+        # 1. Try profile credentials (highest priority)
+        if profile:
+            creds, source = self._try_profile(profile)
+            if creds:
+                return creds, source
+
+        # 2. Try environment variables
+        creds, source = self._try_environment()
+        if creds:
+            # Warn if config file also exists
+            config_path = Path(config_file)
+            if config_path.exists():
+                self._warn_multiple_sources(config_path)
+            return creds, source
+
+        # 3. Try config file (lowest priority)
+        creds, source = self._try_config_file(config_file)
+        if creds:
+            return creds, source
+
+        # No valid credentials found
+        raise CredentialSourceError(
+            "No valid credentials found",
+            source="all",
+            reason="Checked profile, environment variables, and config file",
+            details="Set credentials via --profile, environment variables, or config.json"
+        )
+
+    def _try_profile(self, profile_name: str) -> Tuple[Optional[Dict[str, str]], str]:
+        """Try to load credentials from a profile.
+
+        Args:
+            profile_name: Name of the profile
+
+        Returns:
+            Tuple of (credentials or None, source_name)
+
+        Raises:
+            CredentialSourceError: If profile loading fails critically
+        """
+        self.logger.info(f"Loading credentials from profile '{profile_name}'...")
+        try:
+            creds = load_profile_credentials(profile_name, self.logger)
+            if creds:
+                is_valid, issues = validate_credentials(
+                    creds, self.logger, strict=False, source=f"profile:{profile_name}"
+                )
+                if is_valid:
+                    self.logger.info(f"Using credentials from profile '{profile_name}'")
+                    return creds, f"profile:{profile_name}"
+                else:
+                    self.logger.warning(
+                        f"Profile '{profile_name}' credentials have issues: {issues}"
+                    )
+        except ProfileNotFoundError as e:
+            raise CredentialSourceError(
+                str(e),
+                source=f"profile:{profile_name}",
+                reason="Profile directory not found",
+                details=e.details
+            )
+        except ProfileConfigError as e:
+            raise CredentialSourceError(
+                str(e),
+                source=f"profile:{profile_name}",
+                reason="Invalid profile configuration",
+                details=e.details
+            )
+
+        return None, ""
+
+    def _try_environment(self) -> Tuple[Optional[Dict[str, str]], str]:
+        """Try to load credentials from environment variables.
+
+        Returns:
+            Tuple of (credentials or None, source_name)
+        """
+        loader = EnvironmentCredentialLoader()
+        creds = loader.load(self.logger)
+
+        if creds:
+            is_valid, _ = validate_credentials(
+                creds, self.logger, strict=False, source="environment"
+            )
+            if is_valid:
+                self.logger.info("Using credentials from environment variables")
+                return creds, "environment"
+            else:
+                self.logger.debug("Environment credentials incomplete, trying next source")
+
+        return None, ""
+
+    def _try_config_file(
+        self,
+        config_file: Union[str, Path]
+    ) -> Tuple[Optional[Dict[str, str]], str]:
+        """Try to load credentials from config file.
+
+        Args:
+            config_file: Path to config file
+
+        Returns:
+            Tuple of (credentials or None, source_name)
+
+        Raises:
+            CredentialSourceError: If config file has critical errors
+        """
+        config_path = Path(config_file)
+
+        if not config_path.exists():
+            self.logger.debug(f"Config file not found: {config_path}")
+            return None, ""
+
+        loader = JsonFileCredentialLoader(config_path)
+        creds = loader.load(self.logger)
+
+        if creds:
+            is_valid, issues = validate_credentials(
+                creds, self.logger, strict=False, source=f"config:{config_path.name}"
+            )
+            if is_valid:
+                self.logger.info(f"Using credentials from {config_file}")
+                return creds, f"config:{config_path.name}"
+            else:
+                # Config file exists but has issues
+                raise CredentialSourceError(
+                    f"Config file '{config_file}' has validation errors",
+                    source=f"config:{config_path.name}",
+                    reason="; ".join(issues[:3]),  # Show first 3 issues
+                    details="Fix the issues or use environment variables instead"
+                )
+
+        return None, ""
+
+    def _warn_multiple_sources(self, config_path: Path) -> None:
+        """Warn user when multiple credential sources exist."""
+        self.logger.warning("=" * 60)
+        self.logger.warning("NOTICE: Both environment variables AND config file detected")
+        self.logger.warning(f"  Environment variables: ORG_ID, CLIENT_ID, SECRET, etc.")
+        self.logger.warning(f"  Config file: {config_path}")
+        self.logger.warning("  Using: ENVIRONMENT VARIABLES (takes precedence)")
+        self.logger.warning("")
+        self.logger.warning("To avoid confusion:")
+        self.logger.warning("  - Remove config.json if using environment variables")
+        self.logger.warning("  - Or unset env vars: unset ORG_ID CLIENT_ID SECRET SCOPES")
+        self.logger.warning("=" * 60)
+
+
 def load_credentials_from_env() -> Optional[Dict[str, str]]:
     """
     Load Adobe API credentials from environment variables.
@@ -3290,7 +4324,8 @@ def validate_env_credentials(credentials: Dict[str, str], logger: logging.Logger
     """
     Validate that environment credentials have minimum required fields for OAuth.
 
-    Uses ConfigValidator for detailed validation with actionable suggestions.
+    Uses CREDENTIAL_FIELDS (single source of truth) and validate_credentials for
+    consistent validation across all credential sources.
 
     Args:
         credentials: Dictionary of credentials from environment
@@ -3299,28 +4334,16 @@ def validate_env_credentials(credentials: Dict[str, str], logger: logging.Logger
     Returns:
         True if credentials have minimum required fields
     """
-    base_required = ['org_id', 'client_id', 'secret']
-
-    for field in base_required:
+    # Use CREDENTIAL_FIELDS for required fields (single source of truth)
+    for field in CREDENTIAL_FIELDS['required']:
         if field not in credentials or not credentials[field].strip():
             logger.debug(f"Missing required environment variable: {ENV_VAR_MAPPING.get(field, field)}")
             return False
 
-    # Run detailed validation with ConfigValidator for better error messages
-    issues = ConfigValidator.validate_all(credentials, logger)
-    if issues:
-        # Log issues but don't fail - the API call will give the definitive answer
-        for issue in issues:
-            logger.warning(f"Configuration validation: {issue}")
+    # Use unified validation function
+    is_valid, issues = validate_credentials(credentials, logger, strict=False, source="environment")
 
-    # Check for OAuth scopes (recommended but not strictly required)
-    if 'scopes' not in credentials:
-        logger.warning(
-    "Environment credentials missing OAuth scopes - recommend setting SCOPES "
-            "(copy from Adobe Developer Console)"
-        )
-
-    return True
+    return is_valid
 
 
 def _config_from_env(credentials: Dict[str, str], logger: logging.Logger):
@@ -3358,6 +4381,70 @@ def _config_from_env(credentials: Dict[str, str], logger: logging.Logger):
 
     # Import the temporary config
     cjapy.importConfigFile(temp_config.name)
+
+
+def configure_cjapy(
+    profile: Optional[str] = None,
+    config_file: str = "config.json",
+    logger: Optional[logging.Logger] = None
+) -> Tuple[bool, str, Optional[Dict[str, str]]]:
+    """
+    Configure cjapy with credentials using priority: profile > env > config file.
+
+    This is a lightweight configuration function that sets up cjapy credentials
+    without creating a CJA instance. Use this for commands that need credential
+    configuration but manage their own CJA lifecycle.
+
+    Uses CredentialResolver internally to resolve credentials following the
+    standard priority order.
+
+    Args:
+        profile: Optional profile name to use for credentials
+        config_file: Path to fallback config file
+        logger: Optional logger instance
+
+    Returns:
+        Tuple of (success, source_description, credentials_dict)
+        - success: True if cjapy was configured successfully
+        - source_description: Description of credential source used
+        - credentials_dict: The credentials that were used (for display purposes)
+    """
+    if logger is None:
+        logger = logging.getLogger(__name__)
+        logger.setLevel(logging.WARNING)
+
+    try:
+        # Use CredentialResolver for unified credential resolution
+        resolver = CredentialResolver(logger)
+        credentials, source = resolver.resolve(profile=profile, config_file=config_file)
+
+        # Configure cjapy with the resolved credentials
+        # Source format from resolver: "profile:name", "environment", "config:filename"
+        if source.startswith("profile:") or source == "environment":
+            # Profile or environment credentials need temp file for cjapy
+            _config_from_env(credentials, logger)
+        else:
+            # Config file can be imported directly
+            cjapy.importConfigFile(config_file)
+
+        # Format source for display (convert resolver format to user-friendly format)
+        if source.startswith("profile:"):
+            display_source = f"Profile: {source.split(':', 1)[1]}"
+        elif source == "environment":
+            display_source = "Environment variables"
+        elif source.startswith("config:"):
+            display_source = f"Config file: {Path(config_file).resolve()}"
+        else:
+            display_source = source
+
+        return True, display_source, credentials
+
+    except CredentialSourceError as e:
+        logger.error(f"Credential error: {e}")
+        return False, str(e), None
+    except (ProfileNotFoundError, ProfileConfigError) as e:
+        logger.error(f"Profile error: {e}")
+        return False, f"Profile error: {e}", None
 
 
 # ==================== CJA INITIALIZATION ====================
@@ -3514,17 +4601,20 @@ def validate_config_file(
 
 def initialize_cja(
     config_file: Union[str, Path] = "config.json",
-    logger: Optional[logging.Logger] = None
+    logger: Optional[logging.Logger] = None,
+    profile: Optional[str] = None
 ) -> Optional[cjapy.CJA]:
     """Initialize CJA connection with comprehensive error handling.
 
-    Credential Loading Priority:
-        1. Environment variables (ORG_ID, CLIENT_ID, SECRET, etc.)
-        2. Configuration file (config.json)
+    Uses CredentialResolver for unified credential loading with priority:
+        1. Profile credentials (if --profile or CJA_PROFILE specified)
+        2. Environment variables (ORG_ID, CLIENT_ID, SECRET, etc.)
+        3. Configuration file (config.json)
 
     Args:
         config_file: Path to CJA configuration file
         logger: Logger instance (uses module logger if None)
+        profile: Profile name to load credentials from (optional)
 
     Returns:
         Initialized CJA instance, or None if initialization fails
@@ -3547,70 +4637,50 @@ def initialize_cja(
         else:
             logger.debug("python-dotenv not installed (.env files will not be auto-loaded)")
 
-        # Try environment variables first
-        env_credentials = load_credentials_from_env()
-        use_env_credentials = False
-        config_file_exists = Path(config_file).exists()
+        # Resolve active profile (--profile > CJA_PROFILE > None)
+        active_profile = resolve_active_profile(profile)
 
-        if env_credentials:
-            logger.info("Found environment variables with CJA credentials...")
-            if validate_env_credentials(env_credentials, logger):
-                use_env_credentials = True
-                logger.info("Using credentials from environment variables")
+        # Use CredentialResolver for unified credential loading
+        resolver = CredentialResolver(logger)
+        try:
+            credentials, source = resolver.resolve(
+                profile=active_profile,
+                config_file=config_file
+            )
+            logger.info(f"Credentials loaded from: {source}")
+        except CredentialSourceError as e:
+            logger.critical("=" * 60)
+            logger.critical("CREDENTIAL LOADING FAILED")
+            logger.critical("=" * 60)
+            logger.critical(str(e))
+            if e.reason:
+                logger.critical(f"Reason: {e.reason}")
+            if e.details:
+                logger.critical(e.details)
+            logger.critical("")
+            logger.critical("Options to provide credentials:")
+            logger.critical("  1. Profile:   cja_auto_sdr --profile <name> ...")
+            logger.critical("  2. Env vars:  export ORG_ID=... CLIENT_ID=... SECRET=... SCOPES=...")
+            logger.critical("  3. Config:    Create config.json with credentials")
+            return None
 
-                # Warn if both sources exist to help users avoid confusion
-                if config_file_exists:
-                    logger.warning("=" * 60)
-                    logger.warning("NOTICE: Both environment variables AND config file detected")
-                    logger.warning(f"  Environment variables: ORG_ID, CLIENT_ID, SECRET, etc.")
-                    logger.warning(f"  Config file: {config_file}")
-                    logger.warning("  Using: ENVIRONMENT VARIABLES (takes precedence)")
-                    logger.warning("")
-                    logger.warning("To avoid confusion:")
-                    logger.warning("  - Remove config.json if using environment variables")
-                    logger.warning("  - Or unset env vars: unset ORG_ID CLIENT_ID SECRET SCOPES")
-                    logger.warning("  - Or explicitly set --config-file to use a specific file")
-                    logger.warning("=" * 60)
-            else:
-                logger.info("Environment credentials incomplete, falling back to config file")
-
-        if use_env_credentials:
-            # Use environment credentials
-            logger.info("Loading CJA configuration from environment...")
-            _config_from_env(env_credentials, logger)
-            logger.info("Configuration loaded from environment variables")
-        else:
-            # Fall back to config file
-            logger.info(f"Validating configuration file: {config_file}")
-            if not validate_config_file(config_file, logger):
-                logger.critical("Configuration file validation failed")
-                logger.critical("Please create a valid config file OR set environment variables.")
-                logger.critical("")
-                logger.critical("Option 1: Environment Variables")
-                logger.critical("  export ORG_ID=your_org_id@AdobeOrg")
-                logger.critical("  export CLIENT_ID=your_client_id")
-                logger.critical("  export SECRET=your_client_secret")
-                logger.critical("  export SCOPES='your_scopes_from_developer_console'")
-                logger.critical("")
-                logger.critical("Option 2: Config File (config.json):")
-                logger.critical(json.dumps({
-                    "org_id": "your_org_id",
-                    "client_id": "your_client_id",
-                    "secret": "your_client_secret",
-                    "scopes": "your_scopes_from_developer_console"
-                }, indent=2))
-                return None
-
-            # Load config file
-            logger.info("Loading CJA configuration...")
+        # Configure cjapy with resolved credentials
+        if source.startswith("config:"):
+            # Config file - use cjapy's native loading
+            logger.info(f"Loading CJA configuration from {config_file}...")
             cjapy.importConfigFile(config_file)
-            logger.info("Configuration loaded successfully")
-        
+        else:
+            # Profile or environment - use temp config file
+            logger.info(f"Loading CJA configuration from {source}...")
+            _config_from_env(credentials, logger)
+
+        logger.info("Configuration loaded successfully")
+
         # Attempt to create CJA instance
         logger.info("Creating CJA instance...")
         cja = cjapy.CJA()
         logger.info("CJA instance created successfully")
-        
+
         # Test connection with a simple API call (with retry)
         logger.info("Testing API connection...")
         try:
@@ -3627,10 +4697,10 @@ def initialize_cja(
         except Exception as test_error:
             logger.warning(f"Could not verify connection with test call: {str(test_error)}")
             logger.warning("Proceeding anyway - errors may occur during data fetching")
-        
+
         logger.info("CJA initialization complete")
         return cja
-        
+
     except FileNotFoundError as e:
         logger.critical("=" * 60)
         logger.critical("CONFIGURATION FILE ERROR")
@@ -3639,7 +4709,7 @@ def initialize_cja(
         logger.critical(f"Current working directory: {Path.cwd()}")
         logger.critical("Please ensure the configuration file exists in the correct location")
         return None
-        
+
     except ImportError as e:
         logger.critical("=" * 60)
         logger.critical("DEPENDENCY ERROR")
@@ -3647,7 +4717,7 @@ def initialize_cja(
         logger.critical(f"Failed to import cjapy module: {str(e)}")
         logger.critical("Please ensure cjapy is installed: pip install cjapy")
         return None
-        
+
     except AttributeError as e:
         logger.critical("=" * 60)
         logger.critical("CJA CONFIGURATION ERROR")
@@ -3656,7 +4726,7 @@ def initialize_cja(
         logger.critical("This usually indicates an issue with the authentication credentials")
         logger.critical("Please verify all fields in your configuration file are correct")
         return None
-        
+
     except PermissionError as e:
         logger.critical("=" * 60)
         logger.critical("PERMISSION ERROR")
@@ -3664,7 +4734,7 @@ def initialize_cja(
         logger.critical(f"Cannot read configuration file: {str(e)}")
         logger.critical("Please check file permissions")
         return None
-        
+
     except Exception as e:
         logger.critical("=" * 60)
         logger.critical("CJA INITIALIZATION FAILED")
@@ -4776,13 +5846,20 @@ def apply_excel_formatting(writer, df, sheet_name, logger: logging.Logger,
         
         # Apply row formatting (offset by summary rows)
         data_start_row = summary_rows + 1  # +1 for header row
+
+        # Cache column indices outside the loop for performance (avoids repeated hash lookups)
+        severity_col_idx = df.columns.get_loc('Severity') if 'Severity' in df.columns else -1
+        name_col_idx = df.columns.get_loc('name') if 'name' in df.columns else -1
+        is_data_quality_sheet = sheet_name == 'Data Quality' and severity_col_idx >= 0
+        is_component_sheet = sheet_name in ('Metrics', 'Dimensions') and name_col_idx >= 0
+
         for idx in range(len(df)):
-            max_lines = max(str(val).count('\n') for val in df.iloc[idx]) + 1
+            max_lines = max((str(val).count('\n') for val in df.iloc[idx]), default=0) + 1
             row_height = min(max_lines * 15, 400)
             excel_row = data_start_row + idx
 
             # Apply severity-based formatting for Data Quality sheet
-            if sheet_name == 'Data Quality' and 'Severity' in df.columns:
+            if is_data_quality_sheet:
                 severity = str(df.iloc[idx]['Severity'])
                 row_format, bold_format = severity_formats.get(
                     severity, (low_format, low_bold)
@@ -4792,7 +5869,6 @@ def apply_excel_formatting(writer, df, sheet_name, logger: logging.Logger,
                 worksheet.set_row(excel_row, row_height, row_format)
 
                 # Write Severity column with icon and bold format
-                severity_col_idx = df.columns.get_loc('Severity')
                 icon = severity_icons.get(severity, '')
                 worksheet.write(excel_row, severity_col_idx, f"{icon} {severity}", bold_format)
             else:
@@ -4800,8 +5876,7 @@ def apply_excel_formatting(writer, df, sheet_name, logger: logging.Logger,
                 worksheet.set_row(excel_row, row_height, row_format)
 
                 # Apply bold Name column for Metrics/Dimensions sheets
-                if sheet_name in ('Metrics', 'Dimensions') and 'name' in df.columns:
-                    name_col_idx = df.columns.get_loc('name')
+                if is_component_sheet:
                     name_format = name_bold_grey if idx % 2 == 0 else name_bold_white
                     worksheet.write(excel_row, name_col_idx, df.iloc[idx]['name'], name_format)
 
@@ -5284,10 +6359,11 @@ def write_markdown_output(
                 md_parts.append("| --- | --- |")
 
                 severity_order = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO']
+                severity_emojis = {'CRITICAL': '🔴', 'HIGH': '🟠', 'MEDIUM': '🟡', 'LOW': '⚪', 'INFO': '🔵'}
                 for sev in severity_order:
                     count = severity_counts.get(sev, 0)
                     if count > 0 or sev in ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']:
-                        emoji = {'CRITICAL': '🔴', 'HIGH': '🟠', 'MEDIUM': '🟡', 'LOW': '⚪', 'INFO': '🔵'}.get(sev, '')
+                        emoji = severity_emojis.get(sev, '')
                         md_parts.append(f"| {emoji} {sev} | {count} |")
                 md_parts.append("")
 
@@ -6755,7 +7831,8 @@ def process_single_dataview(
     clear_cache: bool = False,
     show_timings: bool = False,
     metrics_only: bool = False,
-    dimensions_only: bool = False
+    dimensions_only: bool = False,
+    profile: Optional[str] = None
 ) -> ProcessingResult:
     """
     Process a single data view and generate SDR in specified format(s)
@@ -6788,7 +7865,7 @@ def process_single_dataview(
 
     try:
         # Initialize CJA
-        cja = initialize_cja(config_file, logger)
+        cja = initialize_cja(config_file, logger, profile=profile)
         if cja is None:
             return ProcessingResult(
                 data_view_id=data_view_id,
@@ -7235,14 +8312,14 @@ def process_single_dataview_worker(args: tuple) -> ProcessingResult:
     Args:
         args: Tuple of (data_view_id, config_file, output_dir, log_level, log_format, output_format,
                        enable_cache, cache_size, cache_ttl, quiet, skip_validation, max_issues, clear_cache,
-                       show_timings, metrics_only, dimensions_only)
+                       show_timings, metrics_only, dimensions_only, profile)
 
     Returns:
         ProcessingResult
     """
-    data_view_id, config_file, output_dir, log_level, log_format, output_format, enable_cache, cache_size, cache_ttl, quiet, skip_validation, max_issues, clear_cache, show_timings, metrics_only, dimensions_only = args
+    data_view_id, config_file, output_dir, log_level, log_format, output_format, enable_cache, cache_size, cache_ttl, quiet, skip_validation, max_issues, clear_cache, show_timings, metrics_only, dimensions_only, profile = args
     return process_single_dataview(data_view_id, config_file, output_dir, log_level, log_format, output_format,
-                                   enable_cache, cache_size, cache_ttl, quiet, skip_validation, max_issues, clear_cache, show_timings, metrics_only, dimensions_only)
+                                   enable_cache, cache_size, cache_ttl, quiet, skip_validation, max_issues, clear_cache, show_timings, metrics_only, dimensions_only, profile=profile)
 
 # ==================== BATCH PROCESSOR CLASS ====================
 
@@ -7271,6 +8348,7 @@ class BatchProcessor:
         show_timings: Display performance timing for each data view (default: False)
         metrics_only: Only include metrics in output (default: False)
         dimensions_only: Only include dimensions in output (default: False)
+        profile: Profile name for credentials (default: None)
     """
 
     def __init__(self, config_file: str = "config.json", output_dir: str = ".",
@@ -7278,7 +8356,8 @@ class BatchProcessor:
                  log_format: str = "text", output_format: str = "excel", enable_cache: bool = False,
                  cache_size: int = 1000, cache_ttl: int = 3600, quiet: bool = False,
                  skip_validation: bool = False, max_issues: int = 0, clear_cache: bool = False,
-                 show_timings: bool = False, metrics_only: bool = False, dimensions_only: bool = False):
+                 show_timings: bool = False, metrics_only: bool = False, dimensions_only: bool = False,
+                 profile: Optional[str] = None):
         self.config_file = config_file
         self.output_dir = output_dir
         self.clear_cache = clear_cache
@@ -7296,6 +8375,7 @@ class BatchProcessor:
         self.quiet = quiet
         self.skip_validation = skip_validation
         self.max_issues = max_issues
+        self.profile = profile
         self.batch_id = str(uuid.uuid4())[:8]  # Short correlation ID for log tracing
         self.logger = setup_logging(batch_mode=True, log_level=log_level, log_format=log_format)
         self.logger.info(f"Batch ID: {self.batch_id}")
@@ -7346,7 +8426,7 @@ class BatchProcessor:
             (dv_id, self.config_file, self.output_dir, self.log_level, self.log_format,
              self.output_format, self.enable_cache, self.cache_size, self.cache_ttl, self.quiet,
              self.skip_validation, self.max_issues, self.clear_cache, self.show_timings,
-             self.metrics_only, self.dimensions_only)
+             self.metrics_only, self.dimensions_only, self.profile)
             for dv_id in data_view_ids
         ]
 
@@ -7500,12 +8580,13 @@ class BatchProcessor:
 
 # ==================== DRY-RUN MODE ====================
 
-def run_dry_run(data_views: List[str], config_file: str, logger: logging.Logger) -> bool:
+def run_dry_run(data_views: List[str], config_file: str, logger: logging.Logger,
+                profile: Optional[str] = None) -> bool:
     """
     Validate configuration and connectivity without generating reports.
 
     Performs the following checks:
-    1. Configuration file validation (exists, valid JSON, required fields)
+    1. Credential validation (profile, environment variables, or config file)
     2. CJA API connection test
     3. Data view accessibility verification
 
@@ -7513,6 +8594,7 @@ def run_dry_run(data_views: List[str], config_file: str, logger: logging.Logger)
         data_views: List of data view IDs to validate
         config_file: Path to configuration file
         logger: Logger instance
+        profile: Optional profile name to use for credentials
 
     Returns:
         True if all validations pass, False otherwise
@@ -7525,13 +8607,32 @@ def run_dry_run(data_views: List[str], config_file: str, logger: logging.Logger)
 
     all_passed = True
 
-    # Step 1: Validate config file
-    print("[1/3] Validating configuration file...")
-    if validate_config_file(config_file, logger):
-        print(f"  ✓ Configuration file '{config_file}' is valid")
+    # Step 1: Validate credentials
+    print("[1/3] Validating credentials...")
+    if profile:
+        # Validate profile credentials
+        try:
+            profile_creds = load_profile_credentials(profile, logger)
+            if profile_creds:
+                print(f"  ✓ Profile '{profile}' found and valid")
+            else:
+                print(f"  ✗ Profile '{profile}' has no valid credentials")
+                all_passed = False
+        except ProfileNotFoundError:
+            print(f"  ✗ Profile '{profile}' not found")
+            all_passed = False
+        except ProfileConfigError as e:
+            print(f"  ✗ Profile '{profile}' configuration error: {e}")
+            all_passed = False
     else:
-        print(f"  ✗ Configuration file validation failed")
-        all_passed = False
+        # Validate config file
+        if validate_config_file(config_file, logger):
+            print(f"  ✓ Configuration file '{config_file}' is valid")
+        else:
+            print(f"  ✗ Configuration file validation failed")
+            all_passed = False
+
+    if not all_passed:
         print()
         print("=" * 60)
         print("DRY-RUN FAILED - Fix configuration issues before proceeding")
@@ -7542,7 +8643,14 @@ def run_dry_run(data_views: List[str], config_file: str, logger: logging.Logger)
     print()
     print("[2/3] Testing CJA API connection...")
     try:
-        cjapy.importConfigFile(config_file)
+        success, source, _ = configure_cjapy(profile=profile, config_file=config_file, logger=logger)
+        if not success:
+            print(f"  ✗ Credential configuration failed: {source}")
+            print()
+            print("=" * 60)
+            print("DRY-RUN FAILED - Cannot configure credentials")
+            print("=" * 60)
+            return False
         cja = cjapy.CJA()
 
         # Test API with getDataViews call (with retry for transient errors)
@@ -7802,6 +8910,28 @@ Examples:
   # List data views in JSON format (for scripting/piping)
   cja_auto_sdr --list-dataviews --format json
   cja_auto_sdr --list-dataviews --output -    # JSON to stdout
+
+  # --- Profile Management ---
+
+  # List all available profiles
+  cja_auto_sdr --profile-list
+
+  # Use a named profile
+  cja_auto_sdr --profile client-a --list-dataviews
+  cja_auto_sdr -p client-a "My Data View" --format excel
+
+  # Create a new profile interactively
+  cja_auto_sdr --profile-add client-c
+
+  # Test profile credentials
+  cja_auto_sdr --profile-test client-a
+
+  # Show profile configuration (secrets masked)
+  cja_auto_sdr --profile-show client-a
+
+  # Use profile via environment variable
+  export CJA_PROFILE=client-a
+  cja_auto_sdr --list-dataviews
 
 Note:
   At least one data view ID must be provided (except for --list-dataviews, --sample-config, --stats).
@@ -8233,6 +9363,49 @@ Requirements:
              'Used with --auto-snapshot. Can be combined with --keep-last.'
     )
 
+    # ==================== PROFILE MANAGEMENT ARGUMENTS ====================
+
+    profile_group = parser.add_argument_group(
+        'Profile Management',
+        'Manage organization/credential profiles stored in ~/.cja/orgs/'
+    )
+
+    profile_group.add_argument(
+        '--profile', '-p',
+        type=str,
+        metavar='NAME',
+        default=os.environ.get('CJA_PROFILE'),
+        help='Use named profile from ~/.cja/orgs/<NAME>/. '
+             'Can also be set via CJA_PROFILE environment variable'
+    )
+
+    profile_group.add_argument(
+        '--profile-list',
+        action='store_true',
+        help='List all available profiles and exit'
+    )
+
+    profile_group.add_argument(
+        '--profile-add',
+        type=str,
+        metavar='NAME',
+        help='Create a new profile interactively'
+    )
+
+    profile_group.add_argument(
+        '--profile-test',
+        type=str,
+        metavar='NAME',
+        help='Test profile credentials and API connectivity'
+    )
+
+    profile_group.add_argument(
+        '--profile-show',
+        type=str,
+        metavar='NAME',
+        help='Show profile configuration (with masked secrets)'
+    )
+
     # ==================== GIT INTEGRATION ARGUMENTS ====================
 
     git_group = parser.add_argument_group('Git Integration', 'Options for version-controlled snapshots')
@@ -8518,7 +9691,8 @@ def prompt_for_selection(options: List[Tuple[str, str]], prompt_text: str) -> Op
 
 def resolve_data_view_names(identifiers: List[str], config_file: str = "config.json",
                             logger: logging.Logger = None,
-                            suggest_similar: bool = True) -> Tuple[List[str], Dict[str, List[str]]]:
+                            suggest_similar: bool = True,
+                            profile: Optional[str] = None) -> Tuple[List[str], Dict[str, List[str]]]:
     """
     Resolve data view names to IDs. If an identifier is already an ID, keep it as-is.
     If it's a name, look up all data views with that exact name.
@@ -8532,6 +9706,7 @@ def resolve_data_view_names(identifiers: List[str], config_file: str = "config.j
         config_file: Path to CJA configuration file
         logger: Logger instance for logging
         suggest_similar: If True, suggest similar names when exact match fails
+        profile: Optional profile name to use for credentials
 
     Returns:
         Tuple of (resolved_ids, name_to_ids_map)
@@ -8547,7 +9722,10 @@ def resolve_data_view_names(identifiers: List[str], config_file: str = "config.j
     try:
         # Initialize CJA connection
         logger.info(f"Resolving data view identifiers: {identifiers}")
-        cjapy.importConfigFile(config_file)
+        success, source, _ = configure_cjapy(profile, config_file, logger)
+        if not success:
+            logger.error(f"Failed to configure credentials: {source}")
+            return [], {}
         cja = cjapy.CJA()
 
         # Get all available data views (with caching)
@@ -8630,7 +9808,7 @@ def resolve_data_view_names(identifiers: List[str], config_file: str = "config.j
 # ==================== LIST DATA VIEWS ====================
 
 def list_dataviews(config_file: str = "config.json", output_format: str = "table",
-                   output_file: Optional[str] = None) -> bool:
+                   output_file: Optional[str] = None, profile: Optional[str] = None) -> bool:
     """
     List all accessible data views and exit
 
@@ -8638,12 +9816,16 @@ def list_dataviews(config_file: str = "config.json", output_format: str = "table
         config_file: Path to CJA configuration file
         output_format: Output format - "table" (default), "json", or "csv"
         output_file: Optional file path to write output (or "-" for stdout)
+        profile: Profile name to load credentials from (optional)
 
     Returns:
         True if successful, False otherwise
     """
     is_stdout = output_file in ('-', 'stdout')
     is_machine_readable = output_format in ('json', 'csv') or is_stdout
+
+    # Resolve active profile
+    active_profile = resolve_active_profile(profile)
 
     # For machine-readable output, suppress decorative text
     if not is_machine_readable:
@@ -8652,11 +9834,25 @@ def list_dataviews(config_file: str = "config.json", output_format: str = "table
         print("LISTING ACCESSIBLE DATA VIEWS")
         print("=" * 60)
         print()
-        print(f"Using configuration: {config_file}")
+        if active_profile:
+            print(f"Using profile: {active_profile}")
+        else:
+            print(f"Using configuration: {config_file}")
         print()
 
     try:
-        cjapy.importConfigFile(config_file)
+        # Configure cjapy with credentials (profile > env > config file)
+        logger = logging.getLogger('list_dataviews')
+        logger.setLevel(logging.WARNING)
+        success, source, _ = configure_cjapy(
+            profile=active_profile,
+            config_file=config_file,
+            logger=logger
+        )
+        if not success:
+            if not is_machine_readable:
+                print(f"Configuration error: {source}")
+            return False
         cja = cjapy.CJA()
 
         # Get all data views
@@ -8785,7 +9981,8 @@ def list_dataviews(config_file: str = "config.json", output_format: str = "table
 
 # ==================== INTERACTIVE DATA VIEW SELECTION ====================
 
-def interactive_select_dataviews(config_file: str = "config.json") -> List[str]:
+def interactive_select_dataviews(config_file: str = "config.json",
+                                  profile: Optional[str] = None) -> List[str]:
     """
     Interactively select data views from a numbered list.
 
@@ -8798,6 +9995,7 @@ def interactive_select_dataviews(config_file: str = "config.json") -> List[str]:
 
     Args:
         config_file: Path to CJA configuration file
+        profile: Optional profile name to use for credentials
 
     Returns:
         List of selected data view IDs, or empty list on error/cancel
@@ -8807,11 +10005,17 @@ def interactive_select_dataviews(config_file: str = "config.json") -> List[str]:
     print("INTERACTIVE DATA VIEW SELECTION")
     print("=" * 60)
     print()
-    print(f"Using configuration: {config_file}")
+    if profile:
+        print(f"Using profile: {profile}")
+    else:
+        print(f"Using configuration: {config_file}")
     print()
 
     try:
-        cjapy.importConfigFile(config_file)
+        success, source, _ = configure_cjapy(profile, config_file)
+        if not success:
+            print(ConsoleColors.error(f"ERROR: {source}"))
+            return []
         cja = cjapy.CJA()
 
         print("Fetching available data views...")
@@ -9018,17 +10222,19 @@ def generate_sample_config(output_path: str = "config.sample.json") -> bool:
 
 # ==================== CONFIG STATUS ====================
 
-def show_config_status(config_file: str = "config.json") -> bool:
+def show_config_status(config_file: str = "config.json",
+                       profile: Optional[str] = None) -> bool:
     """
     Show configuration status without connecting to API.
 
     Displays:
-        - Active configuration source (env vars vs config file)
+        - Active configuration source (profile, env vars, or config file)
         - Fields that are set (with masked sensitive values)
         - Quick troubleshooting information
 
     Args:
         config_file: Path to CJA configuration file
+        profile: Optional profile name to use for credentials
 
     Returns:
         True if valid configuration found, False otherwise
@@ -9041,14 +10247,28 @@ def show_config_status(config_file: str = "config.json") -> bool:
 
     config_source = None
     config_data = {}
+    logger = logging.getLogger(__name__)
 
-    # Check environment variables first
-    env_credentials = load_credentials_from_env()
-    if env_credentials and validate_env_credentials(env_credentials, logging.getLogger(__name__)):
-        config_source = "Environment variables"
-        config_data = env_credentials
-    else:
-        # Check config file
+    # Priority 1: Profile credentials
+    if profile:
+        try:
+            profile_creds = load_profile_credentials(profile, logger)
+            if profile_creds:
+                config_source = f"Profile: {profile}"
+                config_data = profile_creds
+        except (ProfileNotFoundError, ProfileConfigError) as e:
+            print(ConsoleColors.error(f"ERROR: Profile '{profile}' - {e}"))
+            return False
+
+    # Priority 2: Environment variables
+    if not config_source:
+        env_credentials = load_credentials_from_env()
+        if env_credentials and validate_env_credentials(env_credentials, logger):
+            config_source = "Environment variables"
+            config_data = env_credentials
+
+    # Priority 3: Config file
+    if not config_source:
         config_path = Path(config_file)
         if config_path.exists():
             try:
@@ -9067,6 +10287,7 @@ def show_config_status(config_file: str = "config.json") -> bool:
             print("Options:")
             print(f"  1. Create config file: {config_file}")
             print("  2. Set environment variables: ORG_ID, CLIENT_ID, SECRET, SCOPES")
+            print("  3. Create a profile: cja_auto_sdr --profile-add <name>")
             print()
             print("Generate a sample config with:")
             print("  cja_auto_sdr --sample-config")
@@ -9126,17 +10347,19 @@ def show_config_status(config_file: str = "config.json") -> bool:
 
 # ==================== VALIDATE CONFIG ====================
 
-def validate_config_only(config_file: str = "config.json") -> bool:
+def validate_config_only(config_file: str = "config.json",
+                         profile: Optional[str] = None) -> bool:
     """
-    Validate configuration file and API connectivity without processing data views.
+    Validate configuration and API connectivity without processing data views.
 
     Tests:
-        1. Environment variables or config file exists
+        1. Profile, environment variables, or config file exists
         2. Required credentials are present
         3. CJA API connection works
 
     Args:
         config_file: Path to CJA configuration file
+        profile: Optional profile name to use for credentials
 
     Returns:
         True if configuration is valid and API is reachable
@@ -9148,48 +10371,87 @@ def validate_config_only(config_file: str = "config.json") -> bool:
     print()
 
     all_passed = True
+    active_credentials = None
+    credential_source = None
+    logger = logging.getLogger(__name__)
 
-    # Step 1: Check environment variables
-    print("[1/3] Checking credentials...")
-    env_credentials = load_credentials_from_env()
+    # Helper to display credentials
+    def display_credentials(creds: Dict[str, str], source_name: str):
+        required_fields = ['org_id', 'client_id', 'secret']
+        optional_fields = ['scopes', 'sandbox']
+        missing = []
 
-    if env_credentials:
-        print(f"  ✓ Environment variables detected")
         print()
         print("  Credential status:")
-        # Show detailed status for each credential
-        required_vars = ['org_id', 'client_id', 'secret']
-        optional_vars = ['scopes', 'sandbox']
-        for var in required_vars:
-            env_name = ENV_VAR_MAPPING.get(var, var.upper())
-            if var in env_credentials and env_credentials[var]:
-                # Mask sensitive values
-                value = env_credentials[var]
-                if var in ['secret', 'client_id']:
+        for field in required_fields:
+            if field in creds and creds[field]:
+                value = creds[field]
+                if field in ['secret', 'client_id']:
                     masked = value[:4] + '****' + value[-4:] if len(value) > 8 else '****'
                 else:
                     masked = value
-                print(f"    ✓ {env_name}: {masked}")
+                print(f"    ✓ {field}: {masked}")
             else:
-                print(f"    ✗ {env_name}: not set (required)")
-        for var in optional_vars:
-            env_name = ENV_VAR_MAPPING.get(var, var.upper())
-            if var in env_credentials and env_credentials[var]:
-                print(f"    ✓ {env_name}: {env_credentials[var]}")
-            else:
-                print(f"    - {env_name}: not set (optional)")
-        print()
-        if validate_env_credentials(env_credentials, logging.getLogger(__name__)):
-            print(f"  ✓ Environment credentials are valid")
-            print(f"  → Using: Environment variables")
-        else:
-            print(f"  ⚠ Environment credentials incomplete, checking config file...")
-            env_credentials = None  # Fall through to config file check
-    else:
-        print(f"  - No environment variables set")
+                print(f"    ✗ {field}: not set (required)")
+                missing.append(field)
 
-    # Step 2: Check config file if no valid env credentials
-    if not env_credentials:
+        for field in optional_fields:
+            if field in creds and creds[field]:
+                print(f"    ✓ {field}: {creds[field]}")
+            else:
+                print(f"    - {field}: not set (optional)")
+
+        print()
+        if missing:
+            print(f"  ✗ Missing required fields: {', '.join(missing)}")
+            return False
+        else:
+            print(f"  ✓ All required fields present")
+            print(f"  → Using: {source_name}")
+            return True
+
+    # Step 1: Check credentials (priority: profile > env > config file)
+    print("[1/3] Checking credentials...")
+
+    # Priority 1: Profile
+    if profile:
+        print(f"  Checking profile '{profile}'...")
+        try:
+            profile_creds = load_profile_credentials(profile, logger)
+            if profile_creds:
+                print(f"  ✓ Profile '{profile}' found")
+                if display_credentials(profile_creds, f"Profile: {profile}"):
+                    active_credentials = profile_creds
+                    credential_source = 'profile'
+                else:
+                    all_passed = False
+        except ProfileNotFoundError:
+            print(f"  ✗ Profile '{profile}' not found")
+            print()
+            print("  Create the profile with:")
+            print(f"    cja_auto_sdr --profile-add {profile}")
+            all_passed = False
+        except ProfileConfigError as e:
+            print(f"  ✗ Profile '{profile}' has invalid configuration: {e}")
+            all_passed = False
+
+    # Priority 2: Environment variables (if no profile or profile failed)
+    if not active_credentials and all_passed:
+        env_credentials = load_credentials_from_env()
+        if env_credentials:
+            print(f"  ✓ Environment variables detected")
+            if validate_env_credentials(env_credentials, logger):
+                if display_credentials(env_credentials, "Environment variables"):
+                    active_credentials = env_credentials
+                    credential_source = 'env'
+            else:
+                print(f"  ⚠ Environment credentials incomplete, checking config file...")
+        else:
+            if not profile:
+                print(f"  - No environment variables set")
+
+    # Priority 3: Config file (if no profile and no env)
+    if not active_credentials and all_passed:
         print()
         print("[2/3] Checking configuration file...")
         config_path = Path(config_file)
@@ -9200,39 +10462,11 @@ def validate_config_only(config_file: str = "config.json") -> bool:
                 with open(config_file, 'r') as f:
                     config = json.load(f)
                 print(f"  ✓ Config file is valid JSON")
-                print()
-                print("  Credential status:")
-
-                # Show detailed status for each field
-                required_fields = ['org_id', 'client_id', 'secret']
-                optional_fields = ['scopes', 'sandbox']
-                missing = []
-
-                for field in required_fields:
-                    if field in config and config[field]:
-                        value = config[field]
-                        if field in ['secret', 'client_id']:
-                            masked = value[:4] + '****' + value[-4:] if len(value) > 8 else '****'
-                        else:
-                            masked = value
-                        print(f"    ✓ {field}: {masked}")
-                    else:
-                        print(f"    ✗ {field}: not set (required)")
-                        missing.append(field)
-
-                for field in optional_fields:
-                    if field in config and config[field]:
-                        print(f"    ✓ {field}: {config[field]}")
-                    else:
-                        print(f"    - {field}: not set (optional)")
-
-                print()
-                if missing:
-                    print(f"  ✗ Missing required fields: {', '.join(missing)}")
-                    all_passed = False
+                if display_credentials(config, f"Config file ({config_file})"):
+                    active_credentials = config
+                    credential_source = 'file'
                 else:
-                    print(f"  ✓ All required fields present")
-                    print(f"  → Using: Config file ({config_file})")
+                    all_passed = False
             except json.JSONDecodeError as e:
                 print(f"  ✗ Invalid JSON: {str(e)}")
                 all_passed = False
@@ -9246,10 +10480,13 @@ def validate_config_only(config_file: str = "config.json") -> bool:
             print("    export ORG_ID=your_org_id@AdobeOrg")
             print("    export CLIENT_ID=your_client_id")
             print("    export SECRET=your_client_secret")
+            print()
+            print("  Or create a profile:")
+            print("    cja_auto_sdr --profile-add <name>")
             all_passed = False
-    else:
+    elif active_credentials and credential_source in ('profile', 'env'):
         print()
-        print("[2/3] Skipping config file check (using environment credentials)")
+        print(f"[2/3] Skipping config file check (using {credential_source} credentials)")
 
     if not all_passed:
         print()
@@ -9262,12 +10499,9 @@ def validate_config_only(config_file: str = "config.json") -> bool:
     print()
     print("[3/3] Testing API connection...")
     try:
-        # Initialize CJA (will use env vars or config file automatically)
-        logger = logging.getLogger(__name__)
-        logger.setLevel(logging.WARNING)  # Suppress normal output
-
-        if env_credentials:
-            _config_from_env(env_credentials, logger)
+        # Configure cjapy with the active credentials
+        if credential_source in ('profile', 'env'):
+            _config_from_env(active_credentials, logger)
         else:
             cjapy.importConfigFile(config_file)
 
@@ -9307,7 +10541,7 @@ def validate_config_only(config_file: str = "config.json") -> bool:
 
 def show_stats(data_views: List[str], config_file: str = "config.json",
                output_format: str = "table", output_file: Optional[str] = None,
-               quiet: bool = False) -> bool:
+               quiet: bool = False, profile: Optional[str] = None) -> bool:
     """
     Show quick statistics about data view(s) without generating full reports.
 
@@ -9317,6 +10551,7 @@ def show_stats(data_views: List[str], config_file: str = "config.json",
         output_format: Output format - "table" (default), "json", or "csv"
         output_file: Optional file path to write output (or "-" for stdout)
         quiet: Suppress decorative output
+        profile: Optional profile name to use for credentials
 
     Returns:
         True if successful, False otherwise
@@ -9329,10 +10564,15 @@ def show_stats(data_views: List[str], config_file: str = "config.json",
         print("=" * 60)
         print("DATA VIEW STATISTICS")
         print("=" * 60)
+        if profile:
+            print(f"\nUsing profile: {profile}")
         print()
 
     try:
-        cjapy.importConfigFile(config_file)
+        success, source, _ = configure_cjapy(profile, config_file)
+        if not success:
+            print(ConsoleColors.error(f"ERROR: {source}"))
+            return False
         cja = cjapy.CJA()
 
         stats_data = []
@@ -9465,7 +10705,7 @@ def show_stats(data_views: List[str], config_file: str = "config.json",
 # ==================== DIFF AND SNAPSHOT COMMAND HANDLERS ====================
 
 def handle_snapshot_command(data_view_id: str, snapshot_file: str, config_file: str = "config.json",
-                            quiet: bool = False) -> bool:
+                            quiet: bool = False, profile: Optional[str] = None) -> bool:
     """
     Handle the --snapshot command to save a data view snapshot.
 
@@ -9474,6 +10714,7 @@ def handle_snapshot_command(data_view_id: str, snapshot_file: str, config_file: 
         snapshot_file: Path to save the snapshot
         config_file: Path to CJA configuration file
         quiet: Suppress progress output
+        profile: Optional profile name for credentials
 
     Returns:
         True if successful, False otherwise
@@ -9491,8 +10732,11 @@ def handle_snapshot_command(data_view_id: str, snapshot_file: str, config_file: 
         logger = logging.getLogger(__name__)
         logger.setLevel(logging.INFO if not quiet else logging.WARNING)
 
-        # Initialize CJA
-        cjapy.importConfigFile(config_file)
+        # Initialize CJA with profile support
+        success, source, _ = configure_cjapy(profile=profile, config_file=config_file, logger=logger)
+        if not success:
+            print(ConsoleColors.error(f"ERROR: Configuration failed: {source}"), file=sys.stderr)
+            return False
         cja = cjapy.CJA()
 
         # Create and save snapshot
@@ -9531,7 +10775,8 @@ def handle_diff_command(source_id: str, target_id: str, config_file: str = "conf
                         diff_output: Optional[str] = None,
                         format_pr_comment: bool = False, auto_snapshot: bool = False,
                         snapshot_dir: str = "./snapshots", keep_last: int = 0,
-                        keep_since: Optional[str] = None) -> Tuple[bool, bool, Optional[int]]:
+                        keep_since: Optional[str] = None,
+                        profile: Optional[str] = None) -> Tuple[bool, bool, Optional[int]]:
     """
     Handle the --diff command to compare two data views.
 
@@ -9563,6 +10808,7 @@ def handle_diff_command(source_id: str, target_id: str, config_file: str = "conf
         snapshot_dir: Directory for auto-saved snapshots
         keep_last: Retention policy - keep only last N snapshots per data view (0 = keep all)
         keep_since: Date-based retention - delete snapshots older than this period (e.g., '7d', '2w', '1m')
+        profile: Optional profile name for credentials
 
     Returns:
         Tuple of (success, has_changes, exit_code_override)
@@ -9587,8 +10833,12 @@ def handle_diff_command(source_id: str, target_id: str, config_file: str = "conf
                 print("(Reversed comparison)")
             print()
 
-        # Initialize CJA
-        cjapy.importConfigFile(config_file)
+        # Initialize CJA with profile support
+        success, source, _ = configure_cjapy(profile=profile, config_file=config_file, logger=logger)
+        if not success:
+            if not quiet and not quiet_diff:
+                print(ConsoleColors.error(f"ERROR: Configuration failed: {source}"), file=sys.stderr)
+            return False, False, None
         cja = cjapy.CJA()
 
         # Create snapshots from live data views
@@ -9729,7 +10979,8 @@ def handle_diff_snapshot_command(data_view_id: str, snapshot_file: str, config_f
                                   diff_output: Optional[str] = None,
                                   format_pr_comment: bool = False, auto_snapshot: bool = False,
                                   snapshot_dir: str = "./snapshots", keep_last: int = 0,
-                                  keep_since: Optional[str] = None) -> Tuple[bool, bool, Optional[int]]:
+                                  keep_since: Optional[str] = None,
+                                  profile: Optional[str] = None) -> Tuple[bool, bool, Optional[int]]:
     """
     Handle the --diff-snapshot command to compare a data view against a saved snapshot.
 
@@ -9761,6 +11012,7 @@ def handle_diff_snapshot_command(data_view_id: str, snapshot_file: str, config_f
         snapshot_dir: Directory for auto-saved snapshots
         keep_last: Retention policy - keep only last N snapshots per data view (0 = keep all)
         keep_since: Date-based retention - delete snapshots older than this period (e.g., '7d', '2w', '1m')
+        profile: Optional profile name for credentials
 
     Returns:
         Tuple of (success, has_changes, exit_code_override)
@@ -9784,8 +11036,12 @@ def handle_diff_snapshot_command(data_view_id: str, snapshot_file: str, config_f
         snapshot_manager = SnapshotManager(logger)
         source_snapshot = snapshot_manager.load_snapshot(snapshot_file)
 
-        # Initialize CJA and create current snapshot (target)
-        cjapy.importConfigFile(config_file)
+        # Initialize CJA with profile support
+        success, source, _ = configure_cjapy(profile=profile, config_file=config_file, logger=logger)
+        if not success:
+            if not quiet and not quiet_diff:
+                print(ConsoleColors.error(f"ERROR: Configuration failed: {source}"), file=sys.stderr)
+            return False, False, None
         cja = cjapy.CJA()
 
         if not quiet and not quiet_diff:
@@ -10206,6 +11462,29 @@ def main():
         success = generate_sample_config()
         sys.exit(0 if success else 1)
 
+    # ==================== PROFILE MANAGEMENT COMMANDS ====================
+
+    # Handle --profile-list mode (no data view required)
+    if getattr(args, 'profile_list', False):
+        list_format = 'json' if args.format == 'json' else 'table'
+        success = list_profiles(output_format=list_format)
+        sys.exit(0 if success else 1)
+
+    # Handle --profile-add mode (no data view required)
+    if getattr(args, 'profile_add', None):
+        success = add_profile_interactive(args.profile_add)
+        sys.exit(0 if success else 1)
+
+    # Handle --profile-test mode (no data view required)
+    if getattr(args, 'profile_test', None):
+        success = test_profile(args.profile_test)
+        sys.exit(0 if success else 1)
+
+    # Handle --profile-show mode (no data view required)
+    if getattr(args, 'profile_show', None):
+        success = show_profile(args.profile_show)
+        sys.exit(0 if success else 1)
+
     # Handle --git-init mode (no data view required)
     if getattr(args, 'git_init', False):
         git_dir = Path(getattr(args, 'git_dir', './sdr-snapshots'))
@@ -10240,18 +11519,19 @@ def main():
         success = list_dataviews(
             args.config_file,
             output_format=list_format,
-            output_file=getattr(args, 'output', None)
+            output_file=getattr(args, 'output', None),
+            profile=getattr(args, 'profile', None)
         )
         sys.exit(0 if success else 1)
 
     # Handle --config-status mode (no data view required, no API call)
     if getattr(args, 'config_status', False):
-        success = show_config_status(args.config_file)
+        success = show_config_status(args.config_file, profile=getattr(args, 'profile', None))
         sys.exit(0 if success else 1)
 
     # Handle --validate-config mode (no data view required)
     if args.validate_config:
-        success = validate_config_only(args.config_file)
+        success = validate_config_only(args.config_file, profile=getattr(args, 'profile', None))
         sys.exit(0 if success else 1)
 
     # Get data views from arguments
@@ -10261,7 +11541,7 @@ def main():
     if getattr(args, 'interactive', False):
         if data_view_inputs:
             print(ConsoleColors.warning("Note: --interactive ignores any data view IDs provided on command line"))
-        selected_ids = interactive_select_dataviews(args.config_file)
+        selected_ids = interactive_select_dataviews(args.config_file, profile=getattr(args, 'profile', None))
         if not selected_ids:
             print("No data views selected. Exiting.")
             sys.exit(0)
@@ -10277,7 +11557,10 @@ def main():
         # Resolve data view names first
         temp_logger = logging.getLogger('name_resolution')
         temp_logger.setLevel(logging.WARNING)
-        resolved_ids, _ = resolve_data_view_names(data_view_inputs, args.config_file, temp_logger)
+        resolved_ids, _ = resolve_data_view_names(
+            data_view_inputs, args.config_file, temp_logger,
+            profile=getattr(args, 'profile', None)
+        )
 
         if not resolved_ids:
             print(ConsoleColors.error("ERROR: No valid data views found"), file=sys.stderr)
@@ -10295,7 +11578,8 @@ def main():
             config_file=args.config_file,
             output_format=stats_format,
             output_file=getattr(args, 'output', None),
-            quiet=args.quiet
+            quiet=args.quiet,
+            profile=getattr(args, 'profile', None)
         )
         sys.exit(0 if success else 1)
 
@@ -10385,7 +11669,10 @@ def main():
         target_input = data_view_inputs[1]
 
         # Resolve source identifier
-        source_resolved, source_map = resolve_data_view_names([source_input], args.config_file, temp_logger)
+        source_resolved, source_map = resolve_data_view_names(
+            [source_input], args.config_file, temp_logger,
+            profile=getattr(args, 'profile', None)
+        )
         if not source_resolved:
             print(ConsoleColors.error(f"ERROR: Could not resolve source data view: '{source_input}'"), file=sys.stderr)
             sys.exit(1)
@@ -10407,7 +11694,10 @@ def main():
                 sys.exit(1)
 
         # Resolve target identifier
-        target_resolved, target_map = resolve_data_view_names([target_input], args.config_file, temp_logger)
+        target_resolved, target_map = resolve_data_view_names(
+            [target_input], args.config_file, temp_logger,
+            profile=getattr(args, 'profile', None)
+        )
         if not target_resolved:
             print(ConsoleColors.error(f"ERROR: Could not resolve target data view: '{target_input}'"), file=sys.stderr)
             sys.exit(1)
@@ -10459,7 +11749,8 @@ def main():
             auto_snapshot=getattr(args, 'auto_snapshot', False),
             snapshot_dir=getattr(args, 'snapshot_dir', './snapshots'),
             keep_last=getattr(args, 'keep_last', 0),
-            keep_since=getattr(args, 'keep_since', None)
+            keep_since=getattr(args, 'keep_since', None),
+            profile=getattr(args, 'profile', None)
         )
 
         # Exit with code 3 if threshold exceeded, 2 if differences found, 0 if no changes
@@ -10480,7 +11771,10 @@ def main():
         # Resolve name to ID if needed - ensure 1:1 mapping
         temp_logger = logging.getLogger('name_resolution')
         temp_logger.setLevel(logging.WARNING)
-        resolved_ids, _ = resolve_data_view_names(data_view_inputs, args.config_file, temp_logger)
+        resolved_ids, _ = resolve_data_view_names(
+            data_view_inputs, args.config_file, temp_logger,
+            profile=getattr(args, 'profile', None)
+        )
 
         if not resolved_ids:
             print(ConsoleColors.error(f"ERROR: Could not resolve data view: '{data_view_inputs[0]}'"), file=sys.stderr)
@@ -10506,7 +11800,8 @@ def main():
             data_view_id=resolved_ids[0],
             snapshot_file=args.snapshot,
             config_file=args.config_file,
-            quiet=args.quiet
+            quiet=args.quiet,
+            profile=getattr(args, 'profile', None)
         )
         sys.exit(0 if success else 1)
 
@@ -10520,7 +11815,10 @@ def main():
         # Resolve name to ID if needed
         temp_logger = logging.getLogger('name_resolution')
         temp_logger.setLevel(logging.WARNING)
-        resolved_ids, _ = resolve_data_view_names(data_view_inputs, args.config_file, temp_logger)
+        resolved_ids, _ = resolve_data_view_names(
+            data_view_inputs, args.config_file, temp_logger,
+            profile=getattr(args, 'profile', None)
+        )
 
         if not resolved_ids:
             print(ConsoleColors.error(f"ERROR: Could not resolve data view: '{data_view_inputs[0]}'"), file=sys.stderr)
@@ -10574,7 +11872,10 @@ def main():
         # Resolve name to ID if needed - ensure 1:1 mapping
         temp_logger = logging.getLogger('name_resolution')
         temp_logger.setLevel(logging.WARNING)
-        resolved_ids, _ = resolve_data_view_names(data_view_inputs, args.config_file, temp_logger)
+        resolved_ids, _ = resolve_data_view_names(
+            data_view_inputs, args.config_file, temp_logger,
+            profile=getattr(args, 'profile', None)
+        )
 
         if not resolved_ids:
             print(ConsoleColors.error(f"ERROR: Could not resolve data view: '{data_view_inputs[0]}'"), file=sys.stderr)
@@ -10625,7 +11926,8 @@ def main():
             auto_snapshot=getattr(args, 'auto_snapshot', False),
             snapshot_dir=getattr(args, 'snapshot_dir', './snapshots'),
             keep_last=getattr(args, 'keep_last', 0),
-            keep_since=getattr(args, 'keep_since', None)
+            keep_since=getattr(args, 'keep_since', None),
+            profile=getattr(args, 'profile', None)
         )
 
         # Exit with code 3 if threshold exceeded, 2 if differences found, 0 if no changes
@@ -10660,7 +11962,10 @@ def main():
         print()
         print(ConsoleColors.info(f"Resolving {len(names_provided)} data view name(s)..."))
 
-    data_views, name_to_ids_map = resolve_data_view_names(data_view_inputs, args.config_file, temp_logger)
+    data_views, name_to_ids_map = resolve_data_view_names(
+        data_view_inputs, args.config_file, temp_logger,
+        profile=getattr(args, 'profile', None)
+    )
 
     # Remove the temporary handler
     temp_logger.removeHandler(handler)
@@ -10713,7 +12018,8 @@ def main():
     # Handle dry-run mode
     if args.dry_run:
         logger = setup_logging(batch_mode=True, log_level='WARNING', log_format=args.log_format)
-        success = run_dry_run(data_views, args.config_file, logger)
+        success = run_dry_run(data_views, args.config_file, logger,
+                              profile=getattr(args, 'profile', None))
         sys.exit(0 if success else 1)
 
     # Default to excel for SDR generation
@@ -10773,7 +12079,8 @@ def main():
             clear_cache=args.clear_cache,
             show_timings=args.show_timings,
             metrics_only=getattr(args, 'metrics_only', False),
-            dimensions_only=getattr(args, 'dimensions_only', False)
+            dimensions_only=getattr(args, 'dimensions_only', False),
+            profile=getattr(args, 'profile', None)
         )
 
         results = processor.process_batch(data_views)
@@ -10825,7 +12132,8 @@ def main():
             clear_cache=args.clear_cache,
             show_timings=args.show_timings,
             metrics_only=getattr(args, 'metrics_only', False),
-            dimensions_only=getattr(args, 'dimensions_only', False)
+            dimensions_only=getattr(args, 'dimensions_only', False),
+            profile=getattr(args, 'profile', None)
         )
 
         # Print final status with color and total runtime
@@ -10869,7 +12177,7 @@ def main():
                     try:
                         temp_logger = logging.getLogger('git_snapshot')
                         temp_logger.setLevel(logging.WARNING)
-                        cja = initialize_cja(args.config_file, temp_logger)
+                        cja = initialize_cja(args.config_file, temp_logger, profile=getattr(args, 'profile', None))
                         if cja:
                             snapshot_mgr = SnapshotManager(temp_logger)
                             snapshot = snapshot_mgr.create_snapshot(cja, result.data_view_id, quiet=True)

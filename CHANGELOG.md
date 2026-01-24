@@ -5,6 +5,92 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.15] - 2026-01-23
+
+### Highlights
+- **Profile Management** - Built-in support for managing multiple Adobe Organizations with `--profile`, `--profile-add`, `--profile-list`, `--profile-test`, and `--profile-show`
+
+This release adds **multi-organization support** for agencies, consultants, and enterprises managing multiple Adobe CJA instances.
+
+### Added
+
+#### Profile Management for Multiple Organizations
+Manage credentials for multiple Adobe Organizations without manual config file switching.
+
+```bash
+# Create profiles for your organizations
+cja_auto_sdr --profile-add client-a
+cja_auto_sdr --profile-add client-b
+
+# List all profiles
+cja_auto_sdr --profile-list
+
+# Use a specific profile
+cja_auto_sdr --profile client-a --list-dataviews
+cja_auto_sdr -p client-b "Main Data View" --format excel
+
+# Test profile connectivity
+cja_auto_sdr --profile-test client-a
+
+# Show profile config (secrets masked)
+cja_auto_sdr --profile-show client-a
+
+# Set default profile via environment
+export CJA_PROFILE=client-a
+```
+
+**Profile directory structure:**
+```
+~/.cja/orgs/
+├── client-a/
+│   ├── config.json     # JSON credentials
+│   └── .env            # Optional overrides
+├── client-b/
+│   └── config.json
+└── internal/
+    └── .env
+```
+
+**Environment variables:**
+- `CJA_PROFILE` - Default profile (overridden by `--profile`)
+- `CJA_HOME` - Override default `~/.cja` directory
+
+See the [Profile Management documentation](docs/CONFIGURATION.md#profile-management) for full details.
+
+### Testing
+- **750 tests** (749 passing, 1 skipped) - up from 706 in v3.0.14
+- New test file: `tests/test_profiles.py` with 43 tests covering:
+  - Profile path resolution (3 tests)
+  - Profile name validation (10 tests)
+  - Config.json loading (4 tests)
+  - .env file loading (4 tests)
+  - Credential merging and precedence (5 tests)
+  - Profile listing and display (6 tests)
+  - Sensitive value masking (4 tests)
+  - Exception hierarchy (3 tests)
+  - Active profile resolution (4 tests)
+- **66% code coverage** on cja_sdr_generator.py
+
+### Internal Improvements
+
+#### Credential Management Refactoring
+Unified credential handling across profiles, environment variables, and config files:
+
+- **Single Source of Truth**: Added `CREDENTIAL_FIELDS` constant derived from `CONFIG_SCHEMA`, eliminating 4 duplicate credential field definitions
+- **Abstract Credential Loaders**: New `CredentialLoader` ABC with implementations:
+  - `JsonFileCredentialLoader` - Loads from config.json files
+  - `DotenvCredentialLoader` - Loads from .env files
+  - `EnvironmentCredentialLoader` - Loads from environment variables
+- **Unified Resolution**: `CredentialResolver` class is the single entry point for all credential loading (profile, environment, config file). The `configure_cjapy()` function uses `CredentialResolver` internally, eliminating duplicate priority logic
+- **Complete Profile Integration**: All CJA-related functions now support profiles including `run_dry_run()`, `handle_snapshot_command()`, `handle_diff_command()`, and `handle_diff_snapshot_command()`
+- **Standalone Profile Functions**: Profile operations (`list_profiles`, `add_profile_interactive`, `test_profile`, `show_profile`, `load_profile_credentials`) are standalone functions for simplicity
+- **Standardized Validation**: `validate_credentials()` function provides consistent validation across all credential sources
+- **New Exception**: `CredentialSourceError` provides detailed error context including source type and failure reason
+
+These changes improve maintainability and make it easier to add new credential sources in the future.
+
+---
+
 ## [3.0.14] - 2026-01-23
 
 ### Highlights

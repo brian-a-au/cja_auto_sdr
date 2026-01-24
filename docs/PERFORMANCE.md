@@ -2,7 +2,7 @@
 
 Technical details and optimization options for the CJA SDR Generator.
 
-> **Note:** Performance benchmarks in this guide were measured with v3.0.14. Actual performance may vary based on network conditions, API rate limits, and data view size.
+> **Note:** Performance benchmarks in this guide were measured with v3.0.15. Actual performance may vary based on network conditions, API rate limits, and data view size.
 
 ## Performance Overview
 

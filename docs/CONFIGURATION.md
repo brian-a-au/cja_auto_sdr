@@ -8,14 +8,15 @@ Complete reference for configuring CJA SDR Generator authentication and settings
 
 1. [Quick Start](#quick-start)
 2. [Configuration Methods](#configuration-methods)
-3. [config.json Reference](#configjson-reference)
-4. [Environment Variables Reference](#environment-variables-reference)
-5. [OAuth Scopes Explained](#oauth-scopes-explained)
-6. [Validation Rules](#validation-rules)
-7. [Configuration Precedence](#configuration-precedence)
-8. [Multi-Environment Setup](#multi-environment-setup)
-9. [Security Best Practices](#security-best-practices)
-10. [Troubleshooting](#troubleshooting)
+3. [Profile Management](#profile-management) ← **Recommended for multiple organizations**
+4. [config.json Reference](#configjson-reference)
+5. [Environment Variables Reference](#environment-variables-reference)
+6. [OAuth Scopes Explained](#oauth-scopes-explained)
+7. [Validation Rules](#validation-rules)
+8. [Configuration Precedence](#configuration-precedence)
+9. [Multi-Environment Setup](#multi-environment-setup)
+10. [Security Best Practices](#security-best-practices)
+11. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -28,17 +29,18 @@ Choose your configuration method:
 │                   Which method should I use?                     │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                  │
-│  Local development, single user?                                 │
-│  ────────────────────────────────                               │
+│  Multiple organizations? (agencies, multi-client, regional)     │
+│  ────────────────────────────────────────────────────────────   │
+│  → Use PROFILES (recommended) - see Profile Management section  │
+│    $ cja_auto_sdr --profile client-a --list-dataviews           │
+│                                                                  │
+│  Single organization, local development?                        │
+│  ─────────────────────────────────────────                      │
 │  → Use config.json (simpler setup)                              │
 │                                                                  │
 │  CI/CD, Docker, shared environments?                            │
 │  ────────────────────────────────────                           │
 │  → Use environment variables (more secure)                      │
-│                                                                  │
-│  Both configured?                                                │
-│  ────────────────                                               │
-│  → Environment variables take precedence                        │
 │                                                                  │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -58,7 +60,33 @@ You need these four values for OAuth authentication:
 
 ## Configuration Methods
 
-### Method 1: config.json File
+There are three main ways to configure credentials:
+
+| Method | Best For | Multiple Orgs |
+|--------|----------|---------------|
+| **Profiles** | Agencies, consultants, multi-org enterprises | **Recommended** |
+| **config.json** | Single org, simple local development | No |
+| **Environment Variables** | CI/CD, containers, automation | Via separate configs |
+
+### Method 1: Profiles (Recommended for Multiple Organizations)
+
+If you work with multiple Adobe Organizations, profiles are the recommended approach. Each profile is a named directory under `~/.cja/orgs/` containing credentials that can be activated via CLI or environment variable.
+
+```bash
+# Create a profile interactively
+cja_auto_sdr --profile-add client-a
+
+# Use a profile
+cja_auto_sdr --profile client-a --list-dataviews
+
+# Or set as default
+export CJA_PROFILE=client-a
+cja_auto_sdr --list-dataviews
+```
+
+See [Profile Management](#profile-management) for full documentation.
+
+### Method 2: config.json File
 
 Create a `config.json` file in your working directory:
 
@@ -80,7 +108,7 @@ Create a `config.json` file in your working directory:
 - Risk of accidental commit to version control
 - Single environment only
 
-### Method 2: Environment Variables
+### Method 3: Environment Variables
 
 Set variables in your shell or `.env` file:
 
@@ -155,7 +183,7 @@ SCOPES=your_scopes_from_developer_console
 }
 ```
 
-> **Note:** The `sandbox` field is reserved for future use but is not currently utilized. Sandbox information (`sandboxName`, `sandboxId`) is returned as read-only properties in API responses.
+> **Note:** The `sandbox` field is reserved for future use. The CJA API (`cja.adobe.io`) does not use the `x-sandbox-name` header that other AEP APIs use—CJA resources are scoped at the organization level.
 
 ### Generate a Template
 
@@ -370,88 +398,287 @@ cja_auto_sdr --list-dataviews --verbose
 
 ---
 
-## Multi-Environment Setup
+## Profile Management
 
-### Development / Staging / Production
+> **This is the recommended approach for managing multiple Adobe Organizations.** Whether you're an agency managing client accounts, an enterprise with regional organizations, or a consultant working with multiple clients, profiles provide a clean, built-in solution.
 
-Create separate configuration files:
+Profiles provide a built-in way to manage credentials for multiple Adobe Organizations. Each profile is a named directory containing credentials that can be activated via CLI or environment variable.
 
+### Profile Directory Structure
+
+Profiles are stored in your **user home directory** (not the project directory):
+
+```text
+~/.cja/orgs/
+├── client-a/
+│   ├── config.json     # JSON credentials
+│   └── .env            # ENV format (optional, overrides JSON)
+├── client-b/
+│   └── config.json
+└── internal/
+    └── .env
 ```
-project/
-├── config.json           # Local development (gitignored)
-├── config.dev.json       # Development environment
-├── config.staging.json   # Staging environment
-└── config.prod.json      # Production environment
-```
 
-Use with `--config-file`:
+**Expanded paths by platform:**
+
+| Platform | Path |
+|----------|------|
+| macOS | `/Users/username/.cja/orgs/` |
+| Linux | `/home/username/.cja/orgs/` |
+| Windows | `C:\Users\username\.cja\orgs\` |
+
+> **Why the home directory?** Credentials are user-specific (not project-specific), can be shared across multiple projects, and storing them outside project directories prevents accidental commits to version control.
+
+**Custom location:** Set `CJA_HOME` to override the default `~/.cja` directory:
 
 ```bash
-# Development
-cja_auto_sdr --config-file config.dev.json --list-dataviews
-
-# Staging
-cja_auto_sdr --config-file config.staging.json --list-dataviews
-
-# Production
-cja_auto_sdr --config-file config.prod.json --list-dataviews
+export CJA_HOME=/custom/path
+# Profiles will be at: /custom/path/orgs/
 ```
+
+### Creating Profiles
+
+**Interactive creation:**
+
+```bash
+cja_auto_sdr --profile-add client-a
+# Prompts for: Organization ID, Client ID, Secret, Scopes
+```
+
+**Manual creation:**
+
+```bash
+mkdir -p ~/.cja/orgs/client-a
+cat > ~/.cja/orgs/client-a/config.json << 'EOF'
+{
+  "org_id": "YOUR_ORG_ID@AdobeOrg",
+  "client_id": "YOUR_CLIENT_ID",
+  "secret": "YOUR_SECRET",
+  "scopes": "your_scopes_from_developer_console"
+}
+EOF
+chmod 600 ~/.cja/orgs/client-a/config.json
+```
+
+### Using Profiles
+
+**CLI flag (highest priority):**
+
+```bash
+cja_auto_sdr --profile client-a --list-dataviews
+cja_auto_sdr -p client-a "My Data View" --format excel
+```
+
+**Environment variable:**
+
+```bash
+export CJA_PROFILE=client-a
+cja_auto_sdr --list-dataviews
+```
+
+**In batch scripts:**
+
+```bash
+CJA_PROFILE=client-a cja_auto_sdr --list-dataviews
+CJA_PROFILE=client-b cja_auto_sdr --list-dataviews
+```
+
+### Managing Profiles
+
+| Command | Description |
+|---------|-------------|
+| `--profile-list` | List all available profiles |
+| `--profile-add NAME` | Create a new profile interactively |
+| `--profile-show NAME` | Show profile configuration (secrets masked) |
+| `--profile-test NAME` | Test profile credentials and API connectivity |
+
+**Examples:**
+
+```bash
+# List all profiles
+cja_auto_sdr --profile-list
+
+# Show profile details (secrets masked)
+cja_auto_sdr --profile-show client-a
+
+# Test profile connectivity
+cja_auto_sdr --profile-test client-a
+```
+
+### Profile Credential Precedence
+
+Within a profile, credentials are loaded in this order:
+
+1. `.env` file values (if present)
+2. `config.json` values (base)
+
+The `.env` file overrides any matching values from `config.json`, allowing you to:
+- Store base configuration in `config.json`
+- Override specific values via `.env` for environment-specific settings
+
+### Environment Variables for Profiles
+
+| Variable | Description |
+|----------|-------------|
+| `CJA_PROFILE` | Default profile (overridden by `--profile`) |
+| `CJA_HOME` | Override default `~/.cja` directory |
+
+### Profile Naming Rules
+
+Profile names must:
+- Start with a letter or number
+- Contain only letters, numbers, dashes (`-`), and underscores (`_`)
+- Be 64 characters or less
+
+**Valid names:** `client-a`, `prod_org`, `acme2024`, `my_client`
+**Invalid names:** `-invalid`, `has spaces`, `special@chars`
+
+### Updated Configuration Precedence
+
+When profiles are enabled, the complete credential loading order is:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Configuration Precedence                      │
+│                    (highest to lowest)                          │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  1. Profile credentials (if --profile or CJA_PROFILE)           │
+│     ↓ (if not set, falls back to...)                            │
+│                                                                  │
+│  2. Environment Variables (ORG_ID, CLIENT_ID, etc.)             │
+│     ↓ (if not set, falls back to...)                            │
+│                                                                  │
+│  3. .env file (loaded via python-dotenv)                        │
+│     ↓ (if not set, falls back to...)                            │
+│                                                                  │
+│  4. config.json in current directory                            │
+│     ↓ (if not set, falls back to...)                            │
+│                                                                  │
+│  5. --config-file PATH (explicit path)                          │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Backwards Compatibility
+
+The profile feature is fully backwards compatible:
+- Existing `config.json` files work when no profile is specified
+- Existing environment variables work when no profile is active
+- The `--config-file` flag still works as a fallback
+
+---
+
+## Multi-Environment Setup
+
+This section covers managing configurations for multiple Adobe Organizations and deployment scenarios.
+
+> **Recommended Approach:** For most multi-organization use cases, use the built-in **Profile Management** feature described above. Profiles provide a clean, built-in way to manage and switch between organizations without manual shell scripts or symlinks.
+>
+> The techniques below are provided for advanced scenarios, legacy setups, or cases where profiles don't fit your workflow.
+
+### Understanding Adobe CJA Architecture
+
+```text
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     Adobe CJA Organization Structure                        │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  Adobe Organization (@AdobeOrg)                                             │
+│  ──────────────────────────────                                             │
+│  The top-level container for all Adobe resources. Each org has its own:    │
+│  • Users and permissions                                                    │
+│  • Product licenses and entitlements                                        │
+│  • CJA connections, data views, and projects                               │
+│  • API credentials (Developer Console projects)                             │
+│                                                                              │
+│  Key Points:                                                                │
+│  • API credential access is controlled by assigned product profiles        │
+│  • Multiple data views can exist within a single org                       │
+│  • Product profiles can restrict which data views a credential can access  │
+│  • For complete data isolation, separate Adobe Organizations are used      │
+│                                                                              │
+│  Note: Unlike some AEP APIs, the CJA API (cja.adobe.io) does not use the  │
+│  x-sandbox-name header. CJA resources are scoped to the organization.      │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Common Multi-Org Scenarios
+
+| Scenario | Description | Recommended Solution |
+|----------|-------------|---------------------|
+| **Agency Model** | Managing multiple client organizations, each with separate credentials | Use **Profiles** |
+| **Regional Separation** | Enterprise with distinct orgs per region (NA, EMEA, APAC) for data residency | Use **Profiles** |
+| **Business Unit Isolation** | Separate orgs for divisions, brands, or subsidiaries | Use **Profiles** |
+| **Dev/Staging/Prod Separation** | Separate orgs provisioned for each environment | Use **Profiles** |
+
+**Quick start for these scenarios:**
+
+```bash
+# Create profiles for each organization
+cja_auto_sdr --profile-add client-a
+cja_auto_sdr --profile-add client-b
+cja_auto_sdr --profile-add internal
+
+# Switch between organizations easily
+cja_auto_sdr --profile client-a --list-dataviews
+cja_auto_sdr --profile client-b --list-dataviews
+
+# Or set a default
+export CJA_PROFILE=client-a
+```
+
+> **Note:** The CJA API does not currently support the AEP sandbox model (`x-sandbox-name` header). All CJA resources (connections, data views, projects) are scoped to the organization level. For environment or data isolation, you need separate Adobe Organizations with distinct API credentials. The `sandbox` field in this tool's configuration is reserved for potential future use but is not currently utilized.
+
+---
 
 ### CI/CD Pipeline Configuration
 
-**GitHub Actions:**
+For CI/CD pipelines, use environment variables to pass credentials securely:
+
+**GitHub Actions example:**
+
 ```yaml
-env:
-  ORG_ID: ${{ secrets.ADOBE_ORG_ID }}
-  CLIENT_ID: ${{ secrets.ADOBE_CLIENT_ID }}
-  SECRET: ${{ secrets.ADOBE_SECRET }}
-  SCOPES: ${{ secrets.ADOBE_SCOPES }}
+name: Generate SDR Reports
 
-steps:
-  - name: Generate SDR
-    run: cja_auto_sdr "My Data View" --output-dir ./reports
+on:
+  schedule:
+    - cron: '0 6 * * 1'  # Weekly on Monday
+  workflow_dispatch:
+
+jobs:
+  generate-sdr:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - run: pip install uv && uv sync
+      - name: Generate SDR
+        env:
+          ORG_ID: ${{ secrets.ADOBE_ORG_ID }}
+          CLIENT_ID: ${{ secrets.ADOBE_CLIENT_ID }}
+          SECRET: ${{ secrets.ADOBE_SECRET }}
+          SCOPES: ${{ secrets.ADOBE_SCOPES }}
+        run: cja_auto_sdr "Production Data View" --output-dir ./reports --format excel
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sdr-reports
+          path: ./reports/
 ```
 
-**GitLab CI:**
-```yaml
-variables:
-  ORG_ID: $ADOBE_ORG_ID
-  CLIENT_ID: $ADOBE_CLIENT_ID
-  SECRET: $ADOBE_SECRET
-  SCOPES: $ADOBE_SCOPES
-
-generate_sdr:
-  script:
-    - cja_auto_sdr "My Data View" --output-dir ./reports
-```
-
-**Docker:**
-```dockerfile
-# Pass at runtime
-docker run -e ORG_ID -e CLIENT_ID -e SECRET -e SCOPES cja-sdr-generator
-```
+**Docker example:**
 
 ```bash
-# Or use env file
-docker run --env-file .env cja-sdr-generator
-```
+# Pass environment variables at runtime
+docker run -e ORG_ID -e CLIENT_ID -e SECRET -e SCOPES \
+  cja-sdr-generator "My Data View" --format excel
 
-### Shell Profile Setup
-
-Add to `~/.bashrc`, `~/.zshrc`, or equivalent:
-
-```bash
-# CJA SDR Generator - Development
-alias cja-dev='ORG_ID="dev-org@AdobeOrg" CLIENT_ID="dev-id" SECRET="dev-secret" cja_auto_sdr'
-
-# CJA SDR Generator - Production
-alias cja-prod='ORG_ID="prod-org@AdobeOrg" CLIENT_ID="prod-id" SECRET="prod-secret" cja_auto_sdr'
-```
-
-Usage:
-```bash
-cja-dev --list-dataviews    # Uses dev credentials
-cja-prod --list-dataviews   # Uses prod credentials
+# Or use an env file
+docker run --env-file .env.production \
+  cja-sdr-generator "My Data View" --format excel
 ```
 
 ---
@@ -465,7 +692,6 @@ cja-prod --list-dataviews   # Uses prod credentials
 - **Use .env files** for local development (already gitignored)
 - **Rotate secrets** periodically in Adobe Developer Console
 - **Limit API scope** to only what's needed
-- **Use separate credentials** for dev/staging/prod
 
 ### Don't
 
@@ -505,11 +731,12 @@ If credentials are exposed:
 
 #### "Config file not found"
 
-```
+```text
 Error: Config file not found: config.json
 ```
 
 **Solutions:**
+
 1. Create config.json in your current directory
 2. Use `--config-file` to specify the path
 3. Set environment variables instead
@@ -530,11 +757,12 @@ export SECRET="your_secret"
 
 #### "ORG_ID is missing '@AdobeOrg' suffix"
 
-```
+```text
 Error: ORG_ID 'ABC123' is missing '@AdobeOrg' suffix
 ```
 
 **Solution:** Add the `@AdobeOrg` suffix:
+
 ```json
 {
   "org_id": "ABC123@AdobeOrg"
@@ -543,7 +771,7 @@ Error: ORG_ID 'ABC123' is missing '@AdobeOrg' suffix
 
 #### "CLIENT_ID appears too short"
 
-```
+```text
 Warning: CLIENT_ID 'abc123...' appears too short
 ```
 
@@ -551,11 +779,12 @@ Warning: CLIENT_ID 'abc123...' appears too short
 
 #### "Missing OAuth scopes"
 
-```
+```text
 Warning: OAuth scopes not configured
 ```
 
 **Solution:** Copy scopes from your Adobe Developer Console project:
+
 ```json
 {
   "scopes": "your_scopes_from_developer_console"
@@ -564,17 +793,19 @@ Warning: OAuth scopes not configured
 
 #### "Invalid JSON"
 
-```
+```text
 Error: Invalid JSON syntax at line 3
 ```
 
 **Common causes:**
+
 - Missing comma between fields
 - Trailing comma after last field
 - Unquoted strings
 - Single quotes instead of double quotes
 
 **Validate your JSON:**
+
 ```bash
 # macOS/Linux
 python3 -c "import json; json.load(open('config.json'))"
@@ -584,11 +815,12 @@ python3 -c "import json; json.load(open('config.json'))"
 
 #### "Authentication failed" (401/403 errors)
 
-```
+```text
 Error: API authentication failed (401 Unauthorized)
 ```
 
 **Solutions:**
+
 1. Verify credentials are correct (no extra spaces)
 2. Check that Client Secret hasn't expired
 3. Verify OAuth scopes are set correctly
@@ -633,6 +865,7 @@ cja_auto_sdr --list-dataviews --log-level DEBUG
 ## Quick Reference
 
 ### Minimum config.json
+
 ```json
 {
   "org_id": "YOUR_ORG_ID@AdobeOrg",
@@ -643,6 +876,7 @@ cja_auto_sdr --list-dataviews --log-level DEBUG
 ```
 
 ### Minimum Environment Variables
+
 ```bash
 export ORG_ID="YOUR_ORG_ID@AdobeOrg"
 export CLIENT_ID="YOUR_CLIENT_ID"

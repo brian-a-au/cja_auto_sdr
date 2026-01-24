@@ -48,6 +48,9 @@ A **Solution Design Reference** is the essential documentation that bridges your
 | **Git Integration** | Version-Controlled Snapshots | Save SDR snapshots in Git-friendly format with auto-commit |
 | | Audit Trail | Full history of every Data View configuration change |
 | | Team Collaboration | Share snapshots via Git repositories with PR-based review workflows |
+| **Multi-Org** | Profile Management | Switch between Adobe Organizations with `--profile client-a` |
+| | Interactive Setup | Create profiles interactively with `--profile-add` |
+| | Profile Testing | Validate credentials with `--profile-test` before use |
 | **Developer UX** | Quick Stats Mode | Get metrics/dimensions count instantly with `--stats` (no full report) |
 | | Machine-Readable Discovery | `--list-dataviews --format json` for scripting integration |
 | | Dry-Run Mode | Test configuration without generating reports |
@@ -280,7 +283,7 @@ cja_auto_sdr/
 │   ├── GIT_INTEGRATION.md   # Git integration guide
 │   ├── INSTALLATION.md      # Setup instructions
 │   └── ...                  # Additional guides
-├── tests/                   # Test suite (706 tests)
+├── tests/                   # Test suite (750 tests)
 ├── sample_outputs/          # Example output files
 │   ├── excel/               # Sample Excel SDR
 │   ├── csv/                 # Sample CSV output

@@ -85,6 +85,48 @@ cja-auto-sdr [OPTIONS] DATA_VIEW_ID_OR_NAME [...]
 
 > See the [Configuration Guide](CONFIGURATION.md) for details on config.json format, environment variables, and validation rules.
 
+### Profile Management
+
+Manage credentials for multiple Adobe Organizations. Profiles are stored in `~/.cja/orgs/<name>/`.
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--profile NAME`, `-p NAME` | Use named profile from `~/.cja/orgs/<NAME>/` | `$CJA_PROFILE` |
+| `--profile-list` | List all available profiles | - |
+| `--profile-add NAME` | Create a new profile interactively | - |
+| `--profile-show NAME` | Show profile configuration (secrets masked) | - |
+| `--profile-test NAME` | Test profile credentials and API connectivity | - |
+
+**Environment Variables:**
+
+| Variable | Description |
+|----------|-------------|
+| `CJA_PROFILE` | Default profile (overridden by `--profile`) |
+| `CJA_HOME` | Override default `~/.cja` directory |
+
+**Examples:**
+
+```bash
+# Create a profile interactively
+cja_auto_sdr --profile-add client-a
+
+# List all profiles
+cja_auto_sdr --profile-list
+
+# Use a profile
+cja_auto_sdr --profile client-a --list-dataviews
+cja_auto_sdr -p client-a "My Data View" --format excel
+
+# Test profile connectivity
+cja_auto_sdr --profile-test client-a
+
+# Set default profile via environment
+export CJA_PROFILE=client-a
+cja_auto_sdr --list-dataviews
+```
+
+> See the [Profile Management section](CONFIGURATION.md#profile-management) in the Configuration Guide for full documentation.
+
 ### Validation & Testing
 
 | Option | Description | Default |

@@ -219,10 +219,11 @@ ERROR - Failed to resolve data view names: Authentication failed
 ```
 
 **Solutions:**
-1. Verify your `config.json` has correct credentials
-2. Run `cja_auto_sdr --validate-config` to test the configuration
-3. Check network connectivity to Adobe services
-4. See [TROUBLESHOOTING.md](TROUBLESHOOTING.md#authentication--connection-errors) for detailed steps
+1. Verify your credentials (profile, environment variables, or `config.json`)
+2. If using profiles, test with `cja_auto_sdr --profile-test <name>`
+3. Run `cja_auto_sdr --validate-config` to test the configuration
+4. Check network connectivity to Adobe services
+5. See [TROUBLESHOOTING.md](TROUBLESHOOTING.md#authentication--connection-errors) for detailed steps
 
 ### Access Permission Errors
 
@@ -242,6 +243,24 @@ ERROR: No valid data views found
 2. Contact your Adobe administrator to grant access
 3. Verify you're using the correct Adobe organization credentials
 
+## Using Profiles with Names
+
+When working with multiple Adobe Organizations, use profiles to specify which organization's data views to search:
+
+```bash
+# Resolve names using a specific profile
+cja_auto_sdr --profile client-a "Production Analytics"
+
+# List data views from a specific organization
+cja_auto_sdr --profile client-a --list-dataviews
+
+# Process data views from different organizations
+cja_auto_sdr --profile client-a "Client A Production"
+cja_auto_sdr --profile client-b "Client B Production"
+```
+
+> **Note:** Data view names are resolved within the organization specified by the profile. The same name may exist in different organizations.
+
 ## Batch Processing with Names
 
 Names work seamlessly with batch processing:
@@ -252,6 +271,9 @@ cja_auto_sdr "Production" "Staging" "Test" --workers 4
 
 # Mix with IDs
 cja_auto_sdr dv_12345 "Staging Analytics" dv_67890 --batch
+
+# Batch processing with a profile
+cja_auto_sdr --profile client-a "Production" "Staging" --workers 4
 ```
 
 ## Dry Run with Names

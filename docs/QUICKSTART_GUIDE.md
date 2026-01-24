@@ -177,7 +177,7 @@ This command:
 
 ```bash
 $ uv run cja_auto_sdr --version
-cja_auto_sdr 3.0.14
+cja_auto_sdr 3.0.15
 ```
 
 > **Important:** All commands in this guide assume you're in the `cja_auto_sdr` directory. If you see "command not found", make sure you're in the right directory and have run `uv sync`.
@@ -271,7 +271,37 @@ uv add python-dotenv
 
 > **Note:** Environment variables take precedence over `config.json` if both are set.
 
+### Option C: Profiles (Recommended for Multiple Organizations)
+
+If you manage multiple Adobe Organizations, use profiles to store credentials separately:
+
+```bash
+# Create a profile interactively
+cja_auto_sdr --profile-add my-org
+
+# Use the profile
+cja_auto_sdr --profile my-org --list-dataviews
+```
+
+Profiles are stored in `~/.cja/orgs/` (your home directory, not the project). See [Profile Management](CONFIGURATION.md#profile-management) for full details.
+
 For advanced configuration options, see [CONFIGURATION.md](CONFIGURATION.md).
+
+### Managing Multiple Organizations
+
+If you work with multiple Adobe Organizations (agencies, consultants, enterprises with regional orgs), use **profiles** instead of manually switching config files:
+
+```bash
+# Create profiles for each organization
+cja_auto_sdr --profile-add client-a
+cja_auto_sdr --profile-add client-b
+
+# Switch between organizations easily
+cja_auto_sdr --profile client-a --list-dataviews
+cja_auto_sdr --profile client-b --list-dataviews
+```
+
+See the [Profile Management](CONFIGURATION.md#profile-management) section for full documentation.
 
 ---
 

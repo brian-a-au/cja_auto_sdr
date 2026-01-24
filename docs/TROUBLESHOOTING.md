@@ -10,6 +10,7 @@ Comprehensive solutions for issues with the CJA SDR Generator.
 - [Authentication & Connection Errors](#authentication--connection-errors)
 - [Data View Errors](#data-view-errors)
 - [Diff Comparison & Snapshot Errors](#diff-comparison--snapshot-errors)
+- [Profile Errors](#profile-errors)
 - [API & Network Errors](#api--network-errors)
 - [Retry Mechanism & Rate Limiting](#retry-mechanism--rate-limiting)
 - [Data Quality Issues](#data-quality-issues)
@@ -681,6 +682,167 @@ PermissionError: Permission denied
 3. Use a different output path:
    ```bash
    cja_auto_sdr --diff dv_12345 dv_67890 --diff-output ~/Desktop/diff-report.md
+   ```
+
+---
+
+## Profile Errors
+
+> **Note:** Profiles are stored in your user home directory at `~/.cja/orgs/`, not in the project directory. This location can be customized with the `CJA_HOME` environment variable. See [Profile Management](CONFIGURATION.md#profile-management) for details.
+
+### Profile Not Found
+
+**Symptoms:**
+```
+ERROR - Profile 'client-a' not found
+ProfileNotFoundError: Profile directory does not exist: ~/.cja/orgs/client-a
+```
+
+**Solutions:**
+1. List available profiles:
+   ```bash
+   cja_auto_sdr --profile-list
+   ```
+2. Create the profile:
+   ```bash
+   cja_auto_sdr --profile-add client-a
+   ```
+3. Check profile directory exists:
+   ```bash
+   ls -la ~/.cja/orgs/
+   ```
+
+### Invalid Profile Name
+
+**Symptoms:**
+```
+ERROR - Invalid profile name: 'my profile'
+Profile names must contain only letters, numbers, dashes, and underscores
+```
+
+**Valid profile names:**
+- `client-a` ✓
+- `prod_org` ✓
+- `acme2024` ✓
+- `my_client` ✓
+
+**Invalid profile names:**
+- `my profile` ✗ (contains space)
+- `-invalid` ✗ (starts with dash)
+- `special@chars` ✗ (contains special characters)
+
+### Profile Configuration Error
+
+**Symptoms:**
+```
+ERROR - Profile 'client-a' has invalid configuration
+ProfileConfigError: Missing required field 'org_id' in config.json
+```
+
+**Solutions:**
+1. Check profile configuration:
+   ```bash
+   cja_auto_sdr --profile-show client-a
+   ```
+2. Verify config.json in profile directory:
+   ```bash
+   cat ~/.cja/orgs/client-a/config.json
+   ```
+3. Ensure all required fields are present:
+   ```json
+   {
+     "org_id": "YOUR_ORG_ID@AdobeOrg",
+     "client_id": "YOUR_CLIENT_ID",
+     "secret": "YOUR_CLIENT_SECRET",
+     "scopes": "your_scopes_from_developer_console"
+   }
+   ```
+
+### Profile Test Failed
+
+**Symptoms:**
+```
+ERROR - Profile 'client-a' failed connectivity test
+Authentication failed with provided credentials
+```
+
+**Solutions:**
+1. Verify credentials are correct:
+   ```bash
+   cja_auto_sdr --profile-show client-a
+   ```
+2. Check that credentials haven't expired in Adobe Developer Console
+3. Verify OAuth scopes are correct
+4. Test with debug logging:
+   ```bash
+   cja_auto_sdr --profile client-a --list-dataviews --log-level DEBUG
+   ```
+
+### CJA_PROFILE Environment Variable Not Working
+
+**Symptoms:**
+```bash
+export CJA_PROFILE=client-a
+cja_auto_sdr --list-dataviews
+# Still uses default config.json instead of profile
+```
+
+**Solutions:**
+1. Verify environment variable is set:
+   ```bash
+   echo $CJA_PROFILE
+   ```
+2. Check for typos in profile name
+3. Use `--profile` flag explicitly to verify the profile works:
+   ```bash
+   cja_auto_sdr --profile client-a --list-dataviews
+   ```
+
+### Profile Directory Permission Issues
+
+**Symptoms:**
+```
+PermissionError: Cannot read profile configuration
+ERROR - Permission denied accessing ~/.cja/orgs/client-a/config.json
+```
+
+**Solutions:**
+```bash
+# Check permissions
+ls -la ~/.cja/orgs/client-a/
+
+# Fix permissions
+chmod 700 ~/.cja/orgs/client-a
+chmod 600 ~/.cja/orgs/client-a/config.json
+```
+
+### CJA_HOME Not Recognized
+
+**Symptoms:**
+```bash
+export CJA_HOME=/custom/path
+cja_auto_sdr --profile-list
+# Still looks in ~/.cja/orgs/
+```
+
+**Solutions:**
+1. Ensure the custom directory exists:
+   ```bash
+   mkdir -p /custom/path/orgs
+   ```
+2. Verify CJA_HOME is exported (not just set):
+   ```bash
+   export CJA_HOME=/custom/path
+   echo $CJA_HOME
+   ```
+3. Check spelling (case-sensitive):
+   ```bash
+   # Correct
+   export CJA_HOME=/custom/path
+
+   # Wrong
+   export cja_home=/custom/path
+   export CJA_Home=/custom/path
    ```
 
 ---
@@ -1651,6 +1813,17 @@ Get-Content (Get-ChildItem logs\*.log | Sort-Object LastWriteTime -Descending | 
 | `Diff requires exactly 2 data views` | Wrong number of args to `--diff` | Provide exactly 2 identifiers |
 | `Cannot create snapshot directory` | Permission denied | Check directory permissions |
 | `--format console` not supported for SDR | Console is diff-only | Use excel, csv, json, html, or markdown |
+
+### Profile Errors
+
+| Error Message | Cause | Solution |
+|---------------|-------|----------|
+| `Profile '{name}' not found` | Profile directory doesn't exist | Create with `--profile-add` |
+| `Invalid profile name: '{name}'` | Name contains invalid characters | Use only letters, numbers, dashes, underscores |
+| `Profile has invalid configuration` | Missing or invalid config.json | Check with `--profile-show` |
+| `Profile failed connectivity test` | Invalid credentials | Verify credentials in Developer Console |
+| `Permission denied accessing profile` | File permissions issue | Fix with `chmod 600` |
+| `Missing required field in profile` | config.json incomplete | Add missing field to config.json |
 
 ---
 

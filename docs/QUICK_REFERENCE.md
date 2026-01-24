@@ -1,6 +1,6 @@
 # Quick Reference Card
 
-Single-page command cheat sheet for CJA SDR Generator v3.0.14.
+Single-page command cheat sheet for CJA SDR Generator v3.0.15.
 
 ## Two Main Modes
 
@@ -87,10 +87,33 @@ cja_auto_sdr --diff dv_12345 dv_67890 --changes-only
 cja_auto_sdr --diff dv_12345 dv_67890 --diff-labels "Before" "After"
 ```
 
+## Profile Management (Multi-Org)
+
+```bash
+# Create a profile for each organization
+cja_auto_sdr --profile-add client-a
+cja_auto_sdr --profile-add client-b
+
+# List all profiles
+cja_auto_sdr --profile-list
+
+# Use a specific profile
+cja_auto_sdr --profile client-a --list-dataviews
+cja_auto_sdr -p client-b "Main Data View" --format excel
+
+# Test profile connectivity
+cja_auto_sdr --profile-test client-a
+
+# Set default profile
+export CJA_PROFILE=client-a
+cja_auto_sdr --list-dataviews  # Uses client-a
+```
+
 ## Common Options
 
 | Option | Purpose | Mode |
 |--------|---------|------|
+| `--profile NAME`, `-p` | Use named profile from `~/.cja/orgs/` | Both |
 | `--output-dir PATH` | Save output to specific directory | Both |
 | `--output PATH` | Output file path; use `-` for stdout (JSON/CSV) | Both |
 | `--format FORMAT` | Output format (see note below) | Both |

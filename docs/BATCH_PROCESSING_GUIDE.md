@@ -39,11 +39,12 @@ cja_auto_sdr --batch dv_12345 dv_67890 dv_abcde dv_11111 --workers 8
 
 | Argument | Description | Default |
 |----------|-------------|---------|
+| `--profile NAME` / `-p` | Use named profile from `~/.cja/orgs/<NAME>/` | None |
 | `--batch` | Explicitly enable batch mode (optional with multiple data views) | Auto-detect (parallel if multiple data views) |
 | `--workers N` | Number of parallel workers (1-256), or `auto` for intelligent detection | auto |
 | `--log-format FORMAT` | Log output format: `text` or `json` (for Splunk/ELK/CloudWatch) | text |
 | `--output-dir PATH` | Output directory for generated files | Current directory |
-| `--config-file PATH` | Path to CJA configuration file | config.json |
+| `--config-file PATH` | Path to CJA configuration file (ignored if `--profile` used) | config.json |
 | `--continue-on-error` | Continue processing if one data view fails | Stop on first error |
 | `--log-level LEVEL` | Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL) | INFO |
 | `--enable-cache` | Enable validation result caching | Disabled |
@@ -70,6 +71,9 @@ cja_auto_sdr --batch dv_12345 dv_67890 dv_abcde
 ### Advanced Examples
 
 ```bash
+# Use a profile for credentials (recommended for multi-org)
+cja_auto_sdr --profile client-a dv_12345 dv_67890 dv_abcde
+
 # Custom number of workers (conservative for shared API)
 cja_auto_sdr --batch dv_12345 dv_67890 --workers 2
 

@@ -56,7 +56,7 @@ Contains data view metadata, component counts, and quality issue summary.
   "data_view_name": "Production Analytics",
   "owner": "analytics-team",
   "description": "Main production data view",
-  "tool_version": "3.0.14",
+  "tool_version": "3.0.15",
   "summary": {
     "metrics_count": 5,
     "dimensions_count": 5,
