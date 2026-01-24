@@ -2,5 +2,5 @@
   "org_id": "YOUR_ORG_ID@AdobeOrg",
   "client_id": "YOUR_CLIENT_ID",
   "secret": "YOUR_CLIENT_SECRET",
-  "scopes": "openid, AdobeID, additional_info.projectedProductContext"
+  "scopes": "your_scopes_from_developer_console"
 }

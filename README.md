@@ -133,7 +133,7 @@ uv run cja_auto_sdr --sample-config
   "org_id": "YOUR_ORG_ID@AdobeOrg",
   "client_id": "YOUR_CLIENT_ID",
   "secret": "YOUR_CLIENT_SECRET",
-  "scopes": "openid, AdobeID, additional_info.projectedProductContext"
+  "scopes": "your_scopes_from_developer_console"
 }
 ```
 
@@ -145,7 +145,7 @@ Use a `.env` file (copy from `.env.example`) or export directly:
 ORG_ID=your_org_id@AdobeOrg
 CLIENT_ID=your_client_id
 SECRET=your_client_secret
-SCOPES=openid, AdobeID, additional_info.projectedProductContext
+SCOPES=your_scopes_from_developer_console
 ```
 
 > **Note:** Environment variables take precedence over `config.json`.
