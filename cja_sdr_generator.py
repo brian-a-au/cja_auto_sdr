@@ -624,7 +624,7 @@ class ErrorMessageHelper:
                 "suggestions": [
                     "Verify CLIENT_ID and SECRET in config.json or environment variables",
                     "Check that your ORG_ID ends with '@AdobeOrg'",
-                    "Ensure SCOPES includes: 'openid, AdobeID, additional_info.projectedProductContext'",
+                    "Ensure SCOPES is set (copy from Adobe Developer Console)",
                     "Regenerate credentials at https://developer.adobe.com/console/",
                     f"See authentication setup: {ErrorMessageHelper.QUICKSTART_URL}#configure-credentials",
                 ]
@@ -824,7 +824,7 @@ class ErrorMessageHelper:
                     "  export ORG_ID='your_org_id@AdobeOrg'",
                     "  export CLIENT_ID='your_client_id'",
                     "  export SECRET='your_client_secret'",
-                    "  export SCOPES='openid, AdobeID, additional_info.projectedProductContext'",
+                    "  export SCOPES='your_scopes_from_developer_console'",
                     "",
                     f"See setup guide: {ErrorMessageHelper.QUICKSTART_URL}",
                 ]
@@ -871,7 +871,7 @@ class ErrorMessageHelper:
                     "  - org_id must end with '@AdobeOrg'",
                     "  - client_id should be a long alphanumeric string",
                     "  - secret should be a long alphanumeric string",
-                    "  - scopes should include: 'openid, AdobeID, additional_info.projectedProductContext'",
+                    "  - scopes should be copied from Adobe Developer Console",
                     "",
                     "Verify you copied credentials correctly (no extra spaces or line breaks)",
                     "Try regenerating credentials in Adobe Developer Console",
@@ -2999,9 +2999,6 @@ ENV_VAR_MAPPING = {
 class ConfigValidator:
     """Provides detailed validation and suggestions for configuration fields."""
 
-    # Required OAuth scopes for CJA API access
-    REQUIRED_SCOPES = {'openid', 'AdobeID', 'additional_info.projectedProductContext'}
-
     @staticmethod
     def validate_org_id(org_id: str) -> Tuple[bool, Optional[str]]:
         """
@@ -3041,31 +3038,20 @@ class ConfigValidator:
     @staticmethod
     def validate_scopes(scopes: str) -> Tuple[bool, Optional[str], List[str]]:
         """
-        Validate OAuth scopes include required CJA API scopes.
+        Validate OAuth scopes are provided.
+
+        Scopes vary based on Adobe Developer Console project configuration.
+        See: https://developer.adobe.com/developer-console/docs/guides/authentication/
 
         Args:
-            scopes: Comma-separated scopes string
+            scopes: Comma or space-separated scopes string
 
         Returns:
             Tuple of (is_valid, error_message, missing_scopes).
-            error_message and missing_scopes are empty/None if valid.
+            error_message is None if valid. missing_scopes is always empty (no longer validated).
         """
         if not scopes or not scopes.strip():
-            return False, "SCOPES cannot be empty", list(ConfigValidator.REQUIRED_SCOPES)
-
-        # Parse scopes (handle both comma and space separation)
-        provided = set()
-        for scope in scopes.replace(',', ' ').split():
-            scope = scope.strip()
-            if scope:
-                provided.add(scope)
-
-        missing = ConfigValidator.REQUIRED_SCOPES - provided
-        if missing:
-            return False, (
-                f"Missing required OAuth scopes: {', '.join(sorted(missing))}. "
-                f"Recommended: 'openid, AdobeID, additional_info.projectedProductContext'"
-            ), list(missing)
+            return False, "SCOPES cannot be empty - copy from Adobe Developer Console", []
 
         return True, None, []
 
@@ -3218,8 +3204,8 @@ def validate_env_credentials(credentials: Dict[str, str], logger: logging.Logger
     # Check for OAuth scopes (recommended but not strictly required)
     if 'scopes' not in credentials:
         logger.warning(
-            "Environment credentials missing OAuth scopes - recommend setting SCOPES. "
-            "Example: export SCOPES='openid, AdobeID, additional_info.projectedProductContext'"
+    "Environment credentials missing OAuth scopes - recommend setting SCOPES "
+            "(copy from Adobe Developer Console)"
         )
 
     return True
@@ -3344,8 +3330,7 @@ def validate_config_file(
         if 'scopes' not in config_data or not config_data.get('scopes', '').strip():
             validation_warnings.append(
                 "OAuth Server-to-Server auth: 'scopes' field not set. "
-                "Consider adding scopes (e.g., 'openid,AdobeID,additional_info.projectedProductContext') "
-                "for proper API access."
+                "Copy scopes from your Adobe Developer Console project."
             )
 
         # Validate optional fields if present
@@ -3493,14 +3478,14 @@ def initialize_cja(
                 logger.critical("  export ORG_ID=your_org_id@AdobeOrg")
                 logger.critical("  export CLIENT_ID=your_client_id")
                 logger.critical("  export SECRET=your_client_secret")
-                logger.critical("  export SCOPES='openid, AdobeID, additional_info.projectedProductContext'")
+                logger.critical("  export SCOPES='your_scopes_from_developer_console'")
                 logger.critical("")
                 logger.critical("Option 2: Config File (config.json):")
                 logger.critical(json.dumps({
                     "org_id": "your_org_id",
                     "client_id": "your_client_id",
                     "secret": "your_client_secret",
-                    "scopes": "openid, AdobeID, additional_info.projectedProductContext"
+                    "scopes": "your_scopes_from_developer_console"
                 }, indent=2))
                 return None
 
@@ -8648,7 +8633,7 @@ def generate_sample_config(output_path: str = "config.sample.json") -> bool:
         "org_id": "YOUR_ORG_ID@AdobeOrg",
         "client_id": "your_client_id_here",
         "secret": "your_client_secret_here",
-        "scopes": "openid, AdobeID, additional_info.projectedProductContext"
+        "scopes": "your_scopes_from_developer_console"
     }
 
     print()
