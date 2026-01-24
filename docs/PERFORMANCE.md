@@ -2,7 +2,7 @@
 
 Technical details and optimization options for the CJA SDR Generator.
 
-> **Note:** Performance benchmarks in this guide were measured with v3.0.15. Actual performance may vary based on network conditions, API rate limits, and data view size.
+> **Note:** Performance benchmarks in this guide were measured with v3.0.16. Actual performance may vary based on network conditions, API rate limits, and data view size.
 
 ## Performance Overview
 
@@ -17,6 +17,9 @@ The generator includes multiple optimization features:
 | Production logging mode | 5-10% faster |
 | Name resolution caching | 5-minute API cache for data view listings |
 | Snapshot comparison | No API calls (instant for large datasets) |
+| API auto-tuning | Adaptive worker scaling based on response times |
+| Circuit breaker | Prevents cascading failures, fast recovery |
+| Shared validation cache | Cross-process cache sharing for batch operations |
 
 ## Batch Processing
 
@@ -231,6 +234,75 @@ Attempt 3: API call fails (ConnectionError)
 Attempt 4: API call fails
   → Error raised, processing stops
 ```
+
+## Reliability Features
+
+### API Worker Auto-Tuning
+
+Automatically adjust worker count based on API response times:
+
+```bash
+# Enable auto-tuning (scales 1-10 workers based on response times)
+cja_auto_sdr dv_12345 --api-auto-tune
+
+# Custom bounds
+cja_auto_sdr dv_12345 --api-auto-tune --api-min-workers 2 --api-max-workers 8
+```
+
+**How it works:**
+- Tracks rolling average of last 5 API response times
+- Scales up when responses are fast (< 200ms default)
+- Scales down when responses are slow (> 2000ms default)
+- 10-second cooldown between adjustments
+
+**When to use:**
+- Variable API performance environments
+- Long-running batch operations
+- When optimal worker count is unknown
+
+### Circuit Breaker Pattern
+
+Prevent cascading failures by automatically stopping requests to failing services:
+
+```bash
+# Enable circuit breaker with defaults
+cja_auto_sdr dv_12345 --circuit-breaker
+
+# Custom thresholds (trip after 3 failures, recover after 60s)
+cja_auto_sdr dv_12345 --circuit-breaker --circuit-failure-threshold 3 --circuit-timeout 60
+```
+
+**State transitions:**
+```
+CLOSED (normal) → [5 failures] → OPEN (reject all)
+OPEN → [30s timeout] → HALF_OPEN (test recovery)
+HALF_OPEN → [2 successes] → CLOSED
+HALF_OPEN → [1 failure] → OPEN
+```
+
+**When to use:**
+- Unstable API environments
+- Protection against rate limiting
+- Graceful degradation requirements
+
+### Shared Validation Cache
+
+Share validation cache across batch workers for memory efficiency:
+
+```bash
+# Enable shared cache in batch mode
+cja_auto_sdr --batch dv_1 dv_2 dv_3 --shared-cache --enable-cache
+```
+
+**Benefits:**
+- Single cache instance shared across all worker processes
+- Reduced memory footprint for large batches
+- Higher cache hit rates when processing similar data views
+
+**When to use:**
+- Batch processing with many similar data views
+- Memory-constrained environments
+- When validation results are likely to be reusable
 
 ## Diff Comparison Performance
 

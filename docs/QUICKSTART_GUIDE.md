@@ -177,7 +177,7 @@ This command:
 
 ```bash
 $ uv run cja_auto_sdr --version
-cja_auto_sdr 3.0.15
+cja_auto_sdr 3.0.16
 ```
 
 > **Important:** All commands in this guide assume you're in the `cja_auto_sdr` directory. If you see "command not found", make sure you're in the right directory and have run `uv sync`.

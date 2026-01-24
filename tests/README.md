@@ -30,10 +30,13 @@ tests/
 ├── test_diff_comparison.py          # Data view diff comparison tests
 ├── test_edge_cases.py               # Edge cases and configuration tests
 ├── test_ux_features.py              # UX enhancement features tests (--open, --stats, --output)
+├── test_api_tuning.py               # API worker auto-tuning tests
+├── test_circuit_breaker.py          # Circuit breaker pattern tests
+├── test_shared_cache.py             # Shared validation cache tests
 └── README.md                        # This file
 ```
 
-**Total: 672 comprehensive tests**
+**Total: 786 comprehensive tests**
 
 ### Test Count Breakdown
 
@@ -61,7 +64,10 @@ tests/
 | `test_data_quality.py` | 10 | Data quality validation logic |
 | `test_parallel_validation.py` | 8 | Parallel validation operations |
 | `test_ux_features.py` | 27 | UX features: --open, --stats, --output, --list-dataviews formats |
-| **Total** | **672** | **100% pass rate** |
+| `test_api_tuning.py` | 29 | API worker auto-tuning |
+| `test_circuit_breaker.py` | 27 | Circuit breaker pattern |
+| `test_shared_cache.py` | 16 | Shared validation cache |
+| **Total** | **786** | **100% pass rate** |
 
 ## Running Tests
 
@@ -444,8 +450,11 @@ uv run pytest
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (750 tests total)
+- [x] Comprehensive test coverage (786 tests total)
 - [x] Profile management tests (test_profiles.py) - 43 tests
+- [x] API worker auto-tuning tests (test_api_tuning.py) - 29 tests
+- [x] Circuit breaker pattern tests (test_circuit_breaker.py) - 27 tests
+- [x] Shared validation cache tests (test_shared_cache.py) - 16 tests
 - [x] Parallel validation tests (test_parallel_validation.py)
 - [x] Validation caching tests (test_validation_cache.py)
 - [x] Early exit optimization tests (test_early_exit.py)

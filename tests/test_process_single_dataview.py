@@ -577,7 +577,8 @@ class TestProcessSingleDataviewWorker:
         assert result == expected_result
         mock_process.assert_called_once_with(
             "dv_test_12345", "config.json", "/output", "INFO", "text", "excel",
-            False, 1000, 3600, False, False, 0, False, False, False, False, profile=None
+            False, 1000, 3600, False, False, 0, False, False, False, False,
+            profile=None, shared_cache=None, api_tuning_config=None, circuit_breaker_config=None
         )
 
 

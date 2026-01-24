@@ -5,7 +5,7 @@
   "data_view_name": "Production Analytics",
   "owner": "analytics-team",
   "description": "Main production data view for customer analytics",
-  "tool_version": "3.0.15",
+  "tool_version": "3.0.16",
   "summary": {
     "metrics_count": 5,
     "dimensions_count": 5,

@@ -16,12 +16,14 @@ from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_compl
 from tqdm import tqdm
 import time
 import threading
+import multiprocessing
 import argparse
 import os
 import random
 import functools
 from dataclasses import dataclass, field
 from abc import ABC, abstractmethod
+from enum import Enum
 import tempfile
 import atexit
 import uuid
@@ -50,7 +52,7 @@ except ImportError:
 
 # ==================== VERSION ====================
 
-__version__ = "3.0.15"
+__version__ = "3.0.16"
 
 # ==================== FORMAT ALIASES ====================
 
@@ -335,6 +337,62 @@ class WorkerConfig:
     validation_workers: int = 2
     batch_workers: int = 4
     max_batch_workers: int = 256
+
+
+@dataclass
+class APITuningConfig:
+    """Configuration for API worker auto-tuning.
+
+    Dynamically adjusts the number of API fetch workers based on response times.
+    Opt-in feature enabled via --api-auto-tune CLI flag.
+
+    Attributes:
+        min_workers: Minimum number of workers (default: 1)
+        max_workers: Maximum number of workers (default: 10)
+        scale_up_threshold_ms: Add workers if avg response time below this (default: 200ms)
+        scale_down_threshold_ms: Remove workers if avg response time above this (default: 2000ms)
+        sample_window: Number of requests to average before adjusting (default: 5)
+        cooldown_seconds: Minimum time between adjustments (default: 10s)
+    """
+    min_workers: int = 1
+    max_workers: int = 10
+    scale_up_threshold_ms: float = 200.0
+    scale_down_threshold_ms: float = 2000.0
+    sample_window: int = 5
+    cooldown_seconds: float = 10.0
+
+
+class CircuitState(Enum):
+    """States for the circuit breaker pattern."""
+    CLOSED = "closed"      # Normal operation, requests flow through
+    OPEN = "open"          # Circuit tripped, requests fail fast
+    HALF_OPEN = "half_open"  # Testing if service recovered
+
+
+@dataclass
+class CircuitBreakerConfig:
+    """Configuration for circuit breaker pattern.
+
+    Prevents cascading failures by stopping requests to a failing service.
+    Opt-in feature enabled via --circuit-breaker CLI flag.
+
+    Attributes:
+        failure_threshold: Consecutive failures before opening circuit (default: 5)
+        success_threshold: Successes in half-open to close circuit (default: 2)
+        timeout_seconds: Time before attempting recovery (open→half-open) (default: 30)
+    """
+    failure_threshold: int = 5
+    success_threshold: int = 2
+    timeout_seconds: float = 30.0
+
+
+class CircuitBreakerOpen(Exception):
+    """Exception raised when circuit breaker is open and request is rejected."""
+
+    def __init__(self, message: str = "Circuit breaker is open", time_until_retry: float = 0):
+        self.message = message
+        self.time_until_retry = time_until_retry
+        super().__init__(self.message)
 
 
 @dataclass
@@ -1163,6 +1221,230 @@ RETRYABLE_EXCEPTIONS = (
 RETRYABLE_STATUS_CODES = {408, 429, 500, 502, 503, 504}
 
 
+# ==================== CIRCUIT BREAKER ====================
+
+class CircuitBreaker:
+    """
+    Thread-safe circuit breaker implementation for API resilience.
+
+    The circuit breaker pattern prevents cascading failures by stopping
+    requests to a failing service. It has three states:
+
+    - CLOSED: Normal operation, requests flow through
+    - OPEN: Circuit tripped after too many failures, requests fail fast
+    - HALF_OPEN: Testing if service recovered after timeout
+
+    State Transitions:
+    - CLOSED → OPEN: After failure_threshold consecutive failures
+    - OPEN → HALF_OPEN: After timeout_seconds has elapsed
+    - HALF_OPEN → CLOSED: After success_threshold successful requests
+    - HALF_OPEN → OPEN: After any failure
+
+    Thread Safety:
+    - Uses threading.Lock for all state transitions
+    - Safe for use with ThreadPoolExecutor
+
+    Example:
+        breaker = CircuitBreaker(config=CircuitBreakerConfig(failure_threshold=3))
+
+        if breaker.allow_request():
+            try:
+                result = api_call()
+                breaker.record_success()
+            except Exception as e:
+                breaker.record_failure(e)
+                raise
+        else:
+            raise CircuitBreakerOpen()
+    """
+
+    def __init__(self, config: CircuitBreakerConfig = None, logger: logging.Logger = None):
+        """
+        Initialize the circuit breaker.
+
+        Args:
+            config: Configuration settings (uses defaults if not provided)
+            logger: Logger instance for state change logging
+        """
+        self.config = config or CircuitBreakerConfig()
+        self.logger = logger or logging.getLogger(__name__)
+
+        self._state = CircuitState.CLOSED
+        self._failure_count = 0
+        self._success_count = 0
+        self._last_failure_time: Optional[float] = None
+        self._last_state_change_time = time.time()
+        self._lock = threading.Lock()
+
+        # Statistics
+        self._total_requests = 0
+        self._total_failures = 0
+        self._total_rejections = 0
+        self._trips = 0  # Number of times circuit opened
+
+    @property
+    def state(self) -> CircuitState:
+        """Get current circuit state (thread-safe)."""
+        with self._lock:
+            return self._state
+
+    def allow_request(self) -> bool:
+        """
+        Check if a request should be allowed through.
+
+        Returns:
+            True if request is allowed, False if circuit is open
+
+        Side Effects:
+            - Transitions OPEN → HALF_OPEN if timeout has elapsed
+            - Increments rejection counter if request is blocked
+        """
+        with self._lock:
+            self._total_requests += 1
+
+            if self._state == CircuitState.CLOSED:
+                return True
+
+            if self._state == CircuitState.OPEN:
+                # Check if timeout has elapsed for recovery attempt
+                if self._last_failure_time is not None:
+                    elapsed = time.time() - self._last_failure_time
+                    if elapsed >= self.config.timeout_seconds:
+                        self._transition_to(CircuitState.HALF_OPEN)
+                        return True
+
+                # Still in timeout period
+                self._total_rejections += 1
+                return False
+
+            # HALF_OPEN - allow limited requests to test recovery
+            return True
+
+    def record_success(self) -> None:
+        """
+        Record a successful request.
+
+        Side Effects:
+            - Resets failure count in CLOSED state
+            - Increments success count in HALF_OPEN state
+            - Transitions HALF_OPEN → CLOSED if success threshold reached
+        """
+        with self._lock:
+            if self._state == CircuitState.CLOSED:
+                self._failure_count = 0  # Reset consecutive failure count
+            elif self._state == CircuitState.HALF_OPEN:
+                self._success_count += 1
+                if self._success_count >= self.config.success_threshold:
+                    self._transition_to(CircuitState.CLOSED)
+                    self._failure_count = 0
+                    self._success_count = 0
+
+    def record_failure(self, exception: Exception = None) -> None:
+        """
+        Record a failed request.
+
+        Args:
+            exception: The exception that caused the failure (for logging)
+
+        Side Effects:
+            - Increments failure count
+            - Transitions CLOSED → OPEN if failure threshold reached
+            - Transitions HALF_OPEN → OPEN immediately on any failure
+        """
+        with self._lock:
+            self._failure_count += 1
+            self._total_failures += 1
+            self._last_failure_time = time.time()
+
+            if self._state == CircuitState.CLOSED:
+                if self._failure_count >= self.config.failure_threshold:
+                    self._transition_to(CircuitState.OPEN)
+                    self._trips += 1
+            elif self._state == CircuitState.HALF_OPEN:
+                # Any failure in half-open immediately opens the circuit
+                self._transition_to(CircuitState.OPEN)
+                self._success_count = 0
+
+    def _transition_to(self, new_state: CircuitState) -> None:
+        """
+        Transition to a new state (must be called within lock).
+
+        Args:
+            new_state: The state to transition to
+        """
+        old_state = self._state
+        self._state = new_state
+        self._last_state_change_time = time.time()
+
+        if old_state != new_state:
+            self.logger.info(
+                f"Circuit breaker state: {old_state.value} → {new_state.value} "
+                f"(failures={self._failure_count}, successes={self._success_count})"
+            )
+
+    def get_statistics(self) -> Dict[str, Any]:
+        """
+        Get circuit breaker statistics.
+
+        Returns:
+            Dict with state, counts, and timing information
+        """
+        with self._lock:
+            time_in_state = time.time() - self._last_state_change_time
+            time_until_retry = 0.0
+
+            if self._state == CircuitState.OPEN and self._last_failure_time is not None:
+                time_until_retry = max(0.0, self.config.timeout_seconds - (time.time() - self._last_failure_time))
+
+            return {
+                'state': self._state.value,
+                'failure_count': self._failure_count,
+                'success_count': self._success_count,
+                'total_requests': self._total_requests,
+                'total_failures': self._total_failures,
+                'total_rejections': self._total_rejections,
+                'trips': self._trips,
+                'time_in_state_seconds': time_in_state,
+                'time_until_retry_seconds': time_until_retry,
+            }
+
+    def reset(self) -> None:
+        """Reset the circuit breaker to initial state."""
+        with self._lock:
+            self._state = CircuitState.CLOSED
+            self._failure_count = 0
+            self._success_count = 0
+            self._last_failure_time = None
+            self._last_state_change_time = time.time()
+            self.logger.debug("Circuit breaker reset to CLOSED state")
+
+    def __call__(self, func: Callable[..., T]) -> Callable[..., T]:
+        """
+        Use as a decorator for functions.
+
+        Example:
+            @circuit_breaker
+            def api_call():
+                return requests.get(url)
+        """
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs) -> T:
+            if not self.allow_request():
+                stats = self.get_statistics()
+                raise CircuitBreakerOpen(
+                    f"Circuit breaker is open (will retry in {stats['time_until_retry_seconds']:.1f}s)",
+                    time_until_retry=stats['time_until_retry_seconds']
+                )
+            try:
+                result = func(*args, **kwargs)
+                self.record_success()
+                return result
+            except Exception as e:
+                self.record_failure(e)
+                raise
+        return wrapper
+
+
 def retry_with_backoff(
     max_retries: Optional[int] = None,
     base_delay: Optional[float] = None,
@@ -1276,10 +1558,11 @@ def make_api_call_with_retry(
     *args: Any,
     logger: Optional[logging.Logger] = None,
     operation_name: str = "API call",
+    circuit_breaker: Optional[CircuitBreaker] = None,
     **kwargs: Any
 ) -> T:
     """
-    Execute an API call with retry logic.
+    Execute an API call with retry logic and optional circuit breaker.
 
     This is a function-based alternative to the decorator for cases where
     you need more control or are calling methods on objects.
@@ -1289,12 +1572,14 @@ def make_api_call_with_retry(
         *args: Positional arguments to pass to the function
         logger: Logger instance for retry messages
         operation_name: Human-readable name for logging
+        circuit_breaker: Optional circuit breaker for failure protection
         **kwargs: Keyword arguments to pass to the function
 
     Returns:
         Result from the API call
 
     Raises:
+        CircuitBreakerOpen: If circuit breaker is open and rejecting requests
         The last exception if all retries fail
 
     Example:
@@ -1302,7 +1587,8 @@ def make_api_call_with_retry(
             cja.getMetrics,
             data_view_id,
             logger=logger,
-            operation_name="getMetrics"
+            operation_name="getMetrics",
+            circuit_breaker=my_circuit_breaker
         )
     """
     _logger = logger or logging.getLogger(__name__)
@@ -1311,6 +1597,16 @@ def make_api_call_with_retry(
     max_delay = DEFAULT_RETRY_CONFIG['max_delay']
     exponential_base = DEFAULT_RETRY_CONFIG['exponential_base']
     jitter = DEFAULT_RETRY_CONFIG['jitter']
+
+    # Check circuit breaker before attempting any calls
+    if circuit_breaker is not None:
+        if not circuit_breaker.allow_request():
+            stats = circuit_breaker.get_statistics()
+            raise CircuitBreakerOpen(
+                f"Circuit breaker is open for {operation_name} "
+                f"(will retry in {stats['time_until_retry_seconds']:.1f}s)",
+                time_until_retry=stats['time_until_retry_seconds']
+            )
 
     last_exception = None
 
@@ -1336,6 +1632,10 @@ def make_api_call_with_retry(
                     f"✓ {operation_name} succeeded on attempt {attempt + 1}/{max_retries + 1}"
                 )
 
+            # Record success to circuit breaker
+            if circuit_breaker is not None:
+                circuit_breaker.record_success()
+
             return result
         except RETRYABLE_EXCEPTIONS as e:
             last_exception = e
@@ -1359,6 +1659,10 @@ def make_api_call_with_retry(
                 else:
                     _logger.error(f"Error: {str(e)}")
                     _logger.error("Troubleshooting: Check network connectivity, verify API credentials, or try again later")
+
+                # Record failure to circuit breaker (only after all retries exhausted)
+                if circuit_breaker is not None:
+                    circuit_breaker.record_failure(e)
                 raise
 
             delay = min(base_delay * (exponential_base ** attempt), max_delay)
@@ -1373,6 +1677,9 @@ def make_api_call_with_retry(
         except Exception as e:
             # Non-retryable exception
             _logger.error(f"{operation_name} failed with non-retryable error: {str(e)}")
+            # Record failure to circuit breaker
+            if circuit_breaker is not None:
+                circuit_breaker.record_failure(e)
             raise
 
     if last_exception:
@@ -2900,6 +3207,182 @@ class PerformanceTracker:
 
             self.logger.info("=" * 60)
 
+
+# ==================== API WORKER TUNER ====================
+
+class APIWorkerTuner:
+    """
+    Thread-safe auto-tuner for API worker pool size.
+
+    Dynamically adjusts the number of concurrent API workers based on
+    response time measurements. Scales up when responses are fast (API
+    has capacity) and scales down when responses are slow (API is stressed).
+
+    Algorithm:
+    - Maintains a rolling window of response times
+    - After sample_window measurements, calculates average
+    - If avg < scale_up_threshold_ms: increase workers (if below max)
+    - If avg > scale_down_threshold_ms: decrease workers (if above min)
+    - Enforces cooldown period between adjustments
+
+    Thread Safety:
+    - Uses threading.Lock for all state updates
+    - Safe for use with ThreadPoolExecutor
+
+    Example:
+        tuner = APIWorkerTuner(config=APITuningConfig(min_workers=1, max_workers=10))
+
+        # After each API call
+        new_count = tuner.record_response_time(duration_ms)
+        if new_count is not None:
+            executor.resize(new_count)  # Adjust pool size
+    """
+
+    def __init__(self, config: APITuningConfig = None, initial_workers: int = 3,
+                 logger: logging.Logger = None):
+        """
+        Initialize the API worker tuner.
+
+        Args:
+            config: Tuning configuration (uses defaults if not provided)
+            initial_workers: Starting number of workers
+            logger: Logger instance for tuning decisions
+        """
+        self.config = config or APITuningConfig()
+        self.logger = logger or logging.getLogger(__name__)
+
+        # Current worker count
+        self._current_workers = max(
+            self.config.min_workers,
+            min(initial_workers, self.config.max_workers)
+        )
+
+        # Rolling window of response times
+        self._response_times: List[float] = []
+        self._last_adjustment_time = 0.0
+
+        # Thread safety
+        self._lock = threading.Lock()
+
+        # Statistics
+        self._total_requests = 0
+        self._scale_ups = 0
+        self._scale_downs = 0
+        self._total_response_time_ms = 0.0
+
+    @property
+    def current_workers(self) -> int:
+        """Get current worker count (thread-safe)."""
+        with self._lock:
+            return self._current_workers
+
+    def record_response_time(self, duration_ms: float) -> Optional[int]:
+        """
+        Record a response time and potentially adjust worker count.
+
+        Args:
+            duration_ms: Response time in milliseconds
+
+        Returns:
+            New worker count if adjusted, None if no change needed
+
+        Note:
+            Call this after each API request completes (success or failure).
+        """
+        with self._lock:
+            self._total_requests += 1
+            self._total_response_time_ms += duration_ms
+            self._response_times.append(duration_ms)
+
+            # Keep only the most recent samples
+            if len(self._response_times) > self.config.sample_window:
+                self._response_times = self._response_times[-self.config.sample_window:]
+
+            # Only adjust after we have enough samples
+            if len(self._response_times) < self.config.sample_window:
+                return None
+
+            # Check cooldown period
+            now = time.time()
+            if now - self._last_adjustment_time < self.config.cooldown_seconds:
+                return None
+
+            # Calculate average response time
+            avg_time = sum(self._response_times) / len(self._response_times)
+
+            # Determine if adjustment is needed
+            new_workers = None
+
+            if avg_time < self.config.scale_up_threshold_ms:
+                # Fast responses - try to add workers
+                if self._current_workers < self.config.max_workers:
+                    new_workers = self._current_workers + 1
+                    self._scale_ups += 1
+                    self.logger.info(
+                        f"API tuner: scaling UP {self._current_workers} → {new_workers} workers "
+                        f"(avg response: {avg_time:.0f}ms < {self.config.scale_up_threshold_ms}ms threshold)"
+                    )
+
+            elif avg_time > self.config.scale_down_threshold_ms:
+                # Slow responses - try to reduce workers
+                if self._current_workers > self.config.min_workers:
+                    new_workers = self._current_workers - 1
+                    self._scale_downs += 1
+                    self.logger.info(
+                        f"API tuner: scaling DOWN {self._current_workers} → {new_workers} workers "
+                        f"(avg response: {avg_time:.0f}ms > {self.config.scale_down_threshold_ms}ms threshold)"
+                    )
+
+            if new_workers is not None:
+                self._current_workers = new_workers
+                self._last_adjustment_time = now
+                self._response_times.clear()  # Reset window after adjustment
+                return new_workers
+
+            return None
+
+    def get_statistics(self) -> Dict[str, Any]:
+        """
+        Get tuner statistics.
+
+        Returns:
+            Dict with worker counts, adjustment history, and performance metrics
+        """
+        with self._lock:
+            avg_response = (
+                self._total_response_time_ms / self._total_requests
+                if self._total_requests > 0 else 0.0
+            )
+
+            return {
+                'current_workers': self._current_workers,
+                'min_workers': self.config.min_workers,
+                'max_workers': self.config.max_workers,
+                'total_requests': self._total_requests,
+                'scale_ups': self._scale_ups,
+                'scale_downs': self._scale_downs,
+                'average_response_ms': avg_response,
+                'sample_window_size': len(self._response_times),
+            }
+
+    def reset(self, workers: int = None) -> None:
+        """
+        Reset the tuner state.
+
+        Args:
+            workers: Reset to specific worker count (default: keep current)
+        """
+        with self._lock:
+            if workers is not None:
+                self._current_workers = max(
+                    self.config.min_workers,
+                    min(workers, self.config.max_workers)
+                )
+            self._response_times.clear()
+            self._last_adjustment_time = 0.0
+            self.logger.debug(f"API tuner reset (workers: {self._current_workers})")
+
+
 # ==================== VALIDATION CACHE ====================
 
 class ValidationCache:
@@ -3130,6 +3613,241 @@ class ValidationCache:
             self.logger.info(f"  - Evictions: {stats['evictions']}")
         if estimated_time_saved > 0.1:
             self.logger.info(f"  - Estimated time saved: {estimated_time_saved:.2f}s")
+
+
+# ==================== SHARED VALIDATION CACHE ====================
+
+class SharedValidationCache:
+    """
+    Process-safe shared cache for validation results across batch workers.
+
+    Uses multiprocessing.Manager to share cache state across multiple
+    processes in batch mode. This allows validation results to be reused
+    across different data views being processed in parallel.
+
+    API Compatibility:
+    - Implements the same interface as ValidationCache for drop-in replacement
+    - get() and put() methods accept DataFrame objects like ValidationCache
+
+    Key Differences from ValidationCache:
+    - Uses Manager().dict() instead of regular dict (process-safe)
+    - Manager-level locking instead of threading.Lock
+    - Requires explicit shutdown() to cleanup Manager resources
+    - Slightly higher overhead but enables cross-process sharing
+
+    Usage:
+        # In BatchProcessor
+        shared_cache = SharedValidationCache(max_size=1000)
+
+        # Pass to workers (cache reference is pickle-safe via Manager)
+        worker_args = (data_view_id, ..., shared_cache)
+
+        # In worker process - same API as ValidationCache
+        cached, key = shared_cache.get(df, item_type, req_fields, crit_fields)
+        if cached is None:
+            result = run_validation(...)
+            shared_cache.put(df, item_type, req_fields, crit_fields, result, key)
+
+        # After batch processing
+        shared_cache.shutdown()
+    """
+
+    def __init__(self, max_size: int = 1000, ttl_seconds: int = 3600, logger: logging.Logger = None):
+        """
+        Initialize shared validation cache.
+
+        Args:
+            max_size: Maximum number of cached entries (default: 1000)
+            ttl_seconds: Time-to-live for cache entries in seconds (default: 3600)
+            logger: Logger instance for cache statistics (default: module logger)
+        """
+        self.max_size = max_size
+        self.ttl_seconds = ttl_seconds
+        self.logger = logger or logging.getLogger(__name__)
+
+        # Create multiprocessing Manager for shared state
+        self._manager = multiprocessing.Manager()
+
+        # Shared cache storage: key -> (issues_list, timestamp)
+        self._cache = self._manager.dict()
+
+        # Shared LRU tracking: key -> last_access_time
+        self._access_times = self._manager.dict()
+
+        # Shared statistics
+        self._stats = self._manager.dict({
+            'hits': 0,
+            'misses': 0,
+            'evictions': 0
+        })
+
+        # Manager-level lock for cache operations
+        self._lock = self._manager.Lock()
+
+    def _generate_cache_key(self, df: pd.DataFrame, item_type: str,
+                            required_fields: List[str], critical_fields: List[str]) -> str:
+        """
+        Generate cache key from DataFrame content and configuration.
+
+        Same algorithm as ValidationCache for compatibility.
+        """
+        try:
+            # Hash DataFrame structure and content
+            df_hash = pd.util.hash_pandas_object(df, index=False).sum()
+
+            # Hash configuration (required_fields + critical_fields)
+            config_str = f"{sorted(required_fields)}:{sorted(critical_fields)}"
+            config_hash = hashlib.md5(config_str.encode()).hexdigest()[:8]
+
+            # Combine into cache key
+            return f"{item_type}:{df_hash}:{config_hash}"
+
+        except Exception as e:
+            self.logger.warning(f"Error generating cache key: {e}. Cache disabled for this call.")
+            # Return unique key to force cache miss
+            return f"error:{time.time()}"
+
+    def get(self, df: pd.DataFrame, item_type: str,
+            required_fields: List[str], critical_fields: List[str]) -> Tuple[Optional[List[Dict]], str]:
+        """
+        Retrieve cached validation results if available.
+
+        Same interface as ValidationCache for compatibility.
+
+        Args:
+            df: DataFrame to look up in cache
+            item_type: 'Metrics' or 'Dimensions'
+            required_fields: List of required field names
+            critical_fields: List of critical field names
+
+        Returns:
+            Tuple of (issues list or None, cache_key).
+            The cache_key can be passed to put() to avoid recomputing the hash.
+        """
+        cache_key = self._generate_cache_key(df, item_type, required_fields, critical_fields)
+
+        with self._lock:
+            if cache_key not in self._cache:
+                stats = dict(self._stats)
+                stats['misses'] = stats.get('misses', 0) + 1
+                self._stats.update(stats)
+                return None, cache_key
+
+            cached_data = self._cache[cache_key]
+            cached_issues, timestamp = cached_data
+
+            # Check TTL expiration
+            age = time.time() - timestamp
+            if age > self.ttl_seconds:
+                del self._cache[cache_key]
+                if cache_key in self._access_times:
+                    del self._access_times[cache_key]
+                stats = dict(self._stats)
+                stats['misses'] = stats.get('misses', 0) + 1
+                self._stats.update(stats)
+                return None, cache_key
+
+            # Cache hit - update access time and stats
+            self._access_times[cache_key] = time.time()
+            stats = dict(self._stats)
+            stats['hits'] = stats.get('hits', 0) + 1
+            self._stats.update(stats)
+
+            # Return copy to prevent mutation
+            return [issue.copy() for issue in cached_issues], cache_key
+
+    def put(self, df: pd.DataFrame, item_type: str,
+            required_fields: List[str], critical_fields: List[str],
+            issues: List[Dict], cache_key: str = None) -> None:
+        """
+        Store validation results in cache.
+
+        Same interface as ValidationCache for compatibility.
+
+        Args:
+            df: DataFrame being cached (used if cache_key not provided)
+            item_type: 'Metrics' or 'Dimensions'
+            required_fields: List of required field names
+            critical_fields: List of critical field names
+            issues: List of validation issues to cache
+            cache_key: Optional pre-computed cache key from get()
+        """
+        if cache_key is None:
+            cache_key = self._generate_cache_key(df, item_type, required_fields, critical_fields)
+
+        with self._lock:
+            # Evict oldest entry if cache is full
+            if len(self._cache) >= self.max_size and cache_key not in self._cache:
+                self._evict_lru()
+
+            # Store issues with timestamp (deep copy for safety)
+            self._cache[cache_key] = ([issue.copy() for issue in issues], time.time())
+            self._access_times[cache_key] = time.time()
+
+    def _evict_lru(self) -> None:
+        """Evict least recently used cache entry (must be called within lock)."""
+        if not self._access_times:
+            return
+
+        # Find least recently used key
+        access_times_dict = dict(self._access_times)
+        if not access_times_dict:
+            return
+
+        lru_key = min(access_times_dict.items(), key=lambda x: x[1])[0]
+
+        # Remove from cache
+        if lru_key in self._cache:
+            del self._cache[lru_key]
+        if lru_key in self._access_times:
+            del self._access_times[lru_key]
+
+        stats = dict(self._stats)
+        stats['evictions'] = stats.get('evictions', 0) + 1
+        self._stats.update(stats)
+
+    def get_statistics(self) -> Dict[str, Any]:
+        """
+        Get cache performance statistics.
+
+        Returns:
+            Dict with hits, misses, hit_rate, size, evictions
+        """
+        with self._lock:
+            stats = dict(self._stats)
+            hits = stats.get('hits', 0)
+            misses = stats.get('misses', 0)
+            total_requests = hits + misses
+            hit_rate = (hits / total_requests * 100) if total_requests > 0 else 0
+
+            return {
+                'hits': hits,
+                'misses': misses,
+                'hit_rate': hit_rate,
+                'size': len(self._cache),
+                'max_size': self.max_size,
+                'evictions': stats.get('evictions', 0),
+                'total_requests': total_requests
+            }
+
+    def clear(self) -> None:
+        """Clear all cache entries."""
+        with self._lock:
+            self._cache.clear()
+            self._access_times.clear()
+
+    def shutdown(self) -> None:
+        """
+        Shutdown the Manager and cleanup resources.
+
+        IMPORTANT: Call this after batch processing is complete to avoid
+        resource leaks. The cache cannot be used after shutdown.
+        """
+        try:
+            self._manager.shutdown()
+        except Exception:
+            pass  # Manager may already be shutdown
+
 
 # ==================== PROFILE MANAGEMENT ====================
 
@@ -4879,15 +5597,41 @@ def validate_data_view(
 # ==================== OPTIMIZED API DATA FETCHING ====================
 
 class ParallelAPIFetcher:
-    """Fetch multiple API endpoints in parallel using threading"""
+    """Fetch multiple API endpoints in parallel using threading.
+
+    Supports optional API auto-tuning and circuit breaker protection.
+
+    Args:
+        cja: CJA API client
+        logger: Logger instance
+        perf_tracker: Performance tracker for timing metrics
+        max_workers: Maximum parallel workers (default: 3)
+        quiet: Suppress progress output (default: False)
+        tuning_config: Optional API worker auto-tuning configuration
+        circuit_breaker: Optional circuit breaker for failure protection
+    """
 
     def __init__(self, cja: cjapy.CJA, logger: logging.Logger, perf_tracker: 'PerformanceTracker',
-                 max_workers: int = 3, quiet: bool = False):
+                 max_workers: int = 3, quiet: bool = False,
+                 tuning_config: Optional[APITuningConfig] = None,
+                 circuit_breaker: Optional[CircuitBreaker] = None):
         self.cja = cja
         self.logger = logger
         self.perf_tracker = perf_tracker
         self.max_workers = max_workers
         self.quiet = quiet
+        self.circuit_breaker = circuit_breaker
+
+        # Initialize API tuner if config provided
+        self.tuner: Optional[APIWorkerTuner] = None
+        if tuning_config is not None:
+            self.tuner = APIWorkerTuner(
+                config=tuning_config,
+                initial_workers=max_workers,
+                logger=logger
+            )
+            # Use tuner's worker count as effective max
+            self.max_workers = self.tuner.current_workers
     
     def fetch_all_data(self, data_view_id: str) -> Tuple[pd.DataFrame, pd.DataFrame, dict]:
         """
@@ -4969,18 +5713,42 @@ class ParallelAPIFetcher:
         
         return metrics_result, dimensions_result, dataview_result
     
+    def _timed_api_call(self, api_func: Callable, *args, operation_name: str, **kwargs) -> Any:
+        """
+        Execute an API call with timing for auto-tuning.
+
+        Wraps make_api_call_with_retry with timing measurement and tuner feedback.
+        """
+        start_time = time.time()
+        try:
+            result = make_api_call_with_retry(
+                api_func,
+                *args,
+                logger=self.logger,
+                operation_name=operation_name,
+                circuit_breaker=self.circuit_breaker,
+                **kwargs
+            )
+            return result
+        finally:
+            # Record response time for tuning (regardless of success/failure)
+            if self.tuner is not None:
+                duration_ms = (time.time() - start_time) * 1000
+                new_workers = self.tuner.record_response_time(duration_ms)
+                if new_workers is not None:
+                    self.max_workers = new_workers
+
     def _fetch_metrics(self, data_view_id: str) -> pd.DataFrame:
         """Fetch metrics with error handling and retry"""
         try:
             self.logger.debug(f"Fetching metrics for {data_view_id}")
 
-            # Use retry for transient network errors
-            metrics = make_api_call_with_retry(
+            # Use retry for transient network errors with circuit breaker support
+            metrics = self._timed_api_call(
                 self.cja.getMetrics,
                 data_view_id,
                 inclType=True,
                 full=True,
-                logger=self.logger,
                 operation_name="getMetrics"
             )
 
@@ -4991,6 +5759,9 @@ class ParallelAPIFetcher:
             self.logger.info(f"Successfully fetched {len(metrics)} metrics")
             return metrics
 
+        except CircuitBreakerOpen as e:
+            self.logger.warning(f"Circuit breaker open for metrics fetch: {e.message}")
+            return pd.DataFrame()
         except AttributeError as e:
             self.logger.error(f"API method error - getMetrics may not be available: {str(e)}")
             return pd.DataFrame()
@@ -5003,13 +5774,12 @@ class ParallelAPIFetcher:
         try:
             self.logger.debug(f"Fetching dimensions for {data_view_id}")
 
-            # Use retry for transient network errors
-            dimensions = make_api_call_with_retry(
+            # Use retry for transient network errors with circuit breaker support
+            dimensions = self._timed_api_call(
                 self.cja.getDimensions,
                 data_view_id,
                 inclType=True,
                 full=True,
-                logger=self.logger,
                 operation_name="getDimensions"
             )
 
@@ -5020,6 +5790,9 @@ class ParallelAPIFetcher:
             self.logger.info(f"Successfully fetched {len(dimensions)} dimensions")
             return dimensions
 
+        except CircuitBreakerOpen as e:
+            self.logger.warning(f"Circuit breaker open for dimensions fetch: {e.message}")
+            return pd.DataFrame()
         except AttributeError as e:
             self.logger.error(f"API method error - getDimensions may not be available: {str(e)}")
             return pd.DataFrame()
@@ -5032,11 +5805,10 @@ class ParallelAPIFetcher:
         try:
             self.logger.debug(f"Fetching data view information for {data_view_id}")
 
-            # Use retry for transient network errors
-            lookup_data = make_api_call_with_retry(
+            # Use retry for transient network errors with circuit breaker support
+            lookup_data = self._timed_api_call(
                 self.cja.getDataView,
                 data_view_id,
-                logger=self.logger,
                 operation_name="getDataView"
             )
 
@@ -5047,9 +5819,18 @@ class ParallelAPIFetcher:
             self.logger.info(f"Successfully fetched data view info: {lookup_data.get('name', 'Unknown')}")
             return lookup_data
 
+        except CircuitBreakerOpen as e:
+            self.logger.warning(f"Circuit breaker open for data view fetch: {e.message}")
+            return {"name": "Unknown", "id": data_view_id, "circuit_breaker_open": True}
         except Exception as e:
             self.logger.error(f"Failed to fetch data view information: {str(e)}")
             return {"name": "Unknown", "id": data_view_id, "error": str(e)}
+
+    def get_tuner_statistics(self) -> Optional[Dict[str, Any]]:
+        """Get API tuner statistics if tuning is enabled."""
+        if self.tuner is not None:
+            return self.tuner.get_statistics()
+        return None
 
 # ==================== DATA QUALITY VALIDATION ====================
 
@@ -7835,7 +8616,10 @@ def process_single_dataview(
     show_timings: bool = False,
     metrics_only: bool = False,
     dimensions_only: bool = False,
-    profile: Optional[str] = None
+    profile: Optional[str] = None,
+    shared_cache: Optional[SharedValidationCache] = None,
+    api_tuning_config: Optional[APITuningConfig] = None,
+    circuit_breaker_config: Optional[CircuitBreakerConfig] = None
 ) -> ProcessingResult:
     """
     Process a single data view and generate SDR in specified format(s)
@@ -7897,8 +8681,30 @@ def process_single_dataview(
         logger.info("Starting optimized data fetch operations")
         logger.info("=" * 60)
 
-        fetcher = ParallelAPIFetcher(cja, logger, perf_tracker, max_workers=DEFAULT_API_FETCH_WORKERS, quiet=quiet)
+        # Create circuit breaker if config provided
+        circuit_breaker = None
+        if circuit_breaker_config is not None:
+            circuit_breaker = CircuitBreaker(config=circuit_breaker_config, logger=logger)
+            logger.info(f"Circuit breaker enabled (failure_threshold={circuit_breaker_config.failure_threshold})")
+
+        fetcher = ParallelAPIFetcher(
+            cja, logger, perf_tracker,
+            max_workers=DEFAULT_API_FETCH_WORKERS,
+            quiet=quiet,
+            tuning_config=api_tuning_config,
+            circuit_breaker=circuit_breaker
+        )
+        if api_tuning_config is not None:
+            logger.info(f"API auto-tuning enabled (min={api_tuning_config.min_workers}, max={api_tuning_config.max_workers})")
+
         metrics, dimensions, lookup_data = fetcher.fetch_all_data(data_view_id)
+
+        # Log tuner statistics if tuning was enabled
+        tuner_stats = fetcher.get_tuner_statistics()
+        if tuner_stats is not None and isinstance(tuner_stats, dict):
+            logger.info(f"API tuner stats: {tuner_stats['scale_ups']} scale-ups, "
+                       f"{tuner_stats['scale_downs']} scale-downs, "
+                       f"avg response: {tuner_stats['average_response_ms']:.0f}ms")
 
         # Check if we have any data to process
         if metrics.empty and dimensions.empty:
@@ -7949,8 +8755,12 @@ def process_single_dataview(
             perf_tracker.start("Data Quality Validation")
 
             # Create validation cache if enabled
+            # Use shared cache if provided (from batch processing), otherwise create local cache
             validation_cache = None
-            if enable_cache:
+            if shared_cache is not None:
+                validation_cache = shared_cache
+                logger.info("Using shared validation cache from batch processor")
+            elif enable_cache:
                 validation_cache = ValidationCache(
                     max_size=cache_size,
                     ttl_seconds=cache_ttl,
@@ -8315,14 +9125,34 @@ def process_single_dataview_worker(args: tuple) -> ProcessingResult:
     Args:
         args: Tuple of (data_view_id, config_file, output_dir, log_level, log_format, output_format,
                        enable_cache, cache_size, cache_ttl, quiet, skip_validation, max_issues, clear_cache,
-                       show_timings, metrics_only, dimensions_only, profile)
+                       show_timings, metrics_only, dimensions_only, profile, shared_cache,
+                       api_tuning_config, circuit_breaker_config)
 
     Returns:
         ProcessingResult
     """
-    data_view_id, config_file, output_dir, log_level, log_format, output_format, enable_cache, cache_size, cache_ttl, quiet, skip_validation, max_issues, clear_cache, show_timings, metrics_only, dimensions_only, profile = args
-    return process_single_dataview(data_view_id, config_file, output_dir, log_level, log_format, output_format,
-                                   enable_cache, cache_size, cache_ttl, quiet, skip_validation, max_issues, clear_cache, show_timings, metrics_only, dimensions_only, profile=profile)
+    # Handle varying tuple lengths for backward compatibility
+    shared_cache = None
+    api_tuning_config = None
+    circuit_breaker_config = None
+
+    if len(args) >= 20:
+        # New-style with all args
+        data_view_id, config_file, output_dir, log_level, log_format, output_format, enable_cache, cache_size, cache_ttl, quiet, skip_validation, max_issues, clear_cache, show_timings, metrics_only, dimensions_only, profile, shared_cache, api_tuning_config, circuit_breaker_config = args
+    elif len(args) == 18:
+        # With shared_cache only
+        data_view_id, config_file, output_dir, log_level, log_format, output_format, enable_cache, cache_size, cache_ttl, quiet, skip_validation, max_issues, clear_cache, show_timings, metrics_only, dimensions_only, profile, shared_cache = args
+    else:
+        # Old-style (17 args)
+        data_view_id, config_file, output_dir, log_level, log_format, output_format, enable_cache, cache_size, cache_ttl, quiet, skip_validation, max_issues, clear_cache, show_timings, metrics_only, dimensions_only, profile = args
+
+    return process_single_dataview(
+        data_view_id, config_file, output_dir, log_level, log_format, output_format,
+        enable_cache, cache_size, cache_ttl, quiet, skip_validation, max_issues,
+        clear_cache, show_timings, metrics_only, dimensions_only,
+        profile=profile, shared_cache=shared_cache,
+        api_tuning_config=api_tuning_config, circuit_breaker_config=circuit_breaker_config
+    )
 
 # ==================== BATCH PROCESSOR CLASS ====================
 
@@ -8352,6 +9182,9 @@ class BatchProcessor:
         metrics_only: Only include metrics in output (default: False)
         dimensions_only: Only include dimensions in output (default: False)
         profile: Profile name for credentials (default: None)
+        shared_cache: Share validation cache across batch workers (default: False)
+        api_tuning_config: API worker auto-tuning configuration (default: None)
+        circuit_breaker_config: Circuit breaker configuration (default: None)
     """
 
     def __init__(self, config_file: str = "config.json", output_dir: str = ".",
@@ -8360,7 +9193,9 @@ class BatchProcessor:
                  cache_size: int = 1000, cache_ttl: int = 3600, quiet: bool = False,
                  skip_validation: bool = False, max_issues: int = 0, clear_cache: bool = False,
                  show_timings: bool = False, metrics_only: bool = False, dimensions_only: bool = False,
-                 profile: Optional[str] = None):
+                 profile: Optional[str] = None, shared_cache: bool = False,
+                 api_tuning_config: Optional[APITuningConfig] = None,
+                 circuit_breaker_config: Optional[CircuitBreakerConfig] = None):
         self.config_file = config_file
         self.output_dir = output_dir
         self.clear_cache = clear_cache
@@ -8379,9 +9214,18 @@ class BatchProcessor:
         self.skip_validation = skip_validation
         self.max_issues = max_issues
         self.profile = profile
+        self.shared_cache_enabled = shared_cache
+        self.api_tuning_config = api_tuning_config
+        self.circuit_breaker_config = circuit_breaker_config
         self.batch_id = str(uuid.uuid4())[:8]  # Short correlation ID for log tracing
         self.logger = setup_logging(batch_mode=True, log_level=log_level, log_format=log_format)
         self.logger.info(f"Batch ID: {self.batch_id}")
+
+        # Create shared validation cache if enabled
+        self._shared_cache: Optional[SharedValidationCache] = None
+        if shared_cache and enable_cache and not skip_validation:
+            self._shared_cache = SharedValidationCache(max_size=cache_size, ttl_seconds=cache_ttl)
+            self.logger.info(f"[{self.batch_id}] Shared validation cache enabled (max_size={cache_size})")
 
         # Create output directory if it doesn't exist
         try:
@@ -8429,7 +9273,8 @@ class BatchProcessor:
             (dv_id, self.config_file, self.output_dir, self.log_level, self.log_format,
              self.output_format, self.enable_cache, self.cache_size, self.cache_ttl, self.quiet,
              self.skip_validation, self.max_issues, self.clear_cache, self.show_timings,
-             self.metrics_only, self.dimensions_only, self.profile)
+             self.metrics_only, self.dimensions_only, self.profile, self._shared_cache,
+             self.api_tuning_config, self.circuit_breaker_config)
             for dv_id in data_view_ids
         ]
 
@@ -8493,6 +9338,15 @@ class BatchProcessor:
                     pbar.update(1)
 
         results['total_duration'] = time.time() - batch_start_time
+
+        # Log shared cache statistics if enabled
+        if self._shared_cache is not None:
+            cache_stats = self._shared_cache.get_statistics()
+            self.logger.info(f"[{self.batch_id}] Shared cache stats: {cache_stats['hits']} hits, "
+                           f"{cache_stats['misses']} misses ({cache_stats['hit_rate']:.1f}% hit rate)")
+            # Cleanup shared cache resources
+            self._shared_cache.shutdown()
+            self._shared_cache = None
 
         # Print summary
         self.print_summary(results)
@@ -9076,6 +9930,66 @@ Requirements:
         type=float,
         default=float(os.environ.get('RETRY_MAX_DELAY', DEFAULT_RETRY_CONFIG['max_delay'])),
         help=f'Maximum retry delay in seconds (default: {DEFAULT_RETRY_CONFIG["max_delay"]}, or RETRY_MAX_DELAY env var)'
+    )
+
+    # ==================== RELIABILITY/PERFORMANCE ARGUMENTS ====================
+
+    reliability_group = parser.add_argument_group(
+        'Reliability & Performance',
+        'Options for API resilience and performance tuning'
+    )
+
+    reliability_group.add_argument(
+        '--api-auto-tune',
+        action='store_true',
+        help='Enable automatic API worker tuning based on response times. '
+             'Scales workers up when responses are fast, down when slow'
+    )
+
+    reliability_group.add_argument(
+        '--api-min-workers',
+        type=int,
+        default=1,
+        metavar='N',
+        help='Minimum workers for auto-tuning (default: 1, requires --api-auto-tune)'
+    )
+
+    reliability_group.add_argument(
+        '--api-max-workers',
+        type=int,
+        default=10,
+        metavar='N',
+        help='Maximum workers for auto-tuning (default: 10, requires --api-auto-tune)'
+    )
+
+    reliability_group.add_argument(
+        '--circuit-breaker',
+        action='store_true',
+        help='Enable circuit breaker pattern for API calls. '
+             'Prevents cascading failures by stopping requests after repeated failures'
+    )
+
+    reliability_group.add_argument(
+        '--circuit-failure-threshold',
+        type=int,
+        default=5,
+        metavar='N',
+        help='Consecutive failures before opening circuit (default: 5, requires --circuit-breaker)'
+    )
+
+    reliability_group.add_argument(
+        '--circuit-timeout',
+        type=float,
+        default=30.0,
+        metavar='SECONDS',
+        help='Seconds before attempting recovery from open circuit (default: 30, requires --circuit-breaker)'
+    )
+
+    reliability_group.add_argument(
+        '--shared-cache',
+        action='store_true',
+        help='Share validation cache across batch workers (requires --batch and --enable-cache). '
+             'Enables cache reuse across data views for common validation patterns'
     )
 
     parser.add_argument(
@@ -12052,6 +12966,26 @@ def main():
     # Process data views - start timing here for accurate processing-only runtime
     processing_start_time = time.time()
 
+    # Create API tuning config if enabled
+    api_tuning_config = None
+    if getattr(args, 'api_auto_tune', False):
+        api_tuning_config = APITuningConfig(
+            min_workers=getattr(args, 'api_min_workers', 1),
+            max_workers=getattr(args, 'api_max_workers', 10)
+        )
+        if not args.quiet:
+            print(ConsoleColors.info(f"API auto-tuning enabled (workers: {api_tuning_config.min_workers}-{api_tuning_config.max_workers})"))
+
+    # Create circuit breaker config if enabled
+    circuit_breaker_config = None
+    if getattr(args, 'circuit_breaker', False):
+        circuit_breaker_config = CircuitBreakerConfig(
+            failure_threshold=getattr(args, 'circuit_failure_threshold', 5),
+            timeout_seconds=getattr(args, 'circuit_timeout', 30.0)
+        )
+        if not args.quiet:
+            print(ConsoleColors.info(f"Circuit breaker enabled (threshold: {circuit_breaker_config.failure_threshold}, timeout: {circuit_breaker_config.timeout_seconds}s)"))
+
     if args.batch or len(data_views) > 1:
         # Batch mode - parallel processing
 
@@ -12084,7 +13018,10 @@ def main():
             show_timings=args.show_timings,
             metrics_only=getattr(args, 'metrics_only', False),
             dimensions_only=getattr(args, 'dimensions_only', False),
-            profile=getattr(args, 'profile', None)
+            profile=getattr(args, 'profile', None),
+            shared_cache=getattr(args, 'shared_cache', False),
+            api_tuning_config=api_tuning_config,
+            circuit_breaker_config=circuit_breaker_config
         )
 
         results = processor.process_batch(data_views)
@@ -12137,7 +13074,9 @@ def main():
             show_timings=args.show_timings,
             metrics_only=getattr(args, 'metrics_only', False),
             dimensions_only=getattr(args, 'dimensions_only', False),
-            profile=getattr(args, 'profile', None)
+            profile=getattr(args, 'profile', None),
+            api_tuning_config=api_tuning_config,
+            circuit_breaker_config=circuit_breaker_config
         )
 
         # Print final status with color and total runtime

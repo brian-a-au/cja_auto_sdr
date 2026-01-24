@@ -200,6 +200,18 @@ cja_auto_sdr --list-dataviews
 | `--git-message MSG` | Custom commit message (auto-generated if not provided) | - |
 | `--git-dir DIR` | Directory for Git snapshots | ./sdr-snapshots |
 
+### Reliability & Auto-Tuning
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--api-auto-tune` | Enable automatic API worker tuning based on response times | False |
+| `--api-min-workers N` | Minimum workers for auto-tuning | 1 |
+| `--api-max-workers N` | Maximum workers for auto-tuning | 10 |
+| `--circuit-breaker` | Enable circuit breaker pattern for API calls | False |
+| `--circuit-failure-threshold N` | Consecutive failures before opening circuit | 5 |
+| `--circuit-timeout SECONDS` | Recovery timeout before retrying (OPEN → HALF_OPEN) | 30 |
+| `--shared-cache` | Share validation cache across batch workers (multiprocessing) | False |
+
 ### Environment Variables
 
 **Credentials (take precedence over config.json):**

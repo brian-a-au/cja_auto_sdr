@@ -5,6 +5,130 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.16] - 2026-01-24
+
+### Highlights
+- **API Worker Auto-Tuning** - Dynamically adjust API fetch workers based on response times
+- **Circuit Breaker Pattern** - Prevent cascading failures with state-based protection
+- **Batch Memory Pooling** - Share validation cache across batch processing workers
+
+This release adds three **reliability and performance optimizations** for enterprise-scale deployments. All features are opt-in via CLI flags to maintain backward compatibility.
+
+### Added
+
+#### API Worker Auto-Tuning
+Automatically adjust API worker count based on response time metrics.
+
+```bash
+# Enable auto-tuning with default settings
+cja_auto_sdr dv_12345 --api-auto-tune
+
+# Custom min/max worker bounds
+cja_auto_sdr dv_12345 --api-auto-tune --api-min-workers 2 --api-max-workers 8
+```
+
+**Features:**
+- Scales up workers when responses are fast (< 200ms default)
+- Scales down workers when responses are slow (> 2000ms default)
+- Rolling window sampling (5 requests) before adjustments
+- Cooldown period (10s) between adjustments to prevent thrashing
+- Thread-safe implementation with statistics tracking
+
+**New CLI Arguments:**
+- `--api-auto-tune` - Enable automatic API worker tuning
+- `--api-min-workers N` - Minimum workers for auto-tuning (default: 1)
+- `--api-max-workers N` - Maximum workers for auto-tuning (default: 10)
+
+#### Circuit Breaker Pattern
+Prevent cascading failures by automatically stopping requests to failing services.
+
+```bash
+# Enable circuit breaker with defaults
+cja_auto_sdr dv_12345 --circuit-breaker
+
+# Custom thresholds
+cja_auto_sdr dv_12345 --circuit-breaker --circuit-failure-threshold 3 --circuit-timeout 60
+```
+
+**State Machine:**
+- **CLOSED** - Normal operation, all requests allowed
+- **OPEN** - Circuit tripped after failures, requests rejected immediately
+- **HALF_OPEN** - Testing recovery, limited requests allowed
+
+**Features:**
+- Configurable failure threshold before opening (default: 5)
+- Configurable success threshold to close (default: 2)
+- Automatic timeout-based recovery (default: 30s)
+- Thread-safe state transitions
+- Statistics tracking (trips, rejections, failures)
+- Decorator support for wrapping functions
+
+**New CLI Arguments:**
+- `--circuit-breaker` - Enable circuit breaker pattern
+- `--circuit-failure-threshold N` - Failures before opening circuit (default: 5)
+- `--circuit-timeout SECONDS` - Recovery timeout in seconds (default: 30)
+
+#### Batch Memory Pooling (Shared Validation Cache)
+Share validation cache across batch processing workers using multiprocessing.Manager.
+
+```bash
+# Enable shared cache in batch mode
+cja_auto_sdr --batch dv_1 dv_2 dv_3 --shared-cache
+
+# Combined with other cache settings
+cja_auto_sdr --batch dv_1 dv_2 dv_3 --shared-cache --enable-cache --cache-size 2000
+```
+
+**Features:**
+- Cross-process cache sharing via `multiprocessing.Manager`
+- Same API as `ValidationCache` (drop-in replacement)
+- LRU eviction and TTL expiration
+- Process-safe locking
+- Proper resource cleanup via `shutdown()` method
+
+**New CLI Argument:**
+- `--shared-cache` - Share validation cache across batch workers
+
+### Testing
+- **786 tests** (785 passing, 1 skipped) - up from 750 in v3.0.15
+- New test file: `tests/test_api_tuning.py` with 29 tests covering:
+  - Initial worker count and bounds (4 tests)
+  - Scale up/down behavior (5 tests)
+  - Cooldown enforcement (2 tests)
+  - Statistics tracking (4 tests)
+  - Thread safety (2 tests)
+  - Reset functionality (4 tests)
+  - Configuration dataclass (2 tests)
+- New test file: `tests/test_circuit_breaker.py` with 27 tests covering:
+  - Basic state transitions (6 tests)
+  - Recovery mechanisms (3 tests)
+  - Statistics tracking (5 tests)
+  - Decorator usage (3 tests)
+  - Thread safety (2 tests)
+  - Reset and exception handling (4 tests)
+- New test file: `tests/test_shared_cache.py` with 16 tests covering:
+  - Cache hit/miss behavior (3 tests)
+  - API compatibility with ValidationCache (3 tests)
+  - LRU eviction (2 tests)
+  - TTL expiration (1 test)
+  - Statistics tracking (2 tests)
+  - Shutdown and data integrity (5 tests)
+- Updated `tests/test_process_single_dataview.py` for new function signatures
+
+### Internal Improvements
+- Added `APITuningConfig` dataclass for auto-tuning configuration
+- Added `APIWorkerTuner` class with thread-safe response time tracking
+- Added `CircuitBreakerConfig` dataclass for circuit breaker configuration
+- Added `CircuitState` enum (CLOSED, OPEN, HALF_OPEN)
+- Added `CircuitBreaker` class with full state machine implementation
+- Added `CircuitBreakerOpen` exception for circuit breaker rejections
+- Added `SharedValidationCache` class with multiprocessing.Manager support
+- Modified `ParallelAPIFetcher` to support tuning_config and circuit_breaker
+- Modified `BatchProcessor` to support shared_cache, api_tuning_config, circuit_breaker_config
+- Modified `process_single_dataview` and `process_single_dataview_worker` for new parameters
+
+---
+
 ## [3.0.15] - 2026-01-23
 
 ### Highlights
@@ -1686,7 +1810,7 @@ Batch Processing (10 data views):
 | Validation Caching | No | Yes (50-90% faster on cache hits) |
 | Early Exit Optimization | No | Yes (15-20% faster on errors) |
 | Logging Optimization | No | Yes (5-10% faster with --production) |
-| Tests | None | 706 comprehensive tests |
+| Tests | None | 786 comprehensive tests |
 | Documentation | Basic | 13 detailed guides |
 | Performance Tracking | No | Yes, built-in with cache statistics |
 | Parallel Processing | No | Yes, configurable workers + concurrent validation |

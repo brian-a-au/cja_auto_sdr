@@ -51,6 +51,13 @@ cja_auto_sdr --batch dv_12345 dv_67890 dv_abcde dv_11111 --workers 8
 | `--clear-cache` | Clear cache before processing (use with --enable-cache) | - |
 | `--cache-size N` | Maximum cached entries (>= 1) | 1000 |
 | `--cache-ttl N` | Cache time-to-live in seconds (>= 1) | 3600 |
+| `--shared-cache` | Share validation cache across batch workers | Disabled |
+| `--api-auto-tune` | Enable automatic API worker tuning | Disabled |
+| `--api-min-workers N` | Minimum workers for auto-tuning | 1 |
+| `--api-max-workers N` | Maximum workers for auto-tuning | 10 |
+| `--circuit-breaker` | Enable circuit breaker pattern | Disabled |
+| `--circuit-failure-threshold N` | Failures before opening circuit | 5 |
+| `--circuit-timeout N` | Recovery timeout in seconds | 30 |
 | `-h, --help` | Show help message and exit | - |
 
 ## Usage Examples

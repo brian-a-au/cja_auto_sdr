@@ -39,6 +39,9 @@ A **Solution Design Reference** is the essential documentation that bridges your
 | **Reliability** | Automatic Retry | Exponential backoff with jitter for transient network failures |
 | | Continue-on-Error | Batch processing continues even if individual Data Views fail |
 | | Pre-flight Validation | Validates config and connectivity before processing |
+| | Circuit Breaker | Prevent cascading failures with automatic recovery |
+| | API Auto-Tuning | Dynamic worker adjustment based on response times |
+| | Shared Validation Cache | Cross-process cache sharing for batch operations |
 | **Comparison** | Data View Diff | Compare two Data Views to identify added, removed, and modified components |
 | | Snapshot Support | Save and compare against baseline snapshots for change tracking |
 | | Snapshot-to-Snapshot | Compare two snapshot files directly without API calls |
@@ -283,7 +286,7 @@ cja_auto_sdr/
 │   ├── GIT_INTEGRATION.md   # Git integration guide
 │   ├── INSTALLATION.md      # Setup instructions
 │   └── ...                  # Additional guides
-├── tests/                   # Test suite (750 tests)
+├── tests/                   # Test suite (786 tests)
 ├── sample_outputs/          # Example output files
 │   ├── excel/               # Sample Excel SDR
 │   ├── csv/                 # Sample CSV output
