@@ -2787,8 +2787,9 @@ def setup_logging(
     # Get numeric log level
     numeric_level = getattr(logging, log_level.upper(), logging.INFO)
 
-    # Clear any existing handlers
+    # Clear any existing handlers from root logger
     for handler in logging.root.handlers[:]:
+        handler.close()
         logging.root.removeHandler(handler)
 
     # Configure logging handlers
@@ -2807,18 +2808,20 @@ def setup_logging(
     else:
         formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 
-    # Apply formatter to all handlers
+    # Apply formatter and level to all handlers, then add to root logger
     for handler in handlers:
         handler.setFormatter(formatter)
+        handler.setLevel(numeric_level)
+        logging.root.addHandler(handler)
 
-    # Configure logging
-    logging.basicConfig(
-        level=numeric_level,
-        handlers=handlers,
-        force=True
-    )
+    # Set root logger level explicitly
+    logging.root.setLevel(numeric_level)
 
+    # Get the module logger
     logger = logging.getLogger(__name__)
+    # Ensure it propagates to root and doesn't have its own restrictive level
+    logger.propagate = True
+    logger.setLevel(logging.NOTSET)
 
     # Track initialization state to prevent duplicates
     _logging_initialized = True
@@ -2830,7 +2833,7 @@ def setup_logging(
         logger.info("Logging initialized. Console output only.")
 
     # Flush handlers to ensure log file is not empty even on early exit
-    for handler in logger.handlers:
+    for handler in logging.root.handlers:
         handler.flush()
 
     return logger
