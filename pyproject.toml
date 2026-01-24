@@ -1,6 +1,6 @@
 [project]
 name = "cja-auto-sdr"
-version = "3.0.12"
+version = "3.0.13"
 description = "Customer Journey Analytics SDR Generator with Data Quality Validation"
 readme = "README.md"
 requires-python = ">=3.14"

@@ -5,6 +5,27 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.13] - 2026-01-23
+
+### Changed
+
+#### Flexible OAuth Scopes
+OAuth scope validation no longer enforces specific scope values. Scopes vary based on your Adobe Developer Console project configuration.
+
+**Before:** The tool required specific scopes (`openid`, `AdobeID`, `additional_info.projectedProductContext`) and warned if any were missing.
+
+**After:** The tool validates that scopes are provided but accepts any valid scopes from your Developer Console project.
+
+```json
+{
+  "scopes": "your_scopes_from_developer_console"
+}
+```
+
+- Copy scopes directly from Adobe Developer Console → Credentials → Scopes
+- See [Adobe Authentication Guide](https://developer.adobe.com/developer-console/docs/guides/authentication/) for details
+- Updated all documentation, example configs, and error messages
+
 ## [3.0.12] - 2026-01-23
 
 ### Highlights
@@ -90,12 +111,11 @@ ORG_ID '123ABC' is missing '@AdobeOrg' suffix. Correct format: '123ABC@AdobeOrg'
 
 **Scopes Validation:**
 ```
-Missing required OAuth scopes: AdobeID, additional_info.projectedProductContext.
-Recommended: 'openid, AdobeID, additional_info.projectedProductContext'
+SCOPES cannot be empty - copy from Adobe Developer Console
 ```
 
 - `ConfigValidator.validate_org_id()` - Detects missing `@AdobeOrg` suffix
-- `ConfigValidator.validate_scopes()` - Checks for required OAuth scopes
+- `ConfigValidator.validate_scopes()` - Validates scopes are provided (see v3.0.13 for flexible scopes)
 - `ConfigValidator.validate_client_id()` - Format validation
 - `ConfigValidator.validate_secret()` - Length validation
 
