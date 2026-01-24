@@ -194,6 +194,8 @@ cja_auto_sdr --validate-config
 cja_auto_sdr dv_12345 --dry-run
 ```
 
+See [CONFIGURATION.md](CONFIGURATION.md) for detailed setup of `config.json` and environment variables.
+
 ## Output Files
 
 | Format | File Pattern | Description |
