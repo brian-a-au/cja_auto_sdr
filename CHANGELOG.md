@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.10] - 2026-02-16
+
+### Added
+- **Coverage push to 99%**: Added ~650 tests across 7 new test files covering
+  generator.py edge cases, diff commands, org writers, interactive discovery,
+  CLI paths, and remaining uncovered lines
+- **CI coverage threshold**: Raised `--cov-fail-under` from 90% → 95%
+
+### Fixed
+- **Metadata fallback bug**: Fixed `process_single_dataview` metadata fallback
+  DataFrame using 1-column structure when downstream code expected 2 columns
+  (Property/Value)
+
+### Changed
+- Marked unreachable code with `pragma: no cover` (optional argcomplete import,
+  dead inventory imports, regex-guarded ValueError)
+
 ## [3.2.9] - 2026-02-16
 
 ### Added

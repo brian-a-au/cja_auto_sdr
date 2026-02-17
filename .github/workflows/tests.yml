@@ -20,7 +20,7 @@ jobs:
       - name: Sync dependencies
         run: uv sync --dev
       - name: Run tests with coverage
-        run: uv run pytest tests/ -v --tb=short --cov=cja_auto_sdr --cov-report=term --cov-fail-under=90
+        run: uv run pytest tests/ -v --tb=short --cov=cja_auto_sdr --cov-report=term --cov-fail-under=95
 
   run-summary-contract:
     runs-on: ubuntu-latest
