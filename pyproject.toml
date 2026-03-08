@@ -146,6 +146,7 @@ ignore = [
 "src/cja_auto_sdr/core/credentials.py" = ["PLW2901"]  # line=line.strip() pattern
 "src/cja_auto_sdr/inventory/calculated_metrics.py" = ["ERA001"]  # section header comments
 "src/cja_auto_sdr/org/__init__.py" = ["ERA001"]  # section header comments
+"src/cja_auto_sdr/org/writers/__init__.py" = ["T201", "ERA001", "RUF001", "RUF003"]  # T201: intentional CLI console output; ERA001: section header comments; RUF001/3: intentional Unicode symbols
 "src/cja_auto_sdr/core/exit_codes.py" = ["T201"]  # intentional CLI console output
 "src/cja_auto_sdr/core/logging.py" = ["PLW0603", "T201"]  # legitimate global state for logging init; T201: fallback console output before logger is ready
 "src/cja_auto_sdr/api/quality_policy.py" = ["T201"]  # intentional CLI console output (quality report to stdout)
