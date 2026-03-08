@@ -148,6 +148,7 @@ ignore = [
 "src/cja_auto_sdr/org/__init__.py" = ["ERA001"]  # section header comments
 "src/cja_auto_sdr/core/exit_codes.py" = ["T201"]  # intentional CLI console output
 "src/cja_auto_sdr/core/logging.py" = ["PLW0603", "T201"]  # legitimate global state for logging init; T201: fallback console output before logger is ready
+"src/cja_auto_sdr/api/quality_policy.py" = ["T201"]  # intentional CLI console output (quality report to stdout)
 "src/cja_auto_sdr/api/*.py" = ["F822"]       # lazy forwarding modules (resolved via __getattr__)
 "src/cja_auto_sdr/cli/*.py" = ["F822"]       # lazy forwarding modules
 "src/cja_auto_sdr/core/profiles.py" = ["F822"]  # lazy forwarding module
