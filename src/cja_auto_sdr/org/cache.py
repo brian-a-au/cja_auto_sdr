@@ -242,6 +242,25 @@ class OrgReportCache:
         """Sort snapshot metadata newest-first with undated entries at the end."""
         return sorted(snapshots, key=cls._snapshot_metadata_sort_key)
 
+    @staticmethod
+    def _should_retain_snapshot(
+        snapshot: dict[str, Any],
+        *,
+        retained_paths: set[str],
+        cutoff: datetime | None,
+    ) -> bool:
+        """Return True when a snapshot satisfies at least one retention rule."""
+        filepath = str(snapshot.get("filepath") or "")
+        if filepath and filepath in retained_paths:
+            return True
+        if cutoff is None:
+            return False
+
+        snapshot_epoch = snapshot.get("generated_at_epoch")
+        if snapshot_epoch is None:
+            return False
+        return datetime.fromtimestamp(snapshot_epoch, tz=UTC) >= cutoff
+
     def _load_org_report_snapshot_metadata(
         self,
         snapshot_file: str | Path,
@@ -385,15 +404,7 @@ class OrgReportCache:
                 filepath = str(snapshot.get("filepath") or "")
                 if not filepath:
                     continue
-                if filepath in retained_paths:
-                    continue
-
-                should_delete = keep_last > 0 and filepath not in retained_paths
-                snapshot_epoch = snapshot.get("generated_at_epoch")
-                if cutoff is not None and snapshot_epoch is not None:
-                    should_delete = should_delete or datetime.fromtimestamp(snapshot_epoch, tz=UTC) < cutoff
-
-                if should_delete:
+                if not self._should_retain_snapshot(snapshot, retained_paths=retained_paths, cutoff=cutoff):
                     with contextlib.suppress(OSError):
                         Path(filepath).unlink()
                     if not Path(filepath).exists():

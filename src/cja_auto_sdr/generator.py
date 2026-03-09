@@ -8227,6 +8227,7 @@ def run_org_report(
         # Trending analysis (v3.4.0)
         trending = None
         if trending_window is not None:
+            from cja_auto_sdr.org.snapshot_utils import org_report_snapshot_history_eligible
             from cja_auto_sdr.org.trending import _extract_snapshot_from_json, build_trending
             from cja_auto_sdr.org.writers import build_org_report_json_data as _build_json_for_snapshot
 
@@ -8234,26 +8235,34 @@ def run_org_report(
             snapshot_cache_dir = snapshot_cache.get_org_report_snapshot_dir(result.org_id)
 
             try:
-                # Persist the current run so console/default workflows accumulate history.
                 current_json = _build_json_for_snapshot(result)
-                current_snapshot = _extract_snapshot_from_json(current_json)
-                snapshot_cache.save_org_report_snapshot(current_json, org_id=result.org_id)
-                snapshot_cache.prune_org_report_snapshots(
-                    org_id=result.org_id,
-                    keep_last=max(DEFAULT_ORG_REPORT_SNAPSHOT_KEEP_LAST, trending_window),
-                )
+                if org_report_snapshot_history_eligible(current_json):
+                    # Persist the current run so console/default workflows accumulate history.
+                    current_snapshot = _extract_snapshot_from_json(current_json)
+                    if current_snapshot is not None:
+                        snapshot_cache.save_org_report_snapshot(current_json, org_id=result.org_id)
+                        snapshot_cache.prune_org_report_snapshots(
+                            org_id=result.org_id,
+                            keep_last=max(DEFAULT_ORG_REPORT_SNAPSHOT_KEEP_LAST, trending_window),
+                        )
 
-                trending = build_trending(
-                    cache_dir=snapshot_cache_dir,
-                    window_size=trending_window,
-                    explicit_file=org_config.compare_org_report,
-                    current_snapshot=current_snapshot,
-                    org_id=result.org_id,
-                )
-                if trending is None and not quiet:
+                    trending = build_trending(
+                        cache_dir=snapshot_cache_dir,
+                        window_size=trending_window,
+                        explicit_file=org_config.compare_org_report,
+                        current_snapshot=current_snapshot,
+                        org_id=result.org_id,
+                    )
+                    if trending is None and not quiet:
+                        _status_print(
+                            ConsoleColors.warning(
+                                "Note: Fewer than 2 org-report snapshots found in persistent cache — trending skipped."
+                            ),
+                        )
+                elif not quiet:
                     _status_print(
                         ConsoleColors.warning(
-                            "Note: Fewer than 2 org-report snapshots found in persistent cache — trending skipped."
+                            "Note: Sampled org reports are excluded from persistent trending history — trending skipped."
                         ),
                     )
             except OSError as e:

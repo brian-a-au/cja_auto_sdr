@@ -192,6 +192,12 @@ class TestExtractSnapshotFromJson:
         assert snap.data_view_count == 4
         assert snap.core_count == 2
 
+    def test_sampled_payload_is_excluded_from_trending_snapshots(self):
+        data = _make_org_report_json()
+        data["summary"]["is_sampled"] = True
+
+        assert _extract_snapshot_from_json(data) is None
+
 
 # ---------------------------------------------------------------------------
 # Cache discovery
@@ -277,6 +283,30 @@ class TestDiscoverSnapshots:
         _write_report(tmp_path, "report.json", _make_org_report_json(timestamp="2026-01-01"))
         result = discover_snapshots(tmp_path, window_size=10, explicit_file=tmp_path / "report.json")
         assert len(result) == 1
+
+    def test_explicit_file_deduplicates_against_cached_content_hash(self, tmp_path):
+        cached_payload = _make_org_report_json(timestamp="2026-01-01")
+        cached_payload["_snapshot_meta"] = {"snapshot_id": "persisted-123"}
+        _write_report(tmp_path, "cached.json", cached_payload)
+
+        explicit_dir = tmp_path / "explicit"
+        explicit_dir.mkdir()
+        _write_report(explicit_dir, "baseline.json", _make_org_report_json(timestamp="2026-01-01"))
+
+        result = discover_snapshots(tmp_path, window_size=10, explicit_file=explicit_dir / "baseline.json")
+
+        assert len(result) == 1
+
+    def test_sampled_snapshots_are_ignored_during_discovery(self, tmp_path):
+        retained = _make_org_report_json(timestamp="2026-02-01")
+        sampled = _make_org_report_json(timestamp="2026-01-15")
+        sampled["summary"]["is_sampled"] = True
+        _write_report(tmp_path, "retained.json", retained)
+        _write_report(tmp_path, "sampled.json", sampled)
+
+        result = discover_snapshots(tmp_path, window_size=10)
+
+        assert [snapshot.timestamp for snapshot in result] == ["2026-02-01"]
 
     def test_explicit_file_nonexistent(self, tmp_path):
         _write_report(tmp_path, "report.json", _make_org_report_json(timestamp="2026-01-01"))

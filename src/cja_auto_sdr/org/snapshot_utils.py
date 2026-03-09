@@ -1,8 +1,10 @@
-"""Shared helpers for ordering org-report snapshots."""
+"""Shared helpers for org-report snapshot identity, retention, and ordering."""
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 _EARLIEST_UTC = datetime.min.replace(tzinfo=UTC)
@@ -65,3 +67,35 @@ def newest_first_snapshot_sort_fields(
         str(raw_timestamp or ""),
         tie_breaker,
     )
+
+
+def snapshot_identity_tokens(
+    *,
+    snapshot_id: Any = None,
+    content_hash: Any = None,
+    source_path: str | Path | None = None,
+    fallback_parts: Iterable[Any] = (),
+) -> tuple[tuple[str, ...], ...]:
+    """Return all stable identity aliases available for one snapshot."""
+    identities: list[tuple[str, ...]] = []
+
+    if snapshot_id not in (None, ""):
+        identities.append(("snapshot_id", str(snapshot_id)))
+    if content_hash not in (None, ""):
+        identities.append(("content_hash", str(content_hash)))
+    if source_path not in (None, ""):
+        identities.append(("source_path", str(Path(source_path).resolve(strict=False))))
+
+    if identities:
+        return tuple(identities)
+
+    normalized_fallback = tuple(str(part) for part in fallback_parts)
+    return (("fallback", *normalized_fallback),)
+
+
+def org_report_snapshot_history_eligible(data: Mapping[str, Any]) -> bool:
+    """Return True when an org-report payload should participate in trending history."""
+    summary = data.get("summary", {})
+    if not isinstance(summary, Mapping):
+        return True
+    return not bool(summary.get("is_sampled"))

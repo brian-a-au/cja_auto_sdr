@@ -330,6 +330,36 @@ def test_prune_org_report_snapshots_prefers_dated_entries_over_undated_ones(tmp_
     assert [Path(snapshot["filepath"]).name for snapshot in remaining] == ["newer.json", "older.json"]
 
 
+def test_prune_org_report_snapshots_keeps_entries_matching_either_retention_rule(tmp_path: Path):
+    cache = OrgReportCache(cache_dir=tmp_path)
+    root = cache.get_org_report_snapshot_dir("org@test.example")
+    root.mkdir(parents=True, exist_ok=True)
+
+    now = datetime.now(UTC)
+    for name, timestamp in (
+        ("newest.json", now.isoformat()),
+        ("recent.json", (now - timedelta(days=5)).isoformat()),
+        ("old.json", (now - timedelta(days=45)).isoformat()),
+    ):
+        (root / name).write_text(
+            json.dumps(
+                {
+                    "generated_at": timestamp,
+                    "org_id": "org@test.example",
+                    "summary": {"data_views_total": 1, "total_unique_components": 1},
+                    "distribution": {"core": {"total": 1}, "isolated": {"total": 0}},
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    deleted = cache.prune_org_report_snapshots(org_id="org@test.example", keep_last=1, keep_since_days=30)
+    remaining = cache.list_org_report_snapshots("org@test.example")
+
+    assert [Path(path).name for path in deleted] == ["old.json"]
+    assert [Path(snapshot["filepath"]).name for snapshot in remaining] == ["newest.json", "recent.json"]
+
+
 def test_lock_property_and_health_delegate_to_manager(tmp_path: Path):
     lock = OrgReportLock("org@test", lock_dir=tmp_path)
     manager = Mock()

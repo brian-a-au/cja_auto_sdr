@@ -71,6 +71,16 @@ def _trending_metric_rows(
     ]
 
 
+def _trending_excel_column_specs(
+    snapshots: list[TrendingSnapshot],
+) -> list[tuple[str, str]]:
+    """Return unique worksheet keys paired with display labels for trending snapshots."""
+    return [
+        (f"snapshot_{index + 1}", _format_trending_timestamp_short(snapshot.timestamp))
+        for index, snapshot in enumerate(snapshots)
+    ]
+
+
 def _top_drift_scores(drift_scores: dict[str, float], limit: int = 10) -> list[tuple[str, float]]:
     """Return drift scores sorted descending, capped at *limit*."""
     return sorted(drift_scores.items(), key=lambda x: -x[1])[:limit]
@@ -1392,21 +1402,24 @@ def write_org_report_excel(
         if trending is not None and len(trending.snapshots) >= 2:
             # Snapshot metrics table (transposed: metrics as rows, timestamps as columns)
             snapshots = trending.snapshots
-            col_labels = [_format_trending_timestamp_short(s.timestamp) for s in snapshots]
+            column_specs = _trending_excel_column_specs(snapshots)
             trending_rows = [
                 {
                     "Metric": "Data Views",
-                    **{lbl: s.data_view_count for lbl, s in zip(col_labels, snapshots, strict=True)},
+                    **{key: s.data_view_count for (key, _), s in zip(column_specs, snapshots, strict=True)},
                 },
                 {
                     "Metric": "Components",
-                    **{lbl: s.component_count for lbl, s in zip(col_labels, snapshots, strict=True)},
+                    **{key: s.component_count for (key, _), s in zip(column_specs, snapshots, strict=True)},
                 },
-                {"Metric": "Core", **{lbl: s.core_count for lbl, s in zip(col_labels, snapshots, strict=True)}},
-                {"Metric": "Isolated", **{lbl: s.isolated_count for lbl, s in zip(col_labels, snapshots, strict=True)}},
+                {"Metric": "Core", **{key: s.core_count for (key, _), s in zip(column_specs, snapshots, strict=True)}},
+                {
+                    "Metric": "Isolated",
+                    **{key: s.isolated_count for (key, _), s in zip(column_specs, snapshots, strict=True)},
+                },
                 {
                     "Metric": "High-Sim Pairs",
-                    **{lbl: s.high_sim_pair_count for lbl, s in zip(col_labels, snapshots, strict=True)},
+                    **{key: s.high_sim_pair_count for (key, _), s in zip(column_specs, snapshots, strict=True)},
                 },
             ]
             trending_df = pd.DataFrame(trending_rows)
@@ -1414,15 +1427,16 @@ def write_org_report_excel(
             worksheet = writer.sheets["Trending"]
             worksheet.set_column("A:A", 20)
             # Set width for each snapshot column
-            for col_idx in range(len(col_labels)):
-                worksheet.set_column(col_idx + 1, col_idx + 1, 14)
+            for col_idx, (_key, display_label) in enumerate(column_specs, start=1):
+                worksheet.write(0, col_idx, display_label)
+                worksheet.set_column(col_idx, col_idx, 14)
 
             # Highlight change intensity across the snapshot metric matrix.
             worksheet.conditional_format(
                 1,
                 1,
                 len(trending_rows),
-                len(col_labels),
+                len(column_specs),
                 {
                     "type": "3_color_scale",
                     "min_color": "#F4CCCC",
