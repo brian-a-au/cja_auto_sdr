@@ -9320,6 +9320,23 @@ def _dispatch_inventory_summary_mode(
     )
 
 
+def _prepare_sdr_execution_context(
+    args: argparse.Namespace,
+    *,
+    data_views: list[str],
+    show_processing_count: bool = False,
+    run_state: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    from cja_auto_sdr.cli.execution import prepare_sdr_execution_context as _impl
+
+    return _impl(
+        args,
+        data_views=data_views,
+        show_processing_count=show_processing_count,
+        run_state=run_state,
+    )
+
+
 # ==================== MAIN FUNCTION ====================
 
 
@@ -10289,150 +10306,20 @@ def _main_impl(run_state: dict[str, Any] | None = None):
     if run_state is not None:
         run_state["resolved_data_views"] = list(data_views)
 
-    # Large batch confirmation (unless --yes or --quiet)
-    LARGE_BATCH_THRESHOLD = 20
-    if (
-        len(data_views) >= LARGE_BATCH_THRESHOLD
-        and not getattr(args, "assume_yes", False)
-        and not args.quiet
-        and not getattr(args, "dry_run", False)
-        and sys.stdin.isatty()
-    ):
-        print(ConsoleColors.warning(f"Large batch detected: {len(data_views)} data views"))
-        print()
-        print("Estimated processing:")
-        print(f"  • API calls: ~{len(data_views) * 3} requests (metrics, dimensions, info per DV)")
-        print(f"  • Duration: ~{len(data_views) * 2}-{len(data_views) * 5} seconds")
-        print()
-        print("Tips:")
-        print("  • Use --filter to narrow scope: --filter 'prod*'")
-        print("  • Use --limit N to process only first N data views")
-        print("  • Use --yes to skip this prompt in CI/CD")
-        print()
-
-        try:
-            response = input("Continue? [y/N]: ").strip().lower()
-            if response not in ("y", "yes"):
-                print("Cancelled.")
-                sys.exit(0)
-            print()
-        except EOFError, KeyboardInterrupt:
-            print("\nCancelled.")
-            sys.exit(0)
-
-    # Validate the resolved data view IDs
-    if not args.quiet and names_provided:
-        print(ConsoleColors.info(f"Processing {len(data_views)} data view(s) total..."))
-        print()
-
-    # Priority logic for log level: --quiet > --production > --log-level
-    if args.quiet:
-        effective_log_level = "ERROR"
-    elif args.production:
-        effective_log_level = "WARNING"
-    else:
-        effective_log_level = args.log_level
-
-    # Handle dry-run mode
-    if args.dry_run:
-        logger = setup_logging(batch_mode=True, log_level="WARNING", log_format=args.log_format)
-        success = run_dry_run(data_views, args.config_file, logger, profile=getattr(args, "profile", None))
-        if run_state is not None:
-            run_state["details"] = {"operation_success": success}
-        sys.exit(0 if success else 1)
-
-    quality_report_format = getattr(args, "quality_report", None)
-    quality_report_only = quality_report_format is not None
-
-    # Default to excel for SDR generation
-    sdr_format = args.format or "excel"
-    if quality_report_only:
-        sdr_format = "json"
-    if run_state is not None:
-        run_state["output_format"] = quality_report_format if quality_report_only else sdr_format
-
-    # Validate format - console is only supported for diff comparison
-    if sdr_format == "console" and not quality_report_only:
-        print(ConsoleColors.error("Error: Console format is only supported for diff comparison."), file=sys.stderr)
-        print(file=sys.stderr)
-        print("For SDR generation, use one of these formats:", file=sys.stderr)
-        print("  --format excel     Excel workbook with multiple sheets (default)", file=sys.stderr)
-        print("  --format csv       CSV files (one per data type)", file=sys.stderr)
-        print("  --format json      JSON file with all data", file=sys.stderr)
-        print("  --format html      HTML report", file=sys.stderr)
-        print("  --format markdown  Markdown document", file=sys.stderr)
-        print("  --format all       Generate all formats", file=sys.stderr)
-        print(file=sys.stderr)
-        print("For diff comparison, console is the default:", file=sys.stderr)
-        print("  cja_auto_sdr --diff dv_A dv_B              # Console output", file=sys.stderr)
-        print("  cja_auto_sdr --diff dv_A dv_B --format json  # JSON output", file=sys.stderr)
-        sys.exit(1)
-
-    # Check for conflicting component filter options
-    if getattr(args, "metrics_only", False) and getattr(args, "dimensions_only", False):
-        print(ConsoleColors.error("ERROR: Cannot use both --metrics-only and --dimensions-only"), file=sys.stderr)
-        sys.exit(1)
-
-    # Proactive output directory write check - fail fast before API calls
-    output_access_ok, resolved_output_dir, access_reason, parent_dir = _check_output_dir_access(args.output_dir)
-    if not output_access_ok:
-        if access_reason == "not_directory":
-            print(ConsoleColors.error(f"ERROR: Output path is not a directory: {resolved_output_dir}"), file=sys.stderr)
-        elif access_reason == "parent_not_directory" and parent_dir is not None:
-            print(ConsoleColors.error(f"ERROR: Cannot create output directory: {resolved_output_dir}"), file=sys.stderr)
-            print(f"Path component is not a directory: {parent_dir}", file=sys.stderr)
-        elif access_reason == "parent_not_writable" and parent_dir is not None:
-            print(ConsoleColors.error(f"ERROR: Cannot create output directory: {resolved_output_dir}"), file=sys.stderr)
-            print(f"Parent directory {parent_dir} is not writable.", file=sys.stderr)
-        else:
-            print(
-                ConsoleColors.error(f"ERROR: Cannot write to output directory: {resolved_output_dir}"), file=sys.stderr
-            )
-            print("Check permissions and try again.", file=sys.stderr)
-        sys.exit(1)
-
-    # Process data views - start timing here for accurate processing-only runtime
-    processing_start_time = time.time()
-
-    # Create API tuning config if enabled
-    api_tuning_config = None
-    if getattr(args, "api_auto_tune", False):
-        api_tuning_config = APITuningConfig(
-            min_workers=getattr(args, "api_min_workers", 1),
-            max_workers=getattr(args, "api_max_workers", 10),
-        )
-        if not args.quiet:
-            print(
-                ConsoleColors.info(
-                    f"API auto-tuning enabled (workers: {api_tuning_config.min_workers}-{api_tuning_config.max_workers})",
-                ),
-            )
-
-    # Create circuit breaker config if enabled
-    circuit_breaker_config = None
-    if getattr(args, "circuit_breaker", False):
-        circuit_breaker_config = CircuitBreakerConfig(
-            failure_threshold=getattr(args, "circuit_failure_threshold", 5),
-            timeout_seconds=getattr(args, "circuit_timeout", 30.0),
-        )
-        if not args.quiet:
-            print(
-                ConsoleColors.info(
-                    f"Circuit breaker enabled (threshold: {circuit_breaker_config.failure_threshold}, timeout: {circuit_breaker_config.timeout_seconds}s)",
-                ),
-            )
-
-    inventory_order = _resolve_inventory_mode_configuration(args, argv=list(sys.argv))
-
-    # Handle --inventory-summary mode (quick stats without full output)
-    if getattr(args, "inventory_summary", False):
-        _dispatch_inventory_summary_mode(
-            args,
-            data_views=data_views,
-            effective_log_level=effective_log_level,
-            inventory_order=inventory_order,
-            run_state=run_state,
-        )
+    execution_context = _prepare_sdr_execution_context(
+        args,
+        data_views=data_views,
+        show_processing_count=bool(names_provided),
+        run_state=run_state,
+    )
+    effective_log_level = execution_context["effective_log_level"]
+    quality_report_format = execution_context["quality_report_format"]
+    quality_report_only = execution_context["quality_report_only"]
+    sdr_format = execution_context["sdr_format"]
+    processing_start_time = execution_context["processing_start_time"]
+    api_tuning_config = execution_context["api_tuning_config"]
+    circuit_breaker_config = execution_context["circuit_breaker_config"]
+    inventory_order = execution_context["inventory_order"]
 
     successful_results: list[ProcessingResult] = []
     quality_report_results: list[ProcessingResult] = []

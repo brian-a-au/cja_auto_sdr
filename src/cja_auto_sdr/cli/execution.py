@@ -14,6 +14,7 @@ from typing import Any
 __all__ = [
     "dispatch_inventory_summary_mode",
     "execute_sdr_processing_modes",
+    "prepare_sdr_execution_context",
     "resolve_inventory_mode_configuration",
 ]
 
@@ -125,6 +126,186 @@ def dispatch_inventory_summary_mode(
             print()
 
     sys.exit(0)
+
+
+def _confirm_large_batch(args: argparse.Namespace, *, data_views: list[str]) -> None:
+    generator = _generator_module()
+
+    large_batch_threshold = 20
+    if (
+        len(data_views) < large_batch_threshold
+        or getattr(args, "assume_yes", False)
+        or args.quiet
+        or getattr(args, "dry_run", False)
+        or not sys.stdin.isatty()
+    ):
+        return
+
+    print(generator.ConsoleColors.warning(f"Large batch detected: {len(data_views)} data views"))
+    print()
+    print("Estimated processing:")
+    print(f"  • API calls: ~{len(data_views) * 3} requests (metrics, dimensions, info per DV)")
+    print(f"  • Duration: ~{len(data_views) * 2}-{len(data_views) * 5} seconds")
+    print()
+    print("Tips:")
+    print("  • Use --filter to narrow scope: --filter 'prod*'")
+    print("  • Use --limit N to process only first N data views")
+    print("  • Use --yes to skip this prompt in CI/CD")
+    print()
+
+    try:
+        response = input("Continue? [y/N]: ").strip().lower()
+        if response not in ("y", "yes"):
+            print("Cancelled.")
+            sys.exit(0)
+        print()
+    except EOFError, KeyboardInterrupt:
+        print("\nCancelled.")
+        sys.exit(0)
+
+
+def prepare_sdr_execution_context(
+    args: argparse.Namespace,
+    *,
+    data_views: list[str],
+    show_processing_count: bool = False,
+    run_state: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Prepare validated SDR execution settings and dispatch early execution-only exits."""
+    generator = _generator_module()
+
+    _confirm_large_batch(args, data_views=data_views)
+
+    if not args.quiet and show_processing_count:
+        print(generator.ConsoleColors.info(f"Processing {len(data_views)} data view(s) total..."))
+        print()
+
+    if args.quiet:
+        effective_log_level = "ERROR"
+    elif args.production:
+        effective_log_level = "WARNING"
+    else:
+        effective_log_level = args.log_level
+
+    if args.dry_run:
+        logger = generator.setup_logging(batch_mode=True, log_level="WARNING", log_format=args.log_format)
+        success = generator.run_dry_run(data_views, args.config_file, logger, profile=getattr(args, "profile", None))
+        if run_state is not None:
+            run_state["details"] = {"operation_success": success}
+        sys.exit(0 if success else 1)
+
+    quality_report_format = getattr(args, "quality_report", None)
+    quality_report_only = quality_report_format is not None
+
+    sdr_format = args.format or "excel"
+    if quality_report_only:
+        sdr_format = "json"
+    if run_state is not None:
+        run_state["output_format"] = quality_report_format if quality_report_only else sdr_format
+
+    if sdr_format == "console" and not quality_report_only:
+        print(
+            generator.ConsoleColors.error("Error: Console format is only supported for diff comparison."),
+            file=sys.stderr,
+        )
+        print(file=sys.stderr)
+        print("For SDR generation, use one of these formats:", file=sys.stderr)
+        print("  --format excel     Excel workbook with multiple sheets (default)", file=sys.stderr)
+        print("  --format csv       CSV files (one per data type)", file=sys.stderr)
+        print("  --format json      JSON file with all data", file=sys.stderr)
+        print("  --format html      HTML report", file=sys.stderr)
+        print("  --format markdown  Markdown document", file=sys.stderr)
+        print("  --format all       Generate all formats", file=sys.stderr)
+        print(file=sys.stderr)
+        print("For diff comparison, console is the default:", file=sys.stderr)
+        print("  cja_auto_sdr --diff dv_A dv_B              # Console output", file=sys.stderr)
+        print("  cja_auto_sdr --diff dv_A dv_B --format json  # JSON output", file=sys.stderr)
+        sys.exit(1)
+
+    if getattr(args, "metrics_only", False) and getattr(args, "dimensions_only", False):
+        print(
+            generator.ConsoleColors.error("ERROR: Cannot use both --metrics-only and --dimensions-only"),
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    output_access_ok, resolved_output_dir, access_reason, parent_dir = generator._check_output_dir_access(
+        args.output_dir
+    )
+    if not output_access_ok:
+        if access_reason == "not_directory":
+            print(
+                generator.ConsoleColors.error(f"ERROR: Output path is not a directory: {resolved_output_dir}"),
+                file=sys.stderr,
+            )
+        elif access_reason == "parent_not_directory" and parent_dir is not None:
+            print(
+                generator.ConsoleColors.error(f"ERROR: Cannot create output directory: {resolved_output_dir}"),
+                file=sys.stderr,
+            )
+            print(f"Path component is not a directory: {parent_dir}", file=sys.stderr)
+        elif access_reason == "parent_not_writable" and parent_dir is not None:
+            print(
+                generator.ConsoleColors.error(f"ERROR: Cannot create output directory: {resolved_output_dir}"),
+                file=sys.stderr,
+            )
+            print(f"Parent directory {parent_dir} is not writable.", file=sys.stderr)
+        else:
+            print(
+                generator.ConsoleColors.error(f"ERROR: Cannot write to output directory: {resolved_output_dir}"),
+                file=sys.stderr,
+            )
+            print("Check permissions and try again.", file=sys.stderr)
+        sys.exit(1)
+
+    processing_start_time = time.time()
+
+    api_tuning_config = None
+    if getattr(args, "api_auto_tune", False):
+        api_tuning_config = generator.APITuningConfig(
+            min_workers=getattr(args, "api_min_workers", 1),
+            max_workers=getattr(args, "api_max_workers", 10),
+        )
+        if not args.quiet:
+            print(
+                generator.ConsoleColors.info(
+                    f"API auto-tuning enabled (workers: {api_tuning_config.min_workers}-{api_tuning_config.max_workers})",
+                ),
+            )
+
+    circuit_breaker_config = None
+    if getattr(args, "circuit_breaker", False):
+        circuit_breaker_config = generator.CircuitBreakerConfig(
+            failure_threshold=getattr(args, "circuit_failure_threshold", 5),
+            timeout_seconds=getattr(args, "circuit_timeout", 30.0),
+        )
+        if not args.quiet:
+            print(
+                generator.ConsoleColors.info(
+                    f"Circuit breaker enabled (threshold: {circuit_breaker_config.failure_threshold}, timeout: {circuit_breaker_config.timeout_seconds}s)",
+                ),
+            )
+
+    inventory_order = resolve_inventory_mode_configuration(args, argv=list(sys.argv))
+    if getattr(args, "inventory_summary", False):
+        dispatch_inventory_summary_mode(
+            args,
+            data_views=data_views,
+            effective_log_level=effective_log_level,
+            inventory_order=inventory_order,
+            run_state=run_state,
+        )
+
+    return {
+        "effective_log_level": effective_log_level,
+        "quality_report_format": quality_report_format,
+        "quality_report_only": quality_report_only,
+        "sdr_format": sdr_format,
+        "processing_start_time": processing_start_time,
+        "api_tuning_config": api_tuning_config,
+        "circuit_breaker_config": circuit_breaker_config,
+        "inventory_order": inventory_order,
+    }
 
 
 def _run_quality_report_mode(
