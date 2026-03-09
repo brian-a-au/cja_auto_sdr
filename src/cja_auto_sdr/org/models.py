@@ -422,3 +422,92 @@ class OrgReportComparison:
     new_high_similarity_pairs: list[dict[str, Any]] = field(default_factory=list)
     resolved_pairs: list[dict[str, Any]] = field(default_factory=list)
     summary: dict[str, Any] = field(default_factory=dict)
+
+
+# ---------------------------------------------------------------------------
+# Trending dataclasses (v3.4.0)
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class TrendingSnapshot:
+    """A single point-in-time snapshot of org-report key metrics.
+
+    Extracted from a cached org-report JSON file.  Snapshots are ordered
+    oldest-to-newest within an OrgReportTrending instance.
+    """
+
+    timestamp: str
+    data_view_count: int = 0
+    component_count: int = 0
+    core_count: int = 0
+    isolated_count: int = 0
+    high_sim_pair_count: int = 0
+    # Per-data-view component counts for drift scoring
+    dv_component_counts: dict[str, int] = field(default_factory=dict)
+    dv_core_ratios: dict[str, float] = field(default_factory=dict)
+    dv_max_similarity: dict[str, float] = field(default_factory=dict)
+    dv_ids: set[str] = field(default_factory=set)
+
+
+@dataclass
+class TrendingDelta:
+    """Computed delta between two consecutive TrendingSnapshots."""
+
+    from_timestamp: str
+    to_timestamp: str
+    data_view_delta: int = 0
+    component_delta: int = 0
+    core_delta: int = 0
+    isolated_delta: int = 0
+    high_sim_pair_delta: int = 0
+
+
+@dataclass
+class OrgReportTrending:
+    """Multi-snapshot trending analysis across cached org-reports.
+
+    Attributes:
+        snapshots: Ordered oldest-to-newest list of snapshot summaries.
+        deltas: Computed deltas between consecutive snapshots.
+        drift_scores: Per-data-view drift score (0.0-1.0) across the window.
+        window_size: Actual number of snapshots included.
+    """
+
+    snapshots: list[TrendingSnapshot] = field(default_factory=list)
+    deltas: list[TrendingDelta] = field(default_factory=list)
+    drift_scores: dict[str, float] = field(default_factory=dict)
+    window_size: int = 0
+
+    def to_comparison(self) -> OrgReportComparison | None:
+        """Produce an OrgReportComparison for the most recent pair.
+
+        Returns None if fewer than 2 snapshots exist.
+        """
+        if len(self.snapshots) < 2:
+            return None
+
+        prev = self.snapshots[-2]
+        curr = self.snapshots[-1]
+
+        added_ids = list(curr.dv_ids - prev.dv_ids)
+        removed_ids = list(prev.dv_ids - curr.dv_ids)
+
+        return OrgReportComparison(
+            current_timestamp=curr.timestamp,
+            previous_timestamp=prev.timestamp,
+            data_views_added=added_ids,
+            data_views_removed=removed_ids,
+            components_added=max(0, curr.component_count - prev.component_count),
+            components_removed=max(0, prev.component_count - curr.component_count),
+            core_delta=curr.core_count - prev.core_count,
+            isolated_delta=curr.isolated_count - prev.isolated_count,
+            summary={
+                "data_views_delta": curr.data_view_count - prev.data_view_count,
+                "components_delta": curr.component_count - prev.component_count,
+                "core_delta": curr.core_count - prev.core_count,
+                "isolated_delta": curr.isolated_count - prev.isolated_count,
+                "new_duplicates": 0,
+                "resolved_duplicates": 0,
+            },
+        )
