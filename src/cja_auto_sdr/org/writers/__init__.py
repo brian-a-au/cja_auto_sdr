@@ -58,6 +58,24 @@ def _format_trending_timestamp_short(ts: str) -> str:
         return ts[:10]
 
 
+def _trending_metric_rows(
+    snapshots: list[TrendingSnapshot],
+) -> list[tuple[str, list[int]]]:
+    """Return the standard metric rows for trending tables."""
+    return [
+        ("Data Views", [s.data_view_count for s in snapshots]),
+        ("Components", [s.component_count for s in snapshots]),
+        ("Core", [s.core_count for s in snapshots]),
+        ("Isolated", [s.isolated_count for s in snapshots]),
+        ("High-Sim Pairs", [s.high_sim_pair_count for s in snapshots]),
+    ]
+
+
+def _top_drift_scores(drift_scores: dict[str, float], limit: int = 10) -> list[tuple[str, float]]:
+    """Return drift scores sorted descending, capped at *limit*."""
+    return sorted(drift_scores.items(), key=lambda x: -x[1])[:limit]
+
+
 def _trending_date_range(snapshots: list[TrendingSnapshot]) -> str:
     """Return 'first_label -> last_label' for a list of snapshots."""
     if not snapshots:
@@ -86,14 +104,7 @@ def _render_trending_console(trending: OrgReportTrending) -> str:
     lines.append(header)
 
     # Metric rows
-    metric_rows = [
-        ("Data Views", [s.data_view_count for s in snapshots]),
-        ("Components", [s.component_count for s in snapshots]),
-        ("Core", [s.core_count for s in snapshots]),
-        ("Isolated", [s.isolated_count for s in snapshots]),
-        ("High-Sim Pairs", [s.high_sim_pair_count for s in snapshots]),
-    ]
-    for label, values in metric_rows:
+    for label, values in _trending_metric_rows(snapshots):
         row = f"{label:20s}" + "".join(f"{v:>9d}" for v in values)
         lines.append(row)
 
@@ -101,8 +112,7 @@ def _render_trending_console(trending: OrgReportTrending) -> str:
     if trending.drift_scores:
         lines.append("")
         lines.append("Top Drift:")
-        sorted_drift = sorted(trending.drift_scores.items(), key=lambda x: -x[1])
-        for dv_id, score in sorted_drift[:10]:
+        for dv_id, score in _top_drift_scores(trending.drift_scores):
             lines.append(f"  \u25b8 {dv_id:<40s} {score:.2f}")
 
     return "\n".join(lines)
@@ -157,14 +167,7 @@ def _render_trending_markdown(trending: OrgReportTrending) -> str:
     lines.append(header)
     lines.append(separator)
 
-    metric_rows = [
-        ("Data Views", [s.data_view_count for s in snapshots]),
-        ("Components", [s.component_count for s in snapshots]),
-        ("Core", [s.core_count for s in snapshots]),
-        ("Isolated", [s.isolated_count for s in snapshots]),
-        ("High-Sim Pairs", [s.high_sim_pair_count for s in snapshots]),
-    ]
-    for label, values in metric_rows:
+    for label, values in _trending_metric_rows(snapshots):
         row = f"| {label} | " + " | ".join(str(v) for v in values) + " |"
         lines.append(row)
 
@@ -175,8 +178,7 @@ def _render_trending_markdown(trending: OrgReportTrending) -> str:
         lines.append("")
         lines.append("| Data View ID | Drift Score |")
         lines.append("|--------------|------------:|")
-        sorted_drift = sorted(trending.drift_scores.items(), key=lambda x: -x[1])
-        for dv_id, score in sorted_drift[:10]:
+        for dv_id, score in _top_drift_scores(trending.drift_scores):
             lines.append(f"| `{dv_id}` | {score:.2f} |")
         lines.append("")
 
@@ -201,14 +203,7 @@ def _render_trending_html(trending: OrgReportTrending) -> str:
                 </thead>
                 <tbody>
 """
-    metric_rows = [
-        ("Data Views", [s.data_view_count for s in snapshots]),
-        ("Components", [s.component_count for s in snapshots]),
-        ("Core", [s.core_count for s in snapshots]),
-        ("Isolated", [s.isolated_count for s in snapshots]),
-        ("High-Sim Pairs", [s.high_sim_pair_count for s in snapshots]),
-    ]
-    for label, values in metric_rows:
+    for label, values in _trending_metric_rows(snapshots):
         cells = "".join(f"<td>{v}</td>" for v in values)
         html_out += f"                    <tr><td>{html.escape(label)}</td>{cells}</tr>\n"
 
@@ -227,8 +222,7 @@ def _render_trending_html(trending: OrgReportTrending) -> str:
                 </thead>
                 <tbody>
 """
-        sorted_drift = sorted(trending.drift_scores.items(), key=lambda x: -x[1])
-        for dv_id, score in sorted_drift[:10]:
+        for dv_id, score in _top_drift_scores(trending.drift_scores):
             html_out += f"                    <tr><td><code>{html.escape(dv_id)}</code></td><td>{score:.2f}</td></tr>\n"
         html_out += """                </tbody>
             </table>

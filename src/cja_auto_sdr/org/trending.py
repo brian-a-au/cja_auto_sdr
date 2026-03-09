@@ -57,20 +57,11 @@ def _extract_snapshot_from_json(data: dict[str, Any]) -> TrendingSnapshot | None
     sim_pairs = data.get("similarity_pairs", [])
     high_sim_count = sum(1 for p in sim_pairs if p.get("jaccard_similarity", 0) >= 0.9)
 
-    # Per-DV metrics for drift scoring
+    # Per-DV metrics for drift scoring (single pass over data_views)
     dv_component_counts: dict[str, int] = {}
     dv_core_ratios: dict[str, float] = {}
     dv_max_similarity: dict[str, float] = {}
     dv_ids: set[str] = set()
-
-    for dv in data.get("data_views", []):
-        dv_id = dv.get("data_view_id") or dv.get("id", "")
-        if not dv_id:
-            continue
-        dv_ids.add(dv_id)
-        metrics = dv.get("metric_count", 0)
-        dims = dv.get("dimension_count", 0)
-        dv_component_counts[dv_id] = metrics + dims
 
     # Core ratio per DV: fraction of DV's components that are "core"
     # (shared across >= threshold% of DVs).  Approximated from the global
@@ -83,6 +74,11 @@ def _extract_snapshot_from_json(data: dict[str, Any]) -> TrendingSnapshot | None
         dv_id = dv.get("data_view_id") or dv.get("id", "")
         if not dv_id:
             continue
+        dv_ids.add(dv_id)
+        metrics = dv.get("metric_count", 0)
+        dims = dv.get("dimension_count", 0)
+        dv_component_counts[dv_id] = metrics + dims
+
         metric_ids = set(dv.get("metric_ids", []))
         dimension_ids = set(dv.get("dimension_ids", []))
         all_ids = metric_ids | dimension_ids
