@@ -1373,6 +1373,20 @@ def write_org_report_excel(
                 col_letter = chr(ord("B") + col_idx)
                 worksheet.set_column(f"{col_letter}:{col_letter}", 14)
 
+            # Highlight change intensity across the snapshot metric matrix.
+            worksheet.conditional_format(
+                1,
+                1,
+                len(trending_rows),
+                len(col_labels),
+                {
+                    "type": "3_color_scale",
+                    "min_color": "#F4CCCC",
+                    "mid_color": "#FFF2CC",
+                    "max_color": "#D9EAD3",
+                },
+            )
+
             # Drift scores table below the snapshot data
             if trending.drift_scores:
                 drift_start_row = len(trending_rows) + 3  # leave a gap
@@ -1382,6 +1396,16 @@ def write_org_report_excel(
                 ]
                 drift_df = pd.DataFrame(drift_data)
                 drift_df.to_excel(writer, sheet_name="Trending", index=False, startrow=drift_start_row)
+                worksheet.conditional_format(
+                    drift_start_row + 1,
+                    1,
+                    drift_start_row + len(drift_data),
+                    1,
+                    {
+                        "type": "data_bar",
+                        "bar_color": "#6D9EEB",
+                    },
+                )
 
     logger.info(f"Excel report written to {file_path}")
     return str(file_path)

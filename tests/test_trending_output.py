@@ -1,6 +1,8 @@
 """Tests for trending output across all 6 formats."""
 
+import csv
 import json
+from pathlib import Path
 from unittest.mock import MagicMock
 
 from cja_auto_sdr.org.models import (
@@ -204,6 +206,19 @@ class TestExcelWithTrending:
         ws = wb["Trending"]
         # Should have header row + metric rows
         assert ws.max_row >= 2
+        assert ws["A1"].value == "Metric"
+        assert ws["B1"].value == "Jan 01"
+        assert ws["C1"].value == "Feb 01"
+        assert ws["A2"].value == "Data Views"
+        assert ws["B2"].value == 10
+        assert ws["C2"].value == 12
+        assert ws["A9"].value == "Data View ID"
+        assert ws["B9"].value == "Drift Score"
+        assert ws["A10"].value == "dv1"
+        assert ws["B10"].value == 0.82
+        conditional_ranges = {str(rule.sqref) for rule in ws.conditional_formatting}
+        assert "B2:C6" in conditional_ranges
+        assert "B10:B12" in conditional_ranges
         wb.close()
 
 
@@ -274,3 +289,39 @@ class TestCsvWithTrending:
         write_org_report_csv(result, None, str(tmp_path), logger, trending=trending)
         trending_files = list(tmp_path.glob("**/*trending*"))
         assert len(trending_files) >= 1
+
+    def test_trending_csv_rows_match_snapshot_schema(self, tmp_path):
+        result = _make_result()
+        logger = MagicMock()
+        trending = _make_trending()
+        csv_dir = Path(write_org_report_csv(result, None, str(tmp_path), logger, trending=trending))
+
+        with (csv_dir / "org_report_trending.csv").open(encoding="utf-8", newline="") as handle:
+            rows = list(csv.DictReader(handle))
+
+        assert len(rows) == 10
+        assert rows[0] == {
+            "Snapshot Timestamp": "2026-01-01T00:00:00Z",
+            "Metric": "data_view_count",
+            "Value": "10",
+        }
+        assert rows[-1] == {
+            "Snapshot Timestamp": "2026-02-01T00:00:00Z",
+            "Metric": "high_sim_pair_count",
+            "Value": "3",
+        }
+
+    def test_trending_drift_csv_rows_sorted_descending(self, tmp_path):
+        result = _make_result()
+        logger = MagicMock()
+        trending = _make_trending()
+        csv_dir = Path(write_org_report_csv(result, None, str(tmp_path), logger, trending=trending))
+
+        with (csv_dir / "org_report_trending_drift.csv").open(encoding="utf-8", newline="") as handle:
+            rows = list(csv.DictReader(handle))
+
+        assert rows == [
+            {"Data View ID": "dv1", "Drift Score": "0.82"},
+            {"Data View ID": "dv3", "Drift Score": "0.45"},
+            {"Data View ID": "dv2", "Drift Score": "0.15"},
+        ]
