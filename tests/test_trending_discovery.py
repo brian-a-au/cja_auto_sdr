@@ -140,10 +140,13 @@ class TestExtractSnapshotFromJson:
         assert snap.dv_max_similarity["c"] == 0.9
 
     def test_dv_count_fallback_to_data_views_length(self):
-        data = _make_org_report_json(dv_count=0, data_views=[
-            {"data_view_id": "dv1", "metric_count": 10, "dimension_count": 5},
-            {"data_view_id": "dv2", "metric_count": 10, "dimension_count": 5},
-        ])
+        data = _make_org_report_json(
+            dv_count=0,
+            data_views=[
+                {"data_view_id": "dv1", "metric_count": 10, "dimension_count": 5},
+                {"data_view_id": "dv2", "metric_count": 10, "dimension_count": 5},
+            ],
+        )
         snap = _extract_snapshot_from_json(data)
         assert snap.data_view_count == 2
 
@@ -242,8 +245,22 @@ class TestComputeDeltas:
 
     def test_two_snapshots(self):
         snaps = [
-            TrendingSnapshot(timestamp="2026-01-01", data_view_count=10, component_count=100, core_count=80, isolated_count=20, high_sim_pair_count=2),
-            TrendingSnapshot(timestamp="2026-02-01", data_view_count=12, component_count=130, core_count=95, isolated_count=35, high_sim_pair_count=3),
+            TrendingSnapshot(
+                timestamp="2026-01-01",
+                data_view_count=10,
+                component_count=100,
+                core_count=80,
+                isolated_count=20,
+                high_sim_pair_count=2,
+            ),
+            TrendingSnapshot(
+                timestamp="2026-02-01",
+                data_view_count=12,
+                component_count=130,
+                core_count=95,
+                isolated_count=35,
+                high_sim_pair_count=3,
+            ),
         ]
         deltas = compute_deltas(snaps)
         assert len(deltas) == 1

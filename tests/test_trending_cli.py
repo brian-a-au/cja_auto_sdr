@@ -1,6 +1,5 @@
 """Tests for --trending-window CLI flag integration."""
 
-
 from cja_auto_sdr.cli.parser import parse_arguments
 
 

@@ -956,7 +956,13 @@ def write_markdown_output(
                 md_parts.append("| Severity | Count |")
                 md_parts.append("| --- | --- |")
 
-                severity_emojis = {"CRITICAL": "\U0001f534", "HIGH": "\U0001f7e0", "MEDIUM": "\U0001f7e1", "LOW": "\u26aa", "INFO": "\U0001f535"}
+                severity_emojis = {
+                    "CRITICAL": "\U0001f534",
+                    "HIGH": "\U0001f7e0",
+                    "MEDIUM": "\U0001f7e1",
+                    "LOW": "\u26aa",
+                    "INFO": "\U0001f535",
+                }
                 for sev in DataQualityChecker.SEVERITY_ORDER:
                     count = severity_counts.get(sev, 0)
                     if count > 0 or sev in ["CRITICAL", "HIGH", "MEDIUM", "LOW"]:

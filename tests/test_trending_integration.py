@@ -258,21 +258,15 @@ class TestBuildTrendingEndToEnd:
         assert "trending" in serialized
 
         # Excel
-        excel_path = write_org_report_excel(
-            result, tmp_path / "test.xlsx", str(tmp_path), logger, trending=trending
-        )
+        excel_path = write_org_report_excel(result, tmp_path / "test.xlsx", str(tmp_path), logger, trending=trending)
         assert Path(excel_path).exists()
 
         # Markdown
-        md_path = write_org_report_markdown(
-            result, tmp_path / "test.md", str(tmp_path), logger, trending=trending
-        )
+        md_path = write_org_report_markdown(result, tmp_path / "test.md", str(tmp_path), logger, trending=trending)
         assert "Trending" in Path(md_path).read_text(encoding="utf-8")
 
         # HTML
-        html_path = write_org_report_html(
-            result, tmp_path / "test.html", str(tmp_path), logger, trending=trending
-        )
+        html_path = write_org_report_html(result, tmp_path / "test.html", str(tmp_path), logger, trending=trending)
         assert "Trending" in Path(html_path).read_text(encoding="utf-8")
 
         # CSV

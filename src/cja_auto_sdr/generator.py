@@ -10986,7 +10986,6 @@ def compare_org_reports(current: OrgReportResult, previous_path: str) -> OrgRepo
 # - _validate_org_report_output_request
 
 
-
 def run_org_report(
     config_file: str,
     output_format: str,
@@ -11117,7 +11116,9 @@ def run_org_report(
             # Still output JSON if requested for CI integration
             if output_format == "json":
                 if output_to_stdout:
-                    json.dump(build_org_report_json_data(result, trending=trending), sys.stdout, indent=2, ensure_ascii=False)
+                    json.dump(
+                        build_org_report_json_data(result, trending=trending), sys.stdout, indent=2, ensure_ascii=False
+                    )
                     print()
                 else:
                     file_path = write_org_report_json(result, output_path_obj, output_dir, logger, trending=trending)
@@ -11155,7 +11156,9 @@ def run_org_report(
             write_org_report_console(result, org_config, quiet, trending=trending)
         elif output_format == "json":
             if output_to_stdout:
-                json.dump(build_org_report_json_data(result, trending=trending), sys.stdout, indent=2, ensure_ascii=False)
+                json.dump(
+                    build_org_report_json_data(result, trending=trending), sys.stdout, indent=2, ensure_ascii=False
+                )
                 print()
             else:
                 file_path = write_org_report_json(result, output_path_obj, output_dir, logger, trending=trending)

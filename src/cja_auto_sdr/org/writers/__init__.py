@@ -54,7 +54,7 @@ def _format_trending_timestamp_short(ts: str) -> str:
     try:
         dt = datetime.fromisoformat(ts)
         return dt.strftime("%b %d")
-    except (ValueError, AttributeError):
+    except ValueError, AttributeError:
         return ts[:10]
 
 
@@ -1355,11 +1355,20 @@ def write_org_report_excel(
             snapshots = trending.snapshots
             col_labels = [_format_trending_timestamp_short(s.timestamp) for s in snapshots]
             trending_rows = [
-                {"Metric": "Data Views", **{lbl: s.data_view_count for lbl, s in zip(col_labels, snapshots, strict=True)}},
-                {"Metric": "Components", **{lbl: s.component_count for lbl, s in zip(col_labels, snapshots, strict=True)}},
+                {
+                    "Metric": "Data Views",
+                    **{lbl: s.data_view_count for lbl, s in zip(col_labels, snapshots, strict=True)},
+                },
+                {
+                    "Metric": "Components",
+                    **{lbl: s.component_count for lbl, s in zip(col_labels, snapshots, strict=True)},
+                },
                 {"Metric": "Core", **{lbl: s.core_count for lbl, s in zip(col_labels, snapshots, strict=True)}},
                 {"Metric": "Isolated", **{lbl: s.isolated_count for lbl, s in zip(col_labels, snapshots, strict=True)}},
-                {"Metric": "High-Sim Pairs", **{lbl: s.high_sim_pair_count for lbl, s in zip(col_labels, snapshots, strict=True)}},
+                {
+                    "Metric": "High-Sim Pairs",
+                    **{lbl: s.high_sim_pair_count for lbl, s in zip(col_labels, snapshots, strict=True)},
+                },
             ]
             trending_df = pd.DataFrame(trending_rows)
             trending_df.to_excel(writer, sheet_name="Trending", index=False)
