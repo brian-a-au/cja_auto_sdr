@@ -166,7 +166,9 @@ def resolve_data_view_names(
             elif match_mode == "fuzzy":
                 matching_ids = name_to_id_lookup.get(identifier) or name_to_id_lookup_ci.get(identifier.lower())
                 if matching_ids is None:
-                    similar = generator.find_similar_names(identifier, list(name_to_id_lookup.keys()), max_suggestions=1)
+                    similar = generator.find_similar_names(
+                        identifier, list(name_to_id_lookup.keys()), max_suggestions=1
+                    )
                     if similar:
                         best_name, best_distance = similar[0]
                         matching_ids = name_to_id_lookup.get(best_name)
@@ -447,7 +449,9 @@ def show_stats(
                 total_metrics = sum(s["metrics"] for s in stats_data)
                 total_dims = sum(s["dimensions"] for s in stats_data)
                 total_all = sum(s["total_components"] for s in stats_data)
-                print(f"{'TOTAL':<{max_id_width}} {'':<{max_name_width}} {total_metrics:>8} {total_dims:>10} {total_all:>8}")
+                print(
+                    f"{'TOTAL':<{max_id_width}} {'':<{max_name_width}} {total_metrics:>8} {total_dims:>10} {total_all:>8}"
+                )
 
             print()
             print("=" * generator.BANNER_WIDTH)
@@ -461,7 +465,7 @@ def show_stats(
             human_to_stderr=False,
         )
         return False
-    except (KeyboardInterrupt, SystemExit):
+    except KeyboardInterrupt, SystemExit:
         if not is_machine_readable:
             print()
             print(generator.ConsoleColors.warning("Operation cancelled."))

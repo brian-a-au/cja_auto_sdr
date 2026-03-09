@@ -89,7 +89,7 @@ def handle_snapshot_command(
             print("=" * generator.BANNER_WIDTH)
 
         return True
-    except (KeyboardInterrupt, SystemExit):
+    except KeyboardInterrupt, SystemExit:
         raise
     except generator.RECOVERABLE_COMMAND_HANDLER_EXCEPTIONS as e:
         print(generator.ConsoleColors.error(f"ERROR: Failed to create snapshot: {e!s}"), file=sys.stderr)
@@ -254,8 +254,12 @@ def handle_diff_command(
 
             total_deleted = 0
             if effective_keep_last > 0:
-                total_deleted += len(snapshot_manager.apply_retention_policy(snapshot_dir, source_id, effective_keep_last))
-                total_deleted += len(snapshot_manager.apply_retention_policy(snapshot_dir, target_id, effective_keep_last))
+                total_deleted += len(
+                    snapshot_manager.apply_retention_policy(snapshot_dir, source_id, effective_keep_last)
+                )
+                total_deleted += len(
+                    snapshot_manager.apply_retention_policy(snapshot_dir, target_id, effective_keep_last)
+                )
             if effective_keep_since:
                 days = generator.parse_retention_period(effective_keep_since)
                 if days:
@@ -325,7 +329,7 @@ def handle_diff_command(
 
         generator.append_github_step_summary(generator.build_diff_step_summary(diff_result), logger)
         return True, diff_result.summary.has_changes, exit_code_override
-    except (KeyboardInterrupt, SystemExit):
+    except KeyboardInterrupt, SystemExit:
         raise
     except generator.RECOVERABLE_COMMAND_HANDLER_EXCEPTIONS as e:
         print(generator.ConsoleColors.error(f"ERROR: Failed to compare data views: {e!s}"), file=sys.stderr)
@@ -476,7 +480,9 @@ def handle_diff_snapshot_command(
         if missing_inventory:
             inv_summary = source_snapshot.get_inventory_summary()
             print(
-                generator.ConsoleColors.error("ERROR: Cannot perform inventory diff - snapshot missing requested data."),
+                generator.ConsoleColors.error(
+                    "ERROR: Cannot perform inventory diff - snapshot missing requested data."
+                ),
                 file=sys.stderr,
             )
             print(file=sys.stderr)
@@ -562,7 +568,9 @@ def handle_diff_snapshot_command(
 
             total_deleted = 0
             if effective_keep_last > 0:
-                total_deleted += len(snapshot_manager.apply_retention_policy(snapshot_dir, data_view_id, effective_keep_last))
+                total_deleted += len(
+                    snapshot_manager.apply_retention_policy(snapshot_dir, data_view_id, effective_keep_last)
+                )
             if effective_keep_since:
                 days = generator.parse_retention_period(effective_keep_since)
                 if days:
@@ -640,7 +648,7 @@ def handle_diff_snapshot_command(
     except ValueError as e:
         print(generator.ConsoleColors.error(f"ERROR: Invalid snapshot file: {e!s}"), file=sys.stderr)
         return False, False, None
-    except (KeyboardInterrupt, SystemExit):
+    except KeyboardInterrupt, SystemExit:
         raise
     except generator.RECOVERABLE_COMMAND_HANDLER_EXCEPTIONS as e:
         print(generator.ConsoleColors.error(f"ERROR: Failed to compare against snapshot: {e!s}"), file=sys.stderr)
@@ -701,13 +709,17 @@ def handle_compare_snapshots_command(
 
         if (include_calc_metrics or include_segments) and source_snapshot.data_view_id != target_snapshot.data_view_id:
             print(
-                generator.ConsoleColors.error("ERROR: Inventory comparison requires snapshots from the same data view."),
+                generator.ConsoleColors.error(
+                    "ERROR: Inventory comparison requires snapshots from the same data view."
+                ),
                 file=sys.stderr,
             )
             print(f"  Source: {source_snapshot.data_view_name} ({source_snapshot.data_view_id})", file=sys.stderr)
             print(f"  Target: {target_snapshot.data_view_name} ({target_snapshot.data_view_id})", file=sys.stderr)
             print(file=sys.stderr)
-            print("Inventory IDs are data-view-scoped and cannot be matched across different data views.", file=sys.stderr)
+            print(
+                "Inventory IDs are data-view-scoped and cannot be matched across different data views.", file=sys.stderr
+            )
             print(
                 "Remove --include-segments, --include-calculated, --include-derived for cross-data-view comparison.",
                 file=sys.stderr,
@@ -809,7 +821,7 @@ def handle_compare_snapshots_command(
     except ValueError as e:
         print(generator.ConsoleColors.error(f"ERROR: Invalid snapshot file: {e!s}"), file=sys.stderr)
         return False, False, None
-    except (KeyboardInterrupt, SystemExit):
+    except KeyboardInterrupt, SystemExit:
         raise
     except (generator.CJASDRError, OSError) as e:
         print(generator.ConsoleColors.error(f"ERROR: Failed to compare snapshots: {e!s}"), file=sys.stderr)

@@ -285,7 +285,10 @@ def dispatch_snapshot_cli_modes(
         source_file, target_file = args.compare_snapshots
 
         if getattr(args, "metrics_only", False) and getattr(args, "dimensions_only", False):
-            print(generator.ConsoleColors.error("ERROR: Cannot use both --metrics-only and --dimensions-only"), file=sys.stderr)
+            print(
+                generator.ConsoleColors.error("ERROR: Cannot use both --metrics-only and --dimensions-only"),
+                file=sys.stderr,
+            )
             sys.exit(1)
 
         if getattr(args, "inventory_only", False):
@@ -339,7 +342,10 @@ def dispatch_snapshot_cli_modes(
 
     if getattr(args, "snapshot", None):
         if getattr(args, "include_derived_inventory", False):
-            print(generator.ConsoleColors.error("ERROR: --include-derived cannot be used with --snapshot"), file=sys.stderr)
+            print(
+                generator.ConsoleColors.error("ERROR: --include-derived cannot be used with --snapshot"),
+                file=sys.stderr,
+            )
             print("Derived fields inventory is only available in SDR generation mode.", file=sys.stderr)
             print("Derived field changes are captured in the standard Metrics/Dimensions diff.", file=sys.stderr)
             sys.exit(1)
@@ -407,12 +413,17 @@ def dispatch_snapshot_cli_modes(
 
     if hasattr(args, "diff_snapshot") and args.diff_snapshot:
         if getattr(args, "metrics_only", False) and getattr(args, "dimensions_only", False):
-            print(generator.ConsoleColors.error("ERROR: Cannot use both --metrics-only and --dimensions-only"), file=sys.stderr)
+            print(
+                generator.ConsoleColors.error("ERROR: Cannot use both --metrics-only and --dimensions-only"),
+                file=sys.stderr,
+            )
             sys.exit(1)
 
         if getattr(args, "inventory_only", False):
             print(
-                generator.ConsoleColors.error("ERROR: --inventory-only is only available in SDR mode, not with --diff-snapshot"),
+                generator.ConsoleColors.error(
+                    "ERROR: --inventory-only is only available in SDR mode, not with --diff-snapshot"
+                ),
                 file=sys.stderr,
             )
             sys.exit(1)
