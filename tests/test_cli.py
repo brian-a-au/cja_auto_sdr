@@ -4932,6 +4932,43 @@ class TestOrgReportArgumentValidation:
         assert exc_info.value.code == 1
         mock_run_org_report.assert_not_called()
 
+    @patch("cja_auto_sdr.generator.run_org_report")
+    def test_org_report_rejects_trending_window_zero(self, mock_run_org_report):
+        """--trending-window 0 should fail before org-report execution."""
+        from cja_auto_sdr.generator import main
+
+        with patch.object(sys, "argv", ["cja_auto_sdr", "--org-report", "--trending-window", "0"]):
+            with pytest.raises(SystemExit) as exc_info:
+                main()
+
+        assert exc_info.value.code == 1
+        mock_run_org_report.assert_not_called()
+
+    @patch("cja_auto_sdr.generator.run_org_report")
+    def test_org_report_rejects_trending_window_below_two(self, mock_run_org_report):
+        """--trending-window must be at least 2 before org-report execution."""
+        from cja_auto_sdr.generator import main
+
+        with patch.object(sys, "argv", ["cja_auto_sdr", "--org-report", "--trending-window", "1"]):
+            with pytest.raises(SystemExit) as exc_info:
+                main()
+
+        assert exc_info.value.code == 1
+        mock_run_org_report.assert_not_called()
+
+    @patch("cja_auto_sdr.generator.list_dataviews")
+    def test_trending_window_requires_org_report_mode(self, mock_list_dataviews, capsys):
+        """--trending-window should fail fast outside org-report mode."""
+        from cja_auto_sdr.generator import main
+
+        with patch.object(sys, "argv", ["cja_auto_sdr", "--list-dataviews", "--trending-window", "5"]):
+            with pytest.raises(SystemExit) as exc_info:
+                main()
+
+        assert exc_info.value.code == 1
+        assert "--trending-window is only supported with --org-report" in capsys.readouterr().err
+        mock_list_dataviews.assert_not_called()
+
 
 class TestProfileImportCLI:
     """Tests for non-interactive --profile-import CLI flow."""

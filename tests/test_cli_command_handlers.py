@@ -1546,6 +1546,18 @@ class TestMainImplOrgReport:
         call_kwargs = mock_org.call_args[1]
         assert call_kwargs["org_config"].filter_pattern == "prod.*"
 
+    @patch("cja_auto_sdr.generator._cli_option_specified", _mock_cli_option_specified)
+    @patch("cja_auto_sdr.generator.list_dataviews")
+    def test_trending_window_requires_org_report_mode(self, mock_list_dataviews, capsys):
+        with pytest.raises(SystemExit) as exc_info:
+            with patch("cja_auto_sdr.generator.parse_arguments") as mock_pa:
+                mock_pa.return_value = parse_arguments(["--list-dataviews", "--trending-window", "5"])
+                _main_impl(run_state={})
+
+        assert exc_info.value.code == 1
+        assert "--trending-window is only supported with --org-report" in capsys.readouterr().err
+        mock_list_dataviews.assert_not_called()
+
 
 # ==================== _main_impl: --list-snapshots ====================
 

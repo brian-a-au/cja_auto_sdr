@@ -12387,6 +12387,8 @@ def _main_impl(run_state: dict[str, Any] | None = None):
         _exit_error("--allow-partial is only supported in SDR generation mode")
     if getattr(args, "fail_on_quality", None) and non_sdr_mode:
         _exit_error("--fail-on-quality is only supported in SDR generation mode")
+    if getattr(args, "trending_window", None) is not None and inferred_mode != RunMode.ORG_REPORT:
+        _exit_error("--trending-window is only supported with --org-report")
 
     if (
         getattr(args, "auto_prune", False)
@@ -12819,11 +12821,9 @@ def _main_impl(run_state: dict[str, Any] | None = None):
         # Determine output format (default to console for org reports)
         output_format = args.format or "console"
 
-        # Validate --trending-window
         trending_window = getattr(args, "trending_window", None)
         if trending_window is not None and trending_window < 2:
-            print(ConsoleColors.error("ERROR: --trending-window must be >= 2"), file=sys.stderr)
-            sys.exit(1)
+            _exit_error("--trending-window must be >= 2")
 
         success, thresholds_exceeded = run_org_report(
             config_file=args.config_file,

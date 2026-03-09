@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from contextlib import ExitStack
 from copy import deepcopy
@@ -455,6 +456,43 @@ def test_run_org_report_trending_window_uses_persistent_snapshot_cache(tmp_path:
 
     snapshot_dir = OrgReportCache(cache_dir=snapshot_cache_root).get_org_report_snapshot_dir("test_org@AdobeOrg")
     assert len(list(snapshot_dir.glob("*.json"))) == 2
+
+
+def test_run_org_report_without_trending_window_leaves_output_unchanged(tmp_path: Path, rich_org_report_result):
+    result = deepcopy(rich_org_report_result)
+    result.timestamp = "2026-03-01T00:00:00Z"
+    result.org_id = "test_org@AdobeOrg"
+    output_path = tmp_path / "org_report.json"
+
+    with (
+        patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "mock", {"org_id": "test_org@AdobeOrg"})),
+        patch("cja_auto_sdr.generator.cjapy") as mock_cjapy,
+        patch("cja_auto_sdr.generator.OrgReportCache") as mock_cache_cls,
+        patch("cja_auto_sdr.generator.OrgComponentAnalyzer") as mock_analyzer_cls,
+        patch("cja_auto_sdr.generator.build_org_step_summary", return_value="summary"),
+        patch("cja_auto_sdr.generator.append_github_step_summary"),
+    ):
+        mock_cjapy.CJA.return_value = Mock()
+        analyzer = Mock()
+        analyzer.run_analysis.return_value = result
+        mock_analyzer_cls.return_value = analyzer
+
+        ok, exceeded = generator.run_org_report(
+            config_file="config.json",
+            output_format="json",
+            output_path=str(output_path),
+            output_dir=str(tmp_path),
+            org_config=OrgReportConfig(),
+            quiet=False,
+            trending_window=None,
+        )
+
+    assert ok is True
+    assert exceeded is False
+    assert mock_cache_cls.call_count == 0
+
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+    assert "trending" not in payload
 
 
 def test_run_org_report_comparison_os_error_is_non_fatal(tmp_path: Path, rich_org_report_result, capsys):
