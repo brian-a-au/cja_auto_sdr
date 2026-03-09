@@ -28,6 +28,8 @@ Implemented on the current PR branch:
   - `06e0c04` Fix generator formatting check
   - `b3ba3d9` Continue generator decomposition for CLI command handlers
   - `9b7f302` Extract snapshot and diff CLI dispatch
+  - `838653b` Extract SDR execution preflight orchestration
+  - `823f04e` Sync documented test counts
 - v3.4.0 version/doc updates already landed in repo docs and changelog.
 - Local validation is green on the latest pushed commit (`9b7f302`):
   - `ruff check` on the touched files
@@ -57,7 +59,7 @@ Implemented on the current PR branch:
   - `uv build`
   - clean-wheel install verification for `dist/cja_auto_sdr-3.4.0-py3-none-any.whl`
   - CLI smoke commands: `python -m cja_auto_sdr --version`, `--exit-codes`, `--help`
-- Remote PR checks need to finish again for the latest pushed commit; do not assume the PR is green until CI completes.
+- Remote PR checks are green on the latest pushed commit (`823f04e`), including the follow-up `test-counts` repair after syncing README totals.
 
 Still open or only partially covered:
 
@@ -91,7 +93,7 @@ Still open or only partially covered:
   - [x] Extract inventory-order resolution plus `--inventory-summary` validation/dispatch to `cli/execution.py`
   - [x] Extract remaining SDR preflight validation and setup orchestration out of `_main_impl()`
 - [x] After the next extraction slice, rerun a broader local validation pass (`ruff`, format check, targeted pytest slices, then full pytest if changes touch shared dispatch paths).
-- [ ] Run/monitor remote PR CI on the latest pushed refactor commit and fix any failures if branch-only issues appear.
+- [x] Run/monitor remote PR CI on the latest pushed refactor commit and fix any failures if branch-only issues appear.
 
 Should add to the backlog:
 
