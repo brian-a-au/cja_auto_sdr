@@ -255,6 +255,17 @@ class TestDiscoverSnapshots:
         assert len(result) == 2
         assert result[0].timestamp == "2025-12-01"
 
+    def test_explicit_file_is_retained_when_window_is_trimmed(self, tmp_path):
+        for month in range(1, 5):
+            _write_report(tmp_path, f"cached_{month}.json", _make_org_report_json(timestamp=f"2026-0{month}-01"))
+        explicit = tmp_path / "subdir"
+        explicit.mkdir()
+        _write_report(explicit, "baseline.json", _make_org_report_json(timestamp="2025-12-01"))
+
+        result = discover_snapshots(tmp_path, window_size=3, explicit_file=explicit / "baseline.json")
+
+        assert [snapshot.timestamp for snapshot in result] == ["2025-12-01", "2026-03-01", "2026-04-01"]
+
     def test_same_timestamp_distinct_snapshots_are_preserved(self, tmp_path):
         _write_report(tmp_path, "a.json", _make_org_report_json(timestamp="2026-01-01", comp_count=100))
         _write_report(tmp_path, "b.json", _make_org_report_json(timestamp="2026-01-01", comp_count=200))
@@ -528,6 +539,19 @@ class TestBuildTrending:
         assert result is not None
         assert result.window_size == 2
         assert result.snapshots[0].timestamp == "2026-01-01"
+
+    def test_explicit_file_remains_in_window_after_current_snapshot_is_added(self, tmp_path):
+        for month in range(2, 5):
+            _write_report(tmp_path, f"cached_{month}.json", _make_org_report_json(timestamp=f"2026-0{month}-01"))
+        subdir = tmp_path / "sub"
+        subdir.mkdir()
+        _write_report(subdir, "baseline.json", _make_org_report_json(timestamp="2026-01-01"))
+
+        current = TrendingSnapshot(timestamp="2026-05-01", data_view_count=20, component_count=200)
+        result = build_trending(tmp_path, window_size=3, explicit_file=subdir / "baseline.json", current_snapshot=current)
+
+        assert result is not None
+        assert [snapshot.timestamp for snapshot in result.snapshots] == ["2026-01-01", "2026-04-01", "2026-05-01"]
 
     def test_org_id_scoping_excludes_other_org_snapshots(self, tmp_path):
         _write_report(tmp_path, "a.json", _make_org_report_json(timestamp="2026-01-01", org_id="org_a"))

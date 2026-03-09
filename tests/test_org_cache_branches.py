@@ -225,6 +225,38 @@ def test_list_org_report_snapshots_returns_newest_first(tmp_path: Path):
     assert snapshots[0]["data_views_total"] == 3
 
 
+def test_list_org_report_snapshots_places_undated_entries_last(tmp_path: Path):
+    cache = OrgReportCache(cache_dir=tmp_path)
+    root = cache.get_org_report_snapshot_dir("org@test.example")
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "dated.json").write_text(
+        json.dumps(
+            {
+                "generated_at": "2026-03-01T00:00:00Z",
+                "org_id": "org@test.example",
+                "summary": {"data_views_total": 3, "total_unique_components": 9},
+                "distribution": {"core": {"total": 5}, "isolated": {"total": 4}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (root / "undated.json").write_text(
+        json.dumps(
+            {
+                "generated_at": "not-a-timestamp",
+                "org_id": "org@test.example",
+                "summary": {"data_views_total": 1, "total_unique_components": 2},
+                "distribution": {"core": {"total": 1}, "isolated": {"total": 1}},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    snapshots = cache.list_org_report_snapshots("org@test.example")
+
+    assert [Path(snapshot["filepath"]).name for snapshot in snapshots] == ["dated.json", "undated.json"]
+
+
 def test_inspect_org_report_snapshot_includes_data_view_preview(tmp_path: Path):
     cache = OrgReportCache(cache_dir=tmp_path)
     snapshot_path = cache.get_org_report_snapshot_dir("org@test.example") / "report.json"
@@ -268,6 +300,34 @@ def test_prune_org_report_snapshots_keeps_latest_per_org(tmp_path: Path):
     assert len(deleted) == 1
     assert len(remaining) == 2
     assert [snapshot["generated_at"] for snapshot in remaining] == ["2026-03-01T00:00:00Z", "2026-02-01T00:00:00Z"]
+
+
+def test_prune_org_report_snapshots_prefers_dated_entries_over_undated_ones(tmp_path: Path):
+    cache = OrgReportCache(cache_dir=tmp_path)
+    root = cache.get_org_report_snapshot_dir("org@test.example")
+    root.mkdir(parents=True, exist_ok=True)
+    for name, timestamp in (
+        ("older.json", "2026-02-01T00:00:00Z"),
+        ("newer.json", "2026-03-01T00:00:00Z"),
+        ("undated.json", "not-a-timestamp"),
+    ):
+        (root / name).write_text(
+            json.dumps(
+                {
+                    "generated_at": timestamp,
+                    "org_id": "org@test.example",
+                    "summary": {"data_views_total": 1, "total_unique_components": 1},
+                    "distribution": {"core": {"total": 1}, "isolated": {"total": 0}},
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    deleted = cache.prune_org_report_snapshots(org_id="org@test.example", keep_last=2)
+    remaining = cache.list_org_report_snapshots("org@test.example")
+
+    assert [Path(path).name for path in deleted] == ["undated.json"]
+    assert [Path(snapshot["filepath"]).name for snapshot in remaining] == ["newer.json", "older.json"]
 
 
 def test_lock_property_and_health_delegate_to_manager(tmp_path: Path):

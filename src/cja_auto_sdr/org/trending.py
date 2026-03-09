@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +13,7 @@ from cja_auto_sdr.org.models import (
     TrendingDelta,
     TrendingSnapshot,
 )
+from cja_auto_sdr.org.snapshot_utils import chronological_snapshot_sort_fields
 
 logger = logging.getLogger(__name__)
 
@@ -35,27 +35,6 @@ def _snapshot_content_hash(data: dict[str, Any]) -> str:
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
-def _parse_snapshot_timestamp(raw_timestamp: Any) -> datetime | None:
-    """Normalize snapshot timestamps to UTC for stable chronological ordering."""
-    if raw_timestamp in (None, ""):
-        return None
-
-    timestamp_text = str(raw_timestamp).strip()
-    if not timestamp_text:
-        return None
-    if timestamp_text.endswith("Z"):
-        timestamp_text = f"{timestamp_text[:-1]}+00:00"
-
-    try:
-        parsed = datetime.fromisoformat(timestamp_text)
-    except ValueError:
-        return None
-
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=UTC)
-    return parsed.astimezone(UTC)
-
-
 def _snapshot_identity_key(snapshot: TrendingSnapshot) -> tuple[str, ...]:
     """Return the strongest available stable identity for one snapshot."""
     if snapshot.snapshot_id:
@@ -67,16 +46,10 @@ def _snapshot_identity_key(snapshot: TrendingSnapshot) -> tuple[str, ...]:
     return ("fallback", snapshot.org_id or "", snapshot.timestamp)
 
 
-def _snapshot_sort_key(snapshot: TrendingSnapshot) -> tuple[bool, datetime, str, str]:
+def _snapshot_sort_key(snapshot: TrendingSnapshot) -> tuple[bool, object, str, str]:
     """Return the sort key for oldest-to-newest snapshot ordering."""
-    parsed_timestamp = _parse_snapshot_timestamp(snapshot.timestamp)
     tie_breaker = snapshot.source_path or snapshot.snapshot_id or snapshot.content_hash or ""
-    return (
-        parsed_timestamp is None,
-        parsed_timestamp or datetime.min.replace(tzinfo=UTC),
-        snapshot.timestamp,
-        tie_breaker,
-    )
+    return chronological_snapshot_sort_fields(snapshot.timestamp, tie_breaker=tie_breaker)
 
 
 def _snapshots_equivalent(left: TrendingSnapshot, right: TrendingSnapshot) -> bool:
@@ -99,6 +72,63 @@ def _snapshots_equivalent(left: TrendingSnapshot, right: TrendingSnapshot) -> bo
         and left.dv_ids == right.dv_ids
         and left.dv_names == right.dv_names
     )
+
+
+def _resolve_explicit_snapshot_keys(
+    explicit_file: str | Path | None,
+    *,
+    org_id: str | None = None,
+) -> set[tuple[str, ...]]:
+    """Return identity keys for explicitly requested comparison snapshots."""
+    if explicit_file is None:
+        return set()
+
+    snapshot = _load_snapshot_from_file(Path(explicit_file))
+    if snapshot is None:
+        return set()
+    if org_id is not None and snapshot.org_id != org_id:
+        return set()
+    return {_snapshot_identity_key(snapshot)}
+
+
+def _trim_snapshot_window(
+    snapshots: list[TrendingSnapshot],
+    *,
+    window_size: int,
+    pinned_snapshot_keys: set[tuple[str, ...]] | None = None,
+) -> list[TrendingSnapshot]:
+    """Return an oldest-to-newest window while retaining explicitly pinned snapshots."""
+    if window_size <= 0:
+        return []
+
+    ordered_snapshots = sorted(snapshots, key=_snapshot_sort_key)
+    if len(ordered_snapshots) <= window_size:
+        return ordered_snapshots
+
+    pinned_snapshot_keys = pinned_snapshot_keys or set()
+    selected: list[TrendingSnapshot] = []
+    selected_keys: set[tuple[str, ...]] = set()
+
+    for snapshot in ordered_snapshots:
+        snapshot_key = _snapshot_identity_key(snapshot)
+        if snapshot_key in pinned_snapshot_keys and snapshot_key not in selected_keys:
+            selected.append(snapshot)
+            selected_keys.add(snapshot_key)
+
+    if len(selected) >= window_size:
+        return selected[-window_size:]
+
+    for snapshot in reversed(ordered_snapshots):
+        snapshot_key = _snapshot_identity_key(snapshot)
+        if snapshot_key in selected_keys:
+            continue
+        selected.append(snapshot)
+        selected_keys.add(snapshot_key)
+        if len(selected) >= window_size:
+            break
+
+    selected.sort(key=_snapshot_sort_key)
+    return selected
 
 
 # ---------------------------------------------------------------------------
@@ -253,6 +283,8 @@ def discover_snapshots(
     cache_path = Path(cache_dir)
     snapshots: list[TrendingSnapshot] = []
     seen_snapshot_keys: set[tuple[str, ...]] = set()
+    pinned_snapshot_keys = _resolve_explicit_snapshot_keys(explicit_file, org_id=org_id)
+    explicit_path = Path(explicit_file) if explicit_file is not None else None
 
     # Collect JSON files from the directory
     json_files: list[Path] = []
@@ -260,10 +292,8 @@ def discover_snapshots(
         json_files = sorted(cache_path.glob("*.json"))
 
     # Include explicit file if provided
-    if explicit_file:
-        explicit_path = Path(explicit_file)
-        if explicit_path.is_file() and explicit_path not in json_files:
-            json_files.append(explicit_path)
+    if explicit_path is not None and explicit_path.is_file() and explicit_path not in json_files:
+        json_files.append(explicit_path)
 
     for json_file in json_files:
         snapshot = _load_snapshot_from_file(json_file)
@@ -276,12 +306,11 @@ def discover_snapshots(
             snapshots.append(snapshot)
             seen_snapshot_keys.add(snapshot_key)
 
-    # Sort by normalized UTC timestamp (oldest first) and trim to window
-    snapshots.sort(key=_snapshot_sort_key)
-    if len(snapshots) > window_size:
-        snapshots = snapshots[-window_size:]
-
-    return snapshots
+    return _trim_snapshot_window(
+        snapshots,
+        window_size=window_size,
+        pinned_snapshot_keys=pinned_snapshot_keys,
+    )
 
 
 def _load_snapshot_from_file(json_file: Path) -> TrendingSnapshot | None:
@@ -450,6 +479,7 @@ def build_trending(
         OrgReportTrending if >= 2 snapshots available, else None.
     """
     effective_org_id = org_id or (current_snapshot.org_id if current_snapshot is not None else None)
+    pinned_snapshot_keys = _resolve_explicit_snapshot_keys(explicit_file, org_id=effective_org_id)
     snapshots = discover_snapshots(
         cache_dir,
         window_size=window_size,
@@ -475,10 +505,13 @@ def build_trending(
 
             if not is_duplicate:
                 snapshots.append(current_snapshot)
-                snapshots.sort(key=_snapshot_sort_key)
-                # Re-trim if over window
-                if len(snapshots) > window_size:
-                    snapshots = snapshots[-window_size:]
+                pinned_snapshot_keys.add(_snapshot_identity_key(current_snapshot))
+
+    snapshots = _trim_snapshot_window(
+        snapshots,
+        window_size=window_size,
+        pinned_snapshot_keys=pinned_snapshot_keys,
+    )
 
     if len(snapshots) < 2:
         return None

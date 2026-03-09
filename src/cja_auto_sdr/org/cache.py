@@ -21,6 +21,7 @@ from typing import Any
 
 from cja_auto_sdr.core.locks.manager import LockManager
 from cja_auto_sdr.org.models import DataViewSummary
+from cja_auto_sdr.org.snapshot_utils import newest_first_snapshot_sort_fields, snapshot_epoch
 
 DEFAULT_ORG_REPORT_SNAPSHOT_KEEP_LAST = 25
 
@@ -229,25 +230,17 @@ class OrgReportCache:
         return file_path
 
     @staticmethod
-    def _parse_snapshot_timestamp(raw_timestamp: Any) -> datetime | None:
-        """Normalize persisted snapshot timestamps to UTC datetimes."""
-        if raw_timestamp in (None, ""):
-            return None
+    def _snapshot_metadata_sort_key(snapshot: dict[str, Any]) -> tuple[bool, float, str, str]:
+        """Return a stable newest-first sort key for snapshot metadata."""
+        return newest_first_snapshot_sort_fields(
+            snapshot.get("generated_at"),
+            tie_breaker=str(snapshot.get("filepath", "")),
+        )
 
-        timestamp_text = str(raw_timestamp).strip()
-        if not timestamp_text:
-            return None
-        if timestamp_text.endswith("Z"):
-            timestamp_text = f"{timestamp_text[:-1]}+00:00"
-
-        try:
-            parsed = datetime.fromisoformat(timestamp_text)
-        except ValueError:
-            return None
-
-        if parsed.tzinfo is None:
-            parsed = parsed.replace(tzinfo=UTC)
-        return parsed.astimezone(UTC)
+    @classmethod
+    def _sort_snapshot_metadata(cls, snapshots: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Sort snapshot metadata newest-first with undated entries at the end."""
+        return sorted(snapshots, key=cls._snapshot_metadata_sort_key)
 
     def _load_org_report_snapshot_metadata(
         self,
@@ -283,7 +276,6 @@ class OrgReportCache:
             isolated_section = {}
 
         generated_at = payload.get("generated_at") or payload.get("timestamp")
-        parsed_timestamp = self._parse_snapshot_timestamp(generated_at)
         snapshot_meta = payload.get("_snapshot_meta", {})
         if not isinstance(snapshot_meta, dict):
             snapshot_meta = {}
@@ -294,7 +286,7 @@ class OrgReportCache:
         metadata: dict[str, Any] = {
             "org_id": str(payload.get("org_id") or "unknown"),
             "generated_at": str(generated_at or ""),
-            "generated_at_epoch": parsed_timestamp.timestamp() if parsed_timestamp is not None else None,
+            "generated_at_epoch": snapshot_epoch(generated_at),
             "filepath": str(path),
             "filename": path.name,
             "data_views_total": summary.get("data_views_total", len(data_views)),
@@ -348,15 +340,7 @@ class OrgReportCache:
                 if metadata is not None:
                     snapshots.append(metadata)
 
-        snapshots.sort(
-            key=lambda snapshot: (
-                snapshot.get("generated_at_epoch") is None,
-                snapshot.get("generated_at_epoch") or 0.0,
-                snapshot.get("filepath", ""),
-            ),
-            reverse=True,
-        )
-        return snapshots
+        return self._sort_snapshot_metadata(snapshots)
 
     def inspect_org_report_snapshot(self, snapshot_file: str | Path) -> dict[str, Any]:
         """Return detailed summary metadata for one persisted org-report snapshot."""
@@ -387,15 +371,7 @@ class OrgReportCache:
 
         deleted_paths: list[str] = []
         for org_snapshots in grouped.values():
-            sorted_snapshots = sorted(
-                org_snapshots,
-                key=lambda snapshot: (
-                    snapshot.get("generated_at_epoch") is None,
-                    snapshot.get("generated_at_epoch") or 0.0,
-                    snapshot.get("filepath", ""),
-                ),
-                reverse=True,
-            )
+            sorted_snapshots = self._sort_snapshot_metadata(org_snapshots)
 
             retained_paths: set[str] = set()
             if keep_last > 0:
