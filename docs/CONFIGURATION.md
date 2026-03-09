@@ -924,7 +924,7 @@ cja_auto_sdr --list-dataviews --log-level DEBUG
 At launch, the tool logs diagnostic lines containing the tool version, Python version, platform, active log level, inferred run mode (batch, single, or discovery), and dependency versions. These appear automatically at `INFO` level and are useful for troubleshooting environment issues in CI/CD logs or support requests:
 
 ```text
-CJA SDR Generator v3.3.9 | Python 3.14.2 | darwin | log_level=INFO | mode=single
+CJA SDR Generator v3.4.0 | Python 3.14.2 | darwin | log_level=INFO | mode=single
 Dependencies: cjapy=0.2.4.post3, pandas=2.3.3, numpy=2.2.1, xlsxwriter=3.2.9, tqdm=4.67.0
 ```
 

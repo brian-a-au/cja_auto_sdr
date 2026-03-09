@@ -1,6 +1,6 @@
 # Quick Reference Card
 
-Single-page command cheat sheet for CJA SDR Generator v3.3.9.
+Single-page command cheat sheet for CJA SDR Generator v3.4.0.
 
 ## Four Main Modes
 
@@ -247,6 +247,12 @@ cja_auto_sdr --org-report --sample 50 --sample-seed 42
 cja_auto_sdr --org-report --sample 50 --sample-stratified
 
 # --- Trending & Comparison ---
+# Show trending across last 10 cached snapshots (default)
+cja_auto_sdr --org-report --trending-window
+
+# Show trending across last 5 cached snapshots
+cja_auto_sdr --org-report --trending-window 5 --format json
+
 # Compare against previous org report
 cja_auto_sdr --org-report --compare-org-report ./previous.json
 

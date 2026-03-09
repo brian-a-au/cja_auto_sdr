@@ -837,6 +837,28 @@ if ($LASTEXITCODE -eq 2) {
 Write-Host "GOVERNANCE CHECK PASSED"
 ```
 
+### Temporal Trending
+
+Track how your org's data views and components change over time using cached org-report snapshots.
+
+```bash
+# Show trending across last 10 cached snapshots (default window)
+cja_auto_sdr --org-report --trending-window
+
+# Show trending across last 5 snapshots in JSON format
+cja_auto_sdr --org-report --trending-window 5 --format json
+
+# Combine trending with comparison for full context
+cja_auto_sdr --org-report --trending-window 10 --compare-org-report ./baseline.json
+```
+
+Trending output includes:
+- **Snapshot table**: data view count, component count, core/isolated counts, and high-similarity pairs across each cached run.
+- **Deltas**: period-over-period changes between consecutive snapshots.
+- **Drift scores**: per-data-view weighted score (0.0-1.0) highlighting which data views changed most, based on component count change (40%), core/isolated ratio shift (20%), similarity change (20%), and presence change (20%).
+
+Trending renders in all 6 output formats (console, JSON, Excel, Markdown, HTML, CSV).
+
 ## Related Documentation
 
 - [CLI Reference](CLI_REFERENCE.md) - Complete command-line options

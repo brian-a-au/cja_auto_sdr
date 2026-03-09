@@ -38,7 +38,7 @@ def rich_data_dict():
         "Metadata": pd.DataFrame(
             {
                 "Property": ["Generated At", "Data View ID", "Tool Version", "Total Metrics"],
-                "Value": ["2025-01-15 10:30:00 PST", "dv_content_test", "3.3.9", 3],
+                "Value": ["2025-01-15 10:30:00 PST", "dv_content_test", "3.4.0", 3],
             },
         ),
         "Data Quality": pd.DataFrame(
@@ -104,7 +104,7 @@ def rich_metadata_dict():
         "Generated At": "2025-01-15 10:30:00 PST",
         "Data View ID": "dv_content_test",
         "Data View Name": "Test DataView",
-        "Tool Version": "3.3.9",
+        "Tool Version": "3.4.0",
         "Metrics Count": "3",
         "Dimensions Count": "4",
     }
@@ -224,7 +224,7 @@ class TestJSONContentValidation:
             data = json.load(f)
 
         assert data["metadata"]["Data View ID"] == "dv_content_test"
-        assert data["metadata"]["Tool Version"] == "3.3.9"
+        assert data["metadata"]["Tool Version"] == "3.4.0"
 
     def test_json_metadata_preserves_partial_markers(self, tmp_path, rich_data_dict, rich_metadata_dict):
         logger = logging.getLogger("json_test")

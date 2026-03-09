@@ -7,6 +7,16 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.4.0] - 2026-03-08
+
+### Added
+- **Org-report temporal trending**: `--trending-window N` computes metrics across the last N cached org-report snapshots, with per-data-view drift scoring (weighted composite: component change 0.4, core/isolated ratio 0.2, similarity shift 0.2, presence change 0.2).
+- **Trending output in all 6 formats**: trending snapshots, deltas, and drift scores render in console, JSON, Excel, Markdown, HTML, and CSV output formats.
+- **OrgReportTrending data model**: new `TrendingSnapshot`, `TrendingDelta`, and `OrgReportTrending` dataclasses with backwards-compatible `to_comparison()` bridge to existing `OrgReportComparison`.
+
+### Changed
+- **Structural decomposition**: extracted ~2,980 LOC from `generator.py` into subpackages (`org/writers/`, `output/sdr/`, `api/quality_policy.py`) with full lazy-forwarding re-exports preserving all existing imports.
+
 ## [3.3.9] - 2026-03-06
 
 ### Fixed

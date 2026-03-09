@@ -406,6 +406,7 @@ Cache is stored in `~/.cja_auto_sdr/cache/org_report_cache.json`.
 | `--org-stats` | Quick summary stats only - skips similarity matrix and clustering for faster results | False |
 | `--audit-naming` | Detect naming pattern inconsistencies (snake_case vs camelCase, stale prefixes, etc.) | False |
 | `--compare-org-report PREV.json` | Compare current org-report to a previous JSON report for trending/drift analysis | - |
+| `--trending-window [N]` | Show trending across the last N cached org-report snapshots (default: 10). Renders in all output formats. | None |
 | `--owner-summary` | Group statistics by data view owner (requires `--include-metadata`) | False |
 | `--flag-stale` | Flag components with stale naming patterns (test, old, temp, deprecated, version suffixes, date patterns) | False |
 

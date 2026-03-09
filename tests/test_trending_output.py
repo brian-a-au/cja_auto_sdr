@@ -1,11 +1,7 @@
 """Tests for trending output across all 6 formats."""
 
-import csv
-import io
 import json
 from unittest.mock import MagicMock
-
-import pytest
 
 from cja_auto_sdr.org.models import (
     ComponentDistribution,
@@ -25,7 +21,6 @@ from cja_auto_sdr.org.writers import (
     write_org_report_html,
     write_org_report_markdown,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
