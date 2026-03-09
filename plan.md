@@ -30,8 +30,9 @@ Implemented on the current PR branch:
   - `9b7f302` Extract snapshot and diff CLI dispatch
   - `838653b` Extract SDR execution preflight orchestration
   - `823f04e` Sync documented test counts
+  - `c4fbdb0` Update plan status for latest CI state
 - v3.4.0 version/doc updates already landed in repo docs and changelog.
-- Local validation is green on the latest pushed commit (`9b7f302`):
+- Earlier local validation was green on pushed commit (`9b7f302`) during the diff/snapshot extraction:
   - `ruff check` on the touched files
   - targeted snapshot/diff CLI dispatch pytest slice:
     `tests/test_cli_command_handlers.py`, `tests/test_snapshot_commands.py`,
@@ -59,7 +60,7 @@ Implemented on the current PR branch:
   - `uv build`
   - clean-wheel install verification for `dist/cja_auto_sdr-3.4.0-py3-none-any.whl`
   - CLI smoke commands: `python -m cja_auto_sdr --version`, `--exit-codes`, `--help`
-- Remote PR checks are green on the latest pushed commit (`823f04e`), including the follow-up `test-counts` repair after syncing README totals.
+- Remote PR checks are green on the latest pushed commit (`c4fbdb0`), after the follow-up `test-counts` repair on `823f04e` and the subsequent plan sync commit.
 
 Still open or only partially covered:
 
@@ -84,7 +85,7 @@ Still open or only partially covered:
   - [x] `handle_diff_command()`
   - [x] `handle_diff_snapshot_command()`
   - [x] `handle_compare_snapshots_command()`
-- [~] Reduce `_main_impl()` by pushing branch-specific command orchestration into smaller dispatch helpers/modules.
+- [x] Reduce `_main_impl()` by pushing branch-specific command orchestration into smaller dispatch helpers/modules.
   - [x] Move config/status, interactive, stats, and org-report branching into `_dispatch_post_validation_report_modes()`
   - [x] Extract snapshot list/prune, compare-snapshots, snapshot, compare-with-prev, and diff-snapshot orchestration out of `_main_impl()` into `diff/cli.py`
   - [x] Extract cross-data-view `--diff` orchestration out of `_main_impl()` into `diff/cli.py`
@@ -94,6 +95,8 @@ Still open or only partially covered:
   - [x] Extract remaining SDR preflight validation and setup orchestration out of `_main_impl()`
 - [x] After the next extraction slice, rerun a broader local validation pass (`ruff`, format check, targeted pytest slices, then full pytest if changes touch shared dispatch paths).
 - [x] Run/monitor remote PR CI on the latest pushed refactor commit and fix any failures if branch-only issues appear.
+- [ ] Continue decomposing shared SDR processing/batch orchestration out of `generator.py` while preserving generator-level import/test compatibility.
+- [ ] Reduce remaining `generator.py` compatibility wrappers where safe, without breaking the v3.4.0 public surface.
 
 Should add to the backlog:
 
