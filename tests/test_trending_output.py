@@ -42,6 +42,7 @@ def _make_trending():
                 isolated_count=20,
                 high_sim_pair_count=2,
                 dv_ids={"dv1", "dv2"},
+                dv_names={"dv1": "Legacy DV 1", "dv2": "Test DV 2"},
             ),
             TrendingSnapshot(
                 timestamp="2026-02-01T00:00:00Z",
@@ -51,6 +52,7 @@ def _make_trending():
                 isolated_count=25,
                 high_sim_pair_count=3,
                 dv_ids={"dv1", "dv2", "dv3"},
+                dv_names={"dv1": "Test DV 1", "dv2": "Test DV 2", "dv3": "New DV 3"},
             ),
         ],
         deltas=[
@@ -115,7 +117,7 @@ class TestConsoleWithTrending:
         assert "Data Views" in output
         assert "Components" in output
         assert "Top Drift" in output
-        assert "dv1" in output
+        assert "Test DV 1 (dv1)" in output
 
     def test_trending_quiet_suppressed(self, capsys):
         result = _make_result()
@@ -145,9 +147,15 @@ class TestJsonWithTrending:
         assert "snapshots" in t
         assert "deltas" in t
         assert "drift_scores" in t
+        assert "drift_details" in t
         assert len(t["snapshots"]) == 2
         assert len(t["deltas"]) == 1
         assert t["drift_scores"]["dv1"] == 0.82
+        assert t["drift_details"][0] == {
+            "data_view_id": "dv1",
+            "data_view_name": "Test DV 1",
+            "drift_score": 0.82,
+        }
 
     def test_snapshot_fields(self):
         result = _make_result()
@@ -214,12 +222,14 @@ class TestExcelWithTrending:
         assert ws["B2"].value == 10
         assert ws["C2"].value == 12
         assert ws["A9"].value == "Data View ID"
-        assert ws["B9"].value == "Drift Score"
+        assert ws["B9"].value == "Data View Name"
+        assert ws["C9"].value == "Drift Score"
         assert ws["A10"].value == "dv1"
-        assert ws["B10"].value == 0.82
+        assert ws["B10"].value == "Test DV 1"
+        assert ws["C10"].value == 0.82
         conditional_ranges = {str(rule.sqref) for rule in ws.conditional_formatting}
         assert "B2:C6" in conditional_ranges
-        assert "B10:B12" in conditional_ranges
+        assert "C10:C12" in conditional_ranges
         wb.close()
 
     def test_trending_supports_snapshot_columns_beyond_z(self, tmp_path):
@@ -275,6 +285,7 @@ class TestMarkdownWithTrending:
         assert "## Trending" in content
         assert "Data Views" in content
         assert "Drift Scores" in content
+        assert "Test DV 1" in content
 
 
 # ---------------------------------------------------------------------------
@@ -298,6 +309,7 @@ class TestHtmlWithTrending:
         content = open(path, encoding="utf-8").read()
         assert "Trending" in content
         assert "drift" in content.lower()
+        assert "Test DV 1" in content
 
 
 # ---------------------------------------------------------------------------
@@ -352,7 +364,7 @@ class TestCsvWithTrending:
             rows = list(csv.DictReader(handle))
 
         assert rows == [
-            {"Data View ID": "dv1", "Drift Score": "0.82"},
-            {"Data View ID": "dv3", "Drift Score": "0.45"},
-            {"Data View ID": "dv2", "Drift Score": "0.15"},
+            {"Data View ID": "dv1", "Data View Name": "Test DV 1", "Drift Score": "0.82"},
+            {"Data View ID": "dv3", "Data View Name": "New DV 3", "Drift Score": "0.45"},
+            {"Data View ID": "dv2", "Data View Name": "Test DV 2", "Drift Score": "0.15"},
         ]

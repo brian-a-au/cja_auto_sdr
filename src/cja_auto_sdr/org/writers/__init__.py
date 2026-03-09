@@ -76,6 +76,42 @@ def _top_drift_scores(drift_scores: dict[str, float], limit: int = 10) -> list[t
     return sorted(drift_scores.items(), key=lambda x: -x[1])[:limit]
 
 
+def _resolve_trending_dv_name(trending: OrgReportTrending, dv_id: str) -> str | None:
+    """Return the most recent known display name for a drift-ranked data view."""
+    for snapshot in reversed(trending.snapshots):
+        dv_name = snapshot.dv_names.get(dv_id)
+        if dv_name:
+            return dv_name
+    return None
+
+
+def _format_trending_dv_label(dv_id: str, dv_name: str | None) -> str:
+    """Return a compact human-readable label for one data view."""
+    if not dv_name or dv_name == dv_id:
+        return dv_id
+    return f"{dv_name} ({dv_id})"
+
+
+def _ranked_drift_entries(
+    trending: OrgReportTrending,
+    *,
+    limit: int | None = None,
+) -> list[dict[str, Any]]:
+    """Return ranked drift entries with the best available DV names attached."""
+    ranked_scores = sorted(trending.drift_scores.items(), key=lambda x: -x[1])
+    if limit is not None:
+        ranked_scores = ranked_scores[:limit]
+
+    return [
+        {
+            "data_view_id": dv_id,
+            "data_view_name": _resolve_trending_dv_name(trending, dv_id),
+            "drift_score": score,
+        }
+        for dv_id, score in ranked_scores
+    ]
+
+
 def _trending_date_range(snapshots: list[TrendingSnapshot]) -> str:
     """Return 'first_label -> last_label' for a list of snapshots."""
     if not snapshots:
@@ -112,8 +148,9 @@ def _render_trending_console(trending: OrgReportTrending) -> str:
     if trending.drift_scores:
         lines.append("")
         lines.append("Top Drift:")
-        for dv_id, score in _top_drift_scores(trending.drift_scores):
-            lines.append(f"  \u25b8 {dv_id:<40s} {score:.2f}")
+        for entry in _ranked_drift_entries(trending, limit=10):
+            label = _format_trending_dv_label(entry["data_view_id"], entry["data_view_name"])
+            lines.append(f"  \u25b8 {label:<40.40s} {entry['drift_score']:.2f}")
 
     return "\n".join(lines)
 
@@ -146,6 +183,7 @@ def _trending_snapshots_to_dicts(trending: OrgReportTrending) -> dict[str, Any]:
             for d in trending.deltas
         ],
         "drift_scores": trending.drift_scores,
+        "drift_details": _ranked_drift_entries(trending),
     }
 
 
@@ -176,10 +214,11 @@ def _render_trending_markdown(trending: OrgReportTrending) -> str:
     if trending.drift_scores:
         lines.append("### Top Drift Scores")
         lines.append("")
-        lines.append("| Data View ID | Drift Score |")
-        lines.append("|--------------|------------:|")
-        for dv_id, score in _top_drift_scores(trending.drift_scores):
-            lines.append(f"| `{dv_id}` | {score:.2f} |")
+        lines.append("| Data View ID | Data View Name | Drift Score |")
+        lines.append("|--------------|----------------|------------:|")
+        for entry in _ranked_drift_entries(trending, limit=10):
+            dv_name = entry["data_view_name"] or ""
+            lines.append(f"| `{entry['data_view_id']}` | {dv_name} | {entry['drift_score']:.2f} |")
         lines.append("")
 
     return "\n".join(lines)
@@ -218,12 +257,18 @@ def _render_trending_html(trending: OrgReportTrending) -> str:
         <div class="card">
             <table>
                 <thead>
-                    <tr><th>Data View ID</th><th>Drift Score</th></tr>
+                    <tr><th>Data View ID</th><th>Data View Name</th><th>Drift Score</th></tr>
                 </thead>
                 <tbody>
 """
-        for dv_id, score in _top_drift_scores(trending.drift_scores):
-            html_out += f"                    <tr><td><code>{html.escape(dv_id)}</code></td><td>{score:.2f}</td></tr>\n"
+        for entry in _ranked_drift_entries(trending, limit=10):
+            html_out += (
+                "                    <tr>"
+                f"<td><code>{html.escape(entry['data_view_id'])}</code></td>"
+                f"<td>{html.escape(entry['data_view_name'] or '')}</td>"
+                f"<td>{entry['drift_score']:.2f}</td>"
+                "</tr>\n"
+            )
         html_out += """                </tbody>
             </table>
         </div>
@@ -1390,16 +1435,20 @@ def write_org_report_excel(
             if trending.drift_scores:
                 drift_start_row = len(trending_rows) + 3  # leave a gap
                 drift_data = [
-                    {"Data View ID": dv_id, "Drift Score": score}
-                    for dv_id, score in sorted(trending.drift_scores.items(), key=lambda x: -x[1])
+                    {
+                        "Data View ID": entry["data_view_id"],
+                        "Data View Name": entry["data_view_name"] or "",
+                        "Drift Score": entry["drift_score"],
+                    }
+                    for entry in _ranked_drift_entries(trending)
                 ]
                 drift_df = pd.DataFrame(drift_data)
                 drift_df.to_excel(writer, sheet_name="Trending", index=False, startrow=drift_start_row)
                 worksheet.conditional_format(
                     drift_start_row + 1,
-                    1,
+                    2,
                     drift_start_row + len(drift_data),
-                    1,
+                    2,
                     {
                         "type": "data_bar",
                         "bar_color": "#6D9EEB",
@@ -2186,8 +2235,12 @@ def write_org_report_csv(
         # Drift scores CSV
         if trending.drift_scores:
             drift_data = [
-                {"Data View ID": dv_id, "Drift Score": score}
-                for dv_id, score in sorted(trending.drift_scores.items(), key=lambda x: -x[1])
+                {
+                    "Data View ID": entry["data_view_id"],
+                    "Data View Name": entry["data_view_name"] or "",
+                    "Drift Score": entry["drift_score"],
+                }
+                for entry in _ranked_drift_entries(trending)
             ]
             drift_df = pd.DataFrame(drift_data)
             drift_path = csv_dir / "org_report_trending_drift.csv"
