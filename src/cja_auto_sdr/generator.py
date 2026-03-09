@@ -9241,6 +9241,85 @@ def _dispatch_snapshot_cli_modes(
     )
 
 
+def _dispatch_cross_data_view_diff_cli_mode(
+    args: argparse.Namespace,
+    *,
+    data_view_inputs: list[str],
+    ignore_fields: list[str] | None,
+    labels: tuple[str, str] | None,
+    show_only: list[str] | None,
+    keep_last_specified: bool,
+    keep_since_specified: bool,
+    run_state: dict[str, Any] | None = None,
+) -> None:
+    from cja_auto_sdr.diff.cli import dispatch_cross_data_view_diff_cli_mode as _impl
+
+    _impl(
+        args,
+        data_view_inputs=data_view_inputs,
+        ignore_fields=ignore_fields,
+        labels=labels,
+        show_only=show_only,
+        keep_last_specified=keep_last_specified,
+        keep_since_specified=keep_since_specified,
+        run_state=run_state,
+    )
+
+
+def _execute_sdr_processing_modes(
+    args: argparse.Namespace,
+    *,
+    data_views: list[str],
+    effective_log_level: str,
+    sdr_format: str,
+    processing_start_time: float,
+    workers_auto: bool,
+    quality_report_only: bool,
+    inventory_order: list[str],
+    api_tuning_config: Any,
+    circuit_breaker_config: Any,
+) -> dict[str, Any]:
+    from cja_auto_sdr.cli.execution import execute_sdr_processing_modes as _impl
+
+    return _impl(
+        args,
+        data_views=data_views,
+        effective_log_level=effective_log_level,
+        sdr_format=sdr_format,
+        processing_start_time=processing_start_time,
+        workers_auto=workers_auto,
+        quality_report_only=quality_report_only,
+        inventory_order=inventory_order,
+        api_tuning_config=api_tuning_config,
+        circuit_breaker_config=circuit_breaker_config,
+    )
+
+
+def _resolve_inventory_mode_configuration(args: argparse.Namespace, *, argv: list[str]) -> list[str]:
+    from cja_auto_sdr.cli.execution import resolve_inventory_mode_configuration as _impl
+
+    return _impl(args, argv=argv)
+
+
+def _dispatch_inventory_summary_mode(
+    args: argparse.Namespace,
+    *,
+    data_views: list[str],
+    effective_log_level: str,
+    inventory_order: list[str],
+    run_state: dict[str, Any] | None = None,
+) -> None:
+    from cja_auto_sdr.cli.execution import dispatch_inventory_summary_mode as _impl
+
+    _impl(
+        args,
+        data_views=data_views,
+        effective_log_level=effective_log_level,
+        inventory_order=inventory_order,
+        run_state=run_state,
+    )
+
+
 # ==================== MAIN FUNCTION ====================
 
 
@@ -10112,199 +10191,16 @@ def _main_impl(run_state: dict[str, Any] | None = None):
 
     # Handle --diff mode (compare two data views)
     if hasattr(args, "diff") and args.diff:
-        if len(data_view_inputs) != 2:
-            print(ConsoleColors.error("ERROR: --diff requires exactly 2 data view IDs or names"), file=sys.stderr)
-            print("Usage: cja_auto_sdr --diff DATA_VIEW_A DATA_VIEW_B", file=sys.stderr)
-            sys.exit(1)
-
-        # Check for conflicting options
-        if getattr(args, "metrics_only", False) and getattr(args, "dimensions_only", False):
-            print(ConsoleColors.error("ERROR: Cannot use both --metrics-only and --dimensions-only"), file=sys.stderr)
-            sys.exit(1)
-
-        # Check for inventory options (not supported in cross-DV diff - IDs are data-view-scoped)
-        # Inventory diff is only supported for same-data-view snapshot comparisons
-        if getattr(args, "include_derived_inventory", False):
-            print(
-                ConsoleColors.error("ERROR: --include-derived cannot be used with --diff (cross-data-view comparison)"),
-                file=sys.stderr,
-            )
-            print(
-                "Inventory IDs are data-view-scoped and cannot be matched across different data views.",
-                file=sys.stderr,
-            )
-            print(
-                "For same-data-view comparisons, use: --diff-snapshot, --compare-snapshots, or --compare-with-prev",
-                file=sys.stderr,
-            )
-            sys.exit(1)
-        if getattr(args, "include_calculated_metrics", False):
-            print(
-                ConsoleColors.error(
-                    "ERROR: --include-calculated cannot be used with --diff (cross-data-view comparison)",
-                ),
-                file=sys.stderr,
-            )
-            print(
-                "Inventory IDs are data-view-scoped and cannot be matched across different data views.",
-                file=sys.stderr,
-            )
-            print(
-                "For same-data-view comparisons, use: --diff-snapshot, --compare-snapshots, or --compare-with-prev",
-                file=sys.stderr,
-            )
-            sys.exit(1)
-        if getattr(args, "include_segments_inventory", False):
-            print(
-                ConsoleColors.error(
-                    "ERROR: --include-segments cannot be used with --diff (cross-data-view comparison)",
-                ),
-                file=sys.stderr,
-            )
-            print(
-                "Inventory IDs are data-view-scoped and cannot be matched across different data views.",
-                file=sys.stderr,
-            )
-            print(
-                "For same-data-view comparisons, use: --diff-snapshot, --compare-snapshots, or --compare-with-prev",
-                file=sys.stderr,
-            )
-            sys.exit(1)
-        if getattr(args, "inventory_only", False):
-            print(
-                ConsoleColors.error("ERROR: --inventory-only is only available in SDR mode, not with --diff"),
-                file=sys.stderr,
-            )
-            sys.exit(1)
-
-        # Resolve names to IDs if needed - resolve EACH identifier separately
-        # to ensure 1:1 mapping for diff comparison
-        temp_logger = logging.getLogger("name_resolution")
-        temp_logger.setLevel(logging.WARNING)
-
-        source_input = data_view_inputs[0]
-        target_input = data_view_inputs[1]
-
-        # Resolve source identifier
-        source_resolved, _source_map = resolve_data_view_names(
-            [source_input],
-            args.config_file,
-            temp_logger,
-            profile=getattr(args, "profile", None),
-            match_mode=getattr(args, "name_match", "exact"),
-        )
-        if not source_resolved:
-            print(ConsoleColors.error(f"ERROR: Could not resolve source data view: '{source_input}'"), file=sys.stderr)
-            sys.exit(1)
-        if len(source_resolved) > 1:
-            # Ambiguous - try interactive selection if in terminal
-            options = [(dv_id, f"{source_input} ({dv_id})") for dv_id in source_resolved]
-            selected = prompt_for_selection(
-                options,
-                f"Source name '{source_input}' matches {len(source_resolved)} data views. Please select one:",
-            )
-            if selected:
-                source_resolved = [selected]
-            else:
-                # Not interactive or user cancelled
-                print(
-                    ConsoleColors.error(
-                        f"ERROR: Source name '{source_input}' is ambiguous - matches {len(source_resolved)} data views:",
-                    ),
-                    file=sys.stderr,
-                )
-                for dv_id in source_resolved:
-                    print(f"  • {dv_id}", file=sys.stderr)
-                print("\nPlease specify the exact data view ID instead of the name.", file=sys.stderr)
-                sys.exit(1)
-
-        # Resolve target identifier
-        target_resolved, _target_map = resolve_data_view_names(
-            [target_input],
-            args.config_file,
-            temp_logger,
-            profile=getattr(args, "profile", None),
-            match_mode=getattr(args, "name_match", "exact"),
-        )
-        if not target_resolved:
-            print(ConsoleColors.error(f"ERROR: Could not resolve target data view: '{target_input}'"), file=sys.stderr)
-            sys.exit(1)
-        if len(target_resolved) > 1:
-            # Ambiguous - try interactive selection if in terminal
-            options = [(dv_id, f"{target_input} ({dv_id})") for dv_id in target_resolved]
-            selected = prompt_for_selection(
-                options,
-                f"Target name '{target_input}' matches {len(target_resolved)} data views. Please select one:",
-            )
-            if selected:
-                target_resolved = [selected]
-            else:
-                # Not interactive or user cancelled
-                print(
-                    ConsoleColors.error(
-                        f"ERROR: Target name '{target_input}' is ambiguous - matches {len(target_resolved)} data views:",
-                    ),
-                    file=sys.stderr,
-                )
-                for dv_id in target_resolved:
-                    print(f"  • {dv_id}", file=sys.stderr)
-                print("\nPlease specify the exact data view ID instead of the name.", file=sys.stderr)
-                sys.exit(1)
-
-        resolved_ids = [source_resolved[0], target_resolved[0]]
-        if run_state is not None:
-            run_state["resolved_data_views"] = list(resolved_ids)
-
-        # Default to console for diff commands
-        diff_format = args.format or "console"
-        success, has_changes, exit_code_override = handle_diff_command(
-            source_id=resolved_ids[0],
-            target_id=resolved_ids[1],
-            config_file=args.config_file,
-            output_format=diff_format,
-            output_dir=args.output_dir,
-            changes_only=getattr(args, "changes_only", False),
-            summary_only=getattr(args, "summary", False),
+        _dispatch_cross_data_view_diff_cli_mode(
+            args,
+            data_view_inputs=data_view_inputs,
             ignore_fields=ignore_fields,
             labels=labels,
-            quiet=args.quiet,
             show_only=show_only,
-            metrics_only=getattr(args, "metrics_only", False),
-            dimensions_only=getattr(args, "dimensions_only", False),
-            extended_fields=getattr(args, "extended_fields", False),
-            side_by_side=getattr(args, "side_by_side", False),
-            no_color=getattr(args, "no_color", False),
-            quiet_diff=getattr(args, "quiet_diff", False),
-            reverse_diff=getattr(args, "reverse_diff", False),
-            warn_threshold=getattr(args, "warn_threshold", None),
-            group_by_field=getattr(args, "group_by_field", False),
-            group_by_field_limit=getattr(args, "group_by_field_limit", 10),
-            diff_output=getattr(args, "diff_output", None),
-            format_pr_comment=getattr(args, "format_pr_comment", False),
-            auto_snapshot=getattr(args, "auto_snapshot", False),
-            auto_prune=getattr(args, "auto_prune", False),
-            snapshot_dir=getattr(args, "snapshot_dir", "./snapshots"),
-            keep_last=getattr(args, "keep_last", 0),
-            keep_since=getattr(args, "keep_since", None),
             keep_last_specified=keep_last_specified,
             keep_since_specified=keep_since_specified,
-            profile=getattr(args, "profile", None),
+            run_state=run_state,
         )
-        if run_state is not None:
-            run_state["output_format"] = diff_format
-            run_state["details"] = {
-                "operation_success": success,
-                "has_changes": has_changes,
-                "warn_threshold_exit_code": exit_code_override,
-            }
-
-        # Exit with code 3 if threshold exceeded, 2 if differences found, 0 if no changes
-        if success:
-            if exit_code_override is not None:
-                sys.exit(exit_code_override)
-            sys.exit(2 if has_changes else 0)
-        else:
-            sys.exit(1)
 
     # Validate that at least one data view is provided
     if not data_view_inputs:
@@ -10526,449 +10422,40 @@ def _main_impl(run_state: dict[str, Any] | None = None):
                 ),
             )
 
-    # Validate --inventory-only requires at least one --include-* flag
-    if getattr(args, "inventory_only", False):
-        has_inventory = (
-            getattr(args, "include_derived_inventory", False)
-            or getattr(args, "include_calculated_metrics", False)
-            or getattr(args, "include_segments_inventory", False)
-        )
-        if not has_inventory:
-            print(ConsoleColors.error("ERROR: --inventory-only requires at least one inventory flag"), file=sys.stderr)
-            print("Use: --include-derived, --include-calculated, and/or --include-segments", file=sys.stderr)
-            print("\nExample: cja_auto_sdr dv_12345 --include-segments --inventory-only", file=sys.stderr)
-            sys.exit(1)
-
-    # Validate --inventory-summary requires at least one --include-* flag and is mutually exclusive with --inventory-only
-    # Determine inventory order based on CLI argument order (used for both sheets and summaries)
-    inventory_order = []
-    if (
-        getattr(args, "include_derived_inventory", False)
-        or getattr(args, "include_calculated_metrics", False)
-        or getattr(args, "include_segments_inventory", False)
-    ):
-        # Check which flag appears first in sys.argv
-        derived_pos = None
-        calculated_pos = None
-        segments_pos = None
-        for i, arg in enumerate(sys.argv):
-            if arg == "--include-derived" and derived_pos is None:
-                derived_pos = i
-            elif arg == "--include-calculated" and calculated_pos is None:
-                calculated_pos = i
-            elif arg == "--include-segments" and segments_pos is None:
-                segments_pos = i
-
-        # Build order based on position
-        positions = []
-        if derived_pos is not None:
-            positions.append(("derived", derived_pos))
-        if calculated_pos is not None:
-            positions.append(("calculated", calculated_pos))
-        if segments_pos is not None:
-            positions.append(("segments", segments_pos))
-
-        # Sort by position and extract names
-        positions.sort(key=lambda x: x[1])
-        inventory_order = [name for name, _ in positions]
-
-    if getattr(args, "inventory_summary", False):
-        has_inventory = (
-            getattr(args, "include_derived_inventory", False)
-            or getattr(args, "include_calculated_metrics", False)
-            or getattr(args, "include_segments_inventory", False)
-        )
-        if not has_inventory:
-            print(
-                ConsoleColors.error("ERROR: --inventory-summary requires at least one inventory flag"),
-                file=sys.stderr,
-            )
-            print("Use: --include-derived, --include-calculated, and/or --include-segments", file=sys.stderr)
-            print("\nExample: cja_auto_sdr dv_12345 --include-segments --inventory-summary", file=sys.stderr)
-            sys.exit(1)
-        if getattr(args, "inventory_only", False):
-            print(
-                ConsoleColors.error("ERROR: --inventory-summary cannot be used with --inventory-only"),
-                file=sys.stderr,
-            )
-            print(
-                "Use --inventory-summary alone for quick stats, or --inventory-only for inventory sheets without full SDR.",
-                file=sys.stderr,
-            )
-            sys.exit(1)
+    inventory_order = _resolve_inventory_mode_configuration(args, argv=list(sys.argv))
 
     # Handle --inventory-summary mode (quick stats without full output)
     if getattr(args, "inventory_summary", False):
-        # Determine output format for summary
-        summary_format = args.format if args.format in ("json", "all") else "console"
-        if run_state is not None:
-            run_state["output_format"] = summary_format
-            run_state["details"] = {"operation_success": True}
-
-        if len(data_views) > 1:
-            # Process multiple data views in summary mode
-            for dv_id in data_views:
-                process_inventory_summary(
-                    data_view_id=dv_id,
-                    config_file=args.config_file,
-                    output_dir=args.output_dir,
-                    log_level=effective_log_level,
-                    log_format=args.log_format,
-                    output_format=summary_format,
-                    quiet=args.quiet,
-                    profile=getattr(args, "profile", None),
-                    include_derived=getattr(args, "include_derived_inventory", False),
-                    include_calculated=getattr(args, "include_calculated_metrics", False),
-                    include_segments=getattr(args, "include_segments_inventory", False),
-                    inventory_order=inventory_order,
-                )
-                print()  # Blank line between data views
-        else:
-            # Single data view
-            process_inventory_summary(
-                data_view_id=data_views[0],
-                config_file=args.config_file,
-                output_dir=args.output_dir,
-                log_level=effective_log_level,
-                log_format=args.log_format,
-                output_format=summary_format,
-                quiet=args.quiet,
-                profile=getattr(args, "profile", None),
-                include_derived=getattr(args, "include_derived_inventory", False),
-                include_calculated=getattr(args, "include_calculated_metrics", False),
-                include_segments=getattr(args, "include_segments_inventory", False),
-                inventory_order=inventory_order,
-            )
-        sys.exit(0)
+        _dispatch_inventory_summary_mode(
+            args,
+            data_views=data_views,
+            effective_log_level=effective_log_level,
+            inventory_order=inventory_order,
+            run_state=run_state,
+        )
 
     successful_results: list[ProcessingResult] = []
     quality_report_results: list[ProcessingResult] = []
     processed_results: list[ProcessingResult] = []
     overall_failure = False
     processing_failures_detected = False
-
-    if quality_report_only:
-        if not args.quiet:
-            print(ConsoleColors.info(f"Validating data quality for {len(data_views)} data view(s)..."))
-            print()
-
-        for dv_id in data_views:
-            result = process_single_dataview(
-                dv_id,
-                config_file=args.config_file,
-                output_dir=args.output_dir,
-                log_level=effective_log_level,
-                log_format=args.log_format,
-                output_format=sdr_format,
-                enable_cache=args.enable_cache,
-                cache_size=args.cache_size,
-                cache_ttl=args.cache_ttl,
-                quiet=args.quiet,
-                skip_validation=args.skip_validation,
-                max_issues=args.max_issues,
-                clear_cache=args.clear_cache,
-                show_timings=args.show_timings,
-                metrics_only=getattr(args, "metrics_only", False),
-                dimensions_only=getattr(args, "dimensions_only", False),
-                profile=getattr(args, "profile", None),
-                api_tuning_config=api_tuning_config,
-                circuit_breaker_config=circuit_breaker_config,
-                include_derived_inventory=False,
-                include_calculated_metrics=False,
-                include_segments_inventory=False,
-                inventory_only=False,
-                inventory_order=None,
-                quality_report_only=True,
-                allow_partial=getattr(args, "allow_partial", False),
-                production_mode=args.production,
-            )
-            quality_report_results.append(result)
-            processed_results.append(result)
-
-            if result.success:
-                successful_results.append(result)
-                if not args.quiet:
-                    print(
-                        ConsoleColors.success(
-                            f"✓ {result.data_view_name} ({result.data_view_id}): {result.dq_issues_count} issues",
-                        ),
-                    )
-            else:
-                # Quality report mode should still fail overall if any DV fails,
-                # even when --continue-on-error is used to keep processing.
-                overall_failure = True
-                processing_failures_detected = True
-                print(ConsoleColors.error(f"FAILED: {result.data_view_id} - {result.error_message}"), file=sys.stderr)
-                if not args.continue_on_error:
-                    break
-
-        if not args.quiet:
-            total_runtime = time.time() - processing_start_time
-            print()
-            print(ConsoleColors.bold(f"Total runtime: {total_runtime:.1f}s"))
-
-    elif args.batch or len(data_views) > 1:
-        # Batch mode - parallel processing
-
-        # Apply auto-detection for workers if requested
-        if workers_auto:
-            args.workers = auto_detect_workers(num_data_views=len(data_views))
-            if not args.quiet:
-                cpu_count = os.cpu_count() or 4
-                print(
-                    ConsoleColors.info(
-                        f"Auto-detected workers: {args.workers} (based on {cpu_count} CPU cores, {len(data_views)} data views)",
-                    ),
-                )
-
-        if not args.quiet:
-            print(
-                ConsoleColors.info(
-                    f"Processing {len(data_views)} data view(s) in batch mode with {args.workers} workers...",
-                ),
-            )
-            print()
-
-        processor = BatchProcessor(
-            config_file=args.config_file,
-            output_dir=args.output_dir,
-            workers=args.workers,
-            continue_on_error=args.continue_on_error,
-            log_level=effective_log_level,
-            log_format=args.log_format,
-            output_format=sdr_format,
-            enable_cache=args.enable_cache,
-            cache_size=args.cache_size,
-            cache_ttl=args.cache_ttl,
-            quiet=args.quiet,
-            skip_validation=args.skip_validation,
-            max_issues=args.max_issues,
-            clear_cache=args.clear_cache,
-            show_timings=args.show_timings,
-            metrics_only=getattr(args, "metrics_only", False),
-            dimensions_only=getattr(args, "dimensions_only", False),
-            profile=getattr(args, "profile", None),
-            shared_cache=getattr(args, "shared_cache", False),
-            api_tuning_config=api_tuning_config,
-            circuit_breaker_config=circuit_breaker_config,
-            include_derived_inventory=getattr(args, "include_derived_inventory", False),
-            include_calculated_metrics=getattr(args, "include_calculated_metrics", False),
-            include_segments_inventory=getattr(args, "include_segments_inventory", False),
-            inventory_only=getattr(args, "inventory_only", False),
-            inventory_order=inventory_order or None,
-            quality_report_only=quality_report_only,
-            allow_partial=getattr(args, "allow_partial", False),
-            production_mode=args.production,
-        )
-
-        results = processor.process_batch(data_views)
-        successful_results = list(results.get("successful", []))
-        processed_results = successful_results + list(results.get("failed", []))
-
-        # Print total runtime
-        total_runtime = time.time() - processing_start_time
-        print()
-        print(ConsoleColors.bold(f"Total runtime: {total_runtime:.1f}s"))
-
-        # Handle --open flag for batch mode (open all successful files)
-        if getattr(args, "open", False) and results.get("successful") and not quality_report_only:
-            files_to_open = []
-            for success_info in results["successful"]:
-                files_to_open.extend(_result_output_paths(success_info))
-
-            if files_to_open:
-                print()
-                print(f"Opening {len(files_to_open)} file(s)...")
-                for file_path in files_to_open:
-                    if not open_file_in_default_app(file_path):
-                        print(ConsoleColors.warning(f"  Could not open: {file_path}"))
-
-        # Track processing failures separately for exit-code precedence logic.
-        processing_failures_detected = bool(results.get("failed"))
-
-        # Exit with error code if any failed (unless continue-on-error)
-        overall_failure = bool(results["failed"] and not args.continue_on_error)
-
-    else:
-        # Single mode - process one data view
-        if not args.quiet:
-            print(ConsoleColors.info(f"Processing data view: {data_views[0]}"))
-            print()
-
-        result = process_single_dataview(
-            data_views[0],
-            config_file=args.config_file,
-            output_dir=args.output_dir,
-            log_level=effective_log_level,
-            log_format=args.log_format,
-            output_format=sdr_format,
-            enable_cache=args.enable_cache,
-            cache_size=args.cache_size,
-            cache_ttl=args.cache_ttl,
-            quiet=args.quiet,
-            skip_validation=args.skip_validation,
-            max_issues=args.max_issues,
-            clear_cache=args.clear_cache,
-            show_timings=args.show_timings,
-            metrics_only=getattr(args, "metrics_only", False),
-            dimensions_only=getattr(args, "dimensions_only", False),
-            profile=getattr(args, "profile", None),
-            api_tuning_config=api_tuning_config,
-            circuit_breaker_config=circuit_breaker_config,
-            include_derived_inventory=getattr(args, "include_derived_inventory", False),
-            include_calculated_metrics=getattr(args, "include_calculated_metrics", False),
-            include_segments_inventory=getattr(args, "include_segments_inventory", False),
-            inventory_only=getattr(args, "inventory_only", False),
-            inventory_order=inventory_order or None,
-            quality_report_only=quality_report_only,
-            allow_partial=getattr(args, "allow_partial", False),
-            production_mode=args.production,
-        )
-        processed_results = [result]
-
-        # Print final status with color and total runtime
-        total_runtime = time.time() - processing_start_time
-        print()
-        if result.success:
-            successful_results = [result]
-            if quality_report_only:
-                print(ConsoleColors.success(f"SUCCESS: Quality validation completed for {result.data_view_name}"))
-                print(f"  Metrics: {result.metrics_count}, Dimensions: {result.dimensions_count}")
-                print(f"  Data Quality Issues: {result.dq_issues_count}")
-            else:
-                print(ConsoleColors.success(f"SUCCESS: SDR generated for {result.data_view_name}"))
-                if len(result.emitted_output_files) > 1:
-                    print(f"  Outputs: {len(result.emitted_output_files)} files")
-                    for file_path in result.emitted_output_files:
-                        print(f"    - {file_path}")
-                else:
-                    print(f"  Output: {result.output_file}")
-                print(f"  Size: {result.file_size_formatted}")
-                print(f"  Metrics: {result.metrics_count}, Dimensions: {result.dimensions_count}")
-                if result.dq_issues_count > 0:
-                    print(ConsoleColors.warning(f"  Data Quality Issues: {result.dq_issues_count}"))
-
-                # Display inventory summary if any inventory was requested
-                include_segs = getattr(args, "include_segments_inventory", False)
-                include_calc = getattr(args, "include_calculated_metrics", False)
-                include_derived = getattr(args, "include_derived_inventory", False)
-
-                if include_segs or include_calc or include_derived:
-                    inv_parts = []
-                    # Use inventory_order to maintain consistent ordering with sheets
-                    inv_order = inventory_order or ["segments", "calculated", "derived"]
-                    for inv_type in inv_order:
-                        if inv_type == "segments" and include_segs:
-                            seg_str = f"Segments: {result.segments_count}"
-                            if result.segments_high_complexity > 0:
-                                seg_str += f" ({result.segments_high_complexity} high-complexity)"
-                            inv_parts.append(seg_str)
-                        elif inv_type == "calculated" and include_calc:
-                            calc_str = f"Calculated Metrics: {result.calculated_metrics_count}"
-                            if result.calculated_metrics_high_complexity > 0:
-                                calc_str += f" ({result.calculated_metrics_high_complexity} high-complexity)"
-                            inv_parts.append(calc_str)
-                        elif inv_type == "derived" and include_derived:
-                            derived_str = f"Derived Fields: {result.derived_fields_count}"
-                            if result.derived_fields_high_complexity > 0:
-                                derived_str += f" ({result.derived_fields_high_complexity} high-complexity)"
-                            inv_parts.append(derived_str)
-
-                    if inv_parts:
-                        print(f"  Inventory: {', '.join(inv_parts)}")
-
-                    # Warn about high-complexity items
-                    if result.total_high_complexity > 0:
-                        print(
-                            ConsoleColors.warning(
-                                f"  ⚠ {result.total_high_complexity} high-complexity items (≥75) - review recommended",
-                            ),
-                        )
-
-                # Handle --git-commit for single mode
-                if getattr(args, "git_commit", False):
-                    print()
-                    git_dir = Path(getattr(args, "git_dir", "./sdr-snapshots"))
-
-                    # Initialize repo if needed
-                    if not is_git_repository(git_dir):
-                        print(f"Initializing Git repository at: {git_dir}")
-                        init_success, init_msg = git_init_snapshot_repo(git_dir)
-                        if not init_success:
-                            print(ConsoleColors.error(f"Git init failed: {init_msg}"))
-                        else:
-                            print(ConsoleColors.success("  Repository initialized"))
-
-                    # Create snapshot for Git
-                    # Check if inventory flags are set
-                    include_calc = getattr(args, "include_calculated_metrics", False)
-                    include_segs = getattr(args, "include_segments_inventory", False)
-
-                    snapshot = DataViewSnapshot(
-                        data_view_id=result.data_view_id,
-                        data_view_name=result.data_view_name,
-                        metrics=result.metrics_data if hasattr(result, "metrics_data") else [],
-                        dimensions=result.dimensions_data if hasattr(result, "dimensions_data") else [],
-                    )
-
-                    snapshot = _refetch_git_snapshot_for_commit(
-                        snapshot=snapshot,
-                        data_view_id=result.data_view_id,
-                        config_file=args.config_file,
-                        profile=getattr(args, "profile", None),
-                        include_calculated_metrics=include_calc,
-                        include_segments_inventory=include_segs,
-                    )
-
-                    # Save Git-friendly snapshot
-                    print(f"Saving snapshot to: {git_dir}")
-                    save_git_friendly_snapshot(
-                        snapshot=snapshot,
-                        output_dir=git_dir,
-                        quality_issues=result.dq_issues if hasattr(result, "dq_issues") else None,
-                    )
-
-                    # Commit to Git
-                    git_push = getattr(args, "git_push", False)
-                    git_message = getattr(args, "git_message", None)
-
-                    commit_success, commit_result = git_commit_snapshot(
-                        snapshot_dir=git_dir,
-                        data_view_id=result.data_view_id,
-                        data_view_name=result.data_view_name,
-                        metrics_count=result.metrics_count,
-                        dimensions_count=result.dimensions_count,
-                        quality_issues=result.dq_issues if hasattr(result, "dq_issues") else None,
-                        custom_message=git_message,
-                        push=git_push,
-                    )
-
-                    if commit_success:
-                        if commit_result == "no_changes":
-                            print(ConsoleColors.info("  No changes to commit (snapshot unchanged)"))
-                        else:
-                            print(ConsoleColors.success(f"  Committed: {commit_result}"))
-                            if git_push:
-                                print(ConsoleColors.success("  Pushed to remote"))
-                    else:
-                        print(ConsoleColors.error(f"  Git commit failed: {commit_result}"))
-
-                # Handle --open flag for single mode
-                if getattr(args, "open", False) and result.emitted_output_files:
-                    print()
-                    if len(result.emitted_output_files) == 1:
-                        print("Opening file...")
-                    else:
-                        print(f"Opening {len(result.emitted_output_files)} file(s)...")
-                    for file_path in result.emitted_output_files:
-                        if not open_file_in_default_app(file_path):
-                            print(ConsoleColors.warning(f"  Could not open: {file_path}"))
-        else:
-            print(ConsoleColors.error(f"FAILED: {result.error_message}"))
-            overall_failure = True
-            processing_failures_detected = True
-
-        print(ConsoleColors.bold(f"Total runtime: {total_runtime:.1f}s"))
+    execution_result = _execute_sdr_processing_modes(
+        args,
+        data_views=data_views,
+        effective_log_level=effective_log_level,
+        sdr_format=sdr_format,
+        processing_start_time=processing_start_time,
+        workers_auto=workers_auto,
+        quality_report_only=quality_report_only,
+        inventory_order=inventory_order,
+        api_tuning_config=api_tuning_config,
+        circuit_breaker_config=circuit_breaker_config,
+    )
+    successful_results = list(execution_result["successful_results"])
+    quality_report_results = list(execution_result["quality_report_results"])
+    processed_results = list(execution_result["processed_results"])
+    overall_failure = bool(execution_result["overall_failure"])
+    processing_failures_detected = bool(execution_result["processing_failures_detected"])
 
     all_quality_issues = aggregate_quality_issues(successful_results)
     if run_state is not None:
