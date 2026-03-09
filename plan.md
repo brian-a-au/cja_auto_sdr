@@ -22,6 +22,11 @@ Implemented on the current PR branch:
 - Quality-report, batch, and single-data-view SDR execution extraction to `cli/execution.py` with generator-compatible forwarding preserved.
 - Inventory-order resolution plus `--inventory-summary` validation/dispatch extraction to `cli/execution.py` with generator-compatible forwarding preserved.
 - Remaining SDR preflight/setup orchestration extraction to `cli/execution.py`, including large-batch confirmation, dry-run dispatch, output/format validation, API tuning/circuit-breaker setup, and inventory-summary preflight dispatch, with generator-compatible forwarding preserved.
+- Pipeline models and batch orchestration activation:
+  - `ProcessingResult`, `WorkerArgs`, `ProcessingConfig`, and `BatchConfig` now live in `pipeline/models.py`
+  - `process_single_dataview_worker()` now lives in `pipeline/workers.py`
+  - `BatchProcessor` now lives in `pipeline/batch.py`
+  - `pipeline/single.py` and `pipeline/dry_run.py` now provide real wrapper modules so the `pipeline` package imports resolve without generator-owned lazy stubs
 - `_main_impl()` reduced further by moving config/status, interactive, stats, and org-report branch orchestration into `_dispatch_post_validation_report_modes()`.
 - Follow-up PR maintenance commits landed for continued decomposition and CI stabilization:
   - `6e78359` Continue generator decomposition for v3.4.0
@@ -51,6 +56,12 @@ Implemented on the current PR branch:
   - `uv run ruff format --check src/cja_auto_sdr/cli/execution.py src/cja_auto_sdr/generator.py tests/test_cli_execution.py`
   - `PYTHONPATH=src uv run pytest -q tests/test_cli_execution.py tests/test_main_impl_cli_coverage.py tests/test_cli.py tests/test_quality_policy_and_run_summary.py`
   - `PYTHONPATH=src uv run pytest tests/ -q`
+- Current working tree validation is green after the pipeline batch/models extraction:
+  - `uv run ruff check src/cja_auto_sdr/pipeline/models.py src/cja_auto_sdr/pipeline/workers.py src/cja_auto_sdr/pipeline/batch.py src/cja_auto_sdr/pipeline/single.py src/cja_auto_sdr/pipeline/dry_run.py src/cja_auto_sdr/generator.py`
+  - `uv run ruff format --check src/cja_auto_sdr/pipeline/models.py src/cja_auto_sdr/pipeline/workers.py src/cja_auto_sdr/pipeline/batch.py src/cja_auto_sdr/pipeline/single.py src/cja_auto_sdr/pipeline/dry_run.py src/cja_auto_sdr/generator.py`
+  - `PYTHONPATH=src uv run pytest -q tests/test_batch_processor.py tests/test_process_single_dataview.py tests/test_discovery_formatters.py tests/test_lazy_forwarding.py tests/test_main_impl_coverage.py tests/test_generator_remaining_coverage.py`
+  - `PYTHONPATH=src uv run pytest -q tests/test_cli.py tests/test_main_impl_cli_coverage.py tests/test_cli_execution.py tests/test_quality_policy_and_run_summary.py tests/test_cli_smoke_modes.py tests/test_ux_features.py`
+  - `PYTHONPATH=src uv run pytest tests/ -q`
 - Full local CI-equivalent validation is green on the current working tree:
   - `uv run ruff check src/ tests/ scripts/check_version_sync.py scripts/update_test_counts.py`
   - `uv run ruff format --check src/ tests/ scripts/check_version_sync.py scripts/update_test_counts.py`
@@ -65,9 +76,10 @@ Implemented on the current PR branch:
 Still open or only partially covered:
 
 - Broader `generator.py` decomposition beyond the writer/list/quality-policy/profile/interactive/config/stats/diff-handler extractions already landed on this branch.
-- `generator.py` is still ~10.5k LOC after the current extractions, so the decomposition goal is only partially complete.
+- `generator.py` is still ~9.9k LOC after the current extractions, so the decomposition goal is only partially complete.
 - Most of the remaining bulk is still concentrated in:
-  - shared SDR processing/batch orchestration
+  - single-data-view processing (`process_single_dataview()`)
+  - dry-run orchestration (`run_dry_run()`)
   - compatibility wrappers still living in `generator.py`
 
 ## Pending / open to do
@@ -95,7 +107,7 @@ Still open or only partially covered:
   - [x] Extract remaining SDR preflight validation and setup orchestration out of `_main_impl()`
 - [x] After the next extraction slice, rerun a broader local validation pass (`ruff`, format check, targeted pytest slices, then full pytest if changes touch shared dispatch paths).
 - [x] Run/monitor remote PR CI on the latest pushed refactor commit and fix any failures if branch-only issues appear.
-- [ ] Continue decomposing shared SDR processing/batch orchestration out of `generator.py` while preserving generator-level import/test compatibility.
+- [ ] Continue decomposing single-data-view processing and dry-run orchestration out of `generator.py` while preserving generator-level import/test compatibility.
 - [ ] Reduce remaining `generator.py` compatibility wrappers where safe, without breaking the v3.4.0 public surface.
 
 Should add to the backlog:
