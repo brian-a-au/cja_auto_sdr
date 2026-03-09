@@ -25,6 +25,8 @@ from cja_auto_sdr.org.models import (
     OrgReportComparison,
     OrgReportConfig,
     OrgReportResult,
+    OrgReportTrending,
+    TrendingSnapshot,
 )
 
 __all__ = [
@@ -47,6 +49,195 @@ __all__ = [
 ]
 
 
+def _format_trending_timestamp_short(ts: str) -> str:
+    """Format an ISO timestamp to a short month-day label like 'Jan 12'."""
+    try:
+        dt = datetime.fromisoformat(ts)
+        return dt.strftime("%b %d")
+    except (ValueError, AttributeError):
+        return ts[:10]
+
+
+def _trending_date_range(snapshots: list[TrendingSnapshot]) -> str:
+    """Return 'first_label -> last_label' for a list of snapshots."""
+    if not snapshots:
+        return ""
+    first = _format_trending_timestamp_short(snapshots[0].timestamp)
+    last = _format_trending_timestamp_short(snapshots[-1].timestamp)
+    return f"{first} \u2192 {last}"
+
+
+def _render_trending_console(trending: OrgReportTrending) -> str:
+    """Render a multi-period trending table and drift list for console output."""
+    lines: list[str] = []
+    snapshots = trending.snapshots
+    if len(snapshots) < 2:
+        return ""
+
+    date_range = _trending_date_range(snapshots)
+    lines.append("")
+    lines.append("\u2550" * 56)
+    lines.append(f"TRENDING ({len(snapshots)} snapshots, {date_range})")
+    lines.append("\u2550" * 56)
+
+    # Column headers
+    col_labels = [_format_trending_timestamp_short(s.timestamp) for s in snapshots]
+    header = f"{'':20s}" + "".join(f"{lbl:>9s}" for lbl in col_labels)
+    lines.append(header)
+
+    # Metric rows
+    metric_rows = [
+        ("Data Views", [s.data_view_count for s in snapshots]),
+        ("Components", [s.component_count for s in snapshots]),
+        ("Core", [s.core_count for s in snapshots]),
+        ("Isolated", [s.isolated_count for s in snapshots]),
+        ("High-Sim Pairs", [s.high_sim_pair_count for s in snapshots]),
+    ]
+    for label, values in metric_rows:
+        row = f"{label:20s}" + "".join(f"{v:>9d}" for v in values)
+        lines.append(row)
+
+    # Drift scores
+    if trending.drift_scores:
+        lines.append("")
+        lines.append("Top Drift:")
+        sorted_drift = sorted(trending.drift_scores.items(), key=lambda x: -x[1])
+        for dv_id, score in sorted_drift[:10]:
+            lines.append(f"  \u25b8 {dv_id:<40s} {score:.2f}")
+
+    return "\n".join(lines)
+
+
+def _trending_snapshots_to_dicts(trending: OrgReportTrending) -> dict[str, Any]:
+    """Convert trending data to a JSON-serializable dict."""
+    return {
+        "window_size": trending.window_size,
+        "snapshots": [
+            {
+                "timestamp": s.timestamp,
+                "data_view_count": s.data_view_count,
+                "component_count": s.component_count,
+                "core_count": s.core_count,
+                "isolated_count": s.isolated_count,
+                "high_sim_pair_count": s.high_sim_pair_count,
+            }
+            for s in trending.snapshots
+        ],
+        "deltas": [
+            {
+                "from_timestamp": d.from_timestamp,
+                "to_timestamp": d.to_timestamp,
+                "data_view_delta": d.data_view_delta,
+                "component_delta": d.component_delta,
+                "core_delta": d.core_delta,
+                "isolated_delta": d.isolated_delta,
+                "high_sim_pair_delta": d.high_sim_pair_delta,
+            }
+            for d in trending.deltas
+        ],
+        "drift_scores": trending.drift_scores,
+    }
+
+
+def _render_trending_markdown(trending: OrgReportTrending) -> str:
+    """Render a trending section for Markdown output."""
+    snapshots = trending.snapshots
+    if len(snapshots) < 2:
+        return ""
+
+    lines: list[str] = []
+    date_range = _trending_date_range(snapshots)
+    lines.append(f"## Trending ({len(snapshots)} snapshots, {date_range})")
+    lines.append("")
+
+    # Table header
+    col_labels = [_format_trending_timestamp_short(s.timestamp) for s in snapshots]
+    header = "| Metric | " + " | ".join(col_labels) + " |"
+    separator = "|--------|" + "|".join("---------:" for _ in col_labels) + "|"
+    lines.append(header)
+    lines.append(separator)
+
+    metric_rows = [
+        ("Data Views", [s.data_view_count for s in snapshots]),
+        ("Components", [s.component_count for s in snapshots]),
+        ("Core", [s.core_count for s in snapshots]),
+        ("Isolated", [s.isolated_count for s in snapshots]),
+        ("High-Sim Pairs", [s.high_sim_pair_count for s in snapshots]),
+    ]
+    for label, values in metric_rows:
+        row = f"| {label} | " + " | ".join(str(v) for v in values) + " |"
+        lines.append(row)
+
+    lines.append("")
+
+    if trending.drift_scores:
+        lines.append("### Top Drift Scores")
+        lines.append("")
+        lines.append("| Data View ID | Drift Score |")
+        lines.append("|--------------|------------:|")
+        sorted_drift = sorted(trending.drift_scores.items(), key=lambda x: -x[1])
+        for dv_id, score in sorted_drift[:10]:
+            lines.append(f"| `{dv_id}` | {score:.2f} |")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+def _render_trending_html(trending: OrgReportTrending) -> str:
+    """Render a trending section for HTML output."""
+    snapshots = trending.snapshots
+    if len(snapshots) < 2:
+        return ""
+
+    date_range = _trending_date_range(snapshots)
+    col_labels = [html.escape(_format_trending_timestamp_short(s.timestamp)) for s in snapshots]
+
+    html_out = f"""
+        <h2>Trending ({len(snapshots)} snapshots, {html.escape(date_range)})</h2>
+        <div class="card">
+            <table>
+                <thead>
+                    <tr><th>Metric</th>{"".join(f"<th>{lbl}</th>" for lbl in col_labels)}</tr>
+                </thead>
+                <tbody>
+"""
+    metric_rows = [
+        ("Data Views", [s.data_view_count for s in snapshots]),
+        ("Components", [s.component_count for s in snapshots]),
+        ("Core", [s.core_count for s in snapshots]),
+        ("Isolated", [s.isolated_count for s in snapshots]),
+        ("High-Sim Pairs", [s.high_sim_pair_count for s in snapshots]),
+    ]
+    for label, values in metric_rows:
+        cells = "".join(f"<td>{v}</td>" for v in values)
+        html_out += f"                    <tr><td>{html.escape(label)}</td>{cells}</tr>\n"
+
+    html_out += """                </tbody>
+            </table>
+        </div>
+"""
+
+    if trending.drift_scores:
+        html_out += """
+        <h3>Top Drift Scores</h3>
+        <div class="card">
+            <table>
+                <thead>
+                    <tr><th>Data View ID</th><th>Drift Score</th></tr>
+                </thead>
+                <tbody>
+"""
+        sorted_drift = sorted(trending.drift_scores.items(), key=lambda x: -x[1])
+        for dv_id, score in sorted_drift[:10]:
+            html_out += f"                    <tr><td><code>{html.escape(dv_id)}</code></td><td>{score:.2f}</td></tr>\n"
+        html_out += """                </tbody>
+            </table>
+        </div>
+"""
+
+    return html_out
+
+
 def _render_distribution_bar(count: int, total: int, width: int = 30) -> str:
     """Render ASCII progress bar for distribution visualization.
 
@@ -67,13 +258,19 @@ def _render_distribution_bar(count: int, total: int, width: int = 30) -> str:
     return f"{bar} {pct * 100:>3.0f}%"
 
 
-def write_org_report_console(result: OrgReportResult, config: OrgReportConfig, quiet: bool = False) -> None:
+def write_org_report_console(
+    result: OrgReportResult,
+    config: OrgReportConfig,
+    quiet: bool = False,
+    trending: OrgReportTrending | None = None,
+) -> None:
     """Write org report to console with ASCII distribution bars.
 
     Args:
         result: OrgReportResult from analysis
         config: OrgReportConfig used for analysis
         quiet: Suppress decorative output
+        trending: Optional trending data to append
     """
     if quiet:
         return
@@ -410,6 +607,11 @@ def write_org_report_console(result: OrgReportResult, config: OrgReportConfig, q
 
         print()
 
+    # Trending section (v3.4.0)
+    if trending is not None and len(trending.snapshots) >= 2:
+        print(_render_trending_console(trending))
+        print()
+
 
 def write_org_report_stats_only(result: OrgReportResult, quiet: bool = False) -> None:
     """Write minimal org-report stats to console (Feature 2: --org-stats mode).
@@ -619,10 +821,13 @@ def _flatten_recommendation_for_tabular(rec: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def build_org_report_json_data(result: OrgReportResult) -> dict[str, Any]:
+def build_org_report_json_data(
+    result: OrgReportResult,
+    trending: OrgReportTrending | None = None,
+) -> dict[str, Any]:
     """Build org report JSON payload."""
     effective_overlap_threshold = min(result.parameters.overlap_threshold, 0.9)
-    return {
+    data: dict[str, Any] = {
         "report_type": "org_analysis",
         "version": "1.0",
         "generated_at": result.timestamp,
@@ -771,6 +976,9 @@ def build_org_report_json_data(result: OrgReportResult) -> dict[str, Any]:
         "owner_summary": result.owner_summary,
         "stale_components": result.stale_components,
     }
+    if trending is not None and len(trending.snapshots) >= 2:
+        data["trending"] = _trending_snapshots_to_dicts(trending)
+    return data
 
 
 def write_org_report_json(
@@ -778,6 +986,7 @@ def write_org_report_json(
     output_path: Path | None,
     output_dir: str,
     logger: logging.Logger,
+    trending: OrgReportTrending | None = None,
 ) -> str:
     """Write org report as structured JSON.
 
@@ -786,6 +995,7 @@ def write_org_report_json(
         output_path: Optional specific output path
         output_dir: Output directory if no path specified
         logger: Logger instance
+        trending: Optional trending data to include
 
     Returns:
         Path to created JSON file
@@ -796,7 +1006,7 @@ def write_org_report_json(
         timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
         file_path = Path(output_dir) / f"org_report_{result.org_id}_{timestamp}.json"
 
-    json_data = build_org_report_json_data(result)
+    json_data = build_org_report_json_data(result, trending=trending)
 
     # Write JSON
     file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -812,6 +1022,7 @@ def write_org_report_excel(
     output_path: Path | None,
     output_dir: str,
     logger: logging.Logger,
+    trending: OrgReportTrending | None = None,
 ) -> str:
     """Write org report as multi-sheet Excel workbook.
 
@@ -822,12 +1033,14 @@ def write_org_report_excel(
     - Distribution: Component distribution breakdown
     - Similarity: High-overlap pairs
     - Recommendations: Actionable items
+    - Trending: Multi-snapshot trending data (if provided)
 
     Args:
         result: OrgReportResult from analysis
         output_path: Optional specific output path
         output_dir: Output directory if no path specified
         logger: Logger instance
+        trending: Optional trending data to include
 
     Returns:
         Path to created Excel file
@@ -1136,6 +1349,37 @@ def write_org_report_excel(
             worksheet.set_column("J:Q", 14)
             worksheet.set_column("R:R", 40)
 
+        # Sheet 7: Trending (v3.4.0)
+        if trending is not None and len(trending.snapshots) >= 2:
+            # Snapshot metrics table (transposed: metrics as rows, timestamps as columns)
+            snapshots = trending.snapshots
+            col_labels = [_format_trending_timestamp_short(s.timestamp) for s in snapshots]
+            trending_rows = [
+                {"Metric": "Data Views", **{lbl: s.data_view_count for lbl, s in zip(col_labels, snapshots, strict=True)}},
+                {"Metric": "Components", **{lbl: s.component_count for lbl, s in zip(col_labels, snapshots, strict=True)}},
+                {"Metric": "Core", **{lbl: s.core_count for lbl, s in zip(col_labels, snapshots, strict=True)}},
+                {"Metric": "Isolated", **{lbl: s.isolated_count for lbl, s in zip(col_labels, snapshots, strict=True)}},
+                {"Metric": "High-Sim Pairs", **{lbl: s.high_sim_pair_count for lbl, s in zip(col_labels, snapshots, strict=True)}},
+            ]
+            trending_df = pd.DataFrame(trending_rows)
+            trending_df.to_excel(writer, sheet_name="Trending", index=False)
+            worksheet = writer.sheets["Trending"]
+            worksheet.set_column("A:A", 20)
+            # Set width for each snapshot column
+            for col_idx in range(len(col_labels)):
+                col_letter = chr(ord("B") + col_idx)
+                worksheet.set_column(f"{col_letter}:{col_letter}", 14)
+
+            # Drift scores table below the snapshot data
+            if trending.drift_scores:
+                drift_start_row = len(trending_rows) + 3  # leave a gap
+                drift_data = [
+                    {"Data View ID": dv_id, "Drift Score": score}
+                    for dv_id, score in sorted(trending.drift_scores.items(), key=lambda x: -x[1])
+                ]
+                drift_df = pd.DataFrame(drift_data)
+                drift_df.to_excel(writer, sheet_name="Trending", index=False, startrow=drift_start_row)
+
     logger.info(f"Excel report written to {file_path}")
     return str(file_path)
 
@@ -1145,6 +1389,7 @@ def write_org_report_markdown(
     output_path: Path | None,
     output_dir: str,
     logger: logging.Logger,
+    trending: OrgReportTrending | None = None,
 ) -> str:
     """Write org report as GitHub-flavored markdown.
 
@@ -1153,6 +1398,7 @@ def write_org_report_markdown(
         output_path: Optional specific output path
         output_dir: Output directory if no path specified
         logger: Logger instance
+        trending: Optional trending data to append
 
     Returns:
         Path to created Markdown file
@@ -1347,6 +1593,10 @@ def write_org_report_markdown(
                 lines.append(f"- **{label}:** {value_text}")
             lines.append("")
 
+    # Trending section (v3.4.0)
+    if trending is not None and len(trending.snapshots) >= 2:
+        lines.append(_render_trending_markdown(trending))
+
     # Footer
     lines.append("---")
     lines.append("")
@@ -1365,6 +1615,7 @@ def write_org_report_html(
     output_path: Path | None,
     output_dir: str,
     logger: logging.Logger,
+    trending: OrgReportTrending | None = None,
 ) -> str:
     """Write org report as styled HTML.
 
@@ -1373,6 +1624,7 @@ def write_org_report_html(
         output_path: Optional specific output path
         output_dir: Output directory if no path specified
         logger: Logger instance
+        trending: Optional trending data to append
 
     Returns:
         Path to created HTML file
@@ -1680,6 +1932,10 @@ def write_org_report_html(
         </div>
 """
 
+    # Trending section (v3.4.0)
+    if trending is not None and len(trending.snapshots) >= 2:
+        html_out += _render_trending_html(trending)
+
     html_out += """
         <hr style="margin: 2rem 0; border: none; border-top: 1px solid var(--border);">
         <p style="color: var(--text-secondary); font-size: 0.875rem;">Generated by CJA SDR Generator</p>
@@ -1699,6 +1955,7 @@ def write_org_report_csv(
     output_path: Path | None,
     output_dir: str,
     logger: logging.Logger,
+    trending: OrgReportTrending | None = None,
 ) -> str:
     """Write org report as multiple CSV files.
 
@@ -1708,12 +1965,14 @@ def write_org_report_csv(
     - org_report_components.csv: Component index with names and coverage
     - org_report_similarity.csv: Similarity pairs (if computed)
     - org_report_distribution.csv: Distribution bucket counts
+    - org_report_trending.csv: Trending snapshot data (if provided)
 
     Args:
         result: OrgReportResult from analysis
         output_path: Optional base path (suffix will be added)
         output_dir: Output directory if no path specified
         logger: Logger instance
+        trending: Optional trending data to include
 
     Returns:
         Path to the created directory containing CSV files
@@ -1880,6 +2139,33 @@ def write_org_report_csv(
         rec_df = pd.DataFrame(rec_data)
         rec_path = csv_dir / "org_report_recommendations.csv"
         rec_df.to_csv(rec_path, index=False, encoding="utf-8")
+
+    # 7. Trending CSV (if provided)
+    if trending is not None and len(trending.snapshots) >= 2:
+        trending_rows = []
+        metric_names = ["data_view_count", "component_count", "core_count", "isolated_count", "high_sim_pair_count"]
+        for snapshot in trending.snapshots:
+            trending_rows.extend(
+                {
+                    "Snapshot Timestamp": snapshot.timestamp,
+                    "Metric": metric_name,
+                    "Value": getattr(snapshot, metric_name),
+                }
+                for metric_name in metric_names
+            )
+        trending_df = pd.DataFrame(trending_rows)
+        trending_path = csv_dir / "org_report_trending.csv"
+        trending_df.to_csv(trending_path, index=False, encoding="utf-8")
+
+        # Drift scores CSV
+        if trending.drift_scores:
+            drift_data = [
+                {"Data View ID": dv_id, "Drift Score": score}
+                for dv_id, score in sorted(trending.drift_scores.items(), key=lambda x: -x[1])
+            ]
+            drift_df = pd.DataFrame(drift_data)
+            drift_path = csv_dir / "org_report_trending_drift.csv"
+            drift_df.to_csv(drift_path, index=False, encoding="utf-8")
 
     logger.info(f"CSV reports written to {csv_dir}")
     return str(csv_dir)

@@ -11117,10 +11117,10 @@ def run_org_report(
             # Still output JSON if requested for CI integration
             if output_format == "json":
                 if output_to_stdout:
-                    json.dump(build_org_report_json_data(result), sys.stdout, indent=2, ensure_ascii=False)
+                    json.dump(build_org_report_json_data(result, trending=trending), sys.stdout, indent=2, ensure_ascii=False)
                     print()
                 else:
-                    file_path = write_org_report_json(result, output_path_obj, output_dir, logger)
+                    file_path = write_org_report_json(result, output_path_obj, output_dir, logger, trending=trending)
                     if not quiet:
                         _status_print(f"JSON saved to: {file_path}")
             append_github_step_summary(build_org_step_summary(result), logger)
@@ -11133,44 +11133,44 @@ def run_org_report(
             alias_base = output_path_obj.with_suffix("") if output_path_obj else None
             for fmt in formats_to_generate:
                 if fmt == "json":
-                    path = write_org_report_json(result, alias_base, output_dir, logger)
+                    path = write_org_report_json(result, alias_base, output_dir, logger, trending=trending)
                     generated_files.append(f"JSON: {path}")
                 elif fmt == "excel":
-                    path = write_org_report_excel(result, alias_base, output_dir, logger)
+                    path = write_org_report_excel(result, alias_base, output_dir, logger, trending=trending)
                     generated_files.append(f"Excel: {path}")
                 elif fmt == "markdown":
-                    path = write_org_report_markdown(result, alias_base, output_dir, logger)
+                    path = write_org_report_markdown(result, alias_base, output_dir, logger, trending=trending)
                     generated_files.append(f"Markdown: {path}")
                 elif fmt == "csv":
-                    path = write_org_report_csv(result, alias_base, output_dir, logger)
+                    path = write_org_report_csv(result, alias_base, output_dir, logger, trending=trending)
                     generated_files.append(f"CSV: {path}")
                 elif fmt == "html":
-                    path = write_org_report_html(result, alias_base, output_dir, logger)
+                    path = write_org_report_html(result, alias_base, output_dir, logger, trending=trending)
                     generated_files.append(f"HTML: {path}")
             if not quiet:
                 _status_print(f"\n{ConsoleColors.success('✓')} Reports saved ({output_format} alias):")
                 for f in generated_files:
                     _status_print(f"  - {f}")
         elif output_format == "console" or (output_format is None and output_path is None):
-            write_org_report_console(result, org_config, quiet)
+            write_org_report_console(result, org_config, quiet, trending=trending)
         elif output_format == "json":
             if output_to_stdout:
-                json.dump(build_org_report_json_data(result), sys.stdout, indent=2, ensure_ascii=False)
+                json.dump(build_org_report_json_data(result, trending=trending), sys.stdout, indent=2, ensure_ascii=False)
                 print()
             else:
-                file_path = write_org_report_json(result, output_path_obj, output_dir, logger)
+                file_path = write_org_report_json(result, output_path_obj, output_dir, logger, trending=trending)
                 if not quiet:
                     _status_print(f"\n{ConsoleColors.success('✓')} JSON report saved to: {file_path}")
         elif output_format == "excel":
-            file_path = write_org_report_excel(result, output_path_obj, output_dir, logger)
+            file_path = write_org_report_excel(result, output_path_obj, output_dir, logger, trending=trending)
             if not quiet:
                 _status_print(f"\n{ConsoleColors.success('✓')} Excel report saved to: {file_path}")
         elif output_format == "markdown":
-            file_path = write_org_report_markdown(result, output_path_obj, output_dir, logger)
+            file_path = write_org_report_markdown(result, output_path_obj, output_dir, logger, trending=trending)
             if not quiet:
                 _status_print(f"\n{ConsoleColors.success('✓')} Markdown report saved to: {file_path}")
         elif output_format == "html":
-            file_path = write_org_report_html(result, output_path_obj, output_dir, logger)
+            file_path = write_org_report_html(result, output_path_obj, output_dir, logger, trending=trending)
             if not quiet:
                 _status_print(f"\n{ConsoleColors.success('✓')} HTML report saved to: {file_path}")
         elif output_format == "csv":
@@ -11181,18 +11181,18 @@ def run_org_report(
                     ),
                 )
                 return False, False
-            csv_dir = write_org_report_csv(result, output_path_obj, output_dir, logger)
+            csv_dir = write_org_report_csv(result, output_path_obj, output_dir, logger, trending=trending)
             if not quiet:
                 _status_print(f"\n{ConsoleColors.success('✓')} CSV reports saved to: {csv_dir}")
         elif output_format == "all":
             # Generate all formats
-            write_org_report_console(result, org_config, quiet)
+            write_org_report_console(result, org_config, quiet, trending=trending)
             all_base = output_path_obj.with_suffix("") if output_path_obj else None
-            json_path = write_org_report_json(result, all_base, output_dir, logger)
-            excel_path = write_org_report_excel(result, all_base, output_dir, logger)
-            md_path = write_org_report_markdown(result, all_base, output_dir, logger)
-            html_path = write_org_report_html(result, all_base, output_dir, logger)
-            csv_dir = write_org_report_csv(result, all_base, output_dir, logger)
+            json_path = write_org_report_json(result, all_base, output_dir, logger, trending=trending)
+            excel_path = write_org_report_excel(result, all_base, output_dir, logger, trending=trending)
+            md_path = write_org_report_markdown(result, all_base, output_dir, logger, trending=trending)
+            html_path = write_org_report_html(result, all_base, output_dir, logger, trending=trending)
+            csv_dir = write_org_report_csv(result, all_base, output_dir, logger, trending=trending)
             if not quiet:
                 _status_print(f"\n{ConsoleColors.success('✓')} Reports saved:")
                 _status_print(f"  - JSON: {json_path}")
