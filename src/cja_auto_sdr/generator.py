@@ -10995,6 +10995,7 @@ def run_org_report(
     org_config: OrgReportConfig,
     profile: str | None = None,
     quiet: bool = False,
+    trending_window: int | None = None,
 ) -> tuple[bool, bool]:
     """Run org-wide component analysis and generate report.
 
@@ -11006,6 +11007,7 @@ def run_org_report(
         org_config: OrgReportConfig with analysis parameters
         profile: Optional profile name for credentials
         quiet: Suppress progress output
+        trending_window: If set, compute trending across last N cached snapshots
 
     Returns:
         Tuple of (success, thresholds_exceeded) - thresholds_exceeded triggers exit code 2
@@ -11081,6 +11083,29 @@ def run_org_report(
                 )
             except RECOVERABLE_API_EXCEPTIONS as e:
                 _status_print(ConsoleColors.warning(f"Warning: Could not compare reports: {e}"))
+
+        # Trending analysis (v3.4.0)
+        trending = None
+        if trending_window is not None:
+            from cja_auto_sdr.org.trending import _extract_snapshot_from_json, build_trending
+            from cja_auto_sdr.org.writers import build_org_report_json_data as _build_json_for_snapshot
+
+            # Build a snapshot from the current run
+            current_json = _build_json_for_snapshot(result)
+            current_snapshot = _extract_snapshot_from_json(current_json)
+
+            trending = build_trending(
+                cache_dir=output_dir,
+                window_size=trending_window,
+                explicit_file=org_config.compare_org_report,
+                current_snapshot=current_snapshot,
+            )
+            if trending is None and not quiet:
+                _status_print(
+                    ConsoleColors.warning(
+                        "Note: Fewer than 2 org-report snapshots found in output directory — trending skipped."
+                    ),
+                )
 
         # Generate output based on format
         output_path_obj = Path(output_path) if output_path and not output_to_stdout else None
@@ -12782,6 +12807,12 @@ def _main_impl(run_state: dict[str, Any] | None = None):
         # Determine output format (default to console for org reports)
         output_format = args.format or "console"
 
+        # Validate --trending-window
+        trending_window = getattr(args, "trending_window", None)
+        if trending_window is not None and trending_window < 2:
+            print(ConsoleColors.error("ERROR: --trending-window must be >= 2"), file=sys.stderr)
+            sys.exit(1)
+
         success, thresholds_exceeded = run_org_report(
             config_file=args.config_file,
             output_format=output_format,
@@ -12790,6 +12821,7 @@ def _main_impl(run_state: dict[str, Any] | None = None):
             org_config=org_config,
             profile=getattr(args, "profile", None),
             quiet=args.quiet,
+            trending_window=trending_window,
         )
         if run_state is not None:
             run_state["output_format"] = output_format

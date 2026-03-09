@@ -1308,6 +1308,17 @@ Requirements:
         dest="org_compare_report",
         help="Compare current org-report to a previous JSON report for trending/drift analysis",
     )
+    org_group.add_argument(
+        "--trending-window",
+        type=int,
+        nargs="?",
+        const=10,
+        default=None,
+        metavar="N",
+        dest="trending_window",
+        help="Show trending across the last N cached org-report snapshots (default: 10). "
+        "Requires --org-report. Output appears in all requested formats.",
+    )
 
     # Feature 5: Owner/team summary
     org_group.add_argument(
