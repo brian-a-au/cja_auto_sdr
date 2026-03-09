@@ -6533,37 +6533,28 @@ def _build_name_resolution_result(
     *,
     include_diagnostics: bool,
 ) -> NameResolutionResult | NameResolutionResultWithDiagnostics:
-    """Return either legacy 2-tuple or extended 3-tuple name-resolution output."""
-    if include_diagnostics:
-        return resolved_ids, name_to_ids_map, diagnostics
-    return resolved_ids, name_to_ids_map
+    from cja_auto_sdr.cli.commands.stats import _build_name_resolution_result as _impl
+
+    return _impl(
+        resolved_ids=resolved_ids,
+        name_to_ids_map=name_to_ids_map,
+        diagnostics=diagnostics,
+        include_diagnostics=include_diagnostics,
+    )
 
 
 def _coerce_name_resolution_result(
     result: NameResolutionResult | NameResolutionResultWithDiagnostics,
 ) -> NameResolutionResultWithDiagnostics:
-    """Normalize name-resolution return values into a diagnostics-bearing tuple.
+    from cja_auto_sdr.cli.commands.stats import _coerce_name_resolution_result as _impl
 
-    This keeps CLI call sites robust when tests patch resolve_data_view_names with
-    the legacy 2-tuple return shape.
-    """
-    if len(result) == 2:
-        resolved_ids, name_to_ids_map = result
-        return resolved_ids, name_to_ids_map, NameResolutionDiagnostics()
-    resolved_ids, name_to_ids_map, diagnostics = result
-    if isinstance(diagnostics, NameResolutionDiagnostics):
-        return resolved_ids, name_to_ids_map, diagnostics
-    return resolved_ids, name_to_ids_map, NameResolutionDiagnostics()
+    return _impl(result)
 
 
 def _build_inspection_name_resolution_logger() -> logging.Logger:
-    """Create a muted logger for inspection resolution to keep stderr machine-safe."""
-    logger = logging.getLogger("name_resolution.inspection")
-    logger.setLevel(logging.CRITICAL + 1)
-    logger.propagate = False
-    if not any(isinstance(handler, logging.NullHandler) for handler in logger.handlers):
-        logger.addHandler(logging.NullHandler())
-    return logger
+    from cja_auto_sdr.cli.commands.stats import _build_inspection_name_resolution_logger as _impl
+
+    return _impl()
 
 
 def resolve_data_view_names(
@@ -6575,237 +6566,17 @@ def resolve_data_view_names(
     match_mode: str = "exact",
     include_diagnostics: bool = False,
 ) -> NameResolutionResult | NameResolutionResultWithDiagnostics:
-    """
-    Resolve data view names to IDs. If an identifier is already an ID, keep it as-is.
-    If it's a name, match based on ``match_mode``.
+    from cja_auto_sdr.cli.commands.stats import resolve_data_view_names as _impl
 
-    Features:
-    - Caches API calls for performance when resolving multiple names
-    - Suggests similar names using fuzzy matching when exact match fails
-
-    Args:
-        identifiers: List of data view IDs or names
-        config_file: Path to CJA configuration file
-        logger: Logger instance for logging
-        suggest_similar: If True, suggest similar names when exact match fails
-        profile: Optional profile name to use for credentials
-        match_mode: Name matching strategy: exact, insensitive, or fuzzy
-
-    Returns:
-        Tuple of (resolved_ids, name_to_ids_map), optionally with diagnostics when
-        ``include_diagnostics`` is True.
-        - resolved_ids: List of all resolved data view IDs
-        - name_to_ids_map: Dict mapping names to their resolved IDs (for reporting)
-    """
-    if logger is None:
-        logger = logging.getLogger(__name__)
-    resolution_diagnostics = NameResolutionDiagnostics()
-
-    match_mode = (match_mode or "exact").strip().lower()
-    if match_mode not in {"exact", "insensitive", "fuzzy"}:
-        raise ValueError(f"Invalid match_mode: {match_mode}")
-
-    resolved_ids = []
-    name_to_ids_map = {}
-    unresolved_names: list[str] = []
-
-    try:
-        # Initialize CJA connection
-        logger.info(f"Resolving data view identifiers: {identifiers}")
-        success, source, credentials = configure_cjapy(profile, config_file, logger)
-        if not success:
-            error_message = f"Failed to configure credentials: {source}"
-            logger.error(error_message)
-            resolution_diagnostics = NameResolutionDiagnostics(
-                error_type="configuration_error",
-                error_message=error_message,
-            )
-            return _build_name_resolution_result(
-                [],
-                {},
-                resolution_diagnostics,
-                include_diagnostics=include_diagnostics,
-            )
-        cja = cjapy.CJA()
-
-        # Get all available data views (with caching)
-        logger.debug("Fetching all data views for name resolution")
-        cache_key = _build_data_view_cache_key(
-            config_file=config_file,
-            credential_source=source,
-            credentials=credentials,
-            profile=profile,
-        )
-        available_dvs = get_cached_data_views(cja, cache_key, logger)
-
-        if not available_dvs:
-            error_message = "No data views found or no access to any data views"
-            logger.error(error_message)
-            resolution_diagnostics = NameResolutionDiagnostics(
-                error_type="configuration_error",
-                error_message=error_message,
-            )
-            return _build_name_resolution_result(
-                [],
-                {},
-                resolution_diagnostics,
-                include_diagnostics=include_diagnostics,
-            )
-
-        # Build a lookup map: name -> list of IDs
-        name_to_id_lookup = {}
-        name_to_id_lookup_ci = {}
-        id_to_name_lookup = {}
-
-        for dv in available_dvs:
-            if isinstance(dv, dict):
-                dv_id = dv.get("id")
-                dv_name = dv.get("name")
-
-                if dv_id and dv_name:
-                    id_to_name_lookup[dv_id] = dv_name
-                    if dv_name not in name_to_id_lookup:
-                        name_to_id_lookup[dv_name] = []
-                    name_to_id_lookup[dv_name].append(dv_id)
-                    dv_name_ci = dv_name.lower()
-                    if dv_name_ci not in name_to_id_lookup_ci:
-                        name_to_id_lookup_ci[dv_name_ci] = []
-                    name_to_id_lookup_ci[dv_name_ci].append(dv_id)
-
-        logger.debug(f"Built lookup map with {len(name_to_id_lookup)} unique names and {len(id_to_name_lookup)} IDs")
-
-        # Process each identifier
-        for identifier in identifiers:
-            if is_data_view_id(identifier):
-                # It's an ID - validate it exists
-                if identifier in id_to_name_lookup:
-                    resolved_ids.append(identifier)
-                    logger.debug(f"ID '{identifier}' validated: {id_to_name_lookup[identifier]}")
-                else:
-                    logger.warning(f"Data view ID '{identifier}' not found in accessible data views")
-                    # Still add it - will fail during processing with proper error message
-                    resolved_ids.append(identifier)
-            else:
-                matching_ids: list[str] | None = None
-
-                # It's a name - resolve based on selected match mode
-                if match_mode == "exact":
-                    matching_ids = name_to_id_lookup.get(identifier)
-                elif match_mode == "insensitive":
-                    matching_ids = name_to_id_lookup_ci.get(identifier.lower())
-                elif match_mode == "fuzzy":
-                    # Fuzzy mode prefers exact, then case-insensitive, then nearest name.
-                    matching_ids = name_to_id_lookup.get(identifier) or name_to_id_lookup_ci.get(identifier.lower())
-                    if matching_ids is None:
-                        similar = find_similar_names(identifier, list(name_to_id_lookup.keys()), max_suggestions=1)
-                        if similar:
-                            best_name, best_distance = similar[0]
-                            matching_ids = name_to_id_lookup.get(best_name)
-                            logger.warning(
-                                f"Name '{identifier}' fuzzy-matched to '{best_name}' (distance: {best_distance})",
-                            )
-
-                if matching_ids:
-                    resolved_ids.extend(matching_ids)
-                    name_to_ids_map[identifier] = matching_ids
-
-                    if len(matching_ids) == 1:
-                        logger.info(f"Name '{identifier}' resolved to ID: {matching_ids[0]}")
-                    else:
-                        logger.info(f"Name '{identifier}' matched {len(matching_ids)} data views: {matching_ids}")
-                else:
-                    logger.error(f"Data view name '{identifier}' not found in accessible data views")
-                    unresolved_names.append(identifier)
-
-                    if suggest_similar:
-                        similar = find_similar_names(identifier, list(name_to_id_lookup.keys()))
-                        if similar:
-                            case_match = [s for s in similar if s[1] == 0]
-                            if case_match:
-                                logger.error(f"  → Did you mean '{case_match[0][0]}'? (case mismatch)")
-                            else:
-                                suggestions = [f"'{s[0]}'" for s in similar]
-                                logger.error(f"  → Did you mean: {', '.join(suggestions)}?")
-
-                    if match_mode == "exact":
-                        logger.error("  → Name matching is CASE-SENSITIVE and requires EXACT match")
-                    elif match_mode == "insensitive":
-                        logger.error("  → Name matching is case-insensitive exact match")
-                    else:
-                        logger.error("  → Name matching uses fuzzy nearest-match mode")
-                    logger.error("  → Run 'cja_auto_sdr --list-dataviews' to see all available names")
-
-        if not resolved_ids and unresolved_names:
-            unresolved_label = unresolved_names[0]
-            resolved_name_by_id = {
-                resolved_id: id_to_name_lookup[resolved_id]
-                for resolved_id in resolved_ids
-                if resolved_id in id_to_name_lookup
-            }
-            resolution_diagnostics = NameResolutionDiagnostics(
-                error_type="not_found",
-                error_message=(
-                    f"Could not resolve data view: '{unresolved_label}'. "
-                    "Run 'cja_auto_sdr --list-dataviews' to see available names and IDs."
-                ),
-                resolved_name_by_id=resolved_name_by_id,
-            )
-        else:
-            resolution_diagnostics = NameResolutionDiagnostics(
-                resolved_name_by_id={
-                    resolved_id: id_to_name_lookup[resolved_id]
-                    for resolved_id in resolved_ids
-                    if resolved_id in id_to_name_lookup
-                }
-            )
-        logger.info(f"Resolved {len(identifiers)} identifier(s) to {len(resolved_ids)} data view ID(s)")
-        return _build_name_resolution_result(
-            resolved_ids,
-            name_to_ids_map,
-            resolution_diagnostics,
-            include_diagnostics=include_diagnostics,
-        )
-
-    except FileNotFoundError:
-        error_message = f"Configuration file '{config_file}' not found"
-        logger.error(error_message)
-        resolution_diagnostics = NameResolutionDiagnostics(
-            error_type="configuration_error",
-            error_message=error_message,
-        )
-        return _build_name_resolution_result(
-            [],
-            {},
-            resolution_diagnostics,
-            include_diagnostics=include_diagnostics,
-        )
-    except RECOVERABLE_CONFIG_API_EXCEPTIONS as e:
-        error_message = f"Failed to resolve data view names: {e!s}"
-        logger.error(error_message)
-        resolution_diagnostics = NameResolutionDiagnostics(
-            error_type="connectivity_error",
-            error_message=error_message,
-        )
-        return _build_name_resolution_result(
-            [],
-            {},
-            resolution_diagnostics,
-            include_diagnostics=include_diagnostics,
-        )
-    except (RuntimeError, AttributeError) as e:  # Residual non-API failures (e.g. cjapy internals)
-        error_message = f"Failed to resolve data view names (unexpected): {e!s}"
-        logger.error(error_message)
-        logger.debug("Unexpected error during name resolution", exc_info=True)
-        resolution_diagnostics = NameResolutionDiagnostics(
-            error_type="connectivity_error",
-            error_message=error_message,
-        )
-        return _build_name_resolution_result(
-            [],
-            {},
-            resolution_diagnostics,
-            include_diagnostics=include_diagnostics,
-        )
+    return _impl(
+        identifiers=identifiers,
+        config_file=config_file,
+        logger=logger,
+        suggest_similar=suggest_similar,
+        profile=profile,
+        match_mode=match_mode,
+        include_diagnostics=include_diagnostics,
+    )
 
 
 # ==================== DATASET INFO HELPER ====================
@@ -8724,266 +8495,39 @@ def interactive_wizard(config_file: str = "config.json", profile: str | None = N
 
 
 def generate_sample_config(output_path: str = "config.sample.json") -> bool:
-    """
-    Generate a sample configuration file
+    from cja_auto_sdr.cli.commands.config import generate_sample_config as _impl
 
-    Args:
-        output_path: Path to write the sample config file
-
-    Returns:
-        True if successful, False otherwise
-    """
-    sample_config = {
-        "org_id": "YOUR_ORG_ID@AdobeOrg",
-        "client_id": "your_client_id_here",
-        "secret": "your_client_secret_here",
-        "scopes": "your_scopes_from_developer_console",
-    }
-
-    print()
-    print("=" * BANNER_WIDTH)
-    print("GENERATING SAMPLE CONFIGURATION FILE")
-    print("=" * BANNER_WIDTH)
-    print()
-
-    try:
-        with open(output_path, "w", encoding="utf-8") as f:
-            json.dump(sample_config, f, indent=2)
-
-        print(f"✓ Sample configuration file created: {output_path}")
-        print()
-        print("Next steps:")
-        print("  1. Copy the sample file to 'config.json':")
-        print(f"     cp {output_path} config.json")
-        print()
-        print("  2. Edit config.json with your Adobe Developer Console credentials")
-        print()
-        print("  3. Test your configuration:")
-        print("     cja_auto_sdr --list-dataviews")
-        print()
-        print("=" * BANNER_WIDTH)
-
-        return True
-
-    except (PermissionError, OSError) as e:
-        print(ConsoleColors.error(f"ERROR: Failed to create sample config: {e!s}"))
-        return False
+    return _impl(output_path=output_path)
 
 
 # ==================== CONFIG STATUS ====================
 
 
 def _read_config_status_file(config_file: str, logger: logging.Logger) -> tuple[dict[str, Any] | None, str | None]:
-    """Read config JSON for --config-status and return a controlled error message on failure."""
-    try:
-        with open(config_file, encoding="utf-8") as f:
-            payload = json.load(f)
-    except json.JSONDecodeError:
-        return None, f"{config_file} is not valid JSON"
-    except (UnicodeDecodeError, ConfigurationError, OSError) as e:
-        return None, f"Cannot read {config_file}: {e}"
-    except (ValueError, TypeError) as e:
-        logger.debug("Unexpected error reading config file in --config-status", exc_info=True)
-        return None, f"Cannot read {config_file}: {e}"
+    from cja_auto_sdr.cli.commands.config import _read_config_status_file as _impl
 
-    if not isinstance(payload, dict):
-        return None, f"{config_file} must contain a JSON object"
-
-    return payload, None
+    return _impl(config_file=config_file, logger=logger)
 
 
 def show_config_status(config_file: str = "config.json", profile: str | None = None, output_json: bool = False) -> bool:
-    """
-    Show configuration status without connecting to API.
+    from cja_auto_sdr.cli.commands.config import show_config_status as _impl
 
-    Displays:
-        - Active configuration source (profile, env vars, or config file)
-        - Fields that are set (with masked sensitive values)
-        - Quick troubleshooting information
-
-    Args:
-        config_file: Path to CJA configuration file
-        profile: Optional profile name to use for credentials
-        output_json: If True, output machine-readable JSON instead of human-readable text
-
-    Returns:
-        True if valid configuration found, False otherwise
-    """
-    # For JSON output, we'll collect data and print at the end
-    if not output_json:
-        print()
-        print("=" * BANNER_WIDTH)
-        print("CONFIGURATION STATUS")
-        print("=" * BANNER_WIDTH)
-        print()
-
-    config_source = None
-    config_source_type = None  # 'profile', 'environment', 'file'
-    config_data = {}
-    logger = logging.getLogger(__name__)
-
-    def _emit_config_status_error(message: str, *, include_help: bool = False) -> bool:
-        if output_json:
-            print(json.dumps({"error": message, "valid": False}, indent=2))
-        else:
-            print(ConsoleColors.error(f"ERROR: {message}"))
-            if include_help:
-                print()
-                print("Options:")
-                print(f"  1. Create config file: {config_file}")
-                print("  2. Set environment variables: ORG_ID, CLIENT_ID, SECRET, SCOPES")
-                print("  3. Create a profile: cja_auto_sdr --profile-add <name>")
-                print()
-                print("Generate a sample config with:")
-                print("  cja_auto_sdr --sample-config")
-        return False
-
-    # Priority 1: Profile credentials
-    if profile:
-        try:
-            profile_creds = load_profile_credentials(profile, logger)
-            if profile_creds:
-                config_source = f"Profile: {profile}"
-                config_source_type = "profile"
-                config_data = profile_creds
-        except (ProfileNotFoundError, ProfileConfigError) as e:
-            return _emit_config_status_error(f"Profile '{profile}' - {e}")
-
-    # Priority 2: Environment variables
-    if not config_source:
-        env_credentials = load_credentials_from_env()
-        if env_credentials and validate_env_credentials(env_credentials, logger):
-            config_source = "Environment variables"
-            config_source_type = "environment"
-            config_data = env_credentials
-
-    # Priority 3: Config file
-    if not config_source:
-        config_path = Path(config_file)
-        if config_path.exists():
-            config_payload, read_error = _read_config_status_file(config_file, logger)
-            if read_error:
-                return _emit_config_status_error(read_error)
-            config_data = config_payload or {}
-            config_source = f"Config file: {config_path.resolve()}"
-            config_source_type = "file"
-        else:
-            return _emit_config_status_error("No configuration found", include_help=True)
-
-    # Define field display order and metadata
-    fields = [
-        ("org_id", "ORG_ID", True, False),  # (key, display_name, required, sensitive)
-        ("client_id", "CLIENT_ID", True, True),
-        ("secret", "SECRET", True, True),
-        ("scopes", "SCOPES", False, False),
-        ("sandbox", "SANDBOX", False, False),
-    ]
-
-    # Build credentials info with masked values
-    all_required_set = True
-    credentials_info = {}
-
-    for key, _display_name, required, sensitive in fields:
-        value = config_data.get(key, "")
-        if value:
-            if sensitive:
-                # Mask sensitive values
-                if isinstance(value, str) and len(value) > 8:
-                    masked = value[:4] + "*" * (len(value) - 8) + value[-4:]
-                else:
-                    masked = "****"
-                display_value = masked
-            else:
-                display_value = value
-            credentials_info[key] = {"value": display_value, "set": True, "required": required}
-        else:
-            credentials_info[key] = {"value": None, "set": False, "required": required}
-            if required:
-                all_required_set = False
-
-    # Output based on format
-    if output_json:
-        result = {
-            "source": config_source,
-            "source_type": config_source_type,
-            "profile": profile,
-            "config_file": str(Path(config_file).resolve()) if config_source_type == "file" else None,
-            "credentials": credentials_info,
-            "valid": all_required_set,
-        }
-        print(json.dumps(result, indent=2))
-    else:
-        print(f"Source: {config_source}")
-        print()
-        print("Credentials:")
-
-        for key, display_name, required, _sensitive in fields:
-            info = credentials_info[key]
-            if info["set"]:
-                status = ConsoleColors.success("✓")
-                print(f"  {status} {display_name}: {info['value']}")
-            else:
-                if required:
-                    status = ConsoleColors.error("✗")
-                    print(f"  {status} {display_name}: not set (required)")
-                else:
-                    print(f"  - {display_name}: not set (optional)")
-
-        print()
-        if all_required_set:
-            print(ConsoleColors.success("Configuration is complete."))
-            print()
-            print("To verify API connectivity, run:")
-            print("  cja_auto_sdr --validate-config")
-        else:
-            print(ConsoleColors.error("Configuration is incomplete."))
-            print()
-            print("See documentation:")
-            print("  https://github.com/brian-a-au/cja_auto_sdr/blob/main/docs/CONFIGURATION.md")
-
-        print()
-
-    return all_required_set
+    return _impl(config_file=config_file, profile=profile, output_json=output_json)
 
 
 # ==================== VALIDATE CONFIG ====================
 
 
 def _resolve_output_dir_path(output_dir: str | Path) -> Path:
-    """Resolve output directory for permission checks without requiring it to exist."""
-    output_path = Path(output_dir).expanduser()
-    try:
-        return output_path.resolve(strict=False)
-    # PEP 758 (Python 3.14+): `except A, B:` is equivalent to `except (A, B):`.
-    except OSError, RuntimeError, ValueError:
-        return Path(os.path.abspath(str(output_path)))
+    from cja_auto_sdr.cli.commands.config import _resolve_output_dir_path as _impl
+
+    return _impl(output_dir)
 
 
 def _check_output_dir_access(output_dir: str | Path) -> tuple[bool, Path, str, Path | None]:
-    """Check whether an output directory is writable now or creatable later.
+    from cja_auto_sdr.cli.commands.config import _check_output_dir_access as _impl
 
-    Returns:
-        Tuple: (is_accessible, resolved_output_dir, reason, parent_dir)
-    """
-    resolved_dir = _resolve_output_dir_path(output_dir)
-
-    if resolved_dir.exists():
-        if not resolved_dir.is_dir():
-            return False, resolved_dir, "not_directory", None
-        if os.access(resolved_dir, os.W_OK | os.X_OK):
-            return True, resolved_dir, "writable", None
-        return False, resolved_dir, "not_writable", None
-
-    for candidate in resolved_dir.parents:
-        if not candidate.exists():
-            continue
-        if not candidate.is_dir():
-            return False, resolved_dir, "parent_not_directory", candidate
-        if os.access(candidate, os.W_OK | os.X_OK):
-            return True, resolved_dir, "creatable", candidate
-        return False, resolved_dir, "parent_not_writable", candidate
-
-    return False, resolved_dir, "no_existing_parent", None
+    return _impl(output_dir)
 
 
 def validate_config_only(
@@ -8991,321 +8535,18 @@ def validate_config_only(
     profile: str | None = None,
     output_dir: str = ".",
 ) -> bool:
-    """
-    Validate configuration and API connectivity without processing data views.
+    from cja_auto_sdr.cli.commands.config import validate_config_only as _impl
 
-    Tests:
-        1. Check environment (Python version, platform)
-        2. Check dependencies (core + optional, with versions)
-        3. Check credentials (profile > env > config file)
-        4. Test API connectivity
-        5. Check output permissions (writable output dir)
-
-    Args:
-        config_file: Path to CJA configuration file
-        profile: Optional profile name to use for credentials
-        output_dir: Directory to check for write permissions
-
-    Returns:
-        True if configuration is valid and API is reachable
-    """
-    print()
-    print("=" * BANNER_WIDTH)
-    print("CONFIGURATION VALIDATION")
-    print("=" * BANNER_WIDTH)
-    print()
-
-    all_passed = True
-    active_credentials = None
-    credential_source = None
-    logger = logging.getLogger(__name__)
-
-    # Helper to display credentials
-    def display_credentials(creds: dict[str, str], source_name: str):
-        required_fields = ["org_id", "client_id", "secret"]
-        optional_fields = ["scopes", "sandbox"]
-        missing = []
-
-        print()
-        print("  Credential status:")
-        for field_name in required_fields:
-            if creds.get(field_name):
-                value = creds[field_name]
-                if field_name in ["secret", "client_id"]:
-                    masked = value[:4] + "****" + value[-4:] if len(value) > 8 else "****"
-                else:
-                    masked = value
-                print(ConsoleColors.success(f"    \u2713 {field_name}: {masked}"))
-            else:
-                print(ConsoleColors.error(f"    \u2717 {field_name}: not set (required)"))
-                missing.append(field_name)
-
-        for field_name in optional_fields:
-            if creds.get(field_name):
-                print(ConsoleColors.success(f"    \u2713 {field_name}: {creds[field_name]}"))
-            else:
-                print(ConsoleColors.info(f"    - {field_name}: not set (optional)"))
-
-        print()
-        if missing:
-            print(ConsoleColors.error(f"  \u2717 Missing required fields: {', '.join(missing)}"))
-            return False
-        print(ConsoleColors.success("  \u2713 All required fields present"))
-        print(ConsoleColors.info(f"  \u2192 Using: {source_name}"))
-        return True
-
-    # Step 1: Check environment
-    print("[1/5] Checking environment...")
-    vi = sys.version_info
-    python_version = f"{vi.major}.{vi.minor}.{vi.micro}"
-    if vi >= (3, 14):
-        print(ConsoleColors.success(f"  \u2713 Python {python_version} (minimum: 3.14)"))
-    else:
-        print(ConsoleColors.error(f"  \u2717 Python {python_version} (minimum: 3.14)"))
-        all_passed = False
-    platform_system = platform.system()
-    platform_release = platform.release()
-    platform_label = sys.platform
-    if platform_system == "Darwin":
-        mac_ver = platform.mac_ver()[0]
-        if mac_ver:
-            platform_label += f" (macOS {mac_ver})"
-        else:
-            platform_label += f" ({platform_system} {platform_release})"
-    elif platform_system:
-        platform_label += f" ({platform_system} {platform_release})"
-    print(ConsoleColors.success(f"  \u2713 Platform: {platform_label}"))
-
-    # Step 2: Check dependencies
-    print()
-    print("[2/5] Checking dependencies...")
-
-    # Core dependencies (must exist)
-    for pkg in _CORE_DEPENDENCIES:
-        try:
-            ver = importlib.metadata.version(pkg)
-            print(ConsoleColors.success(f"  \u2713 {pkg} {ver}"))
-        except importlib.metadata.PackageNotFoundError:
-            print(ConsoleColors.error(f"  \u2717 {pkg} (not installed)"))
-            all_passed = False
-        except (OSError, ValueError) as exc:
-            print(ConsoleColors.error(f"  \u2717 {pkg} (metadata error: {exc})"))
-            all_passed = False
-
-    # Optional dependencies (info-only, never fail validation)
-    _optional_deps = (
-        ("scipy", "for --org-report clustering"),
-        ("argcomplete", "for shell tab-completion"),
-        ("python-dotenv", "for .env file loading"),
-    )
-    for pkg, purpose in _optional_deps:
-        try:
-            ver = importlib.metadata.version(pkg)
-            print(f"  - {pkg} {ver} (optional, {purpose})")
-        except importlib.metadata.PackageNotFoundError:
-            print(f"  - {pkg} not installed (optional, {purpose})")
-        except (OSError, ValueError) as exc:
-            print(f"  - {pkg} metadata error: {exc} (optional, {purpose})")
-
-    if not all_passed:
-        print()
-        print("=" * BANNER_WIDTH)
-        print(ConsoleColors.error("VALIDATION FAILED - Fix issues above"))
-        print("=" * BANNER_WIDTH)
-        return False
-
-    # Step 3: Check credentials (priority: profile > env > config file)
-    print()
-    print("[3/5] Checking credentials...")
-
-    # Priority 1: Profile
-    if profile:
-        print(f"  Checking profile '{profile}'...")
-        try:
-            profile_creds = load_profile_credentials(profile, logger)
-            if profile_creds:
-                print(ConsoleColors.success(f"  \u2713 Profile '{profile}' found"))
-                if display_credentials(profile_creds, f"Profile: {profile}"):
-                    active_credentials = profile_creds
-                    credential_source = "profile"
-                else:
-                    all_passed = False
-        except ProfileNotFoundError:
-            print(ConsoleColors.error(f"  \u2717 Profile '{profile}' not found"))
-            print()
-            print("  Create the profile with:")
-            print(f"    cja_auto_sdr --profile-add {profile}")
-            all_passed = False
-        except ProfileConfigError as e:
-            print(ConsoleColors.error(f"  \u2717 Profile '{profile}' has invalid configuration: {e}"))
-            all_passed = False
-
-    # Priority 2: Environment variables (if no profile or profile failed)
-    if not active_credentials and all_passed:
-        env_credentials = load_credentials_from_env()
-        if env_credentials:
-            print(ConsoleColors.success("  \u2713 Environment variables detected"))
-            if validate_env_credentials(env_credentials, logger):
-                if display_credentials(env_credentials, "Environment variables"):
-                    active_credentials = env_credentials
-                    credential_source = "env"
-            else:
-                print(ConsoleColors.warning("  \u26a0 Environment credentials incomplete, checking config file..."))
-        else:
-            if not profile:
-                print("  - No environment variables set")
-
-    # Priority 3: Config file (if no profile and no env)
-    if not active_credentials and all_passed:
-        print()
-        print("[3/5] Checking configuration file...")
-        config_path = Path(config_file)
-        if config_path.exists():
-            abs_path = config_path.resolve()
-            print(ConsoleColors.success(f"  \u2713 Config file found: {abs_path}"))
-            try:
-                with open(config_file) as f:
-                    config = json.load(f)
-                print(ConsoleColors.success("  \u2713 Config file is valid JSON"))
-                if display_credentials(config, f"Config file ({config_file})"):
-                    active_credentials = config
-                    credential_source = "file"
-                else:
-                    all_passed = False
-            except json.JSONDecodeError as e:
-                print(ConsoleColors.error(f"  \u2717 Invalid JSON: {e!s}"))
-                all_passed = False
-        else:
-            print(ConsoleColors.error(f"  \u2717 Config file not found: {config_file}"))
-            print()
-            print("  To create a sample config file:")
-            print("    cja_auto_sdr --sample-config")
-            print()
-            print("  Or set environment variables:")
-            print("    export ORG_ID=your_org_id@AdobeOrg")
-            print("    export CLIENT_ID=your_client_id")
-            print("    export SECRET=your_client_secret")
-            print()
-            print("  Or create a profile:")
-            print("    cja_auto_sdr --profile-add <name>")
-            all_passed = False
-    elif active_credentials and credential_source in ("profile", "env"):
-        print()
-        print(f"[3/5] Skipping config file check (using {credential_source} credentials)")
-
-    if not all_passed:
-        print()
-        print("=" * BANNER_WIDTH)
-        print(ConsoleColors.error("VALIDATION FAILED - Fix issues above"))
-        print("=" * BANNER_WIDTH)
-        return False
-
-    # Step 4: Test API connection
-    print()
-    print("[4/5] Testing API connection...")
-    try:
-        # Configure cjapy with the active credentials
-        if credential_source in ("profile", "env"):
-            _config_from_env(active_credentials, logger)
-        else:
-            cjapy.importConfigFile(config_file)
-
-        cja = cjapy.CJA()
-        print(ConsoleColors.success("  \u2713 CJA client initialized"))
-
-        # Test connection with API call
-        available_dvs = cja.getDataViews()
-        if available_dvs is not None:
-            dv_count = len(available_dvs) if hasattr(available_dvs, "__len__") else 0
-            print(ConsoleColors.success("  \u2713 API connection successful"))
-            print(ConsoleColors.success(f"  \u2713 Found {dv_count} accessible data view(s)"))
-        else:
-            print(ConsoleColors.warning("  \u26a0 API returned empty response - connection may be unstable"))
-
-    except KeyboardInterrupt, SystemExit:
-        print()
-        print(ConsoleColors.warning("Validation cancelled."))
-        raise
-    except RECOVERABLE_CONFIG_API_EXCEPTIONS as e:
-        print(ConsoleColors.error(f"  \u2717 API connection failed: {e!s}"))
-        all_passed = False
-    except (RuntimeError, AttributeError) as e:  # Residual non-API failures (e.g. cjapy internals)
-        print(ConsoleColors.error(f"  \u2717 API connection failed (unexpected): {e!s}"))
-        logging.getLogger(__name__).debug("Unexpected validate-config error", exc_info=True)
-        all_passed = False
-
-    # Step 5: Check output permissions
-    if all_passed:
-        print()
-        print("[5/5] Checking output permissions...")
-        output_access_ok, resolved_dir, access_reason, parent_dir = _check_output_dir_access(output_dir)
-        if output_access_ok and access_reason == "creatable" and parent_dir is not None:
-            print(
-                ConsoleColors.success(
-                    f"  \u2713 Output directory creatable: {resolved_dir} (parent writable: {parent_dir})"
-                )
-            )
-        elif output_access_ok:
-            print(ConsoleColors.success(f"  \u2713 Output directory writable: {resolved_dir}"))
-        else:
-            if access_reason == "not_directory":
-                print(ConsoleColors.error(f"  \u2717 Output path is not a directory: {resolved_dir}"))
-            elif access_reason == "parent_not_directory" and parent_dir is not None:
-                print(
-                    ConsoleColors.error(
-                        "  \u2717 Cannot create output directory: "
-                        f"{resolved_dir} (path component is not a directory: {parent_dir})",
-                    ),
-                )
-            elif access_reason == "parent_not_writable" and parent_dir is not None:
-                print(
-                    ConsoleColors.error(
-                        f"  \u2717 Cannot create output directory: {resolved_dir} (parent not writable: {parent_dir})",
-                    ),
-                )
-            elif access_reason == "no_existing_parent":
-                print(
-                    ConsoleColors.error(
-                        f"  \u2717 Cannot determine writable parent for output directory: {resolved_dir}"
-                    )
-                )
-            else:
-                print(ConsoleColors.error(f"  \u2717 Output directory not writable: {resolved_dir}"))
-            all_passed = False
-
-    # Summary
-    print()
-    print("=" * BANNER_WIDTH)
-    if all_passed:
-        print(ConsoleColors.success("VALIDATION PASSED - Configuration is valid!"))
-        print()
-        print("Next steps — run with a data view to generate SDR reports:")
-        print("  cja_auto_sdr <DATA_VIEW_ID>")
-        print()
-        print("Or list available data views:")
-        print("  cja_auto_sdr --list-dataviews")
-        print("=" * BANNER_WIDTH)
-    else:
-        print(ConsoleColors.error("VALIDATION FAILED - Check errors above"))
-        print("=" * BANNER_WIDTH)
-
-    return all_passed
+    return _impl(config_file=config_file, profile=profile, output_dir=output_dir)
 
 
 # ==================== STATS COMMAND ====================
 
 
 def _stats_error_row(data_view_id: str, error: Exception) -> dict[str, Any]:
-    """Build a consistent non-fatal stats error row for one data view."""
-    return {
-        "id": data_view_id,
-        "name": "ERROR",
-        "owner": "N/A",
-        "metrics": 0,
-        "dimensions": 0,
-        "total_components": 0,
-        "description": f"Error: {error!s}",
-    }
+    from cja_auto_sdr.cli.commands.stats import _stats_error_row as _impl
+
+    return _impl(data_view_id, error)
 
 
 def _require_numeric_component_count_for_stats(
@@ -9315,63 +8556,21 @@ def _require_numeric_component_count_for_stats(
     fetch_spec: _ComponentFetchSpec,
     component_label: str,
 ) -> int:
-    """Return a strict numeric component count for stats rows or raise for invalid payloads."""
-    count = _count_component_items_for_fetch_spec(cja, data_view_id, fetch_spec)
-    if isinstance(count, int):
-        return count
-    raise ValueError(f"Failed to retrieve {component_label} for data view '{data_view_id}'")
+    from cja_auto_sdr.cli.commands.stats import _require_numeric_component_count_for_stats as _impl
+
+    return _impl(cja, data_view_id, fetch_spec=fetch_spec, component_label=component_label)
 
 
 def _collect_stats_row(cja: cjapy.CJA, data_view_id: str) -> dict[str, Any]:
-    """Fetch one data view's stats row. Raises on API/runtime errors."""
-    raw_dv_info = _fetch_dataview_lookup_payload(cja, data_view_id)
-    dv_info, lookup_failure_reason, _ = _coerce_valid_dataview_lookup_payload(
-        raw_dv_info,
-        data_view_id=data_view_id,
-        require_expected_id=False,
-    )
-    if dv_info is None:
-        raise ValueError(f"Data view validation failed for '{data_view_id}' ({lookup_failure_reason})")
-    dv_name = dv_info.get("name", "Unknown")
+    from cja_auto_sdr.cli.commands.stats import _collect_stats_row as _impl
 
-    metrics_count = _require_numeric_component_count_for_stats(
-        cja,
-        data_view_id,
-        fetch_spec=_METRICS_COMPONENT_FETCH_SPEC,
-        component_label="metrics",
-    )
-    dimensions_count = _require_numeric_component_count_for_stats(
-        cja,
-        data_view_id,
-        fetch_spec=_DIMENSIONS_COMPONENT_FETCH_SPEC,
-        component_label="dimensions",
-    )
-
-    owner_info = dv_info.get("owner", {})
-    owner_name = owner_info.get("name", "N/A") if isinstance(owner_info, dict) else "N/A"
-
-    raw_description = dv_info.get("description", "")
-    description_text = str(raw_description) if raw_description is not None else ""
-
-    return {
-        "id": data_view_id,
-        "name": dv_name,
-        "owner": owner_name,
-        "metrics": metrics_count,
-        "dimensions": dimensions_count,
-        "total_components": metrics_count + dimensions_count,
-        "description": description_text[:100] + "..." if len(description_text) > 100 else description_text,
-    }
+    return _impl(cja, data_view_id)
 
 
 def _collect_stats_row_with_fallback(cja: cjapy.CJA, data_view_id: str, logger: logging.Logger) -> dict[str, Any]:
-    """Return one stats row, converting non-fatal per-item failures into an ERROR row."""
-    try:
-        return _collect_stats_row(cja, data_view_id)
-    except RECOVERABLE_STATS_ROW_EXCEPTIONS as e:
-        # Keep per-item stats resilient: one bad DV must not abort the full command.
-        logger.debug("Failed to collect stats row for %s", data_view_id, exc_info=True)
-        return _stats_error_row(data_view_id, e)
+    from cja_auto_sdr.cli.commands.stats import _collect_stats_row_with_fallback as _impl
+
+    return _impl(cja, data_view_id, logger)
 
 
 def show_stats(
@@ -9382,147 +8581,16 @@ def show_stats(
     quiet: bool = False,
     profile: str | None = None,
 ) -> bool:
-    """
-    Show quick statistics about data view(s) without generating full reports.
+    from cja_auto_sdr.cli.commands.stats import show_stats as _impl
 
-    Args:
-        data_views: List of data view IDs to get stats for
-        config_file: Path to CJA configuration file
-        output_format: Output format - "table" (default), "json", or "csv"
-        output_file: Optional file path to write output (or "-" for stdout)
-        quiet: Suppress decorative output
-        profile: Optional profile name to use for credentials
-
-    Returns:
-        True if successful, False otherwise
-    """
-    is_stdout = output_file in ("-", "stdout")
-    is_machine_readable = _is_machine_readable_output(output_format, output_file)
-
-    if not is_machine_readable and not quiet:
-        print()
-        print("=" * BANNER_WIDTH)
-        print("DATA VIEW STATISTICS")
-        print("=" * BANNER_WIDTH)
-        if profile:
-            print(f"\nUsing profile: {profile}")
-        print()
-
-    try:
-        success, source, _ = configure_cjapy(profile, config_file)
-        if not success:
-            _emit_discovery_error(
-                f"Configuration error: {source}",
-                is_machine_readable=is_machine_readable,
-                error_type="configuration_error",
-                human_to_stderr=False,
-            )
-            return False
-        cja = cjapy.CJA()
-        logger = logging.getLogger(__name__)
-
-        stats_data = [_collect_stats_row_with_fallback(cja, dv_id, logger) for dv_id in data_views]
-
-        # Output based on format
-        if output_format == "json" or (is_stdout and output_format != "csv"):
-            output_data = json.dumps(
-                {
-                    "stats": stats_data,
-                    "count": len(stats_data),
-                    "totals": {
-                        "metrics": sum(s["metrics"] for s in stats_data),
-                        "dimensions": sum(s["dimensions"] for s in stats_data),
-                        "components": sum(s["total_components"] for s in stats_data),
-                    },
-                },
-                indent=2,
-                allow_nan=False,
-            )
-            if is_stdout:
-                print(output_data)
-            elif output_file:
-                with open(output_file, "w", encoding="utf-8") as f:
-                    f.write(output_data)
-            else:
-                print(output_data)
-        elif output_format == "csv":
-            lines = ["id,name,owner,metrics,dimensions,total_components"]
-            for item in stats_data:
-                name = item["name"].replace('"', '""')
-                owner = item["owner"].replace('"', '""')
-                lines.append(
-                    f'{item["id"]},"{name}","{owner}",{item["metrics"]},{item["dimensions"]},{item["total_components"]}',
-                )
-            output_data = "\n".join(lines)
-            if is_stdout:
-                print(output_data)
-            elif output_file:
-                with open(output_file, "w", encoding="utf-8") as f:
-                    f.write(output_data)
-            else:
-                print(output_data)
-        else:
-            # Table format
-            if stats_data:
-                # Calculate column widths
-                max_id_width = max(len("ID"), *(len(s["id"]) for s in stats_data)) + 2
-                max_name_width = min(40, max(len("Name"), *(len(s["name"]) for s in stats_data)) + 2)
-
-                # Print header
-                header = (
-                    f"{'ID':<{max_id_width}} {'Name':<{max_name_width}} {'Metrics':>8} {'Dimensions':>10} {'Total':>8}"
-                )
-                print(header)
-                print("-" * len(header))
-
-                # Print data
-                for item in stats_data:
-                    name = (
-                        item["name"][: max_name_width - 2] + ".."
-                        if len(item["name"]) > max_name_width - 2
-                        else item["name"]
-                    )
-                    print(
-                        f"{item['id']:<{max_id_width}} {name:<{max_name_width}} {item['metrics']:>8} {item['dimensions']:>10} {item['total_components']:>8}",
-                    )
-
-                # Print totals
-                print("-" * len(header))
-                total_metrics = sum(s["metrics"] for s in stats_data)
-                total_dims = sum(s["dimensions"] for s in stats_data)
-                total_all = sum(s["total_components"] for s in stats_data)
-                print(
-                    f"{'TOTAL':<{max_id_width}} {'':<{max_name_width}} {total_metrics:>8} {total_dims:>10} {total_all:>8}",
-                )
-
-            print()
-            print("=" * BANNER_WIDTH)
-
-        return True
-
-    except FileNotFoundError:
-        _emit_discovery_error(
-            f"Configuration file '{config_file}' not found",
-            is_machine_readable=is_machine_readable,
-            error_type="configuration_error",
-            human_to_stderr=False,
-        )
-        return False
-
-    except KeyboardInterrupt, SystemExit:
-        if not is_machine_readable:
-            print()
-            print(ConsoleColors.warning("Operation cancelled."))
-        raise
-
-    except RECOVERABLE_COMMAND_HANDLER_EXCEPTIONS as e:
-        _emit_discovery_error(
-            f"Failed to get stats: {e!s}",
-            is_machine_readable=is_machine_readable,
-            error_type="connectivity_error",
-            human_to_stderr=False,
-        )
-        return False
+    return _impl(
+        data_views=data_views,
+        config_file=config_file,
+        output_format=output_format,
+        output_file=output_file,
+        quiet=quiet,
+        profile=profile,
+    )
 
 
 def compare_org_reports(current: OrgReportResult, previous_path: str) -> OrgReportComparison:
@@ -9929,86 +8997,17 @@ def handle_snapshot_command(
     include_calculated_metrics: bool = False,
     include_segments: bool = False,
 ) -> bool:
-    """
-    Handle the --snapshot command to save a data view snapshot.
+    from cja_auto_sdr.diff.commands import handle_snapshot_command as _impl
 
-    Args:
-        data_view_id: The data view ID to snapshot
-        snapshot_file: Path to save the snapshot
-        config_file: Path to CJA configuration file
-        quiet: Suppress progress output
-        profile: Optional profile name for credentials
-        include_calculated_metrics: Include calculated metrics inventory in snapshot
-        include_segments: Include segments inventory in snapshot
-
-    Returns:
-        True if successful, False otherwise
-    """
-    try:
-        # Build inventory info string for header
-        inventory_info = []
-        if include_calculated_metrics:
-            inventory_info.append("calculated metrics")
-        if include_segments:
-            inventory_info.append("segments")
-
-        if not quiet:
-            print()
-            print("=" * BANNER_WIDTH)
-            print("CREATING DATA VIEW SNAPSHOT")
-            print("=" * BANNER_WIDTH)
-            print(f"Data View: {data_view_id}")
-            print(f"Output: {snapshot_file}")
-            if inventory_info:
-                print(f"Including: {', '.join(inventory_info)} inventory")
-            print()
-
-        logger = logging.getLogger(__name__)
-        logger.setLevel(logging.INFO if not quiet else logging.WARNING)
-
-        # Initialize CJA with profile support
-        success, source, _ = configure_cjapy(profile=profile, config_file=config_file, logger=logger)
-        if not success:
-            print(ConsoleColors.error(f"ERROR: Configuration failed: {source}"), file=sys.stderr)
-            return False
-        cja = cjapy.CJA()
-
-        # Create and save snapshot
-        snapshot_manager = SnapshotManager(logger)
-        snapshot = snapshot_manager.create_snapshot(
-            cja,
-            data_view_id,
-            quiet,
-            include_calculated_metrics=include_calculated_metrics,
-            include_segments=include_segments,
-        )
-        saved_path = snapshot_manager.save_snapshot(snapshot, snapshot_file)
-
-        if not quiet:
-            print()
-            print("=" * BANNER_WIDTH)
-            print(ConsoleColors.success("SNAPSHOT CREATED SUCCESSFULLY"))
-            print("=" * BANNER_WIDTH)
-            print(f"Data View: {snapshot.data_view_name} ({snapshot.data_view_id})")
-            print(f"Metrics: {len(snapshot.metrics)}")
-            print(f"Dimensions: {len(snapshot.dimensions)}")
-            # Show inventory counts if included
-            if snapshot.calculated_metrics_inventory is not None:
-                print(f"Calculated Metrics: {len(snapshot.calculated_metrics_inventory)}")
-            if snapshot.segments_inventory is not None:
-                print(f"Segments: {len(snapshot.segments_inventory)}")
-            print(f"Snapshot Version: {snapshot.snapshot_version}")
-            print(f"Saved to: {saved_path}")
-            print("=" * BANNER_WIDTH)
-
-        return True
-
-    except KeyboardInterrupt, SystemExit:
-        # Let signals propagate before broad catch.
-        raise
-    except RECOVERABLE_COMMAND_HANDLER_EXCEPTIONS as e:
-        print(ConsoleColors.error(f"ERROR: Failed to create snapshot: {e!s}"), file=sys.stderr)
-        return False
+    return _impl(
+        data_view_id=data_view_id,
+        snapshot_file=snapshot_file,
+        config_file=config_file,
+        quiet=quiet,
+        profile=profile,
+        include_calculated_metrics=include_calculated_metrics,
+        include_segments=include_segments,
+    )
 
 
 def handle_diff_command(
@@ -10045,280 +9044,42 @@ def handle_diff_command(
     profile: str | None = None,
     diff_config: DiffConfig | None = None,
 ) -> tuple[bool, bool, int | None]:
-    """
-    Handle the --diff command to compare two data views.
+    from cja_auto_sdr.diff.commands import handle_diff_command as _impl
 
-    Args:
-        source_id: Source data view ID
-        target_id: Target data view ID
-        config_file: Path to CJA configuration file
-        output_format: Output format
-        output_dir: Output directory
-        changes_only: Only show changed items
-        summary_only: Only show summary
-        ignore_fields: Fields to ignore
-        labels: Custom labels (source_label, target_label)
-        quiet: Suppress progress output
-        show_only: Filter to show only specific change types
-        metrics_only: Only compare metrics
-        dimensions_only: Only compare dimensions
-        extended_fields: Use extended field comparison
-        side_by_side: Show side-by-side comparison view
-        no_color: Disable ANSI color codes
-        quiet_diff: Suppress output, only return exit code
-        reverse_diff: Swap source and target
-        warn_threshold: Exit with code 3 if change % exceeds threshold
-        group_by_field: Group changes by field name
-        group_by_field_limit: Max items per section in group-by-field output (0 = unlimited)
-        diff_output: Write output to file instead of stdout
-        format_pr_comment: Output in PR comment format
-        auto_snapshot: Automatically save snapshots during diff
-        auto_prune: Apply default retention when --auto-snapshot is enabled
-        snapshot_dir: Directory for auto-saved snapshots
-        keep_last: Retention policy - keep only last N snapshots per data view (0 = keep all)
-        keep_since: Date-based retention - delete snapshots older than this period (e.g., '7d', '2w', '1m')
-        keep_last_specified: Whether --keep-last was explicitly provided
-        keep_since_specified: Whether --keep-since was explicitly provided
-        profile: Optional profile name for credentials
-
-    Returns:
-        Tuple of (success, has_changes, exit_code_override)
-        exit_code_override is 3 if warn_threshold exceeded, None otherwise
-    """
-    if diff_config is None:
-        diff_config = DiffConfig(
-            source_id=source_id,
-            target_id=target_id,
-            config_file=config_file,
-            output_format=output_format,
-            output_dir=output_dir,
-            changes_only=changes_only,
-            summary_only=summary_only,
-            ignore_fields=ignore_fields,
-            labels=labels,
-            quiet=quiet,
-            show_only=show_only,
-            metrics_only=metrics_only,
-            dimensions_only=dimensions_only,
-            extended_fields=extended_fields,
-            side_by_side=side_by_side,
-            no_color=no_color,
-            quiet_diff=quiet_diff,
-            reverse_diff=reverse_diff,
-            warn_threshold=warn_threshold,
-            group_by_field=group_by_field,
-            group_by_field_limit=group_by_field_limit,
-            diff_output=diff_output,
-            format_pr_comment=format_pr_comment,
-            auto_snapshot=auto_snapshot,
-            auto_prune=auto_prune,
-            snapshot_dir=snapshot_dir,
-            keep_last=keep_last,
-            keep_since=keep_since,
-            keep_last_specified=keep_last_specified,
-            keep_since_specified=keep_since_specified,
-            profile=profile,
-        )
-
-    source_id = diff_config.source_id
-    target_id = diff_config.target_id
-    config_file = diff_config.config_file
-    output_format = diff_config.output_format
-    output_dir = diff_config.output_dir
-    changes_only = diff_config.changes_only
-    summary_only = diff_config.summary_only
-    ignore_fields = diff_config.ignore_fields
-    labels = diff_config.labels
-    quiet = diff_config.quiet
-    show_only = diff_config.show_only
-    metrics_only = diff_config.metrics_only
-    dimensions_only = diff_config.dimensions_only
-    extended_fields = diff_config.extended_fields
-    side_by_side = diff_config.side_by_side
-    no_color = diff_config.no_color
-    quiet_diff = diff_config.quiet_diff
-    reverse_diff = diff_config.reverse_diff
-    warn_threshold = diff_config.warn_threshold
-    group_by_field = diff_config.group_by_field
-    group_by_field_limit = diff_config.group_by_field_limit
-    diff_output = diff_config.diff_output
-    format_pr_comment = diff_config.format_pr_comment
-    auto_snapshot = diff_config.auto_snapshot
-    auto_prune = diff_config.auto_prune
-    snapshot_dir = diff_config.snapshot_dir
-    keep_last = diff_config.keep_last
-    keep_since = diff_config.keep_since
-    keep_last_specified = diff_config.keep_last_specified
-    keep_since_specified = diff_config.keep_since_specified
-    profile = diff_config.profile
-
-    try:
-        logger = logging.getLogger(__name__)
-        logger.setLevel(logging.INFO if not quiet else logging.WARNING)
-
-        # Handle reverse diff - swap source and target
-        if reverse_diff:
-            source_id, target_id = target_id, source_id
-
-        if not quiet and not quiet_diff:
-            print()
-            print("=" * BANNER_WIDTH)
-            print("COMPARING DATA VIEWS")
-            print("=" * BANNER_WIDTH)
-            print(f"Source: {source_id}")
-            print(f"Target: {target_id}")
-            if reverse_diff:
-                print("(Reversed comparison)")
-            print()
-
-        # Initialize CJA with profile support
-        success, source, _ = configure_cjapy(profile=profile, config_file=config_file, logger=logger)
-        if not success:
-            if not quiet and not quiet_diff:
-                print(ConsoleColors.error(f"ERROR: Configuration failed: {source}"), file=sys.stderr)
-            return False, False, None
-        cja = cjapy.CJA()
-
-        # Create snapshots from live data views
-        snapshot_manager = SnapshotManager(logger)
-
-        if not quiet and not quiet_diff:
-            print("Fetching source data view...")
-        source_snapshot = snapshot_manager.create_snapshot(cja, source_id, quiet or quiet_diff)
-
-        if not quiet and not quiet_diff:
-            print("Fetching target data view...")
-        target_snapshot = snapshot_manager.create_snapshot(cja, target_id, quiet or quiet_diff)
-
-        # Auto-save snapshots if enabled
-        if auto_snapshot:
-            os.makedirs(snapshot_dir, exist_ok=True)
-
-            effective_keep_last, effective_keep_since = resolve_auto_prune_retention(
-                keep_last=keep_last,
-                keep_since=keep_since,
-                auto_prune=auto_prune,
-                keep_last_specified=keep_last_specified,
-                keep_since_specified=keep_since_specified,
-            )
-
-            # Save source snapshot
-            source_filename = snapshot_manager.generate_snapshot_filename(source_id, source_snapshot.data_view_name)
-            source_path = os.path.join(snapshot_dir, source_filename)
-            snapshot_manager.save_snapshot(source_snapshot, source_path)
-
-            # Save target snapshot
-            target_filename = snapshot_manager.generate_snapshot_filename(target_id, target_snapshot.data_view_name)
-            target_path = os.path.join(snapshot_dir, target_filename)
-            snapshot_manager.save_snapshot(target_snapshot, target_path)
-
-            if not quiet and not quiet_diff:
-                print(f"Auto-saved snapshots to: {snapshot_dir}/")
-                print(f"  - {source_filename}")
-                print(f"  - {target_filename}")
-
-            # Apply retention policies if configured
-            total_deleted = 0
-
-            # Count-based retention
-            if effective_keep_last > 0:
-                deleted_source = snapshot_manager.apply_retention_policy(snapshot_dir, source_id, effective_keep_last)
-                deleted_target = snapshot_manager.apply_retention_policy(snapshot_dir, target_id, effective_keep_last)
-                total_deleted += len(deleted_source) + len(deleted_target)
-
-            # Date-based retention
-            if effective_keep_since:
-                days = parse_retention_period(effective_keep_since)
-                if days:
-                    deleted_source = snapshot_manager.apply_date_retention_policy(
-                        snapshot_dir,
-                        source_id,
-                        keep_since_days=days,
-                    )
-                    deleted_target = snapshot_manager.apply_date_retention_policy(
-                        snapshot_dir,
-                        target_id,
-                        keep_since_days=days,
-                    )
-                    total_deleted += len(deleted_source) + len(deleted_target)
-
-            if total_deleted > 0 and not quiet and not quiet_diff:
-                print(f"  Retention policy: Deleted {total_deleted} old snapshot(s)")
-
-            if not quiet and not quiet_diff:
-                print()
-
-        # Compare
-        source_label = labels[0] if labels else "Source"
-        target_label = labels[1] if labels else "Target"
-
-        comparator = DataViewComparator(
-            logger,
-            ignore_fields=ignore_fields,
-            use_extended_fields=extended_fields,
-            show_only=show_only,
-            metrics_only=metrics_only,
-            dimensions_only=dimensions_only,
-        )
-        diff_result = comparator.compare(source_snapshot, target_snapshot, source_label, target_label)
-
-        # Check warn threshold
-        exit_code_override = None
-        if warn_threshold is not None:
-            max_change_pct = max(
-                diff_result.summary.metrics_change_percent,
-                diff_result.summary.dimensions_change_percent,
-            )
-            if max_change_pct > warn_threshold:
-                exit_code_override = 3
-                if not quiet_diff:
-                    print(
-                        ConsoleColors.warning(
-                            f"WARNING: Change threshold exceeded! {max_change_pct:.1f}% > {warn_threshold}%",
-                        ),
-                        file=sys.stderr,
-                    )
-
-        # Generate output (unless quiet_diff is set)
-        if not quiet_diff:
-            # Determine effective format
-            effective_format = "pr-comment" if format_pr_comment else output_format
-
-            base_filename = f"diff_{source_id}_{target_id}_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}"
-            output_content = write_diff_output(
-                diff_result,
-                effective_format,
-                base_filename,
-                output_dir,
-                logger,
-                changes_only,
-                summary_only,
-                side_by_side,
-                use_color=ConsoleColors.is_enabled() and not no_color,
-                group_by_field=group_by_field,
-                group_by_field_limit=group_by_field_limit,
-            )
-
-            # Handle --diff-output flag
-            if diff_output and output_content:
-                with open(diff_output, "w", encoding="utf-8") as f:
-                    f.write(output_content)
-                if not quiet:
-                    print(f"Diff output written to: {diff_output}")
-
-            if not quiet and output_format != "console":
-                print()
-                print(ConsoleColors.success("Diff report generated successfully"))
-
-        append_github_step_summary(build_diff_step_summary(diff_result), logger)
-        return True, diff_result.summary.has_changes, exit_code_override
-
-    except KeyboardInterrupt, SystemExit:
-        raise
-    except RECOVERABLE_COMMAND_HANDLER_EXCEPTIONS as e:
-        print(ConsoleColors.error(f"ERROR: Failed to compare data views: {e!s}"), file=sys.stderr)
-        logger.debug("Diff comparison failed", exc_info=True)
-        return False, False, None
+    return _impl(
+        source_id=source_id,
+        target_id=target_id,
+        config_file=config_file,
+        output_format=output_format,
+        output_dir=output_dir,
+        changes_only=changes_only,
+        summary_only=summary_only,
+        ignore_fields=ignore_fields,
+        labels=labels,
+        quiet=quiet,
+        show_only=show_only,
+        metrics_only=metrics_only,
+        dimensions_only=dimensions_only,
+        extended_fields=extended_fields,
+        side_by_side=side_by_side,
+        no_color=no_color,
+        quiet_diff=quiet_diff,
+        reverse_diff=reverse_diff,
+        warn_threshold=warn_threshold,
+        group_by_field=group_by_field,
+        group_by_field_limit=group_by_field_limit,
+        diff_output=diff_output,
+        format_pr_comment=format_pr_comment,
+        auto_snapshot=auto_snapshot,
+        auto_prune=auto_prune,
+        snapshot_dir=snapshot_dir,
+        keep_last=keep_last,
+        keep_since=keep_since,
+        keep_last_specified=keep_last_specified,
+        keep_since_specified=keep_since_specified,
+        profile=profile,
+        diff_config=diff_config,
+    )
 
 
 def handle_diff_snapshot_command(
@@ -10357,353 +9118,44 @@ def handle_diff_snapshot_command(
     include_segments: bool = False,
     diff_snapshot_config: DiffSnapshotConfig | None = None,
 ) -> tuple[bool, bool, int | None]:
-    """
-    Handle the --diff-snapshot command to compare a data view against a saved snapshot.
+    from cja_auto_sdr.diff.commands import handle_diff_snapshot_command as _impl
 
-    Args:
-        data_view_id: The current data view ID to compare
-        snapshot_file: Path to the saved snapshot file
-        config_file: Path to CJA configuration file
-        output_format: Output format
-        output_dir: Output directory
-        changes_only: Only show changed items
-        summary_only: Only show summary
-        ignore_fields: Fields to ignore
-        labels: Custom labels (source_label, target_label)
-        quiet: Suppress progress output
-        show_only: Filter to show only specific change types
-        metrics_only: Only compare metrics
-        dimensions_only: Only compare dimensions
-        extended_fields: Use extended field comparison
-        side_by_side: Show side-by-side comparison view
-        no_color: Disable ANSI color codes
-        quiet_diff: Suppress output, only return exit code
-        reverse_diff: Swap source and target
-        warn_threshold: Exit with code 3 if change % exceeds threshold
-        group_by_field: Group changes by field name
-        group_by_field_limit: Max items per section in group-by-field output (0 = unlimited)
-        diff_output: Write output to file instead of stdout
-        format_pr_comment: Output in PR comment format
-        auto_snapshot: Automatically save snapshot of current data view state
-        auto_prune: Apply default retention when --auto-snapshot is enabled
-        snapshot_dir: Directory for auto-saved snapshots
-        keep_last: Retention policy - keep only last N snapshots per data view (0 = keep all)
-        keep_since: Date-based retention - delete snapshots older than this period (e.g., '7d', '2w', '1m')
-        keep_last_specified: Whether --keep-last was explicitly provided
-        keep_since_specified: Whether --keep-since was explicitly provided
-        profile: Optional profile name for credentials
-        include_calc_metrics: Include calculated metrics inventory in comparison
-        include_segments: Include segments inventory in comparison
-
-    Returns:
-        Tuple of (success, has_changes, exit_code_override)
-    """
-    if diff_snapshot_config is None:
-        diff_snapshot_config = DiffSnapshotConfig(
-            data_view_id=data_view_id,
-            snapshot_file=snapshot_file,
-            config_file=config_file,
-            output_format=output_format,
-            output_dir=output_dir,
-            changes_only=changes_only,
-            summary_only=summary_only,
-            ignore_fields=ignore_fields,
-            labels=labels,
-            quiet=quiet,
-            show_only=show_only,
-            metrics_only=metrics_only,
-            dimensions_only=dimensions_only,
-            extended_fields=extended_fields,
-            side_by_side=side_by_side,
-            no_color=no_color,
-            quiet_diff=quiet_diff,
-            reverse_diff=reverse_diff,
-            warn_threshold=warn_threshold,
-            group_by_field=group_by_field,
-            group_by_field_limit=group_by_field_limit,
-            diff_output=diff_output,
-            format_pr_comment=format_pr_comment,
-            auto_snapshot=auto_snapshot,
-            auto_prune=auto_prune,
-            snapshot_dir=snapshot_dir,
-            keep_last=keep_last,
-            keep_since=keep_since,
-            keep_last_specified=keep_last_specified,
-            keep_since_specified=keep_since_specified,
-            profile=profile,
-            include_calc_metrics=include_calc_metrics,
-            include_segments=include_segments,
-        )
-
-    data_view_id = diff_snapshot_config.data_view_id
-    snapshot_file = diff_snapshot_config.snapshot_file
-    config_file = diff_snapshot_config.config_file
-    output_format = diff_snapshot_config.output_format
-    output_dir = diff_snapshot_config.output_dir
-    changes_only = diff_snapshot_config.changes_only
-    summary_only = diff_snapshot_config.summary_only
-    ignore_fields = diff_snapshot_config.ignore_fields
-    labels = diff_snapshot_config.labels
-    quiet = diff_snapshot_config.quiet
-    show_only = diff_snapshot_config.show_only
-    metrics_only = diff_snapshot_config.metrics_only
-    dimensions_only = diff_snapshot_config.dimensions_only
-    extended_fields = diff_snapshot_config.extended_fields
-    side_by_side = diff_snapshot_config.side_by_side
-    no_color = diff_snapshot_config.no_color
-    quiet_diff = diff_snapshot_config.quiet_diff
-    reverse_diff = diff_snapshot_config.reverse_diff
-    warn_threshold = diff_snapshot_config.warn_threshold
-    group_by_field = diff_snapshot_config.group_by_field
-    group_by_field_limit = diff_snapshot_config.group_by_field_limit
-    diff_output = diff_snapshot_config.diff_output
-    format_pr_comment = diff_snapshot_config.format_pr_comment
-    auto_snapshot = diff_snapshot_config.auto_snapshot
-    auto_prune = diff_snapshot_config.auto_prune
-    snapshot_dir = diff_snapshot_config.snapshot_dir
-    keep_last = diff_snapshot_config.keep_last
-    keep_since = diff_snapshot_config.keep_since
-    keep_last_specified = diff_snapshot_config.keep_last_specified
-    keep_since_specified = diff_snapshot_config.keep_since_specified
-    profile = diff_snapshot_config.profile
-    include_calc_metrics = diff_snapshot_config.include_calc_metrics
-    include_segments = diff_snapshot_config.include_segments
-
-    try:
-        logger = logging.getLogger(__name__)
-        logger.setLevel(logging.INFO if not quiet else logging.WARNING)
-
-        if not quiet and not quiet_diff:
-            print()
-            print("=" * BANNER_WIDTH)
-            print("COMPARING DATA VIEW AGAINST SNAPSHOT")
-            print("=" * BANNER_WIDTH)
-            print(f"Data View: {data_view_id}")
-            print(f"Snapshot: {snapshot_file}")
-            if reverse_diff:
-                print("(Reversed comparison)")
-            if include_calc_metrics or include_segments:
-                inv_types = []
-                if include_calc_metrics:
-                    inv_types.append("calculated metrics")
-                if include_segments:
-                    inv_types.append("segments")
-                print(f"Including inventory: {', '.join(inv_types)}")
-            print()
-
-        # Load the saved snapshot (source/baseline)
-        snapshot_manager = SnapshotManager(logger)
-        source_snapshot = snapshot_manager.load_snapshot(snapshot_file)
-
-        # Validate snapshot has required inventory data
-        missing_inventory = []
-        if include_calc_metrics and not source_snapshot.has_calculated_metrics_inventory:
-            missing_inventory.append("calculated metrics")
-        if include_segments and not source_snapshot.has_segments_inventory:
-            missing_inventory.append("segments")
-
-        if missing_inventory:
-            inv_summary = source_snapshot.get_inventory_summary()
-            print(
-                ConsoleColors.error("ERROR: Cannot perform inventory diff - snapshot missing requested data."),
-                file=sys.stderr,
-            )
-            print(file=sys.stderr)
-            print(f"Snapshot '{snapshot_file}' contains:", file=sys.stderr)
-            print(f"  {'✓' if True else '✗'} Metrics ({len(source_snapshot.metrics)} items)", file=sys.stderr)
-            print(f"  {'✓' if True else '✗'} Dimensions ({len(source_snapshot.dimensions)} items)", file=sys.stderr)
-            print(
-                f"  {'✓' if inv_summary['calculated_metrics']['present'] else '✗'} Calculated Metrics Inventory ({inv_summary['calculated_metrics']['count']} items)",
-                file=sys.stderr,
-            )
-            print(
-                f"  {'✓' if inv_summary['segments']['present'] else '✗'} Segments Inventory ({inv_summary['segments']['count']} items)",
-                file=sys.stderr,
-            )
-            print(file=sys.stderr)
-            print(f"You requested: {', '.join(missing_inventory)}", file=sys.stderr)
-            print(file=sys.stderr)
-            print("To create a compatible snapshot:", file=sys.stderr)
-            flags = []
-            if include_calc_metrics:
-                flags.append("--include-calculated")
-            if include_segments:
-                flags.append("--include-segments")
-            print(f"  cja_auto_sdr {data_view_id} {' '.join(flags)} --auto-snapshot", file=sys.stderr)
-            return False, False, None
-
-        # Initialize CJA with profile support
-        success, source, _ = configure_cjapy(profile=profile, config_file=config_file, logger=logger)
-        if not success:
-            if not quiet and not quiet_diff:
-                print(ConsoleColors.error(f"ERROR: Configuration failed: {source}"), file=sys.stderr)
-            return False, False, None
-        cja = cjapy.CJA()
-
-        if not quiet and not quiet_diff:
-            print("Fetching current data view state...")
-        target_snapshot = snapshot_manager.create_snapshot(cja, data_view_id, quiet or quiet_diff)
-
-        # Build inventory for target snapshot if requested
-        if include_calc_metrics or include_segments:
-            if not quiet and not quiet_diff:
-                print("Building inventory for current state...")
-
-            if include_calc_metrics:
-                try:
-                    from cja_auto_sdr.inventory.calculated_metrics import CalculatedMetricsInventoryBuilder
-
-                    builder = CalculatedMetricsInventoryBuilder(logger=logger)
-                    inventory = builder.build(cja, data_view_id, target_snapshot.data_view_name)
-                    target_snapshot.calculated_metrics_inventory = [m.to_full_dict() for m in inventory.metrics]
-                    if not quiet and not quiet_diff:
-                        print(f"  Calculated metrics: {len(target_snapshot.calculated_metrics_inventory)} items")
-                except RECOVERABLE_OPTIONAL_INVENTORY_EXCEPTIONS as e:
-                    logger.warning(f"Failed to build calculated metrics inventory: {e}")
-
-            if include_segments:
-                try:
-                    from cja_auto_sdr.inventory.segments import SegmentsInventoryBuilder
-
-                    builder = SegmentsInventoryBuilder(logger=logger)
-                    inventory = builder.build(cja, data_view_id, target_snapshot.data_view_name)
-                    target_snapshot.segments_inventory = [s.to_full_dict() for s in inventory.segments]
-                    if not quiet and not quiet_diff:
-                        print(f"  Segments: {len(target_snapshot.segments_inventory)} items")
-                except RECOVERABLE_OPTIONAL_INVENTORY_EXCEPTIONS as e:
-                    logger.warning(f"Failed to build segments inventory: {e}")
-
-            if not quiet and not quiet_diff:
-                print()
-
-        # Auto-save current state snapshot if enabled
-        if auto_snapshot:
-            os.makedirs(snapshot_dir, exist_ok=True)
-
-            effective_keep_last, effective_keep_since = resolve_auto_prune_retention(
-                keep_last=keep_last,
-                keep_since=keep_since,
-                auto_prune=auto_prune,
-                keep_last_specified=keep_last_specified,
-                keep_since_specified=keep_since_specified,
-            )
-
-            # Save current state snapshot
-            current_filename = snapshot_manager.generate_snapshot_filename(data_view_id, target_snapshot.data_view_name)
-            current_path = os.path.join(snapshot_dir, current_filename)
-            snapshot_manager.save_snapshot(target_snapshot, current_path)
-
-            if not quiet and not quiet_diff:
-                print(f"Auto-saved current state to: {snapshot_dir}/{current_filename}")
-
-            # Apply retention policies if configured
-            total_deleted = 0
-
-            # Count-based retention
-            if effective_keep_last > 0:
-                deleted = snapshot_manager.apply_retention_policy(snapshot_dir, data_view_id, effective_keep_last)
-                total_deleted += len(deleted)
-
-            # Date-based retention
-            if effective_keep_since:
-                days = parse_retention_period(effective_keep_since)
-                if days:
-                    deleted = snapshot_manager.apply_date_retention_policy(
-                        snapshot_dir,
-                        data_view_id,
-                        keep_since_days=days,
-                    )
-                    total_deleted += len(deleted)
-
-            if total_deleted > 0 and not quiet and not quiet_diff:
-                print(f"  Retention policy: Deleted {total_deleted} old snapshot(s)")
-
-            if not quiet and not quiet_diff:
-                print()
-
-        # Handle reverse_diff - swap source and target
-        if reverse_diff:
-            source_snapshot, target_snapshot = target_snapshot, source_snapshot
-
-        # Compare (snapshot is baseline/source, current state is target)
-        source_label = labels[0] if labels else f"Snapshot ({source_snapshot.created_at[:10]})"
-        target_label = labels[1] if labels else "Current"
-
-        comparator = DataViewComparator(
-            logger,
-            ignore_fields=ignore_fields,
-            use_extended_fields=extended_fields,
-            show_only=show_only,
-            metrics_only=metrics_only,
-            dimensions_only=dimensions_only,
-            include_calc_metrics=include_calc_metrics,
-            include_segments=include_segments,
-        )
-        diff_result = comparator.compare(source_snapshot, target_snapshot, source_label, target_label)
-
-        # Check warn threshold
-        exit_code_override = None
-        if warn_threshold is not None:
-            max_change_pct = max(
-                diff_result.summary.metrics_change_percent,
-                diff_result.summary.dimensions_change_percent,
-            )
-            if max_change_pct > warn_threshold:
-                exit_code_override = 3
-                if not quiet_diff:
-                    print(
-                        ConsoleColors.warning(
-                            f"WARNING: Change threshold exceeded! {max_change_pct:.1f}% > {warn_threshold}%",
-                        ),
-                        file=sys.stderr,
-                    )
-
-        # Generate output (unless quiet_diff is set)
-        if not quiet_diff:
-            # Determine effective format
-            effective_format = "pr-comment" if format_pr_comment else output_format
-
-            base_filename = f"diff_{data_view_id}_snapshot_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}"
-            output_content = write_diff_output(
-                diff_result,
-                effective_format,
-                base_filename,
-                output_dir,
-                logger,
-                changes_only,
-                summary_only,
-                side_by_side,
-                use_color=ConsoleColors.is_enabled() and not no_color,
-                group_by_field=group_by_field,
-                group_by_field_limit=group_by_field_limit,
-            )
-
-            # Handle --diff-output flag
-            if diff_output and output_content:
-                with open(diff_output, "w", encoding="utf-8") as f:
-                    f.write(output_content)
-                if not quiet:
-                    print(f"Diff output written to: {diff_output}")
-
-            if not quiet and output_format != "console":
-                print()
-                print(ConsoleColors.success("Diff report generated successfully"))
-
-        append_github_step_summary(build_diff_step_summary(diff_result), logger)
-        return True, diff_result.summary.has_changes, exit_code_override
-
-    except FileNotFoundError:
-        print(ConsoleColors.error(f"ERROR: Snapshot file not found: {snapshot_file}"), file=sys.stderr)
-        return False, False, None
-    except ValueError as e:
-        print(ConsoleColors.error(f"ERROR: Invalid snapshot file: {e!s}"), file=sys.stderr)
-        return False, False, None
-    except KeyboardInterrupt, SystemExit:
-        raise
-    except RECOVERABLE_COMMAND_HANDLER_EXCEPTIONS as e:
-        print(ConsoleColors.error(f"ERROR: Failed to compare against snapshot: {e!s}"), file=sys.stderr)
-        logger.debug("Diff-snapshot comparison failed", exc_info=True)
-        return False, False, None
+    return _impl(
+        data_view_id=data_view_id,
+        snapshot_file=snapshot_file,
+        config_file=config_file,
+        output_format=output_format,
+        output_dir=output_dir,
+        changes_only=changes_only,
+        summary_only=summary_only,
+        ignore_fields=ignore_fields,
+        labels=labels,
+        quiet=quiet,
+        show_only=show_only,
+        metrics_only=metrics_only,
+        dimensions_only=dimensions_only,
+        extended_fields=extended_fields,
+        side_by_side=side_by_side,
+        no_color=no_color,
+        quiet_diff=quiet_diff,
+        reverse_diff=reverse_diff,
+        warn_threshold=warn_threshold,
+        group_by_field=group_by_field,
+        group_by_field_limit=group_by_field_limit,
+        diff_output=diff_output,
+        format_pr_comment=format_pr_comment,
+        auto_snapshot=auto_snapshot,
+        auto_prune=auto_prune,
+        snapshot_dir=snapshot_dir,
+        keep_last=keep_last,
+        keep_since=keep_since,
+        keep_last_specified=keep_last_specified,
+        keep_since_specified=keep_since_specified,
+        profile=profile,
+        include_calc_metrics=include_calc_metrics,
+        include_segments=include_segments,
+        diff_snapshot_config=diff_snapshot_config,
+    )
 
 
 def handle_compare_snapshots_command(
@@ -10732,214 +9184,34 @@ def handle_compare_snapshots_command(
     include_calc_metrics: bool = False,
     include_segments: bool = False,
 ) -> tuple[bool, bool, int | None]:
-    """
-    Handle the --compare-snapshots command to compare two snapshot files directly.
+    from cja_auto_sdr.diff.commands import handle_compare_snapshots_command as _impl
 
-    This is useful for:
-    - Comparing snapshots from different points in time
-    - Offline comparison without API access
-    - CI/CD pipelines where you want to compare pre/post snapshots
-
-    Args:
-        source_file: Path to the source (baseline) snapshot file
-        target_file: Path to the target snapshot file
-        output_format: Output format
-        output_dir: Output directory
-        changes_only: Only show changed items
-        summary_only: Only show summary
-        ignore_fields: Fields to ignore
-        labels: Custom labels (source_label, target_label)
-        quiet: Suppress progress output
-        show_only: Filter to show only specific change types
-        metrics_only: Only compare metrics
-        dimensions_only: Only compare dimensions
-        extended_fields: Use extended field comparison
-        side_by_side: Show side-by-side comparison view
-        no_color: Disable ANSI color codes
-        quiet_diff: Suppress output, only return exit code
-        reverse_diff: Swap source and target
-        warn_threshold: Exit with code 3 if change % exceeds threshold
-        group_by_field: Group changes by field name
-        group_by_field_limit: Max items per section in group-by-field output (0 = unlimited)
-        diff_output: Write output to file instead of stdout
-        format_pr_comment: Output in PR comment format
-        include_calc_metrics: Include calculated metrics inventory in comparison
-        include_segments: Include segments inventory in comparison
-
-    Returns:
-        Tuple of (success, has_changes, exit_code_override)
-    """
-    try:
-        logger = logging.getLogger(__name__)
-        logger.setLevel(logging.INFO if not quiet else logging.WARNING)
-
-        if not quiet and not quiet_diff:
-            print()
-            print("=" * BANNER_WIDTH)
-            print("COMPARING TWO SNAPSHOTS")
-            print("=" * BANNER_WIDTH)
-            print(f"Source: {source_file}")
-            print(f"Target: {target_file}")
-            if reverse_diff:
-                print("(Reversed comparison)")
-            print()
-
-        # Load both snapshots
-        snapshot_manager = SnapshotManager(logger)
-
-        if not quiet and not quiet_diff:
-            print("Loading source snapshot...")
-        source_snapshot = snapshot_manager.load_snapshot(source_file)
-
-        if not quiet and not quiet_diff:
-            print("Loading target snapshot...")
-        target_snapshot = snapshot_manager.load_snapshot(target_file)
-
-        # Validate same data view for inventory comparison
-        if (include_calc_metrics or include_segments) and source_snapshot.data_view_id != target_snapshot.data_view_id:
-            print(
-                ConsoleColors.error("ERROR: Inventory comparison requires snapshots from the same data view."),
-                file=sys.stderr,
-            )
-            print(f"  Source: {source_snapshot.data_view_name} ({source_snapshot.data_view_id})", file=sys.stderr)
-            print(f"  Target: {target_snapshot.data_view_name} ({target_snapshot.data_view_id})", file=sys.stderr)
-            print(file=sys.stderr)
-            print(
-                "Inventory IDs are data-view-scoped and cannot be matched across different data views.",
-                file=sys.stderr,
-            )
-            print(
-                "Remove --include-segments, --include-calculated, --include-derived for cross-data-view comparison.",
-                file=sys.stderr,
-            )
-            return False, False, None
-
-        # Handle reverse_diff - swap source and target
-        if reverse_diff:
-            source_snapshot, target_snapshot = target_snapshot, source_snapshot
-            source_file, target_file = target_file, source_file
-
-        # Determine labels
-        if labels:
-            source_label, target_label = labels
-        else:
-            # Use snapshot metadata for labels
-            source_label = f"{source_snapshot.data_view_name} ({source_snapshot.created_at[:10]})"
-            target_label = f"{target_snapshot.data_view_name} ({target_snapshot.created_at[:10]})"
-
-        if not quiet and not quiet_diff:
-            print(f"Comparing: {source_label} vs {target_label}")
-            print()
-
-            # Show snapshot metadata
-            print("Snapshot Details:")
-            print("-" * 40)
-
-            # Source snapshot info
-            source_size = os.path.getsize(source_file)
-            source_size_str = f"{source_size:,} bytes" if source_size < 1024 else f"{source_size / 1024:.1f} KB"
-            print("  Source:")
-            print(f"    File: {Path(source_file).name} ({source_size_str})")
-            print(f"    Created: {source_snapshot.created_at}")
-            print(f"    Data View: {source_snapshot.data_view_name} ({source_snapshot.data_view_id})")
-            print(f"    Metrics: {len(source_snapshot.metrics):,} | Dimensions: {len(source_snapshot.dimensions):,}")
-
-            # Target snapshot info
-            target_size = os.path.getsize(target_file)
-            target_size_str = f"{target_size:,} bytes" if target_size < 1024 else f"{target_size / 1024:.1f} KB"
-            print("  Target:")
-            print(f"    File: {Path(target_file).name} ({target_size_str})")
-            print(f"    Created: {target_snapshot.created_at}")
-            print(f"    Data View: {target_snapshot.data_view_name} ({target_snapshot.data_view_id})")
-            print(f"    Metrics: {len(target_snapshot.metrics):,} | Dimensions: {len(target_snapshot.dimensions):,}")
-
-            print("-" * 40)
-            print()
-
-        # Compare snapshots
-        comparator = DataViewComparator(
-            logger,
-            ignore_fields=ignore_fields,
-            use_extended_fields=extended_fields,
-            show_only=show_only,
-            metrics_only=metrics_only,
-            dimensions_only=dimensions_only,
-            include_calc_metrics=include_calc_metrics,
-            include_segments=include_segments,
-        )
-        diff_result = comparator.compare(source_snapshot, target_snapshot, source_label, target_label)
-
-        # Check warn threshold
-        exit_code_override = None
-        if warn_threshold is not None:
-            max_change_pct = max(
-                diff_result.summary.metrics_change_percent,
-                diff_result.summary.dimensions_change_percent,
-            )
-            if max_change_pct > warn_threshold:
-                exit_code_override = 3
-                if not quiet_diff:
-                    print(
-                        ConsoleColors.warning(
-                            f"WARNING: Change threshold exceeded! {max_change_pct:.1f}% > {warn_threshold}%",
-                        ),
-                        file=sys.stderr,
-                    )
-
-        # Generate output (unless quiet_diff is set)
-        if not quiet_diff:
-            # Determine effective format
-            effective_format = "pr-comment" if format_pr_comment else output_format
-
-            # Generate base filename from snapshot names
-            source_base = Path(source_file).stem
-            target_base = Path(target_file).stem
-            base_filename = f"diff_{source_base}_vs_{target_base}_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}"
-
-            output_content = write_diff_output(
-                diff_result,
-                effective_format,
-                base_filename,
-                output_dir,
-                logger,
-                changes_only,
-                summary_only,
-                side_by_side,
-                use_color=ConsoleColors.is_enabled() and not no_color,
-                group_by_field=group_by_field,
-                group_by_field_limit=group_by_field_limit,
-            )
-
-            # Handle --diff-output flag
-            if diff_output and output_content:
-                with open(diff_output, "w", encoding="utf-8") as f:
-                    f.write(output_content)
-                if not quiet:
-                    print(f"Diff output written to: {diff_output}")
-
-            if not quiet and output_format != "console":
-                print()
-                print(ConsoleColors.success("Diff report generated successfully"))
-
-        append_github_step_summary(build_diff_step_summary(diff_result), logger)
-        return True, diff_result.summary.has_changes, exit_code_override
-
-    except FileNotFoundError as e:
-        print(ConsoleColors.error(f"ERROR: Snapshot file not found: {e!s}"), file=sys.stderr)
-        return False, False, None
-    except ValueError as e:
-        print(ConsoleColors.error(f"ERROR: Invalid snapshot file: {e!s}"), file=sys.stderr)
-        return False, False, None
-    except KeyboardInterrupt, SystemExit:
-        raise
-    except (CJASDRError, OSError) as e:
-        print(ConsoleColors.error(f"ERROR: Failed to compare snapshots: {e!s}"), file=sys.stderr)
-        logger.debug("Snapshot comparison failed", exc_info=True)
-        return False, False, None
-    except Exception as e:  # Intentional: tiered command boundary (see RECOVERABLE_COMMAND_HANDLER_EXCEPTIONS)
-        print(ConsoleColors.error(f"ERROR: Failed to compare snapshots (unexpected): {e!s}"), file=sys.stderr)
-        logger.debug("Unexpected snapshot comparison error", exc_info=True)
-        return False, False, None
+    return _impl(
+        source_file=source_file,
+        target_file=target_file,
+        output_format=output_format,
+        output_dir=output_dir,
+        changes_only=changes_only,
+        summary_only=summary_only,
+        ignore_fields=ignore_fields,
+        labels=labels,
+        quiet=quiet,
+        show_only=show_only,
+        metrics_only=metrics_only,
+        dimensions_only=dimensions_only,
+        extended_fields=extended_fields,
+        side_by_side=side_by_side,
+        no_color=no_color,
+        quiet_diff=quiet_diff,
+        reverse_diff=reverse_diff,
+        warn_threshold=warn_threshold,
+        group_by_field=group_by_field,
+        group_by_field_limit=group_by_field_limit,
+        diff_output=diff_output,
+        format_pr_comment=format_pr_comment,
+        include_calc_metrics=include_calc_metrics,
+        include_segments=include_segments,
+    )
 
 
 # ==================== MAIN FUNCTION ====================
@@ -11200,6 +9472,170 @@ def _handle_org_report_snapshot_cli(
             "org_id": org_id,
         }
     sys.exit(0)
+
+
+def _dispatch_post_validation_report_modes(
+    args: argparse.Namespace,
+    *,
+    output_to_stdout: bool,
+    run_state: dict[str, Any] | None = None,
+) -> list[str]:
+    """Handle config/status, interactive, stats, and org-report branches."""
+    if getattr(args, "config_status", False) or getattr(args, "config_json", False):
+        output_json = getattr(args, "config_json", False)
+        success = show_config_status(args.config_file, profile=getattr(args, "profile", None), output_json=output_json)
+        if run_state is not None:
+            run_state["details"] = {"operation_success": success}
+        sys.exit(0 if success else 1)
+
+    if args.validate_config:
+        success = validate_config_only(
+            args.config_file,
+            profile=getattr(args, "profile", None),
+            output_dir=getattr(args, "output_dir", "."),
+        )
+        if run_state is not None:
+            run_state["details"] = {"operation_success": success}
+        sys.exit(0 if success else 1)
+
+    data_view_inputs = args.data_views
+    if run_state is not None:
+        run_state["data_view_inputs"] = list(data_view_inputs)
+
+    if getattr(args, "interactive", False):
+        if data_view_inputs:
+            print(ConsoleColors.warning("Note: --interactive mode ignores positional data view arguments"))
+
+        wizard_config = interactive_wizard(args.config_file, profile=getattr(args, "profile", None))
+        if wizard_config is None:
+            print("Cancelled. Exiting.")
+            sys.exit(0)
+
+        data_view_inputs = wizard_config.data_view_ids
+        args.format = wizard_config.output_format
+        args.include_segments_inventory = wizard_config.include_segments
+        args.include_calculated_metrics = wizard_config.include_calculated
+        args.include_derived_inventory = wizard_config.include_derived
+        args.inventory_only = wizard_config.inventory_only
+        if run_state is not None:
+            run_state["data_view_inputs"] = list(data_view_inputs)
+
+        print()
+        print("=" * BANNER_WIDTH)
+        print("GENERATING SDR...")
+        print("=" * BANNER_WIDTH)
+        print()
+
+    if getattr(args, "stats", False):
+        if not data_view_inputs:
+            print(ConsoleColors.error("ERROR: --stats requires at least one data view ID or name"), file=sys.stderr)
+            sys.exit(1)
+
+        temp_logger = logging.getLogger("name_resolution")
+        temp_logger.setLevel(logging.WARNING)
+        resolved_ids, _ = resolve_data_view_names(
+            data_view_inputs,
+            args.config_file,
+            temp_logger,
+            profile=getattr(args, "profile", None),
+            match_mode=getattr(args, "name_match", "exact"),
+        )
+
+        if not resolved_ids:
+            print(ConsoleColors.error("ERROR: No valid data views found"), file=sys.stderr)
+            sys.exit(1)
+        if run_state is not None:
+            run_state["resolved_data_views"] = list(resolved_ids)
+
+        stats_format = "table"
+        if args.format in ("json", "csv"):
+            stats_format = args.format
+        elif output_to_stdout:
+            stats_format = "json"
+
+        success = show_stats(
+            resolved_ids,
+            config_file=args.config_file,
+            output_format=stats_format,
+            output_file=getattr(args, "output", None),
+            quiet=args.quiet,
+            profile=getattr(args, "profile", None),
+        )
+        if run_state is not None:
+            run_state["output_format"] = stats_format
+            run_state["details"] = {"operation_success": success}
+        sys.exit(0 if success else 1)
+
+    if getattr(args, "org_report", False):
+        org_config = OrgReportConfig(
+            filter_pattern=getattr(args, "org_filter", None),
+            exclude_pattern=getattr(args, "org_exclude", None),
+            limit=getattr(args, "org_limit", None),
+            core_threshold=getattr(args, "core_threshold", 0.5),
+            core_min_count=getattr(args, "core_min_count", None),
+            overlap_threshold=getattr(args, "overlap_threshold", 0.8),
+            summary_only=getattr(args, "org_summary", False) or getattr(args, "summary", False),
+            verbose=getattr(args, "org_verbose", False),
+            include_names=getattr(args, "org_include_names", False),
+            skip_similarity=getattr(args, "skip_similarity", False),
+            similarity_max_dvs=getattr(args, "org_similarity_max_dvs", 250),
+            force_similarity=getattr(args, "org_force_similarity", False),
+            include_component_types=not getattr(args, "no_component_types", False),
+            include_metadata=getattr(args, "org_include_metadata", False),
+            include_drift=getattr(args, "org_include_drift", False),
+            sample_size=getattr(args, "org_sample_size", None),
+            sample_seed=getattr(args, "org_sample_seed", None),
+            sample_stratified=getattr(args, "org_sample_stratified", False),
+            use_cache=getattr(args, "org_use_cache", False),
+            cache_max_age_hours=getattr(args, "org_cache_max_age", 24),
+            clear_cache=getattr(args, "org_clear_cache", False),
+            validate_cache=getattr(args, "org_validate_cache", False),
+            memory_warning_threshold_mb=getattr(args, "org_memory_warning", 100),
+            memory_limit_mb=getattr(args, "org_memory_limit", None),
+            enable_clustering=getattr(args, "org_cluster", False),
+            cluster_method=getattr(args, "org_cluster_method", "average"),
+            quiet=args.quiet,
+            cja_per_thread=not getattr(args, "org_shared_client", False),
+            duplicate_threshold=getattr(args, "org_duplicate_threshold", None),
+            isolated_threshold=getattr(args, "org_isolated_threshold", None),
+            fail_on_threshold=getattr(args, "org_fail_on_threshold", False),
+            org_stats_only=getattr(args, "org_stats_only", False),
+            audit_naming=getattr(args, "org_audit_naming", False),
+            compare_org_report=getattr(args, "org_compare_report", None),
+            include_owner_summary=getattr(args, "org_owner_summary", False),
+            flag_stale=getattr(args, "org_flag_stale", False),
+        )
+
+        output_format = args.format or "console"
+        trending_window = getattr(args, "trending_window", None)
+        if trending_window is not None and trending_window < 2:
+            _exit_error("--trending-window must be >= 2")
+
+        success, thresholds_exceeded = run_org_report(
+            config_file=args.config_file,
+            output_format=output_format,
+            output_path=getattr(args, "output", None),
+            output_dir=args.output_dir,
+            org_config=org_config,
+            profile=getattr(args, "profile", None),
+            quiet=args.quiet,
+            trending_window=trending_window,
+        )
+        if run_state is not None:
+            run_state["output_format"] = output_format
+            run_state["details"] = {
+                "operation_success": success,
+                "thresholds_exceeded": thresholds_exceeded,
+                "fail_on_threshold": org_config.fail_on_threshold,
+            }
+
+        if success:
+            if thresholds_exceeded and org_config.fail_on_threshold:
+                sys.exit(2)
+            sys.exit(0)
+        sys.exit(1)
+
+    return data_view_inputs
 
 
 def _main_impl(run_state: dict[str, Any] | None = None):
@@ -11583,181 +10019,11 @@ def _main_impl(run_state: dict[str, Any] | None = None):
                 run_state["details"] = {"operation_success": success, "discovery_command": attr}
             sys.exit(0 if success else 1)
 
-    # Handle --config-status mode (no data view required, no API call)
-    # --config-json implies --config-status
-    if getattr(args, "config_status", False) or getattr(args, "config_json", False):
-        output_json = getattr(args, "config_json", False)
-        success = show_config_status(args.config_file, profile=getattr(args, "profile", None), output_json=output_json)
-        if run_state is not None:
-            run_state["details"] = {"operation_success": success}
-        sys.exit(0 if success else 1)
-
-    # Handle --validate-config mode (no data view required)
-    if args.validate_config:
-        success = validate_config_only(
-            args.config_file,
-            profile=getattr(args, "profile", None),
-            output_dir=getattr(args, "output_dir", "."),
-        )
-        if run_state is not None:
-            run_state["details"] = {"operation_success": success}
-        sys.exit(0 if success else 1)
-
-    # Get data views from arguments
-    data_view_inputs = args.data_views
-    if run_state is not None:
-        run_state["data_view_inputs"] = list(data_view_inputs)
-
-    # Handle --interactive mode (full wizard for guided SDR generation)
-    if getattr(args, "interactive", False):
-        if data_view_inputs:
-            print(ConsoleColors.warning("Note: --interactive mode ignores positional data view arguments"))
-
-        wizard_config = interactive_wizard(args.config_file, profile=getattr(args, "profile", None))
-        if wizard_config is None:
-            print("Cancelled. Exiting.")
-            sys.exit(0)
-
-        # Apply wizard selections to args
-        data_view_inputs = wizard_config.data_view_ids
-        args.format = wizard_config.output_format
-        args.include_segments_inventory = wizard_config.include_segments
-        args.include_calculated_metrics = wizard_config.include_calculated
-        args.include_derived_inventory = wizard_config.include_derived
-        args.inventory_only = wizard_config.inventory_only
-        if run_state is not None:
-            run_state["data_view_inputs"] = list(data_view_inputs)
-
-        print()
-        print("=" * BANNER_WIDTH)
-        print("GENERATING SDR...")
-        print("=" * BANNER_WIDTH)
-        print()
-
-    # Handle --stats mode (requires data views)
-    if getattr(args, "stats", False):
-        if not data_view_inputs:
-            print(ConsoleColors.error("ERROR: --stats requires at least one data view ID or name"), file=sys.stderr)
-            sys.exit(1)
-
-        # Resolve data view names first
-        temp_logger = logging.getLogger("name_resolution")
-        temp_logger.setLevel(logging.WARNING)
-        resolved_ids, _ = resolve_data_view_names(
-            data_view_inputs,
-            args.config_file,
-            temp_logger,
-            profile=getattr(args, "profile", None),
-            match_mode=getattr(args, "name_match", "exact"),
-        )
-
-        if not resolved_ids:
-            print(ConsoleColors.error("ERROR: No valid data views found"), file=sys.stderr)
-            sys.exit(1)
-        if run_state is not None:
-            run_state["resolved_data_views"] = list(resolved_ids)
-
-        # Determine format for stats output
-        stats_format = "table"
-        if args.format in ("json", "csv"):
-            stats_format = args.format
-        elif output_to_stdout:
-            stats_format = "json"
-
-        success = show_stats(
-            resolved_ids,
-            config_file=args.config_file,
-            output_format=stats_format,
-            output_file=getattr(args, "output", None),
-            quiet=args.quiet,
-            profile=getattr(args, "profile", None),
-        )
-        if run_state is not None:
-            run_state["output_format"] = stats_format
-            run_state["details"] = {"operation_success": success}
-        sys.exit(0 if success else 1)
-
-    # Handle --org-report mode (no data views required)
-    if getattr(args, "org_report", False):
-        # Build config from args
-        org_config = OrgReportConfig(
-            filter_pattern=getattr(args, "org_filter", None),
-            exclude_pattern=getattr(args, "org_exclude", None),
-            limit=getattr(args, "org_limit", None),
-            core_threshold=getattr(args, "core_threshold", 0.5),
-            core_min_count=getattr(args, "core_min_count", None),
-            overlap_threshold=getattr(args, "overlap_threshold", 0.8),
-            summary_only=getattr(args, "org_summary", False) or getattr(args, "summary", False),
-            verbose=getattr(args, "org_verbose", False),
-            include_names=getattr(args, "org_include_names", False),
-            skip_similarity=getattr(args, "skip_similarity", False),
-            similarity_max_dvs=getattr(args, "org_similarity_max_dvs", 250),
-            force_similarity=getattr(args, "org_force_similarity", False),
-            # Existing options
-            include_component_types=not getattr(args, "no_component_types", False),
-            include_metadata=getattr(args, "org_include_metadata", False),
-            include_drift=getattr(args, "org_include_drift", False),
-            sample_size=getattr(args, "org_sample_size", None),
-            sample_seed=getattr(args, "org_sample_seed", None),
-            sample_stratified=getattr(args, "org_sample_stratified", False),
-            use_cache=getattr(args, "org_use_cache", False),
-            cache_max_age_hours=getattr(args, "org_cache_max_age", 24),
-            clear_cache=getattr(args, "org_clear_cache", False),
-            validate_cache=getattr(args, "org_validate_cache", False),
-            memory_warning_threshold_mb=getattr(args, "org_memory_warning", 100),
-            memory_limit_mb=getattr(args, "org_memory_limit", None),
-            enable_clustering=getattr(args, "org_cluster", False),
-            cluster_method=getattr(args, "org_cluster_method", "average"),
-            quiet=args.quiet,
-            cja_per_thread=not getattr(args, "org_shared_client", False),
-            # Feature 1: Governance thresholds
-            duplicate_threshold=getattr(args, "org_duplicate_threshold", None),
-            isolated_threshold=getattr(args, "org_isolated_threshold", None),
-            fail_on_threshold=getattr(args, "org_fail_on_threshold", False),
-            # Feature 2: Org-stats mode
-            org_stats_only=getattr(args, "org_stats_only", False),
-            # Feature 3: Naming audit
-            audit_naming=getattr(args, "org_audit_naming", False),
-            # Feature 4: Trending/drift report
-            compare_org_report=getattr(args, "org_compare_report", None),
-            # Feature 5: Owner summary
-            include_owner_summary=getattr(args, "org_owner_summary", False),
-            # Feature 6: Stale component heuristics
-            flag_stale=getattr(args, "org_flag_stale", False),
-        )
-
-        # Determine output format (default to console for org reports)
-        output_format = args.format or "console"
-
-        trending_window = getattr(args, "trending_window", None)
-        if trending_window is not None and trending_window < 2:
-            _exit_error("--trending-window must be >= 2")
-
-        success, thresholds_exceeded = run_org_report(
-            config_file=args.config_file,
-            output_format=output_format,
-            output_path=getattr(args, "output", None),
-            output_dir=args.output_dir,
-            org_config=org_config,
-            profile=getattr(args, "profile", None),
-            quiet=args.quiet,
-            trending_window=trending_window,
-        )
-        if run_state is not None:
-            run_state["output_format"] = output_format
-            run_state["details"] = {
-                "operation_success": success,
-                "thresholds_exceeded": thresholds_exceeded,
-                "fail_on_threshold": org_config.fail_on_threshold,
-            }
-
-        # Exit code: 0 = success, 1 = error, 2 = thresholds exceeded (with --fail-on-threshold)
-        if success:
-            if thresholds_exceeded and org_config.fail_on_threshold:
-                sys.exit(2)
-            sys.exit(0)
-        else:
-            sys.exit(1)
+    data_view_inputs = _dispatch_post_validation_report_modes(
+        args,
+        output_to_stdout=output_to_stdout,
+        run_state=run_state,
+    )
 
     # Parse ignore_fields if provided
     ignore_fields = None

@@ -25,13 +25,13 @@ __getattr__ = make_getattr(
         # Canonical implementation in cli.parser
         "parse_arguments": "cja_auto_sdr.cli.parser",
         # Remaining entrypoints
-        "generate_sample_config": "cja_auto_sdr.generator",
+        "generate_sample_config": "cja_auto_sdr.cli.commands.config",
         "interactive_select_dataviews": "cja_auto_sdr.generator",
         "interactive_wizard": "cja_auto_sdr.generator",
         "list_dataviews": "cja_auto_sdr.cli.commands.list",
         "main": "cja_auto_sdr.generator",
         "prompt_for_selection": "cja_auto_sdr.generator",
-        "show_config_status": "cja_auto_sdr.generator",
-        "validate_config_only": "cja_auto_sdr.generator",
+        "show_config_status": "cja_auto_sdr.cli.commands.config",
+        "validate_config_only": "cja_auto_sdr.cli.commands.config",
     },
 )

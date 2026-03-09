@@ -21,7 +21,7 @@ __getattr__ = make_getattr(
     __all__,
     mapping={
         "describe_dataview": "cja_auto_sdr.cli.commands.list",
-        "generate_sample_config": "cja_auto_sdr.generator",
+        "generate_sample_config": "cja_auto_sdr.cli.commands.config",
         "list_calculated_metrics": "cja_auto_sdr.cli.commands.list",
         "list_connections": "cja_auto_sdr.cli.commands.list",
         "list_datasets": "cja_auto_sdr.cli.commands.list",
@@ -29,7 +29,7 @@ __getattr__ = make_getattr(
         "list_dimensions": "cja_auto_sdr.cli.commands.list",
         "list_metrics": "cja_auto_sdr.cli.commands.list",
         "list_segments": "cja_auto_sdr.cli.commands.list",
-        "show_config_status": "cja_auto_sdr.generator",
-        "validate_config_only": "cja_auto_sdr.generator",
+        "show_config_status": "cja_auto_sdr.cli.commands.config",
+        "validate_config_only": "cja_auto_sdr.cli.commands.config",
     },
 )
