@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import errno
+import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -143,6 +144,27 @@ def test_get_stats_reports_file_size(tmp_path: Path):
     assert stats_after["entries"] == 1
     assert stats_after["cache_size_bytes"] > 0
     assert stats_after["cache_file"].endswith("org_report_cache.json")
+
+
+def test_get_org_report_snapshot_dir_sanitizes_org_id(tmp_path: Path):
+    cache = OrgReportCache(cache_dir=tmp_path)
+    snapshot_dir = cache.get_org_report_snapshot_dir("org@test.example")
+    assert snapshot_dir == tmp_path / "org_report_snapshots" / "org_test_example"
+
+
+def test_save_org_report_snapshot_writes_json_file(tmp_path: Path):
+    cache = OrgReportCache(cache_dir=tmp_path)
+    report = {
+        "generated_at": "2026-03-01T00:00:00Z",
+        "org_id": "org@test.example",
+        "summary": {"data_views_total": 2, "total_unique_components": 5},
+    }
+
+    path = cache.save_org_report_snapshot(report)
+
+    assert path.exists()
+    assert path.parent == cache.get_org_report_snapshot_dir("org@test.example")
+    assert json.loads(path.read_text(encoding="utf-8"))["org_id"] == "org@test.example"
 
 
 def test_lock_property_and_health_delegate_to_manager(tmp_path: Path):

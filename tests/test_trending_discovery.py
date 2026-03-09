@@ -20,6 +20,7 @@ from cja_auto_sdr.org.trending import (
 
 def _make_org_report_json(
     timestamp="2026-01-01T00:00:00Z",
+    org_id="test_org",
     dv_count=10,
     comp_count=100,
     core_metrics=None,
@@ -27,13 +28,15 @@ def _make_org_report_json(
     isolated_metrics=None,
     isolated_dimensions=None,
     data_views=None,
+    component_index=None,
     similarity_pairs=None,
 ):
     """Build a minimal org-report JSON dict."""
     return {
         "generated_at": timestamp,
+        "org_id": org_id,
         "summary": {
-            "total_data_views": dv_count,
+            "data_views_total": dv_count,
             "total_unique_components": comp_count,
         },
         "distribution": {
@@ -41,8 +44,8 @@ def _make_org_report_json(
                 "total": len(core_metrics or []) + len(core_dimensions or []),
                 "metrics_count": len(core_metrics or []),
                 "dimensions_count": len(core_dimensions or []),
-                "core_metrics": core_metrics or [],
-                "core_dimensions": core_dimensions or [],
+                "metrics": core_metrics or [],
+                "dimensions": core_dimensions or [],
             },
             "isolated": {
                 "total": len(isolated_metrics or []) + len(isolated_dimensions or []),
@@ -51,6 +54,7 @@ def _make_org_report_json(
             },
         },
         "data_views": data_views or [],
+        "component_index": component_index or {},
         "similarity_pairs": similarity_pairs or [],
     }
 
@@ -76,11 +80,11 @@ class TestExtractSnapshotFromJson:
         assert snap.component_count == 200
 
     def test_missing_timestamp_returns_none(self):
-        data = {"summary": {"total_data_views": 5}}
+        data = {"summary": {"data_views_total": 5}}
         assert _extract_snapshot_from_json(data) is None
 
     def test_fallback_timestamp_key(self):
-        data = {"timestamp": "2026-06-01", "summary": {"total_data_views": 5}}
+        data = {"timestamp": "2026-06-01", "summary": {"data_views_total": 5}, "org_id": "test_org"}
         snap = _extract_snapshot_from_json(data)
         assert snap is not None
         assert snap.timestamp == "2026-06-01"
@@ -119,13 +123,31 @@ class TestExtractSnapshotFromJson:
     def test_per_dv_component_counts(self):
         data = _make_org_report_json(
             data_views=[
-                {"data_view_id": "dv1", "metric_count": 50, "dimension_count": 30},
-                {"data_view_id": "dv2", "metric_count": 20, "dimension_count": 10},
+                {"id": "dv1", "name": "DV 1", "metrics_count": 50, "dimensions_count": 30},
+                {"id": "dv2", "name": "DV 2", "metrics_count": 20, "dimensions_count": 10},
             ],
         )
         snap = _extract_snapshot_from_json(data)
         assert snap.dv_component_counts == {"dv1": 80, "dv2": 30}
         assert snap.dv_ids == {"dv1", "dv2"}
+        assert snap.dv_names == {"dv1": "DV 1", "dv2": "DV 2"}
+
+    def test_core_ratios_are_derived_from_component_index(self):
+        data = _make_org_report_json(
+            core_metrics=["m1"],
+            core_dimensions=["d1"],
+            data_views=[
+                {"id": "dv1", "metrics_count": 2, "dimensions_count": 1},
+                {"id": "dv2", "metrics_count": 1, "dimensions_count": 1},
+            ],
+            component_index={
+                "m1": {"type": "metric", "data_views": ["dv1", "dv2"]},
+                "d1": {"type": "dimension", "data_views": ["dv1"]},
+            },
+        )
+        snap = _extract_snapshot_from_json(data)
+        assert snap.dv_core_ratios["dv1"] == pytest.approx(2 / 3, abs=0.0001)
+        assert snap.dv_core_ratios["dv2"] == pytest.approx(1 / 2, abs=0.0001)
 
     def test_dv_max_similarity(self):
         data = _make_org_report_json(
@@ -143,12 +165,32 @@ class TestExtractSnapshotFromJson:
         data = _make_org_report_json(
             dv_count=0,
             data_views=[
-                {"data_view_id": "dv1", "metric_count": 10, "dimension_count": 5},
-                {"data_view_id": "dv2", "metric_count": 10, "dimension_count": 5},
+                {"id": "dv1", "metrics_count": 10, "dimensions_count": 5},
+                {"id": "dv2", "metrics_count": 10, "dimensions_count": 5},
             ],
         )
         snap = _extract_snapshot_from_json(data)
         assert snap.data_view_count == 2
+
+    def test_legacy_summary_and_distribution_keys_still_supported(self):
+        data = {
+            "generated_at": "2026-01-01T00:00:00Z",
+            "org_id": "test_org",
+            "summary": {"total_data_views": 4, "total_unique_components": 10},
+            "distribution": {
+                "core": {"core_metrics": ["m1"], "core_dimensions": ["d1"], "metrics_count": 1, "dimensions_count": 1},
+                "isolated": {"metrics_count": 1, "dimensions_count": 0},
+            },
+            "data_views": [{"data_view_id": "dv1", "metric_count": 2, "dimension_count": 1}],
+            "component_index": {
+                "m1": {"data_views": ["dv1"]},
+                "d1": {"data_views": ["dv1"]},
+            },
+        }
+        snap = _extract_snapshot_from_json(data)
+        assert snap is not None
+        assert snap.data_view_count == 4
+        assert snap.core_count == 2
 
 
 # ---------------------------------------------------------------------------
@@ -228,6 +270,13 @@ class TestDiscoverSnapshots:
         _write_report(tmp_path, "report.json", _make_org_report_json(timestamp="2026-01-01"))
         result = discover_snapshots(tmp_path, window_size=10, explicit_file=tmp_path / "gone.json")
         assert len(result) == 1
+
+    def test_filters_discovered_snapshots_to_org_id(self, tmp_path):
+        _write_report(tmp_path, "a.json", _make_org_report_json(timestamp="2026-01-01", org_id="org_a"))
+        _write_report(tmp_path, "b.json", _make_org_report_json(timestamp="2026-02-01", org_id="org_b"))
+        result = discover_snapshots(tmp_path, window_size=10, org_id="org_a")
+        assert len(result) == 1
+        assert result[0].org_id == "org_a"
 
 
 # ---------------------------------------------------------------------------
@@ -467,3 +516,11 @@ class TestBuildTrending:
         assert result is not None
         assert result.window_size == 2
         assert result.snapshots[0].timestamp == "2026-01-01"
+
+    def test_org_id_scoping_excludes_other_org_snapshots(self, tmp_path):
+        _write_report(tmp_path, "a.json", _make_org_report_json(timestamp="2026-01-01", org_id="org_a"))
+        _write_report(tmp_path, "b.json", _make_org_report_json(timestamp="2026-02-01", org_id="org_b"))
+        current = TrendingSnapshot(timestamp="2026-03-01", org_id="org_a")
+        result = build_trending(tmp_path, current_snapshot=current, org_id="org_a")
+        assert result is not None
+        assert [snapshot.org_id for snapshot in result.snapshots] == ["org_a", "org_a"]

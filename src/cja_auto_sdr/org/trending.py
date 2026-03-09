@@ -32,9 +32,10 @@ def _extract_snapshot_from_json(data: dict[str, Any]) -> TrendingSnapshot | None
 
     summary = data.get("summary", {})
     distribution = data.get("distribution", {})
+    org_id = data.get("org_id")
 
     # Data view count
-    dv_count = summary.get("total_data_views", 0)
+    dv_count = summary.get("data_views_total", summary.get("total_data_views", 0))
     if not dv_count:
         dv_count = len(data.get("data_views", []))
 
@@ -62,29 +63,46 @@ def _extract_snapshot_from_json(data: dict[str, Any]) -> TrendingSnapshot | None
     dv_core_ratios: dict[str, float] = {}
     dv_max_similarity: dict[str, float] = {}
     dv_ids: set[str] = set()
+    dv_names: dict[str, str] = {}
 
     # Core ratio per DV: fraction of DV's components that are "core"
     # (shared across >= threshold% of DVs).  Approximated from the global
     # core component list — a DV's core ratio is len(its_components ∩ core) / total.
     core_ids: set[str] = set()
-    for comp_id_list_key in ("core_metrics", "core_dimensions"):
-        core_ids.update(distribution.get("core", {}).get(comp_id_list_key, []))
+    core_section = distribution.get("core", {})
+    for comp_id_list_key in (("metrics", "core_metrics"), ("dimensions", "core_dimensions")):
+        for key in comp_id_list_key:
+            values = core_section.get(key, [])
+            if isinstance(values, list):
+                core_ids.update(str(value) for value in values)
+                break
+
+    dv_core_component_counts: dict[str, int] = {}
 
     for dv in data.get("data_views", []):
         dv_id = dv.get("data_view_id") or dv.get("id", "")
         if not dv_id:
             continue
         dv_ids.add(dv_id)
-        metrics = dv.get("metric_count", 0)
-        dims = dv.get("dimension_count", 0)
+        metrics = dv.get("metrics_count", dv.get("metric_count", 0))
+        dims = dv.get("dimensions_count", dv.get("dimension_count", 0))
         dv_component_counts[dv_id] = metrics + dims
+        dv_names[dv_id] = dv.get("data_view_name") or dv.get("name") or dv_id
+        dv_core_component_counts[dv_id] = 0
 
-        metric_ids = set(dv.get("metric_ids", []))
-        dimension_ids = set(dv.get("dimension_ids", []))
-        all_ids = metric_ids | dimension_ids
-        total = len(all_ids)
-        if total > 0 and core_ids:
-            dv_core_ratios[dv_id] = len(all_ids & core_ids) / total
+    component_index = data.get("component_index", {})
+    if isinstance(component_index, dict) and core_ids:
+        for comp_id in core_ids:
+            comp_info = component_index.get(comp_id)
+            if not isinstance(comp_info, dict):
+                continue
+            for dv_id in comp_info.get("data_views", []):
+                if dv_id in dv_core_component_counts:
+                    dv_core_component_counts[dv_id] += 1
+
+    for dv_id, total_components in dv_component_counts.items():
+        if total_components > 0 and core_ids:
+            dv_core_ratios[dv_id] = dv_core_component_counts.get(dv_id, 0) / total_components
         else:
             dv_core_ratios[dv_id] = 0.0
 
@@ -100,6 +118,7 @@ def _extract_snapshot_from_json(data: dict[str, Any]) -> TrendingSnapshot | None
 
     return TrendingSnapshot(
         timestamp=str(timestamp),
+        org_id=str(org_id) if org_id is not None else None,
         data_view_count=dv_count,
         component_count=comp_count,
         core_count=core_count,
@@ -109,6 +128,7 @@ def _extract_snapshot_from_json(data: dict[str, Any]) -> TrendingSnapshot | None
         dv_core_ratios=dv_core_ratios,
         dv_max_similarity=dv_max_similarity,
         dv_ids=dv_ids,
+        dv_names=dv_names,
     )
 
 
@@ -121,6 +141,7 @@ def discover_snapshots(
     cache_dir: str | Path,
     window_size: int = 10,
     explicit_file: str | Path | None = None,
+    org_id: str | None = None,
 ) -> list[TrendingSnapshot]:
     """Walk a directory for org-report JSON files and return snapshots.
 
@@ -136,7 +157,7 @@ def discover_snapshots(
     """
     cache_path = Path(cache_dir)
     snapshots: list[TrendingSnapshot] = []
-    seen_timestamps: set[str] = set()
+    seen_snapshot_keys: set[tuple[str | None, str]] = set()
 
     # Collect JSON files from the directory
     json_files: list[Path] = []
@@ -151,9 +172,14 @@ def discover_snapshots(
 
     for json_file in json_files:
         snapshot = _load_snapshot_from_file(json_file)
-        if snapshot is not None and snapshot.timestamp not in seen_timestamps:
+        if snapshot is None:
+            continue
+        if org_id is not None and snapshot.org_id != org_id:
+            continue
+        snapshot_key = (snapshot.org_id, snapshot.timestamp)
+        if snapshot_key not in seen_snapshot_keys:
             snapshots.append(snapshot)
-            seen_timestamps.add(snapshot.timestamp)
+            seen_snapshot_keys.add(snapshot_key)
 
     # Sort by timestamp (oldest first) and trim to window
     snapshots.sort(key=lambda s: s.timestamp)
@@ -315,6 +341,7 @@ def build_trending(
     window_size: int = 10,
     explicit_file: str | Path | None = None,
     current_snapshot: TrendingSnapshot | None = None,
+    org_id: str | None = None,
 ) -> OrgReportTrending | None:
     """Build a complete OrgReportTrending from cached org-report JSONs.
 
@@ -327,16 +354,35 @@ def build_trending(
     Returns:
         OrgReportTrending if >= 2 snapshots available, else None.
     """
-    snapshots = discover_snapshots(cache_dir, window_size=window_size, explicit_file=explicit_file)
+    effective_org_id = org_id or (current_snapshot.org_id if current_snapshot is not None else None)
+    snapshots = discover_snapshots(
+        cache_dir,
+        window_size=window_size,
+        explicit_file=explicit_file,
+        org_id=effective_org_id,
+    )
 
     # Append current run snapshot if provided and not a duplicate
     if current_snapshot is not None:
-        existing_timestamps = {s.timestamp for s in snapshots}
-        if current_snapshot.timestamp not in existing_timestamps:
-            snapshots.append(current_snapshot)
-            # Re-trim if over window
-            if len(snapshots) > window_size:
-                snapshots = snapshots[-window_size:]
+        current_snapshot_org_id = current_snapshot.org_id or effective_org_id
+        if current_snapshot.org_id is None and current_snapshot_org_id is not None:
+            current_snapshot.org_id = current_snapshot_org_id
+
+        if effective_org_id is None or current_snapshot_org_id == effective_org_id:
+            if current_snapshot_org_id is None:
+                existing_timestamps = {s.timestamp for s in snapshots}
+                is_duplicate = current_snapshot.timestamp in existing_timestamps
+            else:
+                existing_snapshot_keys = {(s.org_id, s.timestamp) for s in snapshots}
+                snapshot_key = (current_snapshot_org_id, current_snapshot.timestamp)
+                is_duplicate = snapshot_key in existing_snapshot_keys
+
+            if not is_duplicate:
+                snapshots.append(current_snapshot)
+                snapshots.sort(key=lambda s: s.timestamp)
+                # Re-trim if over window
+                if len(snapshots) > window_size:
+                    snapshots = snapshots[-window_size:]
 
     if len(snapshots) < 2:
         return None

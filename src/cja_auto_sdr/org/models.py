@@ -438,6 +438,7 @@ class TrendingSnapshot:
     """
 
     timestamp: str
+    org_id: str | None = None
     data_view_count: int = 0
     component_count: int = 0
     core_count: int = 0
@@ -448,6 +449,7 @@ class TrendingSnapshot:
     dv_core_ratios: dict[str, float] = field(default_factory=dict)
     dv_max_similarity: dict[str, float] = field(default_factory=dict)
     dv_ids: set[str] = field(default_factory=set)
+    dv_names: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -490,14 +492,16 @@ class OrgReportTrending:
         prev = self.snapshots[-2]
         curr = self.snapshots[-1]
 
-        added_ids = list(curr.dv_ids - prev.dv_ids)
-        removed_ids = list(prev.dv_ids - curr.dv_ids)
+        added_ids = sorted(curr.dv_ids - prev.dv_ids)
+        removed_ids = sorted(prev.dv_ids - curr.dv_ids)
 
         return OrgReportComparison(
             current_timestamp=curr.timestamp,
             previous_timestamp=prev.timestamp,
             data_views_added=added_ids,
             data_views_removed=removed_ids,
+            data_views_added_names=[curr.dv_names.get(dv_id, dv_id) for dv_id in added_ids],
+            data_views_removed_names=[prev.dv_names.get(dv_id, dv_id) for dv_id in removed_ids],
             components_added=max(0, curr.component_count - prev.component_count),
             components_removed=max(0, prev.component_count - curr.component_count),
             core_delta=curr.core_count - prev.core_count,

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from contextlib import ExitStack
+from copy import deepcopy
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -11,6 +12,7 @@ import pytest
 
 from cja_auto_sdr import generator
 from cja_auto_sdr.core.exceptions import CJASDRError
+from cja_auto_sdr.org.cache import OrgReportCache
 from cja_auto_sdr.org.models import ComponentInfo, OrgReportComparison, OrgReportConfig
 
 
@@ -390,6 +392,69 @@ def test_run_org_report_cache_and_comparison_error_paths(tmp_path: Path, rich_or
 
     assert ok is True
     assert exceeded is False
+
+
+def test_run_org_report_trending_window_uses_persistent_snapshot_cache(tmp_path: Path, rich_org_report_result):
+    first_result = deepcopy(rich_org_report_result)
+    first_result.timestamp = "2026-02-01T00:00:00Z"
+    first_result.org_id = "test_org@AdobeOrg"
+
+    second_result = deepcopy(rich_org_report_result)
+    second_result.timestamp = "2026-03-01T00:00:00Z"
+    second_result.org_id = "test_org@AdobeOrg"
+
+    snapshot_cache_root = tmp_path / "cache"
+
+    def _cache_factory(*args, **kwargs):
+        return OrgReportCache(cache_dir=snapshot_cache_root, logger=kwargs.get("logger"))
+
+    with (
+        patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "mock", {"org_id": "test_org@AdobeOrg"})),
+        patch("cja_auto_sdr.generator.cjapy") as mock_cjapy,
+        patch("cja_auto_sdr.generator.OrgReportCache", side_effect=_cache_factory),
+        patch("cja_auto_sdr.generator.OrgComponentAnalyzer") as mock_analyzer_cls,
+        patch("cja_auto_sdr.generator.write_org_report_console") as mock_console,
+        patch("cja_auto_sdr.generator.build_org_step_summary", return_value="summary"),
+        patch("cja_auto_sdr.generator.append_github_step_summary"),
+    ):
+        mock_cjapy.CJA.return_value = Mock()
+        analyzer = Mock()
+        analyzer.run_analysis.side_effect = [first_result, second_result]
+        mock_analyzer_cls.return_value = analyzer
+
+        ok1, exceeded1 = generator.run_org_report(
+            config_file="config.json",
+            output_format="console",
+            output_path=None,
+            output_dir=str(tmp_path / "run_one"),
+            org_config=OrgReportConfig(),
+            quiet=False,
+            trending_window=3,
+        )
+        ok2, exceeded2 = generator.run_org_report(
+            config_file="config.json",
+            output_format="console",
+            output_path=None,
+            output_dir=str(tmp_path / "run_two"),
+            org_config=OrgReportConfig(),
+            quiet=False,
+            trending_window=3,
+        )
+
+    assert ok1 is True
+    assert exceeded1 is False
+    assert ok2 is True
+    assert exceeded2 is False
+    assert mock_console.call_count == 2
+
+    first_trending = mock_console.call_args_list[0].kwargs.get("trending")
+    second_trending = mock_console.call_args_list[1].kwargs.get("trending")
+    assert first_trending is None
+    assert second_trending is not None
+    assert second_trending.window_size == 2
+
+    snapshot_dir = OrgReportCache(cache_dir=snapshot_cache_root).get_org_report_snapshot_dir("test_org@AdobeOrg")
+    assert len(list(snapshot_dir.glob("*.json"))) == 2
 
 
 def test_run_org_report_comparison_os_error_is_non_fatal(tmp_path: Path, rich_org_report_result, capsys):

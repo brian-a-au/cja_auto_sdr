@@ -11089,22 +11089,31 @@ def run_org_report(
             from cja_auto_sdr.org.trending import _extract_snapshot_from_json, build_trending
             from cja_auto_sdr.org.writers import build_org_report_json_data as _build_json_for_snapshot
 
-            # Build a snapshot from the current run
-            current_json = _build_json_for_snapshot(result)
-            current_snapshot = _extract_snapshot_from_json(current_json)
+            snapshot_cache = cache if cache is not None else OrgReportCache(logger=logger)
+            snapshot_cache_dir = snapshot_cache.get_org_report_snapshot_dir(result.org_id)
 
-            trending = build_trending(
-                cache_dir=output_dir,
-                window_size=trending_window,
-                explicit_file=org_config.compare_org_report,
-                current_snapshot=current_snapshot,
-            )
-            if trending is None and not quiet:
-                _status_print(
-                    ConsoleColors.warning(
-                        "Note: Fewer than 2 org-report snapshots found in output directory — trending skipped."
-                    ),
+            try:
+                # Persist the current run so console/default workflows accumulate history.
+                current_json = _build_json_for_snapshot(result)
+                current_snapshot = _extract_snapshot_from_json(current_json)
+                snapshot_cache.save_org_report_snapshot(current_json, org_id=result.org_id)
+
+                trending = build_trending(
+                    cache_dir=snapshot_cache_dir,
+                    window_size=trending_window,
+                    explicit_file=org_config.compare_org_report,
+                    current_snapshot=current_snapshot,
+                    org_id=result.org_id,
                 )
+                if trending is None and not quiet:
+                    _status_print(
+                        ConsoleColors.warning(
+                            "Note: Fewer than 2 org-report snapshots found in persistent cache — trending skipped."
+                        ),
+                    )
+            except OSError as e:
+                if not quiet:
+                    _status_print(ConsoleColors.warning(f"Warning: Could not persist org-report snapshot history: {e}"))
 
         # Generate output based on format
         output_path_obj = Path(output_path) if output_path and not output_to_stdout else None

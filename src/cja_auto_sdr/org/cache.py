@@ -12,6 +12,7 @@ import errno
 import json
 import logging
 import os
+import re
 import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -167,6 +168,32 @@ class OrgReportCache:
             self.logger.warning(f"Failed to save org report cache to {self.cache_file}: {e}")
             with contextlib.suppress(OSError):
                 tmp_path.unlink()
+
+    @staticmethod
+    def _sanitize_org_id(org_id: str | None) -> str:
+        """Return a filesystem-safe org identifier."""
+        if not org_id:
+            return "unknown"
+        return re.sub(r"[^a-zA-Z0-9_-]", "_", str(org_id))
+
+    def get_org_report_snapshot_dir(self, org_id: str | None = None) -> Path:
+        """Return the persistent snapshot directory for org-report trending history."""
+        return self.cache_dir / "org_report_snapshots" / self._sanitize_org_id(org_id)
+
+    def save_org_report_snapshot(self, report_data: dict[str, Any], org_id: str | None = None) -> Path:
+        """Persist an org-report JSON payload for future trending windows."""
+        resolved_org_id = org_id or str(report_data.get("org_id") or "unknown")
+        snapshot_dir = self.get_org_report_snapshot_dir(resolved_org_id)
+        snapshot_dir.mkdir(parents=True, exist_ok=True)
+
+        timestamp = str(report_data.get("generated_at") or datetime.now(UTC).isoformat())
+        timestamp_slug = re.sub(r"[^0-9A-Za-z_-]", "_", timestamp)
+        file_path = snapshot_dir / f"org_report_{self._sanitize_org_id(resolved_org_id)}_{timestamp_slug}.json"
+
+        with open(file_path, "w", encoding="utf-8") as f:
+            json.dump(report_data, f, indent=2, ensure_ascii=False)
+
+        return file_path
 
     def get(
         self,

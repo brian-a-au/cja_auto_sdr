@@ -160,6 +160,13 @@ class TestJsonSchemaBackwardsCompat:
 
 
 class TestComparisonConsoleBridge:
+    def test_trending_to_comparison_populates_added_removed_names(self):
+        trending = _make_trending()
+        comparison = trending.to_comparison()
+        assert comparison is not None
+        assert comparison.data_views_added_names == ["dv3"]
+        assert comparison.data_views_removed_names == []
+
     def test_trending_to_comparison_feeds_console_writer(self, capsys):
         trending = _make_trending()
         comparison = trending.to_comparison()
