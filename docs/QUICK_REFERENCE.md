@@ -256,6 +256,15 @@ cja_auto_sdr --org-report --trending-window 5 --format json
 # Compare against previous org report
 cja_auto_sdr --org-report --compare-org-report ./previous.json
 
+# List cached org-report snapshots
+cja_auto_sdr --list-org-report-snapshots
+
+# Inspect one cached org-report snapshot
+cja_auto_sdr --inspect-org-report-snapshot ./org_report_test_org_AdobeOrg_2026_03_01T00_00_00Z.json
+
+# Prune cached org-report snapshots
+cja_auto_sdr --prune-org-report-snapshots --org-report-keep-last 10
+
 # --- Naming Audit ---
 # Audit naming conventions
 cja_auto_sdr --org-report --audit-naming

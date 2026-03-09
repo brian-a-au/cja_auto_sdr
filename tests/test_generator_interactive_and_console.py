@@ -13,8 +13,9 @@ import pytest
 
 from cja_auto_sdr import generator
 from cja_auto_sdr.core.exceptions import CJASDRError
-from cja_auto_sdr.org.cache import OrgReportCache
+from cja_auto_sdr.org.cache import DEFAULT_ORG_REPORT_SNAPSHOT_KEEP_LAST, OrgReportCache
 from cja_auto_sdr.org.models import ComponentInfo, OrgReportComparison, OrgReportConfig
+from cja_auto_sdr.org.writers import build_org_report_json_data
 
 
 def _mock_data_views() -> list[dict[str, object]]:
@@ -456,6 +457,136 @@ def test_run_org_report_trending_window_uses_persistent_snapshot_cache(tmp_path:
 
     snapshot_dir = OrgReportCache(cache_dir=snapshot_cache_root).get_org_report_snapshot_dir("test_org@AdobeOrg")
     assert len(list(snapshot_dir.glob("*.json"))) == 2
+
+
+def test_run_org_report_trending_window_prunes_snapshot_history(tmp_path: Path, rich_org_report_result):
+    result = deepcopy(rich_org_report_result)
+    result.timestamp = "2026-03-01T00:00:00Z"
+    result.org_id = "test_org@AdobeOrg"
+
+    snapshot_cache_root = tmp_path / "cache"
+
+    def _cache_factory(*args, **kwargs):
+        return OrgReportCache(cache_dir=snapshot_cache_root, logger=kwargs.get("logger"))
+
+    with (
+        patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "mock", {"org_id": "test_org@AdobeOrg"})),
+        patch("cja_auto_sdr.generator.cjapy") as mock_cjapy,
+        patch("cja_auto_sdr.generator.OrgReportCache", side_effect=_cache_factory),
+        patch.object(OrgReportCache, "prune_org_report_snapshots", return_value=[]) as mock_prune,
+        patch("cja_auto_sdr.generator.OrgComponentAnalyzer") as mock_analyzer_cls,
+        patch("cja_auto_sdr.generator.write_org_report_console"),
+        patch("cja_auto_sdr.generator.build_org_step_summary", return_value="summary"),
+        patch("cja_auto_sdr.generator.append_github_step_summary"),
+    ):
+        mock_cjapy.CJA.return_value = Mock()
+        analyzer = Mock()
+        analyzer.run_analysis.return_value = result
+        mock_analyzer_cls.return_value = analyzer
+
+        ok, exceeded = generator.run_org_report(
+            config_file="config.json",
+            output_format="console",
+            output_path=None,
+            output_dir=str(tmp_path),
+            org_config=OrgReportConfig(),
+            quiet=False,
+            trending_window=3,
+        )
+
+    assert ok is True
+    assert exceeded is False
+    mock_prune.assert_called_once_with(
+        org_id="test_org@AdobeOrg",
+        keep_last=max(DEFAULT_ORG_REPORT_SNAPSHOT_KEEP_LAST, 3),
+    )
+
+
+def test_run_org_report_trending_window_renders_across_file_formats_with_persistent_cache(
+    tmp_path: Path, rich_org_report_result, capsys
+):
+    openpyxl = pytest.importorskip("openpyxl")
+
+    baseline = deepcopy(rich_org_report_result)
+    baseline.timestamp = "2026-02-01T00:00:00Z"
+    baseline.org_id = "test_org@AdobeOrg"
+
+    current = deepcopy(rich_org_report_result)
+    current.timestamp = "2026-03-01T00:00:00Z"
+    current.org_id = "test_org@AdobeOrg"
+
+    snapshot_cache_root = tmp_path / "cache"
+    OrgReportCache(cache_dir=snapshot_cache_root).save_org_report_snapshot(
+        build_org_report_json_data(baseline), org_id=baseline.org_id
+    )
+
+    def _cache_factory(*args, **kwargs):
+        return OrgReportCache(cache_dir=snapshot_cache_root, logger=kwargs.get("logger"))
+
+    with (
+        patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "mock", {"org_id": "test_org@AdobeOrg"})),
+        patch("cja_auto_sdr.generator.cjapy") as mock_cjapy,
+        patch("cja_auto_sdr.generator.OrgReportCache", side_effect=_cache_factory),
+        patch("cja_auto_sdr.generator.OrgComponentAnalyzer") as mock_analyzer_cls,
+        patch("cja_auto_sdr.generator.build_org_step_summary", return_value="summary"),
+        patch("cja_auto_sdr.generator.append_github_step_summary"),
+    ):
+        mock_cjapy.CJA.return_value = Mock()
+        analyzer = Mock()
+        analyzer.run_analysis.return_value = current
+        mock_analyzer_cls.return_value = analyzer
+
+        format_outputs = {
+            "json": tmp_path / "json" / "org_report.json",
+            "excel": tmp_path / "excel" / "org_report.xlsx",
+            "markdown": tmp_path / "markdown" / "org_report.md",
+            "html": tmp_path / "html" / "org_report.html",
+        }
+
+        ok_console, exceeded_console = generator.run_org_report(
+            config_file="config.json",
+            output_format="console",
+            output_path=None,
+            output_dir=str(tmp_path / "console"),
+            org_config=OrgReportConfig(),
+            quiet=False,
+            trending_window=3,
+        )
+        assert ok_console is True
+        assert exceeded_console is False
+        assert "TRENDING" in capsys.readouterr().out
+
+        for fmt, output_path in format_outputs.items():
+            ok, exceeded = generator.run_org_report(
+                config_file="config.json",
+                output_format=fmt,
+                output_path=str(output_path),
+                output_dir=str(output_path.parent),
+                org_config=OrgReportConfig(),
+                quiet=False,
+                trending_window=3,
+            )
+            assert ok is True
+            assert exceeded is False
+
+        ok_csv, exceeded_csv = generator.run_org_report(
+            config_file="config.json",
+            output_format="csv",
+            output_path=None,
+            output_dir=str(tmp_path / "csv"),
+            org_config=OrgReportConfig(),
+            quiet=False,
+            trending_window=3,
+        )
+        assert ok_csv is True
+        assert exceeded_csv is False
+
+    json_payload = json.loads(format_outputs["json"].read_text(encoding="utf-8"))
+    assert "trending" in json_payload
+    assert "Trending" in format_outputs["markdown"].read_text(encoding="utf-8")
+    assert "Trending" in format_outputs["html"].read_text(encoding="utf-8")
+    assert "Trending" in openpyxl.load_workbook(format_outputs["excel"]).sheetnames
+    assert list((tmp_path / "csv").rglob("*trending*.csv"))
 
 
 def test_run_org_report_without_trending_window_leaves_output_unchanged(tmp_path: Path, rich_org_report_result):

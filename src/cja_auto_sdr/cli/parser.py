@@ -1319,6 +1319,48 @@ Requirements:
         help="Show trending across the last N cached org-report snapshots (default: 10). "
         "Requires --org-report. Output appears in all requested formats.",
     )
+    org_group.add_argument(
+        "--list-org-report-snapshots",
+        action="store_true",
+        dest="list_org_report_snapshots",
+        help="List cached org-report snapshots from the persistent trending history store",
+    )
+    org_group.add_argument(
+        "--inspect-org-report-snapshot",
+        type=str,
+        metavar="FILE",
+        dest="inspect_org_report_snapshot",
+        help="Inspect one cached org-report snapshot JSON without running a fresh org-report",
+    )
+    org_group.add_argument(
+        "--prune-org-report-snapshots",
+        action="store_true",
+        dest="prune_org_report_snapshots",
+        help="Apply retention policies to cached org-report snapshots in the persistent trending history store",
+    )
+    org_group.add_argument(
+        "--org-report-snapshot-org",
+        type=str,
+        metavar="ORG_ID",
+        dest="org_report_snapshot_org",
+        help="Filter org-report snapshot listing/pruning to one org ID",
+    )
+    org_group.add_argument(
+        "--org-report-keep-last",
+        type=int,
+        default=0,
+        metavar="N",
+        dest="org_report_keep_last",
+        help="For --prune-org-report-snapshots, keep only the last N snapshots per org (0 = keep all)",
+    )
+    org_group.add_argument(
+        "--org-report-keep-since",
+        type=str,
+        default=None,
+        metavar="PERIOD",
+        dest="org_report_keep_since",
+        help="For --prune-org-report-snapshots, delete org-report snapshots older than PERIOD (e.g. 30d, 12w)",
+    )
 
     # Feature 5: Owner/team summary
     org_group.add_argument(

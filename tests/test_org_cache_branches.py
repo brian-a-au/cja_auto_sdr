@@ -167,6 +167,84 @@ def test_save_org_report_snapshot_writes_json_file(tmp_path: Path):
     assert json.loads(path.read_text(encoding="utf-8"))["org_id"] == "org@test.example"
 
 
+def test_list_org_report_snapshots_returns_newest_first(tmp_path: Path):
+    cache = OrgReportCache(cache_dir=tmp_path)
+    root = cache.get_org_report_snapshot_dir("org@test.example")
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "older.json").write_text(
+        json.dumps(
+            {
+                "generated_at": "2026-02-01T00:00:00Z",
+                "org_id": "org@test.example",
+                "summary": {"data_views_total": 1, "total_unique_components": 2},
+                "distribution": {"core": {"total": 1}, "isolated": {"total": 1}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (root / "newer.json").write_text(
+        json.dumps(
+            {
+                "generated_at": "2026-03-01T00:00:00Z",
+                "org_id": "org@test.example",
+                "summary": {"data_views_total": 3, "total_unique_components": 9},
+                "distribution": {"core": {"total": 5}, "isolated": {"total": 4}},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    snapshots = cache.list_org_report_snapshots("org@test.example")
+
+    assert [Path(snapshot["filepath"]).name for snapshot in snapshots] == ["newer.json", "older.json"]
+    assert snapshots[0]["data_views_total"] == 3
+
+
+def test_inspect_org_report_snapshot_includes_data_view_preview(tmp_path: Path):
+    cache = OrgReportCache(cache_dir=tmp_path)
+    snapshot_path = cache.get_org_report_snapshot_dir("org@test.example") / "report.json"
+    snapshot_path.parent.mkdir(parents=True, exist_ok=True)
+    snapshot_path.write_text(
+        json.dumps(
+            {
+                "generated_at": "2026-03-01T00:00:00Z",
+                "org_id": "org@test.example",
+                "summary": {"data_views_total": 2, "total_unique_components": 4},
+                "distribution": {"core": {"total": 2}, "isolated": {"total": 2}},
+                "data_views": [
+                    {"data_view_id": "dv_1", "data_view_name": "Orders"},
+                    {"data_view_id": "dv_2", "data_view_name": "Visitors"},
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    snapshot = cache.inspect_org_report_snapshot(snapshot_path)
+
+    assert snapshot["data_view_names_preview"] == ["Orders", "Visitors"]
+    assert snapshot["data_view_names_total"] == 2
+
+
+def test_prune_org_report_snapshots_keeps_latest_per_org(tmp_path: Path):
+    cache = OrgReportCache(cache_dir=tmp_path)
+    for month in ("01", "02", "03"):
+        cache.save_org_report_snapshot(
+            {
+                "generated_at": f"2026-{month}-01T00:00:00Z",
+                "org_id": "org@test.example",
+                "summary": {"data_views_total": 1, "total_unique_components": 1},
+            }
+        )
+
+    deleted = cache.prune_org_report_snapshots(org_id="org@test.example", keep_last=2)
+    remaining = cache.list_org_report_snapshots("org@test.example")
+
+    assert len(deleted) == 1
+    assert len(remaining) == 2
+    assert [snapshot["generated_at"] for snapshot in remaining] == ["2026-03-01T00:00:00Z", "2026-02-01T00:00:00Z"]
+
+
 def test_lock_property_and_health_delegate_to_manager(tmp_path: Path):
     lock = OrgReportLock("org@test", lock_dir=tmp_path)
     manager = Mock()

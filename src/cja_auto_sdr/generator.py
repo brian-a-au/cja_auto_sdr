@@ -169,7 +169,7 @@ from cja_auto_sdr.core.exceptions import (
 )
 from cja_auto_sdr.core.version import __version__
 from cja_auto_sdr.org.analyzer import OrgComponentAnalyzer
-from cja_auto_sdr.org.cache import OrgReportCache
+from cja_auto_sdr.org.cache import DEFAULT_ORG_REPORT_SNAPSHOT_KEEP_LAST, OrgReportCache
 
 # ==================== LEGACY DEFINITIONS REMOVED ====================
 # The following sections have been moved to cja_auto_sdr.core:
@@ -616,6 +616,7 @@ class RunMode(Enum):
     CONFIG_STATUS = "config_status"
     VALIDATE_CONFIG = "validate_config"
     STATS = "stats"
+    ORG_REPORT_SNAPSHOTS = "org_report_snapshots"
     ORG_REPORT = "org_report"
     LIST_SNAPSHOTS = "list_snapshots"
     PRUNE_SNAPSHOTS = "prune_snapshots"
@@ -1528,6 +1529,14 @@ def _infer_run_mode_enum(args: argparse.Namespace) -> RunMode:
         (RunMode.CONFIG_STATUS, bool(getattr(args, "config_status", False) or getattr(args, "config_json", False))),
         (RunMode.VALIDATE_CONFIG, getattr(args, "validate_config", False)),
         (RunMode.STATS, getattr(args, "stats", False)),
+        (
+            RunMode.ORG_REPORT_SNAPSHOTS,
+            bool(
+                getattr(args, "list_org_report_snapshots", False)
+                or getattr(args, "inspect_org_report_snapshot", None)
+                or getattr(args, "prune_org_report_snapshots", False)
+            ),
+        ),
         (RunMode.ORG_REPORT, getattr(args, "org_report", False)),
         (RunMode.LIST_SNAPSHOTS, getattr(args, "list_snapshots", False)),
         (RunMode.PRUNE_SNAPSHOTS, getattr(args, "prune_snapshots", False)),
@@ -10931,6 +10940,10 @@ def run_org_report(
                 current_json = _build_json_for_snapshot(result)
                 current_snapshot = _extract_snapshot_from_json(current_json)
                 snapshot_cache.save_org_report_snapshot(current_json, org_id=result.org_id)
+                snapshot_cache.prune_org_report_snapshots(
+                    org_id=result.org_id,
+                    keep_last=max(DEFAULT_ORG_REPORT_SNAPSHOT_KEEP_LAST, trending_window),
+                )
 
                 trending = build_trending(
                     cache_dir=snapshot_cache_dir,
@@ -12143,6 +12156,234 @@ def _warn_describe_dataview_ignored_options(args: argparse.Namespace) -> None:
     )
 
 
+def _handle_org_report_snapshot_cli(
+    args: argparse.Namespace,
+    *,
+    output_to_stdout: bool,
+    run_state: dict[str, Any] | None = None,
+) -> NoReturn:
+    """Handle listing, inspection, and pruning for persisted org-report snapshots."""
+    snapshot_cache = OrgReportCache()
+    org_id = getattr(args, "org_report_snapshot_org", None)
+    output_file = getattr(args, "output", None)
+
+    if getattr(args, "list_org_report_snapshots", False):
+        snapshots = snapshot_cache.list_org_report_snapshots(org_id=org_id)
+        output_format = args.format if args.format in ("json", "csv") else "table"
+        if output_to_stdout and output_format == "table":
+            output_format = "json"
+
+        if output_format == "json":
+            _emit_json_output(
+                {
+                    "snapshot_root": str(snapshot_cache.get_org_report_snapshot_root_dir()),
+                    "org_id": org_id,
+                    "count": len(snapshots),
+                    "snapshots": snapshots,
+                },
+                output_file=output_file,
+                is_stdout=output_to_stdout,
+                contract_label="Org-report snapshot listing output",
+            )
+        elif output_format == "csv":
+            rows = [
+                {
+                    "org_id": snapshot.get("org_id", ""),
+                    "generated_at": snapshot.get("generated_at", ""),
+                    "data_views_total": snapshot.get("data_views_total", 0),
+                    "total_unique_components": snapshot.get("total_unique_components", 0),
+                    "core_count": snapshot.get("core_count", 0),
+                    "isolated_count": snapshot.get("isolated_count", 0),
+                    "high_similarity_pairs": snapshot.get("high_similarity_pairs", 0),
+                    "filepath": snapshot.get("filepath", ""),
+                }
+                for snapshot in snapshots
+            ]
+            _emit_output(
+                _format_as_csv(
+                    [
+                        "org_id",
+                        "generated_at",
+                        "data_views_total",
+                        "total_unique_components",
+                        "core_count",
+                        "isolated_count",
+                        "high_similarity_pairs",
+                        "filepath",
+                    ],
+                    rows,
+                ),
+                output_file,
+                output_to_stdout,
+            )
+        else:
+            if snapshots:
+                table_rows = [
+                    {
+                        "org_id": snapshot.get("org_id", ""),
+                        "generated_at": snapshot.get("generated_at", ""),
+                        "data_views_total": snapshot.get("data_views_total", 0),
+                        "total_unique_components": snapshot.get("total_unique_components", 0),
+                        "filepath": Path(str(snapshot.get("filepath", ""))).name,
+                    }
+                    for snapshot in snapshots
+                ]
+                header = f"Found {len(table_rows)} org-report snapshot(s)"
+                if org_id:
+                    header += f" for {org_id}"
+                header += f" in {snapshot_cache.get_org_report_snapshot_root_dir()}:"
+                table_text = _format_as_table(
+                    header,
+                    table_rows,
+                    columns=["org_id", "generated_at", "data_views_total", "total_unique_components", "filepath"],
+                    col_labels=["Org ID", "Generated", "Data Views", "Components", "File"],
+                )
+            else:
+                table_text = (
+                    f"\nNo org-report snapshots found in {snapshot_cache.get_org_report_snapshot_root_dir()}.\n"
+                )
+            _emit_output(table_text, output_file, output_to_stdout)
+
+        if run_state is not None:
+            run_state["output_format"] = output_format
+            run_state["details"] = {"operation_success": True, "snapshot_count": len(snapshots), "org_id": org_id}
+        sys.exit(0)
+
+    snapshot_path = getattr(args, "inspect_org_report_snapshot", None)
+    if snapshot_path:
+        try:
+            snapshot = snapshot_cache.inspect_org_report_snapshot(snapshot_path)
+        except (OSError, ValueError) as exc:
+            _exit_error(str(exc))
+
+        output_format = args.format if args.format in ("json", "csv") else "table"
+        if output_to_stdout and output_format == "table":
+            output_format = "json"
+
+        if output_format == "json":
+            _emit_json_output(
+                {"snapshot": snapshot},
+                output_file=output_file,
+                is_stdout=output_to_stdout,
+                contract_label="Org-report snapshot inspection output",
+            )
+        elif output_format == "csv":
+            _emit_output(
+                _format_as_csv(
+                    [
+                        "org_id",
+                        "generated_at",
+                        "data_views_total",
+                        "total_unique_components",
+                        "core_count",
+                        "isolated_count",
+                        "high_similarity_pairs",
+                        "filepath",
+                    ],
+                    [snapshot],
+                ),
+                output_file,
+                output_to_stdout,
+            )
+        else:
+            lines = [
+                "",
+                "Org-Report Snapshot",
+                "=" * 80,
+                f"Org ID:               {snapshot.get('org_id', '')}",
+                f"Generated:            {snapshot.get('generated_at', '')}",
+                f"Data views:           {snapshot.get('data_views_total', 0)}",
+                f"Unique components:    {snapshot.get('total_unique_components', 0)}",
+                f"Core components:      {snapshot.get('core_count', 0)}",
+                f"Isolated components:  {snapshot.get('isolated_count', 0)}",
+                f"High-similarity pairs:{snapshot.get('high_similarity_pairs', 0)}",
+                f"File:                 {snapshot.get('filepath', '')}",
+            ]
+            preview_names = snapshot.get("data_view_names_preview", [])
+            if preview_names:
+                lines.extend(["", "Data view preview:"])
+                lines.extend([f"  - {name}" for name in preview_names])
+                if snapshot.get("data_view_names_truncated"):
+                    lines.append(f"  ... ({snapshot.get('data_view_names_total', len(preview_names))} total)")
+            lines.append("")
+            _emit_output("\n".join(lines), output_file, output_to_stdout)
+
+        if run_state is not None:
+            run_state["output_format"] = output_format
+            run_state["details"] = {
+                "operation_success": True,
+                "snapshot_file": snapshot.get("filepath", snapshot_path),
+                "org_id": snapshot.get("org_id"),
+            }
+        sys.exit(0)
+
+    effective_keep_last = getattr(args, "org_report_keep_last", 0)
+    effective_keep_since = getattr(args, "org_report_keep_since", None)
+    if effective_keep_last <= 0 and not effective_keep_since:
+        _exit_error(
+            "--prune-org-report-snapshots requires --org-report-keep-last and/or --org-report-keep-since",
+        )
+
+    keep_since_days = None
+    if effective_keep_since:
+        keep_since_days = parse_retention_period(effective_keep_since)
+        if keep_since_days is None:
+            _exit_error(f"Invalid --org-report-keep-since value: {effective_keep_since}")
+
+    deleted_paths = snapshot_cache.prune_org_report_snapshots(
+        org_id=org_id,
+        keep_last=effective_keep_last,
+        keep_since_days=keep_since_days,
+    )
+
+    output_format = args.format if args.format in ("json", "csv") else "table"
+    if output_to_stdout and output_format == "table":
+        output_format = "json"
+
+    if output_format == "json":
+        _emit_json_output(
+            {
+                "snapshot_root": str(snapshot_cache.get_org_report_snapshot_root_dir()),
+                "org_id": org_id,
+                "deleted_count": len(deleted_paths),
+                "deleted_files": deleted_paths,
+                "retention": {"keep_last": effective_keep_last, "keep_since": effective_keep_since},
+            },
+            output_file=output_file,
+            is_stdout=output_to_stdout,
+            contract_label="Org-report snapshot prune output",
+        )
+    elif output_format == "csv":
+        _emit_output(
+            _format_as_csv(["filepath"], [{"filepath": path} for path in deleted_paths]), output_file, output_to_stdout
+        )
+    else:
+        lines = [
+            "",
+            f"Org-report snapshot prune complete for {snapshot_cache.get_org_report_snapshot_root_dir()}",
+            f"Deleted files: {len(deleted_paths)}",
+            f"Retention keep_last: {effective_keep_last}",
+            f"Retention keep_since: {effective_keep_since or '-'}",
+        ]
+        if org_id:
+            lines.append(f"Target org: {org_id}")
+        if deleted_paths:
+            lines.extend(["", "Deleted files:"])
+            lines.extend([f"  - {Path(path).name}" for path in deleted_paths])
+        lines.append("")
+        _emit_output("\n".join(lines), output_file, output_to_stdout)
+
+    if run_state is not None:
+        run_state["output_format"] = output_format
+        run_state["details"] = {
+            "operation_success": True,
+            "deleted_count": len(deleted_paths),
+            "retention": {"keep_last": effective_keep_last, "keep_since": effective_keep_since},
+            "org_id": org_id,
+        }
+    sys.exit(0)
+
+
 def _main_impl(run_state: dict[str, Any] | None = None):
     """Main CLI implementation."""
 
@@ -12241,6 +12482,18 @@ def _main_impl(run_state: dict[str, Any] | None = None):
     if getattr(args, "allow_partial", False) and getattr(args, "fail_on_quality", None):
         _exit_error("--allow-partial cannot be used with --fail-on-quality")
 
+    org_report_snapshot_actions = (
+        bool(getattr(args, "list_org_report_snapshots", False)),
+        bool(getattr(args, "inspect_org_report_snapshot", None)),
+        bool(getattr(args, "prune_org_report_snapshots", False)),
+    )
+    if sum(org_report_snapshot_actions) > 1:
+        _exit_error(
+            "Use only one of --list-org-report-snapshots, --inspect-org-report-snapshot, or --prune-org-report-snapshots",
+        )
+    if any(org_report_snapshot_actions) and getattr(args, "org_report", False):
+        _exit_error("Org-report snapshot maintenance commands cannot be combined with --org-report")
+
     if getattr(args, "list_snapshots", False) and getattr(args, "prune_snapshots", False):
         _exit_error("Use either --list-snapshots or --prune-snapshots, not both")
     if getattr(args, "profile_overwrite", False) and not getattr(args, "profile_import", None):
@@ -12269,6 +12522,9 @@ def _main_impl(run_state: dict[str, Any] | None = None):
             if not args.quiet:
                 print(f"Auto-detected format '{inferred_format}' from output file extension")
     _sync_run_summary_cli_metadata(run_state, args)
+
+    if inferred_mode == RunMode.ORG_REPORT_SNAPSHOTS:
+        _handle_org_report_snapshot_cli(args, output_to_stdout=output_to_stdout, run_state=run_state)
 
     # Set color theme for diff output (accessible accessibility)
     color_theme = getattr(args, "color_theme", "default")

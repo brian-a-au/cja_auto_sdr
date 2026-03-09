@@ -850,6 +850,15 @@ cja_auto_sdr --org-report --trending-window 5 --format json
 
 # Combine trending with comparison for full context
 cja_auto_sdr --org-report --trending-window 10 --compare-org-report ./baseline.json
+
+# List cached org-report snapshots used for trending
+cja_auto_sdr --list-org-report-snapshots
+
+# Inspect one cached org-report snapshot
+cja_auto_sdr --inspect-org-report-snapshot ./org_report_test_org_AdobeOrg_2026_03_01T00_00_00Z.json
+
+# Prune old cached org-report snapshots
+cja_auto_sdr --prune-org-report-snapshots --org-report-keep-last 10
 ```
 
 Trending output includes:
@@ -858,6 +867,9 @@ Trending output includes:
 - **Drift scores**: per-data-view weighted score (0.0-1.0) highlighting which data views changed most, based on component count change (40%), core/isolated ratio shift (20%), similarity change (20%), and presence change (20%).
 
 Trending renders in all 6 output formats (console, JSON, Excel, Markdown, HTML, CSV).
+The persisted history lives under `~/.cja_auto_sdr/cache/org_report_snapshots/<ORG_ID>/`. When `--trending-window`
+is used, the current run is saved there even for console output, and older entries are pruned automatically to keep
+the cache bounded.
 
 ## Related Documentation
 

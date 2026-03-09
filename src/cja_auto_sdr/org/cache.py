@@ -21,6 +21,8 @@ from typing import Any
 from cja_auto_sdr.core.locks.manager import LockManager
 from cja_auto_sdr.org.models import DataViewSummary
 
+DEFAULT_ORG_REPORT_SNAPSHOT_KEEP_LAST = 25
+
 
 class OrgReportLock:
     """Cross-process lock to prevent concurrent org-report runs for one org.
@@ -178,7 +180,11 @@ class OrgReportCache:
 
     def get_org_report_snapshot_dir(self, org_id: str | None = None) -> Path:
         """Return the persistent snapshot directory for org-report trending history."""
-        return self.cache_dir / "org_report_snapshots" / self._sanitize_org_id(org_id)
+        return self.get_org_report_snapshot_root_dir() / self._sanitize_org_id(org_id)
+
+    def get_org_report_snapshot_root_dir(self) -> Path:
+        """Return the root directory containing per-org snapshot history."""
+        return self.cache_dir / "org_report_snapshots"
 
     def save_org_report_snapshot(self, report_data: dict[str, Any], org_id: str | None = None) -> Path:
         """Persist an org-report JSON payload for future trending windows."""
@@ -194,6 +200,198 @@ class OrgReportCache:
             json.dump(report_data, f, indent=2, ensure_ascii=False)
 
         return file_path
+
+    @staticmethod
+    def _parse_snapshot_timestamp(raw_timestamp: Any) -> datetime | None:
+        """Normalize persisted snapshot timestamps to UTC datetimes."""
+        if raw_timestamp in (None, ""):
+            return None
+
+        timestamp_text = str(raw_timestamp).strip()
+        if not timestamp_text:
+            return None
+        if timestamp_text.endswith("Z"):
+            timestamp_text = f"{timestamp_text[:-1]}+00:00"
+
+        try:
+            parsed = datetime.fromisoformat(timestamp_text)
+        except ValueError:
+            return None
+
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=UTC)
+        return parsed.astimezone(UTC)
+
+    def _load_org_report_snapshot_metadata(
+        self,
+        snapshot_file: str | Path,
+        *,
+        include_data_views: bool = False,
+    ) -> dict[str, Any] | None:
+        """Load one persisted org-report snapshot and return summarized metadata."""
+        path = Path(snapshot_file)
+        try:
+            with open(path, encoding="utf-8") as f:
+                payload = json.load(f)
+        except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+            self.logger.warning("Skipping org-report snapshot %s: %s", path, exc)
+            return None
+
+        if not isinstance(payload, dict):
+            self.logger.warning("Skipping org-report snapshot %s: expected JSON object", path)
+            return None
+
+        summary = payload.get("summary", {})
+        if not isinstance(summary, dict):
+            summary = {}
+        distribution = payload.get("distribution", {})
+        if not isinstance(distribution, dict):
+            distribution = {}
+
+        core_section = distribution.get("core", {})
+        if not isinstance(core_section, dict):
+            core_section = {}
+        isolated_section = distribution.get("isolated", {})
+        if not isinstance(isolated_section, dict):
+            isolated_section = {}
+
+        generated_at = payload.get("generated_at") or payload.get("timestamp")
+        parsed_timestamp = self._parse_snapshot_timestamp(generated_at)
+        data_views = payload.get("data_views", [])
+        if not isinstance(data_views, list):
+            data_views = []
+
+        metadata: dict[str, Any] = {
+            "org_id": str(payload.get("org_id") or "unknown"),
+            "generated_at": str(generated_at or ""),
+            "generated_at_epoch": parsed_timestamp.timestamp() if parsed_timestamp is not None else None,
+            "filepath": str(path),
+            "filename": path.name,
+            "data_views_total": summary.get("data_views_total", len(data_views)),
+            "total_unique_components": summary.get("total_unique_components", 0),
+            "core_count": core_section.get(
+                "total",
+                core_section.get("metrics_count", 0) + core_section.get("dimensions_count", 0),
+            ),
+            "isolated_count": isolated_section.get(
+                "total",
+                isolated_section.get("metrics_count", 0) + isolated_section.get("dimensions_count", 0),
+            ),
+            "high_similarity_pairs": sum(
+                1
+                for pair in payload.get("similarity_pairs", [])
+                if isinstance(pair, dict) and pair.get("jaccard_similarity", 0) >= 0.9
+            ),
+        }
+
+        if include_data_views:
+            data_view_names = [
+                str(dv.get("data_view_name") or dv.get("name") or dv.get("data_view_id") or dv.get("id") or "")
+                for dv in data_views
+                if isinstance(dv, dict)
+            ]
+            data_view_names = [name for name in data_view_names if name]
+            metadata["data_view_names_preview"] = data_view_names[:10]
+            metadata["data_view_names_total"] = len(data_view_names)
+            metadata["data_view_names_truncated"] = len(data_view_names) > 10
+
+        return metadata
+
+    def list_org_report_snapshots(self, org_id: str | None = None) -> list[dict[str, Any]]:
+        """List persisted org-report snapshots, optionally filtered to one org."""
+        snapshot_dirs: list[Path] = []
+        if org_id:
+            snapshot_dirs = [self.get_org_report_snapshot_dir(org_id)]
+        else:
+            snapshot_root = self.get_org_report_snapshot_root_dir()
+            if snapshot_root.exists():
+                snapshot_dirs = sorted(path for path in snapshot_root.iterdir() if path.is_dir())
+
+        snapshots: list[dict[str, Any]] = []
+        for snapshot_dir in snapshot_dirs:
+            if not snapshot_dir.exists():
+                continue
+            for snapshot_file in sorted(snapshot_dir.glob("*.json")):
+                metadata = self._load_org_report_snapshot_metadata(snapshot_file)
+                if metadata is not None:
+                    snapshots.append(metadata)
+
+        snapshots.sort(
+            key=lambda snapshot: (
+                snapshot.get("generated_at_epoch") is None,
+                snapshot.get("generated_at_epoch") or 0.0,
+                snapshot.get("filepath", ""),
+            ),
+            reverse=True,
+        )
+        return snapshots
+
+    def inspect_org_report_snapshot(self, snapshot_file: str | Path) -> dict[str, Any]:
+        """Return detailed summary metadata for one persisted org-report snapshot."""
+        metadata = self._load_org_report_snapshot_metadata(snapshot_file, include_data_views=True)
+        if metadata is None:
+            raise ValueError(f"Invalid org-report snapshot: {snapshot_file}")
+        return metadata
+
+    def prune_org_report_snapshots(
+        self,
+        *,
+        org_id: str | None = None,
+        keep_last: int = 0,
+        keep_since_days: int | None = None,
+    ) -> list[str]:
+        """Delete persisted org-report snapshots outside the requested retention window."""
+        if keep_last <= 0 and keep_since_days is None:
+            return []
+
+        snapshots = self.list_org_report_snapshots(org_id=org_id)
+        grouped: dict[str, list[dict[str, Any]]] = {}
+        for snapshot in snapshots:
+            grouped.setdefault(str(snapshot.get("org_id") or "unknown"), []).append(snapshot)
+
+        cutoff: datetime | None = None
+        if keep_since_days is not None and keep_since_days >= 0:
+            cutoff = datetime.now(UTC) - timedelta(days=keep_since_days)
+
+        deleted_paths: list[str] = []
+        for org_snapshots in grouped.values():
+            sorted_snapshots = sorted(
+                org_snapshots,
+                key=lambda snapshot: (
+                    snapshot.get("generated_at_epoch") is None,
+                    snapshot.get("generated_at_epoch") or 0.0,
+                    snapshot.get("filepath", ""),
+                ),
+                reverse=True,
+            )
+
+            retained_paths: set[str] = set()
+            if keep_last > 0:
+                retained_paths = {
+                    str(snapshot.get("filepath"))
+                    for snapshot in sorted_snapshots[:keep_last]
+                    if snapshot.get("filepath")
+                }
+
+            for snapshot in sorted_snapshots:
+                filepath = str(snapshot.get("filepath") or "")
+                if not filepath:
+                    continue
+                if filepath in retained_paths:
+                    continue
+
+                should_delete = keep_last > 0 and filepath not in retained_paths
+                snapshot_epoch = snapshot.get("generated_at_epoch")
+                if cutoff is not None and snapshot_epoch is not None:
+                    should_delete = should_delete or datetime.fromtimestamp(snapshot_epoch, tz=UTC) < cutoff
+
+                if should_delete:
+                    with contextlib.suppress(OSError):
+                        Path(filepath).unlink()
+                    if not Path(filepath).exists():
+                        deleted_paths.append(filepath)
+
+        return sorted(set(deleted_paths))
 
     def get(
         self,

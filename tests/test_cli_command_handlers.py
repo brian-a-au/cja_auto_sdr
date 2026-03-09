@@ -1559,6 +1559,95 @@ class TestMainImplOrgReport:
         mock_list_dataviews.assert_not_called()
 
 
+class TestMainImplOrgReportSnapshots:
+    """Tests for dedicated org-report snapshot inspection/listing/pruning commands."""
+
+    @patch("cja_auto_sdr.generator._cli_option_specified", _mock_cli_option_specified)
+    @patch("cja_auto_sdr.generator.OrgReportCache")
+    def test_list_org_report_snapshots_json_output(self, mock_cache_cls):
+        mock_cache = MagicMock()
+        mock_cache.list_org_report_snapshots.return_value = [
+            {
+                "org_id": "test_org@AdobeOrg",
+                "generated_at": "2026-03-01T00:00:00Z",
+                "data_views_total": 4,
+                "total_unique_components": 12,
+                "core_count": 8,
+                "isolated_count": 4,
+                "high_similarity_pairs": 1,
+                "filepath": "/tmp/report.json",
+            }
+        ]
+        mock_cache.get_org_report_snapshot_root_dir.return_value = "/tmp/org_report_snapshots"
+        mock_cache_cls.return_value = mock_cache
+
+        with pytest.raises(SystemExit) as exc_info:
+            with patch("cja_auto_sdr.generator.parse_arguments") as mock_pa:
+                mock_pa.return_value = parse_arguments(["--list-org-report-snapshots", "--format", "json"])
+                _main_impl()
+
+        assert exc_info.value.code == 0
+
+    @patch("cja_auto_sdr.generator._cli_option_specified", _mock_cli_option_specified)
+    @patch("cja_auto_sdr.generator._emit_output")
+    @patch("cja_auto_sdr.generator.OrgReportCache")
+    def test_inspect_org_report_snapshot_table_output(self, mock_cache_cls, mock_emit):
+        mock_cache = MagicMock()
+        mock_cache.inspect_org_report_snapshot.return_value = {
+            "org_id": "test_org@AdobeOrg",
+            "generated_at": "2026-03-01T00:00:00Z",
+            "data_views_total": 4,
+            "total_unique_components": 12,
+            "core_count": 8,
+            "isolated_count": 4,
+            "high_similarity_pairs": 1,
+            "filepath": "/tmp/report.json",
+            "data_view_names_preview": ["Orders", "Visitors"],
+            "data_view_names_total": 2,
+            "data_view_names_truncated": False,
+        }
+        mock_cache_cls.return_value = mock_cache
+
+        with pytest.raises(SystemExit) as exc_info:
+            with patch("cja_auto_sdr.generator.parse_arguments") as mock_pa:
+                mock_pa.return_value = parse_arguments(["--inspect-org-report-snapshot", "/tmp/report.json"])
+                _main_impl()
+
+        assert exc_info.value.code == 0
+        emitted = mock_emit.call_args[0][0]
+        assert "Org-Report Snapshot" in emitted
+        assert "Orders" in emitted
+
+    @patch("cja_auto_sdr.generator._cli_option_specified", _mock_cli_option_specified)
+    @patch("cja_auto_sdr.generator.OrgReportCache")
+    def test_prune_org_report_snapshots_json_output(self, mock_cache_cls):
+        mock_cache = MagicMock()
+        mock_cache.prune_org_report_snapshots.return_value = ["/tmp/old.json"]
+        mock_cache.get_org_report_snapshot_root_dir.return_value = "/tmp/org_report_snapshots"
+        mock_cache_cls.return_value = mock_cache
+
+        with pytest.raises(SystemExit) as exc_info:
+            with patch("cja_auto_sdr.generator.parse_arguments") as mock_pa:
+                mock_pa.return_value = parse_arguments(
+                    ["--prune-org-report-snapshots", "--org-report-keep-last", "5", "--format", "json"]
+                )
+                _main_impl()
+
+        assert exc_info.value.code == 0
+
+    @patch("cja_auto_sdr.generator._cli_option_specified", _mock_cli_option_specified)
+    def test_org_report_snapshot_commands_conflict(self, capsys):
+        with pytest.raises(SystemExit) as exc_info:
+            with patch("cja_auto_sdr.generator.parse_arguments") as mock_pa:
+                mock_pa.return_value = parse_arguments(
+                    ["--list-org-report-snapshots", "--inspect-org-report-snapshot", "cached.json"]
+                )
+                _main_impl()
+
+        assert exc_info.value.code == 1
+        assert "Use only one of --list-org-report-snapshots" in capsys.readouterr().err
+
+
 # ==================== _main_impl: --list-snapshots ====================
 
 

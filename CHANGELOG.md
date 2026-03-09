@@ -13,9 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Org-report temporal trending**: `--trending-window N` computes metrics across the last N cached org-report snapshots, with per-data-view drift scoring (weighted composite: component change 0.4, core/isolated ratio 0.2, similarity shift 0.2, presence change 0.2).
 - **Trending output in all 6 formats**: trending snapshots, deltas, and drift scores render in console, JSON, Excel, Markdown, HTML, and CSV output formats.
 - **OrgReportTrending data model**: new `TrendingSnapshot`, `TrendingDelta`, and `OrgReportTrending` dataclasses with backwards-compatible `to_comparison()` bridge to existing `OrgReportComparison`.
+- **Org-report snapshot maintenance commands**: `--list-org-report-snapshots`, `--inspect-org-report-snapshot`, and `--prune-org-report-snapshots` expose the persistent trending history directly for inspection and cleanup.
 
 ### Changed
 - **Structural decomposition**: extracted ~2,980 LOC from `generator.py` into subpackages (`org/writers/`, `output/sdr/`, `api/quality_policy.py`) with full lazy-forwarding re-exports preserving all existing imports.
+- **Bounded org-report history retention**: runs using `--trending-window` now prune persisted org-report snapshots automatically after saving the current run, preventing unbounded cache growth while preserving a useful recent window.
 
 ## [3.3.9] - 2026-03-06
 
