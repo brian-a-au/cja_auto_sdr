@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -16,12 +18,99 @@ from cja_auto_sdr.org.models import (
 logger = logging.getLogger(__name__)
 
 
+def _canonical_snapshot_payload(data: dict[str, Any]) -> dict[str, Any]:
+    """Return the stable subset of a snapshot payload used for hashing."""
+    return {key: value for key, value in data.items() if key != "_snapshot_meta"}
+
+
+def _snapshot_content_hash(data: dict[str, Any]) -> str:
+    """Return a deterministic content hash for an org-report JSON payload."""
+    serialized = json.dumps(
+        _canonical_snapshot_payload(data),
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        default=str,
+    )
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def _parse_snapshot_timestamp(raw_timestamp: Any) -> datetime | None:
+    """Normalize snapshot timestamps to UTC for stable chronological ordering."""
+    if raw_timestamp in (None, ""):
+        return None
+
+    timestamp_text = str(raw_timestamp).strip()
+    if not timestamp_text:
+        return None
+    if timestamp_text.endswith("Z"):
+        timestamp_text = f"{timestamp_text[:-1]}+00:00"
+
+    try:
+        parsed = datetime.fromisoformat(timestamp_text)
+    except ValueError:
+        return None
+
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
+
+
+def _snapshot_identity_key(snapshot: TrendingSnapshot) -> tuple[str, ...]:
+    """Return the strongest available stable identity for one snapshot."""
+    if snapshot.snapshot_id:
+        return ("snapshot_id", snapshot.snapshot_id)
+    if snapshot.content_hash:
+        return ("content_hash", snapshot.content_hash)
+    if snapshot.source_path:
+        return ("source_path", str(Path(snapshot.source_path).resolve(strict=False)))
+    return ("fallback", snapshot.org_id or "", snapshot.timestamp)
+
+
+def _snapshot_sort_key(snapshot: TrendingSnapshot) -> tuple[bool, datetime, str, str]:
+    """Return the sort key for oldest-to-newest snapshot ordering."""
+    parsed_timestamp = _parse_snapshot_timestamp(snapshot.timestamp)
+    tie_breaker = snapshot.source_path or snapshot.snapshot_id or snapshot.content_hash or ""
+    return (
+        parsed_timestamp is None,
+        parsed_timestamp or datetime.min.replace(tzinfo=UTC),
+        snapshot.timestamp,
+        tie_breaker,
+    )
+
+
+def _snapshots_equivalent(left: TrendingSnapshot, right: TrendingSnapshot) -> bool:
+    """Return True when two snapshot objects describe the same persisted state."""
+    if left.org_id != right.org_id or left.timestamp != right.timestamp:
+        return False
+    if left.snapshot_id and right.snapshot_id:
+        return left.snapshot_id == right.snapshot_id
+    if left.content_hash and right.content_hash:
+        return left.content_hash == right.content_hash
+    return (
+        left.data_view_count == right.data_view_count
+        and left.component_count == right.component_count
+        and left.core_count == right.core_count
+        and left.isolated_count == right.isolated_count
+        and left.high_sim_pair_count == right.high_sim_pair_count
+        and left.dv_component_counts == right.dv_component_counts
+        and left.dv_core_ratios == right.dv_core_ratios
+        and left.dv_max_similarity == right.dv_max_similarity
+        and left.dv_ids == right.dv_ids
+        and left.dv_names == right.dv_names
+    )
+
+
 # ---------------------------------------------------------------------------
 # Snapshot extraction
 # ---------------------------------------------------------------------------
 
 
-def _extract_snapshot_from_json(data: dict[str, Any]) -> TrendingSnapshot | None:
+def _extract_snapshot_from_json(
+    data: dict[str, Any],
+    *,
+    source_path: str | Path | None = None,
+) -> TrendingSnapshot | None:
     """Build a TrendingSnapshot from a parsed org-report JSON dict.
 
     Returns None if the payload is missing required top-level keys.
@@ -33,6 +122,9 @@ def _extract_snapshot_from_json(data: dict[str, Any]) -> TrendingSnapshot | None
     summary = data.get("summary", {})
     distribution = data.get("distribution", {})
     org_id = data.get("org_id")
+    snapshot_meta = data.get("_snapshot_meta", {})
+    if not isinstance(snapshot_meta, dict):
+        snapshot_meta = {}
 
     # Data view count
     dv_count = summary.get("data_views_total", summary.get("total_data_views", 0))
@@ -124,6 +216,9 @@ def _extract_snapshot_from_json(data: dict[str, Any]) -> TrendingSnapshot | None
         core_count=core_count,
         isolated_count=isolated_count,
         high_sim_pair_count=high_sim_count,
+        snapshot_id=str(snapshot_meta["snapshot_id"]) if snapshot_meta.get("snapshot_id") is not None else None,
+        content_hash=str(snapshot_meta.get("content_hash") or _snapshot_content_hash(data)),
+        source_path=str(source_path) if source_path is not None else None,
         dv_component_counts=dv_component_counts,
         dv_core_ratios=dv_core_ratios,
         dv_max_similarity=dv_max_similarity,
@@ -157,7 +252,7 @@ def discover_snapshots(
     """
     cache_path = Path(cache_dir)
     snapshots: list[TrendingSnapshot] = []
-    seen_snapshot_keys: set[tuple[str | None, str]] = set()
+    seen_snapshot_keys: set[tuple[str, ...]] = set()
 
     # Collect JSON files from the directory
     json_files: list[Path] = []
@@ -176,13 +271,13 @@ def discover_snapshots(
             continue
         if org_id is not None and snapshot.org_id != org_id:
             continue
-        snapshot_key = (snapshot.org_id, snapshot.timestamp)
+        snapshot_key = _snapshot_identity_key(snapshot)
         if snapshot_key not in seen_snapshot_keys:
             snapshots.append(snapshot)
             seen_snapshot_keys.add(snapshot_key)
 
-    # Sort by timestamp (oldest first) and trim to window
-    snapshots.sort(key=lambda s: s.timestamp)
+    # Sort by normalized UTC timestamp (oldest first) and trim to window
+    snapshots.sort(key=_snapshot_sort_key)
     if len(snapshots) > window_size:
         snapshots = snapshots[-window_size:]
 
@@ -209,7 +304,7 @@ def _load_snapshot_from_file(json_file: Path) -> TrendingSnapshot | None:
     if "summary" not in data and "data_views" not in data:
         return None
 
-    return _extract_snapshot_from_json(data)
+    return _extract_snapshot_from_json(data, source_path=json_file)
 
 
 # ---------------------------------------------------------------------------
@@ -370,16 +465,17 @@ def build_trending(
 
         if effective_org_id is None or current_snapshot_org_id == effective_org_id:
             if current_snapshot_org_id is None:
-                existing_timestamps = {s.timestamp for s in snapshots}
-                is_duplicate = current_snapshot.timestamp in existing_timestamps
+                is_duplicate = any(_snapshots_equivalent(snapshot, current_snapshot) for snapshot in snapshots)
             else:
-                existing_snapshot_keys = {(s.org_id, s.timestamp) for s in snapshots}
-                snapshot_key = (current_snapshot_org_id, current_snapshot.timestamp)
-                is_duplicate = snapshot_key in existing_snapshot_keys
+                is_duplicate = any(
+                    _snapshots_equivalent(snapshot, current_snapshot)
+                    for snapshot in snapshots
+                    if snapshot.org_id == current_snapshot_org_id
+                )
 
             if not is_duplicate:
                 snapshots.append(current_snapshot)
-                snapshots.sort(key=lambda s: s.timestamp)
+                snapshots.sort(key=_snapshot_sort_key)
                 # Re-trim if over window
                 if len(snapshots) > window_size:
                     snapshots = snapshots[-window_size:]

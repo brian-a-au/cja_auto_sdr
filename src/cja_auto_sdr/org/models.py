@@ -444,6 +444,10 @@ class TrendingSnapshot:
     core_count: int = 0
     isolated_count: int = 0
     high_sim_pair_count: int = 0
+    # Snapshot identity metadata for persistence/deduplication.
+    snapshot_id: str | None = None
+    content_hash: str | None = None
+    source_path: str | None = None
     # Per-data-view component counts for drift scoring
     dv_component_counts: dict[str, int] = field(default_factory=dict)
     dv_core_ratios: dict[str, float] = field(default_factory=dict)

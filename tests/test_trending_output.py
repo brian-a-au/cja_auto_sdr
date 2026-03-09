@@ -2,6 +2,7 @@
 
 import csv
 import json
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -219,6 +220,36 @@ class TestExcelWithTrending:
         conditional_ranges = {str(rule.sqref) for rule in ws.conditional_formatting}
         assert "B2:C6" in conditional_ranges
         assert "B10:B12" in conditional_ranges
+        wb.close()
+
+    def test_trending_supports_snapshot_columns_beyond_z(self, tmp_path):
+        result = _make_result()
+        logger = MagicMock()
+        start = datetime(2026, 1, 1, tzinfo=UTC)
+        snapshots = [
+            TrendingSnapshot(
+                timestamp=(start + timedelta(days=offset)).isoformat().replace("+00:00", "Z"),
+                data_view_count=10 + offset,
+                component_count=100 + offset,
+                core_count=80 + offset,
+                isolated_count=20 + offset,
+                high_sim_pair_count=2 + offset,
+                dv_ids={"dv1"},
+            )
+            for offset in range(28)
+        ]
+        trending = OrgReportTrending(snapshots=snapshots, deltas=[], drift_scores={"dv1": 0.82}, window_size=28)
+
+        path = write_org_report_excel(result, tmp_path / "wide.xlsx", str(tmp_path), logger, trending=trending)
+        import openpyxl
+
+        wb = openpyxl.load_workbook(path)
+        ws = wb["Trending"]
+        assert ws["Z1"].value == "Jan 25"
+        assert ws["AA1"].value == "Jan 26"
+        assert ws["AC1"].value == "Jan 28"
+        conditional_ranges = {str(rule.sqref) for rule in ws.conditional_formatting}
+        assert "B2:AC6" in conditional_ranges
         wb.close()
 
 

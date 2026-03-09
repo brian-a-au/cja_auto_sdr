@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import contextlib
 import errno
+import hashlib
 import json
 import logging
 import os
@@ -186,6 +187,24 @@ class OrgReportCache:
         """Return the root directory containing per-org snapshot history."""
         return self.cache_dir / "org_report_snapshots"
 
+    @staticmethod
+    def _canonical_org_report_snapshot_payload(report_data: dict[str, Any]) -> dict[str, Any]:
+        """Return the stable payload used for snapshot content hashing."""
+        return {key: value for key, value in report_data.items() if key != "_snapshot_meta"}
+
+    @classmethod
+    def _compute_org_report_snapshot_content_hash(cls, report_data: dict[str, Any]) -> str:
+        """Return a deterministic hash for an org-report snapshot payload."""
+        canonical_payload = cls._canonical_org_report_snapshot_payload(report_data)
+        serialized = json.dumps(
+            canonical_payload,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            default=str,
+        )
+        return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
     def save_org_report_snapshot(self, report_data: dict[str, Any], org_id: str | None = None) -> Path:
         """Persist an org-report JSON payload for future trending windows."""
         resolved_org_id = org_id or str(report_data.get("org_id") or "unknown")
@@ -194,10 +213,18 @@ class OrgReportCache:
 
         timestamp = str(report_data.get("generated_at") or datetime.now(UTC).isoformat())
         timestamp_slug = re.sub(r"[^0-9A-Za-z_-]", "_", timestamp)
-        file_path = snapshot_dir / f"org_report_{self._sanitize_org_id(resolved_org_id)}_{timestamp_slug}.json"
+        snapshot_id = uuid.uuid4().hex
+        payload = dict(report_data)
+        payload["_snapshot_meta"] = {
+            "snapshot_id": snapshot_id,
+            "content_hash": self._compute_org_report_snapshot_content_hash(report_data),
+        }
+        file_path = snapshot_dir / (
+            f"org_report_{self._sanitize_org_id(resolved_org_id)}_{timestamp_slug}_{snapshot_id[:8]}.json"
+        )
 
         with open(file_path, "w", encoding="utf-8") as f:
-            json.dump(report_data, f, indent=2, ensure_ascii=False)
+            json.dump(payload, f, indent=2, ensure_ascii=False)
 
         return file_path
 
@@ -257,6 +284,9 @@ class OrgReportCache:
 
         generated_at = payload.get("generated_at") or payload.get("timestamp")
         parsed_timestamp = self._parse_snapshot_timestamp(generated_at)
+        snapshot_meta = payload.get("_snapshot_meta", {})
+        if not isinstance(snapshot_meta, dict):
+            snapshot_meta = {}
         data_views = payload.get("data_views", [])
         if not isinstance(data_views, list):
             data_views = []
@@ -282,6 +312,8 @@ class OrgReportCache:
                 for pair in payload.get("similarity_pairs", [])
                 if isinstance(pair, dict) and pair.get("jaccard_similarity", 0) >= 0.9
             ),
+            "snapshot_id": snapshot_meta.get("snapshot_id"),
+            "content_hash": snapshot_meta.get("content_hash"),
         }
 
         if include_data_views:

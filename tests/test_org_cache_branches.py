@@ -164,7 +164,32 @@ def test_save_org_report_snapshot_writes_json_file(tmp_path: Path):
 
     assert path.exists()
     assert path.parent == cache.get_org_report_snapshot_dir("org@test.example")
-    assert json.loads(path.read_text(encoding="utf-8"))["org_id"] == "org@test.example"
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert payload["org_id"] == "org@test.example"
+    assert payload["_snapshot_meta"]["snapshot_id"]
+    assert payload["_snapshot_meta"]["content_hash"]
+
+
+def test_save_org_report_snapshot_same_timestamp_creates_unique_files(tmp_path: Path):
+    cache = OrgReportCache(cache_dir=tmp_path)
+    report_a = {
+        "generated_at": "2026-03-01T00:00:00Z",
+        "org_id": "org@test.example",
+        "summary": {"data_views_total": 2, "total_unique_components": 5},
+    }
+    report_b = {
+        "generated_at": "2026-03-01T00:00:00Z",
+        "org_id": "org@test.example",
+        "summary": {"data_views_total": 3, "total_unique_components": 7},
+    }
+
+    path_a = cache.save_org_report_snapshot(report_a)
+    path_b = cache.save_org_report_snapshot(report_b)
+
+    assert path_a != path_b
+    assert path_a.exists()
+    assert path_b.exists()
+    assert len(list(cache.get_org_report_snapshot_dir("org@test.example").glob("*.json"))) == 2
 
 
 def test_list_org_report_snapshots_returns_newest_first(tmp_path: Path):

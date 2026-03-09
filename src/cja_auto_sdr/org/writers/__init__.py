@@ -1370,8 +1370,7 @@ def write_org_report_excel(
             worksheet.set_column("A:A", 20)
             # Set width for each snapshot column
             for col_idx in range(len(col_labels)):
-                col_letter = chr(ord("B") + col_idx)
-                worksheet.set_column(f"{col_letter}:{col_letter}", 14)
+                worksheet.set_column(col_idx + 1, col_idx + 1, 14)
 
             # Highlight change intensity across the snapshot metric matrix.
             worksheet.conditional_format(

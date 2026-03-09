@@ -255,11 +255,12 @@ class TestDiscoverSnapshots:
         assert len(result) == 2
         assert result[0].timestamp == "2025-12-01"
 
-    def test_deduplicates_by_timestamp(self, tmp_path):
-        _write_report(tmp_path, "a.json", _make_org_report_json(timestamp="2026-01-01"))
-        _write_report(tmp_path, "b.json", _make_org_report_json(timestamp="2026-01-01"))
+    def test_same_timestamp_distinct_snapshots_are_preserved(self, tmp_path):
+        _write_report(tmp_path, "a.json", _make_org_report_json(timestamp="2026-01-01", comp_count=100))
+        _write_report(tmp_path, "b.json", _make_org_report_json(timestamp="2026-01-01", comp_count=200))
         result = discover_snapshots(tmp_path, window_size=10)
-        assert len(result) == 1
+        assert len(result) == 2
+        assert sorted(snapshot.component_count for snapshot in result) == [100, 200]
 
     def test_explicit_file_deduplicates(self, tmp_path):
         _write_report(tmp_path, "report.json", _make_org_report_json(timestamp="2026-01-01"))
@@ -277,6 +278,17 @@ class TestDiscoverSnapshots:
         result = discover_snapshots(tmp_path, window_size=10, org_id="org_a")
         assert len(result) == 1
         assert result[0].org_id == "org_a"
+
+    def test_orders_snapshots_by_normalized_utc_timestamp(self, tmp_path):
+        _write_report(tmp_path, "late_local.json", _make_org_report_json(timestamp="2026-03-01T00:15:00-02:00"))
+        _write_report(tmp_path, "early_utc.json", _make_org_report_json(timestamp="2026-03-01T01:30:00+02:00"))
+
+        result = discover_snapshots(tmp_path, window_size=10)
+
+        assert [snapshot.timestamp for snapshot in result] == [
+            "2026-03-01T01:30:00+02:00",
+            "2026-03-01T00:15:00-02:00",
+        ]
 
 
 # ---------------------------------------------------------------------------
@@ -496,7 +508,7 @@ class TestBuildTrending:
     def test_current_snapshot_deduplicates(self, tmp_path):
         _write_report(tmp_path, "a.json", _make_org_report_json(timestamp="2026-01-01"))
         _write_report(tmp_path, "b.json", _make_org_report_json(timestamp="2026-02-01"))
-        current = TrendingSnapshot(timestamp="2026-02-01")  # duplicate
+        current = _extract_snapshot_from_json(_make_org_report_json(timestamp="2026-02-01"))
         result = build_trending(tmp_path, current_snapshot=current)
         assert result.window_size == 2
 
