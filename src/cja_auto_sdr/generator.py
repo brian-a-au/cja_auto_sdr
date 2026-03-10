@@ -8283,7 +8283,7 @@ def run_org_report(
         # Handle org-stats mode (Feature 2) - minimal output
         if org_config.org_stats_only:
             with contextlib.redirect_stdout(status_stream):
-                write_org_report_stats_only(result, quiet)
+                write_org_report_stats_only(result, quiet=quiet, trending=trending)
             # Still output JSON if requested for CI integration
             if output_format == "json":
                 if output_to_stdout:
@@ -8798,6 +8798,23 @@ def _warn_describe_dataview_ignored_options(args: argparse.Namespace) -> None:
     )
 
 
+def _build_org_report_snapshot_listing_rows(snapshots: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Normalize persisted org-report snapshot rows for listing output."""
+    return [
+        {
+            "org_id": snapshot.get("org_id", ""),
+            "generated_at": snapshot.get("generated_at", ""),
+            "data_views_total": snapshot.get("data_views_total", 0),
+            "total_unique_components": snapshot.get("total_unique_components", 0),
+            "core_count": snapshot.get("core_count", 0),
+            "isolated_count": snapshot.get("isolated_count", 0),
+            "high_similarity_pairs": snapshot.get("high_similarity_pairs", 0),
+            "filepath": str(snapshot.get("filepath") or snapshot.get("filename") or ""),
+        }
+        for snapshot in snapshots
+    ]
+
+
 def _handle_org_report_snapshot_cli(
     args: argparse.Namespace,
     *,
@@ -8828,19 +8845,7 @@ def _handle_org_report_snapshot_cli(
                 contract_label="Org-report snapshot listing output",
             )
         elif output_format == "csv":
-            rows = [
-                {
-                    "org_id": snapshot.get("org_id", ""),
-                    "generated_at": snapshot.get("generated_at", ""),
-                    "data_views_total": snapshot.get("data_views_total", 0),
-                    "total_unique_components": snapshot.get("total_unique_components", 0),
-                    "core_count": snapshot.get("core_count", 0),
-                    "isolated_count": snapshot.get("isolated_count", 0),
-                    "high_similarity_pairs": snapshot.get("high_similarity_pairs", 0),
-                    "filepath": snapshot.get("filepath", ""),
-                }
-                for snapshot in snapshots
-            ]
+            rows = _build_org_report_snapshot_listing_rows(snapshots)
             _emit_output(
                 _format_as_csv(
                     [
@@ -8860,16 +8865,7 @@ def _handle_org_report_snapshot_cli(
             )
         else:
             if snapshots:
-                table_rows = [
-                    {
-                        "org_id": snapshot.get("org_id", ""),
-                        "generated_at": snapshot.get("generated_at", ""),
-                        "data_views_total": snapshot.get("data_views_total", 0),
-                        "total_unique_components": snapshot.get("total_unique_components", 0),
-                        "filepath": Path(str(snapshot.get("filepath", ""))).name,
-                    }
-                    for snapshot in snapshots
-                ]
+                table_rows = _build_org_report_snapshot_listing_rows(snapshots)
                 header = f"Found {len(table_rows)} org-report snapshot(s)"
                 if org_id:
                     header += f" for {org_id}"
@@ -8878,7 +8874,7 @@ def _handle_org_report_snapshot_cli(
                     header,
                     table_rows,
                     columns=["org_id", "generated_at", "data_views_total", "total_unique_components", "filepath"],
-                    col_labels=["Org ID", "Generated", "Data Views", "Components", "File"],
+                    col_labels=["Org ID", "Generated", "Data Views", "Components", "Snapshot Path"],
                 )
             else:
                 table_text = (

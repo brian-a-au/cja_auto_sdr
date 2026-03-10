@@ -1591,6 +1591,37 @@ class TestMainImplOrgReportSnapshots:
     @patch("cja_auto_sdr.generator._cli_option_specified", _mock_cli_option_specified)
     @patch("cja_auto_sdr.generator._emit_output")
     @patch("cja_auto_sdr.generator.OrgReportCache")
+    def test_list_org_report_snapshots_table_output_preserves_snapshot_path(self, mock_cache_cls, mock_emit):
+        mock_cache = MagicMock()
+        nested_snapshot = "/tmp/org_report_snapshots/3a/9f/org_report_test_org_20260301_abcd1234.json"
+        mock_cache.list_org_report_snapshots.return_value = [
+            {
+                "org_id": "test_org@AdobeOrg",
+                "generated_at": "2026-03-01T00:00:00Z",
+                "data_views_total": 4,
+                "total_unique_components": 12,
+                "core_count": 8,
+                "isolated_count": 4,
+                "high_similarity_pairs": 1,
+                "filepath": nested_snapshot,
+            }
+        ]
+        mock_cache.get_org_report_snapshot_root_dir.return_value = "/tmp/org_report_snapshots"
+        mock_cache_cls.return_value = mock_cache
+
+        with pytest.raises(SystemExit) as exc_info:
+            with patch("cja_auto_sdr.generator.parse_arguments") as mock_pa:
+                mock_pa.return_value = parse_arguments(["--list-org-report-snapshots"])
+                _main_impl()
+
+        assert exc_info.value.code == 0
+        emitted = mock_emit.call_args[0][0]
+        assert "Snapshot Path" in emitted
+        assert nested_snapshot in emitted.replace("\n", "").replace(" ", "")
+
+    @patch("cja_auto_sdr.generator._cli_option_specified", _mock_cli_option_specified)
+    @patch("cja_auto_sdr.generator._emit_output")
+    @patch("cja_auto_sdr.generator.OrgReportCache")
     def test_inspect_org_report_snapshot_table_output(self, mock_cache_cls, mock_emit):
         mock_cache = MagicMock()
         mock_cache.inspect_org_report_snapshot.return_value = {

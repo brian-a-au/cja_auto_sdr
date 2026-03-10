@@ -910,6 +910,58 @@ def test_run_org_report_org_stats_json_stdout_branch(tmp_path: Path, capsys, ric
     assert '"report_type": "org_analysis"' in stdout
 
 
+def test_run_org_report_org_stats_console_renders_trending_window(
+    tmp_path: Path, capsys, rich_org_report_result
+):
+    baseline = deepcopy(rich_org_report_result)
+    baseline.timestamp = "2026-02-01T00:00:00Z"
+    baseline.org_id = "test_org@AdobeOrg"
+    baseline.is_sampled = False
+
+    current = deepcopy(rich_org_report_result)
+    current.timestamp = "2026-03-01T00:00:00Z"
+    current.org_id = "test_org@AdobeOrg"
+    current.is_sampled = False
+
+    snapshot_cache_root = tmp_path / "cache"
+    OrgReportCache(cache_dir=snapshot_cache_root).save_org_report_snapshot(
+        build_org_report_json_data(baseline), org_id=baseline.org_id
+    )
+
+    def _cache_factory(*args, **kwargs):
+        return OrgReportCache(cache_dir=snapshot_cache_root, logger=kwargs.get("logger"))
+
+    with (
+        patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "mock", {"org_id": "test_org@AdobeOrg"})),
+        patch("cja_auto_sdr.generator.cjapy") as mock_cjapy,
+        patch("cja_auto_sdr.generator.OrgReportCache", side_effect=_cache_factory),
+        patch("cja_auto_sdr.generator.OrgComponentAnalyzer") as mock_analyzer_cls,
+        patch("cja_auto_sdr.generator.build_org_step_summary", return_value="summary"),
+        patch("cja_auto_sdr.generator.append_github_step_summary"),
+    ):
+        mock_cjapy.CJA.return_value = Mock()
+        analyzer = Mock()
+        analyzer.run_analysis.return_value = current
+        mock_analyzer_cls.return_value = analyzer
+
+        ok, exceeded = generator.run_org_report(
+            config_file="config.json",
+            output_format="console",
+            output_path=None,
+            output_dir=str(tmp_path),
+            org_config=OrgReportConfig(org_stats_only=True),
+            quiet=False,
+            trending_window=3,
+        )
+
+    output = capsys.readouterr().out
+    assert ok is True
+    assert exceeded is False
+    assert "ORG STATS" in output
+    assert "TRENDING" in output
+    assert "Top Drift" in output
+
+
 def test_org_report_renderers_core_min_count_and_unnamed_component_branches(
     tmp_path: Path,
     capsys,

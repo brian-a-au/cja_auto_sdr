@@ -256,9 +256,14 @@ def _trending_delta_csv_rows(
     return rows
 
 
+def _sorted_drift_score_items(drift_scores: dict[str, float]) -> list[tuple[str, float]]:
+    """Return drift scores sorted descending with a stable DV-id tie-breaker."""
+    return sorted(drift_scores.items(), key=lambda item: (-item[1], item[0]))
+
+
 def _top_drift_scores(drift_scores: dict[str, float], limit: int = 10) -> list[tuple[str, float]]:
     """Return drift scores sorted descending, capped at *limit*."""
-    return sorted(drift_scores.items(), key=lambda x: -x[1])[:limit]
+    return _sorted_drift_score_items(drift_scores)[:limit]
 
 
 def _resolve_trending_dv_name(trending: OrgReportTrending, dv_id: str) -> str | None:
@@ -283,7 +288,7 @@ def _ranked_drift_entries(
     limit: int | None = None,
 ) -> list[dict[str, Any]]:
     """Return ranked drift entries with the best available DV names attached."""
-    ranked_scores = sorted(trending.drift_scores.items(), key=lambda x: -x[1])
+    ranked_scores = _sorted_drift_score_items(trending.drift_scores)
     if limit is not None:
         ranked_scores = ranked_scores[:limit]
 
@@ -346,6 +351,15 @@ def _render_trending_console(trending: OrgReportTrending) -> str:
     return "\n".join(lines)
 
 
+def _print_trending_console_section(trending: OrgReportTrending | None) -> None:
+    """Emit the console trending section when a usable window is available."""
+    if trending is None or len(trending.snapshots) < 2:
+        return
+
+    print(_render_trending_console(trending))
+    print()
+
+
 def _trending_snapshots_to_dicts(trending: OrgReportTrending) -> dict[str, Any]:
     """Convert trending data to a JSON-serializable dict."""
     return {
@@ -373,7 +387,7 @@ def _trending_snapshots_to_dicts(trending: OrgReportTrending) -> dict[str, Any]:
             }
             for d in trending.deltas
         ],
-        "drift_scores": trending.drift_scores,
+        "drift_scores": {dv_id: score for dv_id, score in _sorted_drift_score_items(trending.drift_scores)},
         "drift_details": _ranked_drift_entries(trending),
     }
 
@@ -842,17 +856,20 @@ def write_org_report_console(
         print()
 
     # Trending section (v3.4.0)
-    if trending is not None and len(trending.snapshots) >= 2:
-        print(_render_trending_console(trending))
-        print()
+    _print_trending_console_section(trending)
 
 
-def write_org_report_stats_only(result: OrgReportResult, quiet: bool = False) -> None:
+def write_org_report_stats_only(
+    result: OrgReportResult,
+    quiet: bool = False,
+    trending: OrgReportTrending | None = None,
+) -> None:
     """Write minimal org-report stats to console (Feature 2: --org-stats mode).
 
     Args:
         result: OrgReportResult from analysis
         quiet: Suppress output
+        trending: Optional trending window to append after the stats summary
     """
     if quiet:
         return
@@ -876,6 +893,8 @@ def write_org_report_stats_only(result: OrgReportResult, quiet: bool = False) ->
     print(f"Duration: {result.duration:.2f}s")
     print("=" * BANNER_WIDTH)
     print()
+
+    _print_trending_console_section(trending)
 
 
 def write_org_report_comparison_console(comparison: OrgReportComparison, quiet: bool = False) -> None:

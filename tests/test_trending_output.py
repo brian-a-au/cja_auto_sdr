@@ -17,6 +17,7 @@ from cja_auto_sdr.org.models import (
     TrendingSnapshot,
 )
 from cja_auto_sdr.org.writers import (
+    _ranked_drift_entries,
     build_org_report_json_data,
     write_org_report_console,
     write_org_report_csv,
@@ -187,6 +188,20 @@ class TestJsonWithTrending:
         serialized = json.dumps(data, default=str)
         parsed = json.loads(serialized)
         assert parsed["trending"]["window_size"] == 2
+
+    def test_equal_drift_scores_use_stable_dv_id_tiebreaker(self):
+        result = _make_result()
+        trending = _make_trending()
+        trending.drift_scores = {"dv_b": 0.5, "dv_a": 0.5, "dv_c": 0.4}
+        trending.snapshots[0].dv_names.update({"dv_a": "DV A", "dv_b": "DV B", "dv_c": "DV C"})
+        trending.snapshots[1].dv_names.update({"dv_a": "DV A", "dv_b": "DV B", "dv_c": "DV C"})
+
+        ranked = _ranked_drift_entries(trending)
+        assert [entry["data_view_id"] for entry in ranked] == ["dv_a", "dv_b", "dv_c"]
+
+        data = build_org_report_json_data(result, trending=trending)
+        assert list(data["trending"]["drift_scores"]) == ["dv_a", "dv_b", "dv_c"]
+        assert [entry["data_view_id"] for entry in data["trending"]["drift_details"]] == ["dv_a", "dv_b", "dv_c"]
 
 
 # ---------------------------------------------------------------------------
