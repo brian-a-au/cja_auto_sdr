@@ -38,6 +38,12 @@ def _mock_cli_option_specified(option_name, argv=None):
     return False
 
 
+def _mock_cli_option_specified_for(*option_names):
+    """Return a stub that reports only the selected long options as explicit."""
+    specified = set(option_names)
+    return lambda option_name, argv=None: option_name in specified
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -1685,7 +1691,6 @@ class TestMainImplOrgReportSnapshots:
         assert "History exclusion:    org_stats_only" in emitted
         assert "Orders" in emitted
 
-    @patch("cja_auto_sdr.generator._cli_option_specified", _mock_cli_option_specified)
     @patch("cja_auto_sdr.generator.OrgReportCache")
     def test_prune_org_report_snapshots_json_output(self, mock_cache_cls):
         mock_cache = MagicMock()
@@ -1694,13 +1699,73 @@ class TestMainImplOrgReportSnapshots:
         mock_cache_cls.return_value = mock_cache
 
         with pytest.raises(SystemExit) as exc_info:
-            with patch("cja_auto_sdr.generator.parse_arguments") as mock_pa:
+            with (
+                patch("cja_auto_sdr.generator._cli_option_specified") as mock_cli_spec,
+                patch("cja_auto_sdr.generator.parse_arguments") as mock_pa,
+            ):
+                mock_cli_spec.side_effect = _mock_cli_option_specified_for("--org-report-keep-last")
                 mock_pa.return_value = parse_arguments(
                     ["--prune-org-report-snapshots", "--org-report-keep-last", "5", "--format", "json"]
                 )
                 _main_impl()
 
         assert exc_info.value.code == 0
+        mock_cache.prune_org_report_snapshots.assert_called_once_with(
+            org_id=None,
+            keep_last=5,
+            keep_since_days=None,
+        )
+
+    @patch("cja_auto_sdr.generator.OrgReportCache")
+    def test_prune_org_report_snapshots_keep_last_zero_is_allowed(self, mock_cache_cls):
+        mock_cache = MagicMock()
+        mock_cache.prune_org_report_snapshots.return_value = []
+        mock_cache.get_org_report_snapshot_root_dir.return_value = "/tmp/org_report_snapshots"
+        mock_cache_cls.return_value = mock_cache
+
+        with pytest.raises(SystemExit) as exc_info:
+            with (
+                patch("cja_auto_sdr.generator._cli_option_specified") as mock_cli_spec,
+                patch("cja_auto_sdr.generator.parse_arguments") as mock_pa,
+            ):
+                mock_cli_spec.side_effect = _mock_cli_option_specified_for("--org-report-keep-last")
+                mock_pa.return_value = parse_arguments(
+                    ["--prune-org-report-snapshots", "--org-report-keep-last", "0", "--format", "json"]
+                )
+                _main_impl()
+
+        assert exc_info.value.code == 0
+        mock_cache.prune_org_report_snapshots.assert_called_once_with(
+            org_id=None,
+            keep_last=0,
+            keep_since_days=None,
+        )
+
+    def test_org_report_snapshot_keep_last_zero_requires_prune_mode(self, capsys):
+        with pytest.raises(SystemExit) as exc_info:
+            with (
+                patch("cja_auto_sdr.generator._cli_option_specified") as mock_cli_spec,
+                patch("cja_auto_sdr.generator.parse_arguments") as mock_pa,
+            ):
+                mock_cli_spec.side_effect = _mock_cli_option_specified_for("--org-report-keep-last")
+                mock_pa.return_value = parse_arguments(["--list-org-report-snapshots", "--org-report-keep-last", "0"])
+                _main_impl()
+
+        assert exc_info.value.code == 1
+        assert "--org-report-keep-last and --org-report-keep-since are only supported" in capsys.readouterr().err
+
+    def test_prune_org_report_snapshots_reject_negative_keep_last(self, capsys):
+        with pytest.raises(SystemExit) as exc_info:
+            with (
+                patch("cja_auto_sdr.generator._cli_option_specified") as mock_cli_spec,
+                patch("cja_auto_sdr.generator.parse_arguments") as mock_pa,
+            ):
+                mock_cli_spec.side_effect = _mock_cli_option_specified_for("--org-report-keep-last")
+                mock_pa.return_value = parse_arguments(["--prune-org-report-snapshots", "--org-report-keep-last", "-1"])
+                _main_impl()
+
+        assert exc_info.value.code == 1
+        assert "--org-report-keep-last cannot be negative" in capsys.readouterr().err
 
     @patch("cja_auto_sdr.generator._cli_option_specified", _mock_cli_option_specified)
     def test_org_report_snapshot_commands_conflict(self, capsys):

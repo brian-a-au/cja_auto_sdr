@@ -1028,13 +1028,18 @@ def test_run_org_report_org_stats_json_stdout_branch(tmp_path: Path, capsys, ric
     assert '"report_type": "org_analysis"' in stdout
 
 
-def test_run_org_report_org_stats_console_skips_low_fidelity_trending_window(
+def test_run_org_report_org_stats_console_uses_cached_trending_for_low_fidelity_current_run(
     tmp_path: Path, capsys, rich_org_report_result
 ):
-    baseline = deepcopy(rich_org_report_result)
-    baseline.timestamp = "2026-02-01T00:00:00Z"
-    baseline.org_id = "test_org@AdobeOrg"
-    baseline.is_sampled = False
+    baseline_one = deepcopy(rich_org_report_result)
+    baseline_one.timestamp = "2026-01-01T00:00:00Z"
+    baseline_one.org_id = "test_org@AdobeOrg"
+    baseline_one.is_sampled = False
+
+    baseline_two = deepcopy(rich_org_report_result)
+    baseline_two.timestamp = "2026-02-01T00:00:00Z"
+    baseline_two.org_id = "test_org@AdobeOrg"
+    baseline_two.is_sampled = False
 
     current = deepcopy(rich_org_report_result)
     current.timestamp = "2026-03-01T00:00:00Z"
@@ -1045,7 +1050,10 @@ def test_run_org_report_org_stats_console_skips_low_fidelity_trending_window(
 
     snapshot_cache_root = tmp_path / "cache"
     OrgReportCache(cache_dir=snapshot_cache_root).save_org_report_snapshot(
-        build_org_report_json_data(baseline), org_id=baseline.org_id
+        build_org_report_json_data(baseline_one), org_id=baseline_one.org_id
+    )
+    OrgReportCache(cache_dir=snapshot_cache_root).save_org_report_snapshot(
+        build_org_report_json_data(baseline_two), org_id=baseline_two.org_id
     )
 
     def _cache_factory(*args, **kwargs):
@@ -1078,11 +1086,69 @@ def test_run_org_report_org_stats_console_skips_low_fidelity_trending_window(
     assert ok is True
     assert exceeded is False
     assert "ORG STATS" in output
-    assert "TRENDING" not in output
+    assert "TRENDING" in output
     assert "full similarity analysis" in output
+    assert "Using eligible cached snapshots only." in output
 
     snapshot_dir = OrgReportCache(cache_dir=snapshot_cache_root).get_org_report_snapshot_dir("test_org@AdobeOrg")
-    assert len(list(snapshot_dir.glob("*.json"))) == 1
+    assert len(list(snapshot_dir.glob("*.json"))) == 2
+
+
+def test_run_org_report_trending_window_uses_current_snapshot_when_persist_fails(
+    tmp_path: Path, capsys, rich_org_report_result
+):
+    baseline = deepcopy(rich_org_report_result)
+    baseline.timestamp = "2026-02-01T00:00:00Z"
+    baseline.org_id = "test_org@AdobeOrg"
+    baseline.is_sampled = False
+
+    current = deepcopy(rich_org_report_result)
+    current.timestamp = "2026-03-01T00:00:00Z"
+    current.org_id = "test_org@AdobeOrg"
+    current.is_sampled = False
+
+    snapshot_cache_root = tmp_path / "cache"
+    OrgReportCache(cache_dir=snapshot_cache_root).save_org_report_snapshot(
+        build_org_report_json_data(baseline), org_id=baseline.org_id
+    )
+
+    def _cache_factory(*args, **kwargs):
+        return OrgReportCache(cache_dir=snapshot_cache_root, logger=kwargs.get("logger"))
+
+    with (
+        patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "mock", {"org_id": "test_org@AdobeOrg"})),
+        patch("cja_auto_sdr.generator.cjapy") as mock_cjapy,
+        patch("cja_auto_sdr.generator.OrgReportCache", side_effect=_cache_factory),
+        patch.object(OrgReportCache, "save_org_report_snapshot", side_effect=OSError("disk full")),
+        patch.object(OrgReportCache, "prune_org_report_snapshots", return_value=[]) as mock_prune,
+        patch("cja_auto_sdr.generator.OrgComponentAnalyzer") as mock_analyzer_cls,
+        patch("cja_auto_sdr.generator.write_org_report_console") as mock_console,
+        patch("cja_auto_sdr.generator.build_org_step_summary", return_value="summary"),
+        patch("cja_auto_sdr.generator.append_github_step_summary"),
+    ):
+        mock_cjapy.CJA.return_value = Mock()
+        analyzer = Mock()
+        analyzer.run_analysis.return_value = current
+        mock_analyzer_cls.return_value = analyzer
+
+        ok, exceeded = generator.run_org_report(
+            config_file="config.json",
+            output_format="console",
+            output_path=None,
+            output_dir=str(tmp_path),
+            org_config=OrgReportConfig(),
+            quiet=False,
+            trending_window=3,
+        )
+
+    assert ok is True
+    assert exceeded is False
+    assert "Could not persist org-report snapshot history: disk full" in capsys.readouterr().out
+
+    trending = mock_console.call_args.kwargs.get("trending")
+    assert trending is not None
+    assert [snapshot.timestamp for snapshot in trending.snapshots] == ["2026-02-01T00:00:00Z", "2026-03-01T00:00:00Z"]
+    mock_prune.assert_not_called()
 
 
 def test_org_report_renderers_core_min_count_and_unnamed_component_branches(

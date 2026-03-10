@@ -1401,6 +1401,14 @@ def _active_run_modes(args: argparse.Namespace) -> list[RunMode]:
     return [mode for mode, is_active in _run_mode_checks(args) if is_active]
 
 
+def _org_report_snapshot_retention_flags_specified(argv: list[str] | None = None) -> tuple[bool, bool]:
+    """Return whether org-report snapshot retention flags were explicitly provided."""
+    return (
+        _cli_option_specified("--org-report-keep-last", argv=argv),
+        _cli_option_specified("--org-report-keep-since", argv=argv),
+    )
+
+
 def _validate_org_report_snapshot_cli_args(
     args: argparse.Namespace,
     *,
@@ -1440,9 +1448,12 @@ def _validate_org_report_snapshot_cli_args(
             "--org-report-snapshot-org can only be used with --list-org-report-snapshots or --prune-org-report-snapshots",
         )
 
-    if not getattr(args, "prune_org_report_snapshots", False) and (
-        getattr(args, "org_report_keep_last", 0) > 0 or getattr(args, "org_report_keep_since", None)
-    ):
+    keep_last_specified, keep_since_specified = _org_report_snapshot_retention_flags_specified()
+    effective_keep_last = getattr(args, "org_report_keep_last", 0)
+    if keep_last_specified and effective_keep_last < 0:
+        _exit_error("--org-report-keep-last cannot be negative")
+
+    if not getattr(args, "prune_org_report_snapshots", False) and (keep_last_specified or keep_since_specified):
         _exit_error(
             "--org-report-keep-last and --org-report-keep-since are only supported with --prune-org-report-snapshots",
         )
@@ -8165,6 +8176,105 @@ def compare_org_reports(current: OrgReportResult, previous_path: str) -> OrgRepo
     )
 
 
+def _org_report_history_exclusion_note(
+    history_exclusion_reason: str | None,
+    *,
+    trending_available: bool,
+) -> str:
+    """Return a user-facing note for low-fidelity current org-report runs."""
+    base_note = (
+        "Note: Sampled org reports are excluded from persistent trending history."
+        if history_exclusion_reason == "sampled"
+        else "Note: Org reports without full similarity analysis are excluded from persistent trending history."
+    )
+    if trending_available:
+        return f"{base_note} Using eligible cached snapshots only."
+    return f"{base_note} Fewer than 2 eligible cached snapshots found — trending skipped."
+
+
+def _build_org_report_trending_window(
+    *,
+    result: OrgReportResult,
+    org_config: OrgReportConfig,
+    trending_window: int,
+    cache: OrgReportCache | None,
+    logger: logging.Logger,
+    quiet: bool,
+    status_print: Callable[..., None],
+):
+    """Build a trending window while treating current-run eligibility and persistence separately."""
+    from cja_auto_sdr.org.snapshot_utils import org_report_snapshot_history_exclusion_reason
+    from cja_auto_sdr.org.trending import _extract_snapshot_from_json, build_trending
+    from cja_auto_sdr.org.writers import build_org_report_json_data as _build_json_for_snapshot
+
+    snapshot_cache = cache if cache is not None else OrgReportCache(logger=logger)
+    snapshot_cache_dir = snapshot_cache.get_org_report_snapshot_root_dir()
+    current_json = _build_json_for_snapshot(result)
+    history_exclusion_reason = org_report_snapshot_history_exclusion_reason(current_json)
+
+    current_snapshot = None
+    saved_snapshot_path: str | Path | None = None
+    if history_exclusion_reason is None:
+        current_snapshot = _extract_snapshot_from_json(current_json)
+        if current_snapshot is None:
+            if not quiet:
+                status_print(
+                    ConsoleColors.warning(
+                        "Warning: Current org-report could not be normalized for persistent trending history; "
+                        "using eligible cached snapshots only.",
+                    ),
+                )
+        else:
+            try:
+                saved_snapshot_path = snapshot_cache.save_org_report_snapshot(current_json, org_id=result.org_id)
+            except OSError as exc:
+                if not quiet:
+                    status_print(
+                        ConsoleColors.warning(f"Warning: Could not persist org-report snapshot history: {exc}")
+                    )
+
+    trending = build_trending(
+        cache_dir=snapshot_cache_dir,
+        window_size=trending_window,
+        explicit_file=org_config.compare_org_report,
+        current_snapshot=current_snapshot,
+        org_id=result.org_id,
+    )
+
+    if not quiet:
+        if history_exclusion_reason is not None:
+            status_print(
+                ConsoleColors.warning(
+                    _org_report_history_exclusion_note(
+                        history_exclusion_reason,
+                        trending_available=trending is not None,
+                    ),
+                ),
+            )
+        elif trending is None:
+            status_print(
+                ConsoleColors.warning(
+                    "Note: Fewer than 2 org-report snapshots found in persistent cache — trending skipped."
+                ),
+            )
+
+    if saved_snapshot_path is not None:
+        preserved_snapshot_paths: list[str | Path] = [saved_snapshot_path]
+        if org_config.compare_org_report:
+            preserved_snapshot_paths.append(org_config.compare_org_report)
+        try:
+            snapshot_cache.prune_org_report_snapshots(
+                org_id=result.org_id,
+                keep_last=max(DEFAULT_ORG_REPORT_SNAPSHOT_KEEP_LAST, trending_window),
+                preserved_snapshot_paths=preserved_snapshot_paths,
+            )
+        except OSError as exc:
+            if not quiet:
+                status_print(ConsoleColors.warning(f"Warning: Could not prune org-report snapshot history: {exc}"))
+
+    return trending
+
+
 # ==================== ORG REPORT WRITERS (EXTRACTED) ====================
 # The following functions have been moved to cja_auto_sdr.org.writers:
 # - _render_distribution_bar
@@ -8285,62 +8395,19 @@ def run_org_report(
         # Trending analysis (v3.4.0)
         trending = None
         if trending_window is not None:
-            from cja_auto_sdr.org.snapshot_utils import (
-                org_report_snapshot_history_eligible,
-                org_report_snapshot_history_exclusion_reason,
-            )
-            from cja_auto_sdr.org.trending import _extract_snapshot_from_json, build_trending
-            from cja_auto_sdr.org.writers import build_org_report_json_data as _build_json_for_snapshot
-
-            snapshot_cache = cache if cache is not None else OrgReportCache(logger=logger)
-            snapshot_cache_dir = snapshot_cache.get_org_report_snapshot_root_dir()
-
             try:
-                current_json = _build_json_for_snapshot(result)
-                history_exclusion_reason = org_report_snapshot_history_exclusion_reason(current_json)
-                if org_report_snapshot_history_eligible(current_json):
-                    # Persist the current run so console/default workflows accumulate history.
-                    current_snapshot = _extract_snapshot_from_json(current_json)
-                    saved_snapshot_path = None
-                    if current_snapshot is not None:
-                        saved_snapshot_path = snapshot_cache.save_org_report_snapshot(
-                            current_json, org_id=result.org_id
-                        )
-
-                    trending = build_trending(
-                        cache_dir=snapshot_cache_dir,
-                        window_size=trending_window,
-                        explicit_file=org_config.compare_org_report,
-                        current_snapshot=current_snapshot,
-                        org_id=result.org_id,
-                    )
-                    if saved_snapshot_path is not None:
-                        preserved_snapshot_paths: list[str | Path] = [saved_snapshot_path]
-                        if org_config.compare_org_report:
-                            preserved_snapshot_paths.append(org_config.compare_org_report)
-                        snapshot_cache.prune_org_report_snapshots(
-                            org_id=result.org_id,
-                            keep_last=max(DEFAULT_ORG_REPORT_SNAPSHOT_KEEP_LAST, trending_window),
-                            preserved_snapshot_paths=preserved_snapshot_paths,
-                        )
-                    if trending is None and not quiet:
-                        _status_print(
-                            ConsoleColors.warning(
-                                "Note: Fewer than 2 org-report snapshots found in persistent cache — trending skipped."
-                            ),
-                        )
-                elif not quiet:
-                    history_note = (
-                        "Note: Sampled org reports are excluded from persistent trending history — trending skipped."
-                        if history_exclusion_reason == "sampled"
-                        else "Note: Org reports without full similarity analysis are excluded from persistent trending history — trending skipped."
-                    )
-                    _status_print(
-                        ConsoleColors.warning(history_note),
-                    )
+                trending = _build_org_report_trending_window(
+                    result=result,
+                    org_config=org_config,
+                    trending_window=trending_window,
+                    cache=cache,
+                    logger=logger,
+                    quiet=quiet,
+                    status_print=_status_print,
+                )
             except OSError as e:
                 if not quiet:
-                    _status_print(ConsoleColors.warning(f"Warning: Could not persist org-report snapshot history: {e}"))
+                    _status_print(ConsoleColors.warning(f"Warning: Could not load org-report snapshot history: {e}"))
 
         # Generate output based on format
         output_path_obj = Path(output_path) if output_path and not output_to_stdout else None
@@ -8884,6 +8951,28 @@ def _build_org_report_snapshot_listing_rows(snapshots: list[dict[str, Any]]) -> 
     ]
 
 
+def _resolve_org_report_snapshot_prune_retention(args: argparse.Namespace) -> tuple[int, int | None, str | None]:
+    """Resolve validated retention settings for --prune-org-report-snapshots."""
+    effective_keep_last = getattr(args, "org_report_keep_last", 0)
+    effective_keep_since = getattr(args, "org_report_keep_since", None)
+    keep_last_specified, keep_since_specified = _org_report_snapshot_retention_flags_specified()
+
+    if keep_last_specified and effective_keep_last < 0:
+        _exit_error("--org-report-keep-last cannot be negative")
+    if not keep_last_specified and not keep_since_specified:
+        _exit_error(
+            "--prune-org-report-snapshots requires --org-report-keep-last and/or --org-report-keep-since",
+        )
+
+    keep_since_days = None
+    if keep_since_specified:
+        keep_since_days = parse_retention_period(effective_keep_since)
+        if keep_since_days is None:
+            _exit_error(f"Invalid --org-report-keep-since value: {effective_keep_since}")
+
+    return effective_keep_last, keep_since_days, effective_keep_since
+
+
 def _handle_org_report_snapshot_cli(
     args: argparse.Namespace,
     *,
@@ -9030,18 +9119,7 @@ def _handle_org_report_snapshot_cli(
             }
         sys.exit(0)
 
-    effective_keep_last = getattr(args, "org_report_keep_last", 0)
-    effective_keep_since = getattr(args, "org_report_keep_since", None)
-    if effective_keep_last <= 0 and not effective_keep_since:
-        _exit_error(
-            "--prune-org-report-snapshots requires --org-report-keep-last and/or --org-report-keep-since",
-        )
-
-    keep_since_days = None
-    if effective_keep_since:
-        keep_since_days = parse_retention_period(effective_keep_since)
-        if keep_since_days is None:
-            _exit_error(f"Invalid --org-report-keep-since value: {effective_keep_since}")
+    effective_keep_last, keep_since_days, effective_keep_since = _resolve_org_report_snapshot_prune_retention(args)
 
     deleted_paths = snapshot_cache.prune_org_report_snapshots(
         org_id=org_id,
