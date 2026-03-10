@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import errno
 import json
+import os
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -153,6 +154,17 @@ def test_get_org_report_snapshot_dir_uses_collision_resistant_org_key(tmp_path: 
     assert snapshot_dir.name.startswith("org_test_example__")
 
 
+def test_iter_org_report_snapshot_dirs_returns_current_and_legacy_dirs(tmp_path: Path):
+    cache = OrgReportCache(cache_dir=tmp_path)
+
+    snapshot_dirs = cache._iter_org_report_snapshot_dirs("org@test.example")
+
+    assert [path.name for path in snapshot_dirs] == [
+        cache.get_org_report_snapshot_dir("org@test.example").name,
+        "org_test_example",
+    ]
+
+
 def test_org_report_snapshot_dirs_do_not_collide_for_distinct_org_ids(tmp_path: Path):
     cache = OrgReportCache(cache_dir=tmp_path)
 
@@ -173,6 +185,36 @@ def test_org_report_snapshot_dirs_do_not_collide_for_distinct_org_ids(tmp_path: 
     assert path_a.parent != path_b.parent
     assert [snapshot["org_id"] for snapshot in cache.list_org_report_snapshots("a.b@AdobeOrg")] == ["a.b@AdobeOrg"]
     assert [snapshot["org_id"] for snapshot in cache.list_org_report_snapshots("a_b@AdobeOrg")] == ["a_b@AdobeOrg"]
+
+
+def test_list_org_report_snapshots_reads_legacy_dir_and_filters_mismatched_org_metadata(tmp_path: Path):
+    cache = OrgReportCache(cache_dir=tmp_path)
+    legacy_dir = cache.get_org_report_snapshot_root_dir() / "org_test_example"
+    legacy_dir.mkdir(parents=True, exist_ok=True)
+    (legacy_dir / "match.json").write_text(
+        json.dumps(
+            {
+                "generated_at": "2026-03-01T00:00:00Z",
+                "org_id": "org@test.example",
+                "summary": {"data_views_total": 1, "total_unique_components": 1},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (legacy_dir / "mismatch.json").write_text(
+        json.dumps(
+            {
+                "generated_at": "2026-03-02T00:00:00Z",
+                "org_id": "other-org",
+                "summary": {"data_views_total": 1, "total_unique_components": 1},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    snapshots = cache.list_org_report_snapshots("org@test.example")
+
+    assert [Path(snapshot["filepath"]).name for snapshot in snapshots] == ["match.json"]
 
 
 def test_save_org_report_snapshot_writes_json_file(tmp_path: Path):
@@ -304,6 +346,55 @@ def test_inspect_org_report_snapshot_includes_data_view_preview(tmp_path: Path):
 
     assert snapshot["data_view_names_preview"] == ["Orders", "Visitors"]
     assert snapshot["data_view_names_total"] == 2
+
+
+def test_load_org_report_snapshot_metadata_normalizes_malformed_sections(tmp_path: Path):
+    cache = OrgReportCache(cache_dir=tmp_path)
+    snapshot_path = cache.get_org_report_snapshot_dir("org@test.example") / "report.json"
+    snapshot_path.parent.mkdir(parents=True, exist_ok=True)
+    snapshot_path.write_text(
+        json.dumps(
+            {
+                "generated_at": "2026-03-01T00:00:00Z",
+                "org_id": "org@test.example",
+                "summary": [],
+                "distribution": {"core": [], "isolated": []},
+                "_snapshot_meta": "bad-meta",
+                "data_views": [{"name": f"DV {index}"} for index in range(12)],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    metadata = cache._load_org_report_snapshot_metadata(snapshot_path, include_data_views=True)
+
+    assert metadata is not None
+    assert metadata["data_views_total"] == 12
+    assert metadata["core_count"] == 0
+    assert metadata["isolated_count"] == 0
+    assert metadata["snapshot_id"] is None
+    assert metadata["data_view_names_total"] == 12
+    assert metadata["data_view_names_truncated"] is True
+
+
+def test_should_retain_snapshot_uses_normalized_preserved_paths_and_cutoff(tmp_path: Path):
+    preserved_path = tmp_path / "snap.json"
+    preserved_path.write_text("{}", encoding="utf-8")
+    snapshot = {
+        "filepath": os.path.relpath(preserved_path, Path.cwd()),
+        "generated_at_epoch": datetime.now(UTC).timestamp(),
+    }
+
+    assert OrgReportCache._should_retain_snapshot(
+        snapshot,
+        retained_paths={str(preserved_path.resolve(strict=False))},
+        cutoff=None,
+    )
+    assert OrgReportCache._should_retain_snapshot(
+        snapshot,
+        retained_paths=set(),
+        cutoff=datetime.now(UTC) - timedelta(days=1),
+    )
 
 
 def test_prune_org_report_snapshots_keeps_latest_per_org(tmp_path: Path):

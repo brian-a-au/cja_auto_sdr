@@ -6,7 +6,11 @@ import pytest
 
 from cja_auto_sdr.org.models import OrgReportTrending, TrendingSnapshot
 from cja_auto_sdr.org.trending import (
+    _data_view_row_has_error,
     _extract_snapshot_from_json,
+    _resolve_explicit_snapshot_identities,
+    _successful_data_view_rows,
+    _trim_snapshot_window,
     build_trending,
     compute_deltas,
     compute_drift_scores,
@@ -71,6 +75,21 @@ def _write_report(tmp_path, filename, data):
 
 
 class TestExtractSnapshotFromJson:
+    def test_data_view_error_helpers_handle_non_dict_and_blank_errors(self):
+        assert _data_view_row_has_error([]) is True
+        assert _data_view_row_has_error({"error": ""}) is False
+        assert _successful_data_view_rows({"data_views": "not-a-list"}) == []
+        assert _successful_data_view_rows(
+            {
+                "data_views": [
+                    {"id": "ok", "error": None},
+                    {"id": "blank", "error": ""},
+                    {"id": "bad", "error": "timeout"},
+                    [],
+                ]
+            }
+        ) == [{"id": "ok", "error": None}, {"id": "blank", "error": ""}]
+
     def test_basic_extraction(self):
         data = _make_org_report_json(dv_count=12, comp_count=200)
         snap = _extract_snapshot_from_json(data)
@@ -224,6 +243,17 @@ class TestExtractSnapshotFromJson:
         data["summary"]["is_sampled"] = True
 
         assert _extract_snapshot_from_json(data) is None
+
+    def test_non_dict_snapshot_meta_and_non_list_data_views_are_tolerated(self):
+        data = _make_org_report_json(data_views=[])
+        data["_snapshot_meta"] = "bad-meta"
+        data["data_views"] = "bad-data-views"
+
+        snap = _extract_snapshot_from_json(data)
+
+        assert snap is not None
+        assert snap.snapshot_id is None
+        assert snap.dv_ids == set()
 
 
 # ---------------------------------------------------------------------------
@@ -619,3 +649,25 @@ class TestBuildTrending:
         result = build_trending(tmp_path, current_snapshot=current, org_id="org_a")
         assert result is not None
         assert [snapshot.org_id for snapshot in result.snapshots] == ["org_a", "org_a"]
+
+
+def test_resolve_explicit_snapshot_identities_respects_org_scope(tmp_path):
+    explicit = _write_report(tmp_path, "baseline.json", _make_org_report_json(timestamp="2026-01-01", org_id="org_b"))
+
+    assert _resolve_explicit_snapshot_identities(explicit, org_id="org_a") == set()
+
+
+def test_trim_snapshot_window_prefers_pinned_entries_when_pins_exceed_window():
+    snapshots = [
+        TrendingSnapshot(timestamp="2026-01-01", snapshot_id="one"),
+        TrendingSnapshot(timestamp="2026-02-01", snapshot_id="two"),
+        TrendingSnapshot(timestamp="2026-03-01", snapshot_id="three"),
+    ]
+
+    trimmed = _trim_snapshot_window(
+        snapshots,
+        window_size=2,
+        pinned_snapshot_identities={("snapshot_id", "one"), ("snapshot_id", "two"), ("snapshot_id", "three")},
+    )
+
+    assert [snapshot.snapshot_id for snapshot in trimmed] == ["two", "three"]
