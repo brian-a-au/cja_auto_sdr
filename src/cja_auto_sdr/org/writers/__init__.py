@@ -201,9 +201,7 @@ def _render_html_trending_table(
         + "".join(f"<th>{html.escape(label)}</th>" for label in column_labels)
         + "</tr>\n"
         "                </thead>\n"
-        "                <tbody>\n"
-        + "\n".join(rows)
-        + "\n                </tbody>\n"
+        "                <tbody>\n" + "\n".join(rows) + "\n                </tbody>\n"
         "            </table>\n"
         "        </div>\n"
     )
