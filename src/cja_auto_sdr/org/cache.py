@@ -229,7 +229,7 @@ class OrgReportCache:
             with open(tmp_path, "w", encoding="utf-8") as f:
                 json.dump(payload, f, indent=2, ensure_ascii=False)
             os.replace(tmp_path, file_path)
-        except (OSError, TypeError, ValueError):
+        except OSError, TypeError, ValueError:
             with contextlib.suppress(OSError):
                 tmp_path.unlink()
             raise

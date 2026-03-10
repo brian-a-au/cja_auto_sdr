@@ -559,7 +559,7 @@ def test_run_org_report_trending_window_prunes_snapshot_history(tmp_path: Path, 
     assert len(mock_prune.call_args.kwargs["preserved_snapshot_paths"]) == 1
 
 
-def test_run_org_report_trending_window_preserves_explicit_baseline_before_prune(
+def test_run_org_report_trending_window_does_not_pin_compare_baseline_into_window(
     tmp_path: Path, rich_org_report_result
 ):
     current = deepcopy(rich_org_report_result)
@@ -614,7 +614,9 @@ def test_run_org_report_trending_window_preserves_explicit_baseline_before_prune
     assert exceeded is False
     trending = mock_console.call_args.kwargs.get("trending")
     assert trending is not None
-    assert trending.snapshots[0].source_path == str(explicit_baseline.resolve(strict=False))
+    assert trending.window_size == 3
+    assert str(explicit_baseline.resolve(strict=False)) not in {snapshot.source_path for snapshot in trending.snapshots}
+    assert trending.snapshots[-1].timestamp == "2026-03-01T00:00:00Z"
     assert explicit_baseline.exists()
 
 
@@ -771,7 +773,7 @@ def test_run_org_report_trending_window_renders_across_file_formats_with_persist
     assert list((tmp_path / "csv").rglob("*trending*.csv"))
 
 
-def test_run_org_report_trending_window_skips_sampled_history(tmp_path: Path, rich_org_report_result):
+def test_run_org_report_trending_window_persists_sampled_history_for_inspection(tmp_path: Path, rich_org_report_result):
     sampled_result = deepcopy(rich_org_report_result)
     sampled_result.timestamp = "2026-03-01T00:00:00Z"
     sampled_result.org_id = "test_org@AdobeOrg"
@@ -810,10 +812,15 @@ def test_run_org_report_trending_window_skips_sampled_history(tmp_path: Path, ri
     assert ok is True
     assert exceeded is False
     assert mock_console.call_args.kwargs.get("trending") is None
-    mock_prune.assert_not_called()
+    mock_prune.assert_called_once()
 
-    snapshot_dir = OrgReportCache(cache_dir=snapshot_cache_root).get_org_report_snapshot_dir("test_org@AdobeOrg")
-    assert not snapshot_dir.exists() or not list(snapshot_dir.glob("*.json"))
+    snapshot_cache = OrgReportCache(cache_dir=snapshot_cache_root)
+    snapshot_dir = snapshot_cache.get_org_report_snapshot_dir("test_org@AdobeOrg")
+    assert len(list(snapshot_dir.glob("*.json"))) == 1
+    snapshots = snapshot_cache.list_org_report_snapshots("test_org@AdobeOrg")
+    assert len(snapshots) == 1
+    assert snapshots[0]["history_eligible"] is False
+    assert snapshots[0]["history_exclusion_reason"] == "sampled"
 
 
 def test_run_org_report_without_trending_window_leaves_output_unchanged(tmp_path: Path, rich_org_report_result):
@@ -1090,8 +1097,13 @@ def test_run_org_report_org_stats_console_uses_cached_trending_for_low_fidelity_
     assert "full similarity analysis" in output
     assert "Using eligible cached snapshots only." in output
 
-    snapshot_dir = OrgReportCache(cache_dir=snapshot_cache_root).get_org_report_snapshot_dir("test_org@AdobeOrg")
-    assert len(list(snapshot_dir.glob("*.json"))) == 2
+    snapshot_cache = OrgReportCache(cache_dir=snapshot_cache_root)
+    snapshot_dir = snapshot_cache.get_org_report_snapshot_dir("test_org@AdobeOrg")
+    assert len(list(snapshot_dir.glob("*.json"))) == 3
+    snapshots = snapshot_cache.list_org_report_snapshots("test_org@AdobeOrg")
+    assert snapshots[0]["generated_at"] == "2026-03-01T00:00:00Z"
+    assert snapshots[0]["history_eligible"] is False
+    assert snapshots[0]["history_exclusion_reason"] == "org_stats_only"
 
 
 def test_run_org_report_trending_window_uses_current_snapshot_when_persist_fails(

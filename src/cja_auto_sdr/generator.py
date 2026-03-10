@@ -8214,29 +8214,25 @@ def _build_org_report_trending_window(
 
     current_snapshot = None
     saved_snapshot_path: str | Path | None = None
+    try:
+        saved_snapshot_path = snapshot_cache.save_org_report_snapshot(current_json, org_id=result.org_id)
+    except (OSError, ValueError) as exc:
+        if not quiet:
+            status_print(ConsoleColors.warning(f"Warning: Could not persist org-report snapshot history: {exc}"))
+
     if history_exclusion_reason is None:
         current_snapshot = _extract_snapshot_from_json(current_json)
-        if current_snapshot is None:
-            if not quiet:
-                status_print(
-                    ConsoleColors.warning(
-                        "Warning: Current org-report could not be normalized for persistent trending history; "
-                        "using eligible cached snapshots only.",
-                    ),
-                )
-        else:
-            try:
-                saved_snapshot_path = snapshot_cache.save_org_report_snapshot(current_json, org_id=result.org_id)
-            except OSError as exc:
-                if not quiet:
-                    status_print(
-                        ConsoleColors.warning(f"Warning: Could not persist org-report snapshot history: {exc}")
-                    )
+        if current_snapshot is None and not quiet:
+            status_print(
+                ConsoleColors.warning(
+                    "Warning: Current org-report could not be normalized for persistent trending history; "
+                    "using eligible cached snapshots only.",
+                ),
+            )
 
     trending = build_trending(
         cache_dir=snapshot_cache_dir,
         window_size=trending_window,
-        explicit_file=org_config.compare_org_report,
         current_snapshot=current_snapshot,
         org_id=result.org_id,
     )
