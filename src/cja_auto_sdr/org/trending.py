@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -335,9 +336,7 @@ def _load_snapshot_from_file(json_file: Path) -> TrendingSnapshot | None:
 def compute_deltas(snapshots: list[TrendingSnapshot]) -> list[TrendingDelta]:
     """Compute deltas between consecutive snapshots."""
     deltas: list[TrendingDelta] = []
-    for i in range(1, len(snapshots)):
-        prev = snapshots[i - 1]
-        curr = snapshots[i]
+    for prev, curr in _iter_consecutive_snapshot_pairs(snapshots):
         deltas.append(
             TrendingDelta(
                 from_timestamp=prev.timestamp,
@@ -363,21 +362,64 @@ _WEIGHT_SIMILARITY = 0.2
 _WEIGHT_PRESENCE = 0.2
 
 
+def _iter_consecutive_snapshot_pairs(
+    snapshots: list[TrendingSnapshot],
+) -> Iterator[tuple[TrendingSnapshot, TrendingSnapshot]]:
+    """Yield consecutive oldest-to-newest snapshot pairs."""
+    for index in range(1, len(snapshots)):
+        yield snapshots[index - 1], snapshots[index]
+
+
+def _normalize_drift_dimension(values: dict[str, float]) -> dict[str, float]:
+    """Scale one raw drift dimension to 0.0-1.0 by the largest DV value."""
+    if not values:
+        return {}
+    max_value = max(values.values())
+    if max_value == 0:
+        return dict.fromkeys(values, 0.0)
+    return {dv_id: value / max_value for dv_id, value in values.items()}
+
+
+def _accumulate_pairwise_drift(
+    previous: TrendingSnapshot,
+    current: TrendingSnapshot,
+    *,
+    dv_ids: set[str],
+    raw_component: dict[str, float],
+    raw_core_ratio: dict[str, float],
+    raw_similarity: dict[str, float],
+    raw_presence: dict[str, float],
+) -> None:
+    """Accumulate absolute period-over-period drift contributions for one pair."""
+    for dv_id in dv_ids:
+        previous_present = dv_id in previous.dv_ids
+        current_present = dv_id in current.dv_ids
+        raw_presence[dv_id] += 1.0 if previous_present != current_present else 0.0
+        raw_component[dv_id] += abs(
+            current.dv_component_counts.get(dv_id, 0) - previous.dv_component_counts.get(dv_id, 0)
+        )
+        raw_core_ratio[dv_id] += abs(
+            current.dv_core_ratios.get(dv_id, 0.0) - previous.dv_core_ratios.get(dv_id, 0.0)
+        )
+        raw_similarity[dv_id] += abs(
+            current.dv_max_similarity.get(dv_id, 0.0) - previous.dv_max_similarity.get(dv_id, 0.0)
+        )
+
+
 def compute_drift_scores(snapshots: list[TrendingSnapshot]) -> dict[str, float]:
     """Compute per-data-view drift scores across the snapshot window.
 
     Each score is a float 0.0-1.0 indicating how much the DV changed
-    relative to others.  Uses weighted normalization across four dimensions:
-    component count change (0.4), core/isolated ratio shift (0.2),
-    similarity shift (0.2), and presence change (0.2).
+    relative to others. Uses weighted normalization across four dimensions,
+    with each raw dimension accumulated from consecutive snapshot deltas
+    across the full window: component count change (0.4),
+    core/isolated ratio shift (0.2), similarity shift (0.2),
+    and presence change (0.2).
 
     Returns an empty dict if fewer than 2 snapshots.
     """
     if len(snapshots) < 2:
         return {}
-
-    first = snapshots[0]
-    last = snapshots[-1]
 
     # All DVs seen across the window
     all_dv_ids: set[str] = set()
@@ -387,50 +429,27 @@ def compute_drift_scores(snapshots: list[TrendingSnapshot]) -> dict[str, float]:
     if not all_dv_ids:
         return {}
 
-    # Raw deltas per DV per dimension
-    raw_component: dict[str, float] = {}
-    raw_core_ratio: dict[str, float] = {}
-    raw_similarity: dict[str, float] = {}
-    raw_presence: dict[str, float] = {}
+    # Raw deltas per DV per dimension, aggregated across every period.
+    raw_component = dict.fromkeys(all_dv_ids, 0.0)
+    raw_core_ratio = dict.fromkeys(all_dv_ids, 0.0)
+    raw_similarity = dict.fromkeys(all_dv_ids, 0.0)
+    raw_presence = dict.fromkeys(all_dv_ids, 0.0)
 
-    for dv_id in all_dv_ids:
-        in_first = dv_id in first.dv_ids
-        in_last = dv_id in last.dv_ids
+    for previous, current in _iter_consecutive_snapshot_pairs(snapshots):
+        _accumulate_pairwise_drift(
+            previous,
+            current,
+            dv_ids=all_dv_ids,
+            raw_component=raw_component,
+            raw_core_ratio=raw_core_ratio,
+            raw_similarity=raw_similarity,
+            raw_presence=raw_presence,
+        )
 
-        # Presence change: 1.0 if added or removed, 0.0 if present throughout
-        if in_first and in_last:
-            raw_presence[dv_id] = 0.0
-        else:
-            raw_presence[dv_id] = 1.0
-
-        # Component count change (absolute delta)
-        comp_first = first.dv_component_counts.get(dv_id, 0)
-        comp_last = last.dv_component_counts.get(dv_id, 0)
-        raw_component[dv_id] = abs(comp_last - comp_first)
-
-        # Core ratio shift
-        ratio_first = first.dv_core_ratios.get(dv_id, 0.0)
-        ratio_last = last.dv_core_ratios.get(dv_id, 0.0)
-        raw_core_ratio[dv_id] = abs(ratio_last - ratio_first)
-
-        # Similarity shift
-        sim_first = first.dv_max_similarity.get(dv_id, 0.0)
-        sim_last = last.dv_max_similarity.get(dv_id, 0.0)
-        raw_similarity[dv_id] = abs(sim_last - sim_first)
-
-    # Normalize each dimension to 0-1
-    def _normalize(values: dict[str, float]) -> dict[str, float]:
-        if not values:
-            return {}
-        max_val = max(values.values())
-        if max_val == 0:
-            return dict.fromkeys(values, 0.0)
-        return {k: v / max_val for k, v in values.items()}
-
-    norm_component = _normalize(raw_component)
-    norm_core_ratio = _normalize(raw_core_ratio)
-    norm_similarity = _normalize(raw_similarity)
-    norm_presence = _normalize(raw_presence)
+    norm_component = _normalize_drift_dimension(raw_component)
+    norm_core_ratio = _normalize_drift_dimension(raw_core_ratio)
+    norm_similarity = _normalize_drift_dimension(raw_similarity)
+    norm_presence = _normalize_drift_dimension(raw_presence)
 
     # Weighted average
     scores: dict[str, float] = {}

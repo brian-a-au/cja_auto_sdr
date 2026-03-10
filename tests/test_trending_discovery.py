@@ -646,6 +646,68 @@ class TestComputeDriftScores:
         assert scores["b"] == 0.0
         assert scores["a"] == pytest.approx(0.4, abs=0.01)  # 0.4 weight * 1.0 normalized
 
+    def test_component_churn_across_intermediate_snapshots_counts_as_drift(self):
+        snaps = [
+            TrendingSnapshot(
+                timestamp="2026-01-01",
+                dv_ids={"a", "b"},
+                dv_component_counts={"a": 100, "b": 50},
+                dv_core_ratios={"a": 0.5, "b": 0.5},
+                dv_max_similarity={"a": 0.5, "b": 0.5},
+            ),
+            TrendingSnapshot(
+                timestamp="2026-02-01",
+                dv_ids={"a", "b"},
+                dv_component_counts={"a": 200, "b": 50},
+                dv_core_ratios={"a": 0.5, "b": 0.5},
+                dv_max_similarity={"a": 0.5, "b": 0.5},
+            ),
+            TrendingSnapshot(
+                timestamp="2026-03-01",
+                dv_ids={"a", "b"},
+                dv_component_counts={"a": 100, "b": 50},
+                dv_core_ratios={"a": 0.5, "b": 0.5},
+                dv_max_similarity={"a": 0.5, "b": 0.5},
+            ),
+        ]
+
+        scores = compute_drift_scores(snaps)
+
+        assert scores["a"] > scores["b"]
+        assert scores["b"] == 0.0
+        assert scores["a"] == pytest.approx(0.4, abs=0.01)
+
+    def test_presence_churn_across_intermediate_snapshots_counts_as_drift(self):
+        snaps = [
+            TrendingSnapshot(
+                timestamp="2026-01-01",
+                dv_ids={"a", "b"},
+                dv_component_counts={"a": 100, "b": 50},
+                dv_core_ratios={"a": 0.8, "b": 0.6},
+                dv_max_similarity={"a": 0.5, "b": 0.5},
+            ),
+            TrendingSnapshot(
+                timestamp="2026-02-01",
+                dv_ids={"b"},
+                dv_component_counts={"b": 50},
+                dv_core_ratios={"b": 0.6},
+                dv_max_similarity={"b": 0.5},
+            ),
+            TrendingSnapshot(
+                timestamp="2026-03-01",
+                dv_ids={"a", "b"},
+                dv_component_counts={"a": 100, "b": 50},
+                dv_core_ratios={"a": 0.8, "b": 0.6},
+                dv_max_similarity={"a": 0.5, "b": 0.5},
+            ),
+        ]
+
+        scores = compute_drift_scores(snaps)
+
+        assert scores["a"] > scores["b"]
+        assert scores["b"] == 0.0
+        assert scores["a"] == pytest.approx(1.0, abs=0.01)
+
     def test_scores_are_deterministic(self):
         snaps = [
             TrendingSnapshot(

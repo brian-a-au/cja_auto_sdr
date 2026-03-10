@@ -864,7 +864,7 @@ cja_auto_sdr --prune-org-report-snapshots --org-report-keep-last 10
 Trending output includes:
 - **Snapshot table**: data view count, component count, core/isolated counts, and high-similarity pairs across each cached run.
 - **Deltas**: period-over-period changes between consecutive snapshots.
-- **Drift scores**: per-data-view weighted score (0.0-1.0) highlighting which data views changed most, based on component count change (40%), core/isolated ratio shift (20%), similarity change (20%), and presence change (20%).
+- **Drift scores**: per-data-view weighted score (0.0-1.0) highlighting which data views changed most by accumulating period-over-period churn across the full window, based on component count change (40%), core/isolated ratio shift (20%), similarity change (20%), and presence change (20%).
 
 Trending renders in all 6 output formats (console, JSON, Excel, Markdown, HTML, CSV).
 The persisted history lives under `~/.cja_auto_sdr/cache/org_report_snapshots/<ORG_ID>/`. When `--trending-window`
