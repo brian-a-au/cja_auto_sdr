@@ -910,9 +910,7 @@ def test_run_org_report_org_stats_json_stdout_branch(tmp_path: Path, capsys, ric
     assert '"report_type": "org_analysis"' in stdout
 
 
-def test_run_org_report_org_stats_console_renders_trending_window(
-    tmp_path: Path, capsys, rich_org_report_result
-):
+def test_run_org_report_org_stats_console_renders_trending_window(tmp_path: Path, capsys, rich_org_report_result):
     baseline = deepcopy(rich_org_report_result)
     baseline.timestamp = "2026-02-01T00:00:00Z"
     baseline.org_id = "test_org@AdobeOrg"
