@@ -1184,7 +1184,7 @@ def build_org_report_json_data(
                 "dimensions_count": dv.dimension_count,
                 "total_components": dv.total_components,
                 "status": dv.status,
-                "error": dv.error,
+                "error": dv.normalized_error_reason if dv.has_error else None,
                 # Component type breakdown
                 "standard_metrics": dv.standard_metric_count,
                 "derived_metrics": dv.derived_metric_count,

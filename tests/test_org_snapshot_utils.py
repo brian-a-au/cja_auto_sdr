@@ -9,6 +9,7 @@ from cja_auto_sdr.org.snapshot_utils import (
     chronological_snapshot_sort_fields,
     newest_first_snapshot_sort_fields,
     org_report_snapshot_content_hash,
+    org_report_snapshot_data_view_stats,
     org_report_snapshot_dir_candidates,
     org_report_snapshot_dir_key,
     org_report_snapshot_history_eligible,
@@ -147,6 +148,45 @@ def test_org_report_snapshot_history_legacy_payload_without_fidelity_fields_stay
 
     assert org_report_snapshot_history_eligible(legacy_payload) is True
     assert org_report_snapshot_history_exclusion_reason(legacy_payload) is None
+
+
+def test_org_report_snapshot_data_view_stats_preserve_reported_total_and_successful_subset():
+    stats = org_report_snapshot_data_view_stats(
+        {
+            "summary": {
+                "data_views_total": 5,
+                "data_views_analyzed": 3,
+            },
+            "data_views": [
+                {"id": "dv_1", "error": None},
+                {"id": "dv_2", "error": None},
+                {"id": "dv_3", "error": None},
+                {"id": "dv_4", "error": "timeout"},
+                {"id": "dv_5", "error": "forbidden"},
+            ],
+        }
+    )
+
+    assert stats.reported_total == 5
+    assert stats.analyzed_total == 3
+    assert stats.failed_total == 2
+    assert stats.successful_row_total == 3
+
+
+def test_org_report_snapshot_data_view_stats_treat_blank_error_rows_as_failed():
+    stats = org_report_snapshot_data_view_stats(
+        {
+            "summary": {"data_views_total": 2},
+            "data_views": [
+                {"id": "dv_ok", "error": None},
+                {"id": "dv_blank", "error": ""},
+            ],
+        }
+    )
+
+    assert stats.reported_total == 2
+    assert stats.analyzed_total == 1
+    assert stats.failed_total == 1
 
 
 def test_org_report_snapshot_content_hash_ignores_trending_and_snapshot_meta():

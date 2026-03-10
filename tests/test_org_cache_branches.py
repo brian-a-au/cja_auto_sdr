@@ -492,7 +492,7 @@ def test_load_org_report_snapshot_metadata_normalizes_malformed_sections(tmp_pat
     assert metadata["data_view_names_truncated"] is True
 
 
-def test_load_org_report_snapshot_metadata_prefers_analyzed_counts(tmp_path: Path):
+def test_load_org_report_snapshot_metadata_preserves_reported_and_analyzed_counts(tmp_path: Path):
     cache = OrgReportCache(cache_dir=tmp_path)
     snapshot_path = cache.get_org_report_snapshot_dir("org@test.example") / "report.json"
     snapshot_path.parent.mkdir(parents=True, exist_ok=True)
@@ -523,8 +523,9 @@ def test_load_org_report_snapshot_metadata_prefers_analyzed_counts(tmp_path: Pat
     metadata = cache._load_org_report_snapshot_metadata(snapshot_path, include_data_views=True)
 
     assert metadata is not None
-    assert metadata["data_views_total"] == 3
+    assert metadata["data_views_total"] == 5
     assert metadata["data_views_analyzed"] == 3
+    assert metadata["data_views_failed"] == 2
     assert metadata["data_views_total_reported"] == 5
     assert metadata["data_view_names_total"] == 5
 
@@ -659,6 +660,59 @@ def test_prune_org_report_snapshots_preserves_explicit_paths(tmp_path: Path):
 
     assert [Path(path).name for path in deleted] == [middle.name]
     assert [Path(snapshot["filepath"]).name for snapshot in remaining] == [newest.name, retained.name]
+
+
+def test_prune_org_report_snapshots_keep_last_ignores_ineligible_runs(tmp_path: Path):
+    cache = OrgReportCache(cache_dir=tmp_path)
+    eligible_old = cache.save_org_report_snapshot(
+        {
+            "generated_at": "2026-01-01T00:00:00Z",
+            "org_id": "org@test.example",
+            "summary": {
+                "data_views_total": 2,
+                "data_views_analyzed": 2,
+                "similarity_analysis_complete": True,
+                "total_unique_components": 5,
+            },
+            "distribution": {"core": {"total": 2}, "isolated": {"total": 3}},
+            "similarity_pairs": [],
+        }
+    )
+    ineligible_new = cache.save_org_report_snapshot(
+        {
+            "generated_at": "2026-02-01T00:00:00Z",
+            "org_id": "org@test.example",
+            "summary": {
+                "data_views_total": 2,
+                "data_views_analyzed": 2,
+                "similarity_analysis_complete": False,
+                "similarity_analysis_mode": "org_stats_only",
+                "total_unique_components": 5,
+            },
+            "distribution": {"core": {"total": 2}, "isolated": {"total": 3}},
+            "similarity_pairs": [],
+        }
+    )
+    eligible_new = cache.save_org_report_snapshot(
+        {
+            "generated_at": "2026-03-01T00:00:00Z",
+            "org_id": "org@test.example",
+            "summary": {
+                "data_views_total": 2,
+                "data_views_analyzed": 2,
+                "similarity_analysis_complete": True,
+                "total_unique_components": 5,
+            },
+            "distribution": {"core": {"total": 2}, "isolated": {"total": 3}},
+            "similarity_pairs": [],
+        }
+    )
+
+    deleted = cache.prune_org_report_snapshots(org_id="org@test.example", keep_last=2)
+    remaining = cache.list_org_report_snapshots("org@test.example")
+
+    assert deleted == [str(ineligible_new.resolve(strict=False))]
+    assert [Path(snapshot["filepath"]).name for snapshot in remaining] == [eligible_new.name, eligible_old.name]
 
 
 def test_lock_property_and_health_delegate_to_manager(tmp_path: Path):

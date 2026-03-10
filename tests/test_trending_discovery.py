@@ -78,7 +78,7 @@ def _write_report(tmp_path, filename, data):
 class TestExtractSnapshotFromJson:
     def test_data_view_error_helpers_handle_non_dict_and_blank_errors(self):
         assert _data_view_row_has_error([]) is True
-        assert _data_view_row_has_error({"error": ""}) is False
+        assert _data_view_row_has_error({"error": ""}) is True
         assert _successful_data_view_rows({"data_views": "not-a-list"}) == []
         assert _successful_data_view_rows(
             {
@@ -89,7 +89,7 @@ class TestExtractSnapshotFromJson:
                     [],
                 ]
             }
-        ) == [{"id": "ok", "error": None}, {"id": "blank", "error": ""}]
+        ) == [{"id": "ok", "error": None}]
 
     def test_basic_extraction(self):
         data = _make_org_report_json(dv_count=12, comp_count=200)
@@ -185,6 +185,26 @@ class TestExtractSnapshotFromJson:
         assert snap.dv_core_ratios == {"dv_ok": pytest.approx(0.2, abs=0.0001)}
         assert snap.dv_max_similarity == {"dv_ok": 0.0}
 
+    def test_partial_failures_preserve_reported_headline_count(self):
+        data = _make_org_report_json(
+            dv_count=5,
+            data_views=[
+                {"id": "dv1", "name": "Healthy 1", "metrics_count": 2, "dimensions_count": 1, "error": None},
+                {"id": "dv2", "name": "Healthy 2", "metrics_count": 2, "dimensions_count": 1, "error": None},
+                {"id": "dv3", "name": "Healthy 3", "metrics_count": 2, "dimensions_count": 1, "error": None},
+                {"id": "dv4", "name": "Failed 4", "error": "timeout"},
+                {"id": "dv5", "name": "Failed 5", "error": "forbidden"},
+            ],
+        )
+        data["summary"]["data_views_analyzed"] = 3
+
+        snap = _extract_snapshot_from_json(data)
+
+        assert snap is not None
+        assert snap.data_view_count == 5
+        assert snap.analyzed_data_view_count == 3
+        assert snap.dv_ids == {"dv1", "dv2", "dv3"}
+
     def test_zero_analyzed_count_is_preserved_for_failed_snapshots(self):
         data = _make_org_report_json(
             dv_count=5,
@@ -198,7 +218,8 @@ class TestExtractSnapshotFromJson:
         snap = _extract_snapshot_from_json(data)
 
         assert snap is not None
-        assert snap.data_view_count == 0
+        assert snap.data_view_count == 5
+        assert snap.analyzed_data_view_count == 0
         assert snap.dv_ids == set()
         assert snap.dv_component_counts == {}
 
@@ -847,8 +868,9 @@ class TestBuildTrending:
         result = build_trending(tmp_path)
 
         assert result is not None
-        assert [snapshot.data_view_count for snapshot in result.snapshots] == [0, 5]
-        assert result.deltas[0].data_view_delta == 5
+        assert [snapshot.data_view_count for snapshot in result.snapshots] == [5, 5]
+        assert [snapshot.analyzed_data_view_count for snapshot in result.snapshots] == [0, 5]
+        assert result.deltas[0].data_view_delta == 0
 
 
 def test_resolve_explicit_snapshot_identities_respects_org_scope(tmp_path):

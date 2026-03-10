@@ -6,6 +6,7 @@ import hashlib
 import json
 import re
 from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -13,6 +14,17 @@ from typing import Any
 _EARLIEST_UTC = datetime.min.replace(tzinfo=UTC)
 ORG_REPORT_SNAPSHOT_ROOT_DIRNAME = "org_report_snapshots"
 _VOLATILE_ORG_REPORT_SNAPSHOT_KEYS = frozenset({"_snapshot_meta", "trending"})
+
+
+@dataclass(frozen=True)
+class OrgReportSnapshotDataViewStats:
+    """Normalized data-view population counts for one org-report snapshot."""
+
+    reported_total: int
+    analyzed_total: int
+    failed_total: int
+    raw_total: int
+    successful_row_total: int
 
 
 def parse_snapshot_timestamp(raw_timestamp: Any) -> datetime | None:
@@ -354,7 +366,9 @@ def org_report_data_view_row_has_error(data_view: Any) -> bool:
     """Return True when a serialized data-view row represents a failed fetch."""
     if not isinstance(data_view, dict):
         return True
-    return data_view.get("error") not in (None, "")
+    if "error" not in data_view:
+        return False
+    return data_view.get("error") is not None
 
 
 def successful_org_report_data_view_rows(data: Mapping[str, Any]) -> list[dict[str, Any]]:
@@ -367,6 +381,48 @@ def successful_org_report_data_view_rows(data: Mapping[str, Any]) -> list[dict[s
     ]
 
 
+def org_report_snapshot_data_view_stats(data: Mapping[str, Any]) -> OrgReportSnapshotDataViewStats:
+    """Return normalized reported/analyzed/failed counts for one snapshot payload."""
+    summary = snapshot_mapping_dict(data.get("summary", {}))
+    raw_data_views = snapshot_mapping_list(data.get("data_views", []))
+    successful_data_views = successful_org_report_data_view_rows(data)
+
+    raw_total = len(raw_data_views)
+    successful_row_total = len(successful_data_views)
+
+    analyzed_total = snapshot_mapping_int(summary, "data_views_analyzed")
+    if analyzed_total is None:
+        analyzed_total = successful_row_total
+    analyzed_total = max(0, analyzed_total)
+
+    explicit_reported_total = snapshot_mapping_int(summary, "data_views_total", "total_data_views")
+    reported_candidates = [successful_row_total, analyzed_total]
+    if raw_total > 0:
+        reported_candidates.append(raw_total)
+    if explicit_reported_total is not None:
+        reported_candidates.append(max(0, explicit_reported_total))
+    reported_total = max(reported_candidates, default=0)
+
+    explicit_failed_total = snapshot_mapping_int(summary, "data_views_failed")
+    if explicit_failed_total is None:
+        explicit_failed_total = 0
+    explicit_failed_total = max(0, explicit_failed_total)
+    failed_total = max(
+        explicit_failed_total,
+        raw_total - successful_row_total,
+        reported_total - analyzed_total,
+        0,
+    )
+
+    return OrgReportSnapshotDataViewStats(
+        reported_total=reported_total,
+        analyzed_total=analyzed_total,
+        failed_total=failed_total,
+        raw_total=raw_total,
+        successful_row_total=successful_row_total,
+    )
+
+
 def normalized_similarity_pair_ids(pair: Mapping[str, Any]) -> tuple[str, str] | None:
     """Extract a stable high-similarity pair identity from serialized report data."""
     dv1 = str(pair.get("dv1_id") or snapshot_mapping_dict(pair.get("data_view_1", {})).get("id") or "").strip()
@@ -377,20 +433,8 @@ def normalized_similarity_pair_ids(pair: Mapping[str, Any]) -> tuple[str, str] |
 
 
 def effective_org_report_data_view_count(data: Mapping[str, Any]) -> int:
-    """Return the data-view count used consistently across snapshot consumers."""
-    summary = snapshot_mapping_dict(data.get("summary", {}))
-    successful_data_views = successful_org_report_data_view_rows(data)
-    raw_data_views = snapshot_mapping_list(data.get("data_views", []))
-
-    # Prefer explicit analyzed counts, including legitimate zero-analyzed outage snapshots.
-    data_view_count = snapshot_mapping_int(summary, "data_views_analyzed")
-    if data_view_count is None:
-        data_view_count = snapshot_mapping_int(summary, "data_views_total", "total_data_views")
-        if data_view_count == 0:
-            data_view_count = None
-    if data_view_count is None:
-        data_view_count = len(successful_data_views) if successful_data_views else len(raw_data_views)
-    return data_view_count
+    """Return the snapshot headline data-view count."""
+    return org_report_snapshot_data_view_stats(data).reported_total
 
 
 def reported_org_report_data_view_count(data: Mapping[str, Any]) -> int | None:
@@ -467,11 +511,10 @@ def org_report_snapshot_metadata(
     timestamp = org_report_snapshot_timestamp(data)
     assert timestamp is not None
 
-    summary = snapshot_mapping_dict(data.get("summary", {}))
     snapshot_meta = snapshot_mapping_dict(data.get("_snapshot_meta", {}))
     data_views = snapshot_mapping_list(data.get("data_views", []))
     source = Path(source_path) if source_path is not None else None
-    reported_data_view_count = reported_org_report_data_view_count(data)
+    data_view_stats = org_report_snapshot_data_view_stats(data)
 
     history_exclusion_reason = org_report_snapshot_history_exclusion_reason(data)
 
@@ -481,9 +524,10 @@ def org_report_snapshot_metadata(
         "generated_at_epoch": snapshot_epoch(timestamp),
         "filepath": snapshot_path_text(source),
         "filename": source.name if source is not None else "",
-        "data_views_total": effective_org_report_data_view_count(data),
-        "data_views_analyzed": snapshot_mapping_int(summary, "data_views_analyzed"),
-        "data_views_total_reported": reported_data_view_count,
+        "data_views_total": data_view_stats.reported_total,
+        "data_views_analyzed": data_view_stats.analyzed_total,
+        "data_views_failed": data_view_stats.failed_total,
+        "data_views_total_reported": reported_org_report_data_view_count(data),
         "total_unique_components": org_report_component_count(data),
         "core_count": org_report_core_count(data),
         "isolated_count": org_report_isolated_count(data),

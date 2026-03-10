@@ -443,6 +443,40 @@ class TestCompareOrgReports:
         assert "dv_001" in comparison.data_views_removed
         assert "dv_001" not in comparison.data_views_added
 
+    def test_compare_excludes_failed_previous_data_views_from_summary_deltas(self, tmp_path):
+        prev_report = {
+            "generated_at": "2024-08-01T10:00:00Z",
+            "data_views": [
+                {"data_view_id": "dv_001", "data_view_name": "Data View 1", "error": None},
+                {"data_view_id": "dv_002", "data_view_name": "Data View 2", "error": "timeout"},
+                {"data_view_id": "dv_003", "data_view_name": "Data View 3", "error": None},
+            ],
+            "summary": {
+                "data_views_total": 3,
+                "data_views_analyzed": 2,
+                "total_unique_components": 20,
+            },
+            "distribution": {
+                "core": {"total": 5},
+                "isolated": {"total": 2},
+            },
+            "similarity_pairs": [],
+        }
+        prev_path = tmp_path / "prev_partial_failure.json"
+        prev_path.write_text(json.dumps(prev_report), encoding="utf-8")
+
+        current = _make_org_result(include_similarity=False)
+        current.data_view_summaries = [
+            _make_data_view_summary("dv_001", "Data View 1"),
+            _make_data_view_summary("dv_003", "Data View 3"),
+        ]
+
+        comparison = compare_org_reports(current, str(prev_path))
+
+        assert comparison.data_views_added == []
+        assert comparison.data_views_removed == []
+        assert comparison.summary["data_views_delta"] == 0
+
     def test_compare_uses_exact_component_ids_when_available(self, tmp_path):
         prev_report = {
             "generated_at": "2024-08-01T10:00:00Z",
@@ -1240,6 +1274,8 @@ class TestBuildOrgReportJsonData:
         assert data["data_view_fetch_failures"]["count"] == 1
         assert data["data_view_fetch_failures"]["data_view_ids"] == ["dv_err_blank"]
         assert data["data_view_fetch_failures"]["failure_reason_counts"] == {"Unknown error": 1}
+        serialized_error = next(dv for dv in data["data_views"] if dv["id"] == "dv_err_blank")["error"]
+        assert serialized_error == "Unknown error"
 
     def test_json_data_with_clusters(self):
         result = _make_org_result(include_clusters=True)

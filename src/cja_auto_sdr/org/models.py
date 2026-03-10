@@ -432,6 +432,7 @@ class OrgReportComparisonInput:
     data_view_ids: set[str] = field(default_factory=set)
     data_view_names: dict[str, str] = field(default_factory=dict)
     data_view_count: int = 0
+    comparison_data_view_count: int | None = None
     component_count: int = 0
     component_ids: set[str] | None = None
     core_count: int = 0
@@ -441,10 +442,11 @@ class OrgReportComparisonInput:
 
 def _resolve_data_view_total(source: OrgReportComparisonInput) -> int:
     """Resolve the authoritative data-view total for summary deltas."""
-    total = _safe_non_negative_int(source.data_view_count)
-    if total == 0 and source.data_view_ids:
+    if source.data_view_ids:
         return len(source.data_view_ids)
-    return total
+    if source.comparison_data_view_count is not None:
+        return _safe_non_negative_int(source.comparison_data_view_count)
+    return _safe_non_negative_int(source.data_view_count)
 
 
 def _resolve_component_total(source: OrgReportComparisonInput) -> int:
@@ -555,6 +557,7 @@ class TrendingSnapshot:
     timestamp: str
     org_id: str | None = None
     data_view_count: int = 0
+    analyzed_data_view_count: int | None = None
     component_count: int = 0
     core_count: int = 0
     isolated_count: int = 0
@@ -618,6 +621,7 @@ class OrgReportTrending:
                 data_view_ids=set(prev.dv_ids),
                 data_view_names=dict(prev.dv_names),
                 data_view_count=prev.data_view_count,
+                comparison_data_view_count=prev.analyzed_data_view_count,
                 component_count=prev.component_count,
                 component_ids=None if prev.component_ids is None else set(prev.component_ids),
                 core_count=prev.core_count,
@@ -629,6 +633,7 @@ class OrgReportTrending:
                 data_view_ids=set(curr.dv_ids),
                 data_view_names=dict(curr.dv_names),
                 data_view_count=curr.data_view_count,
+                comparison_data_view_count=curr.analyzed_data_view_count,
                 component_count=curr.component_count,
                 component_ids=None if curr.component_ids is None else set(curr.component_ids),
                 core_count=curr.core_count,

@@ -21,6 +21,7 @@ from cja_auto_sdr.org.snapshot_utils import (
     org_report_data_view_row_has_error,
     org_report_high_similarity_pairs,
     org_report_snapshot_content_hash,
+    org_report_snapshot_data_view_stats,
     org_report_snapshot_history_eligible,
     org_report_snapshot_metadata,
     snapshot_identity_tokens,
@@ -63,6 +64,7 @@ def _snapshots_equivalent(left: TrendingSnapshot, right: TrendingSnapshot) -> bo
         return left.content_hash == right.content_hash
     return (
         left.data_view_count == right.data_view_count
+        and left.analyzed_data_view_count == right.analyzed_data_view_count
         and left.component_count == right.component_count
         and left.core_count == right.core_count
         and left.isolated_count == right.isolated_count
@@ -164,6 +166,7 @@ def _extract_snapshot_from_json(
 
     timestamp = metadata["generated_at"]
     distribution = _mapping_dict(data.get("distribution", {}))
+    data_view_stats = org_report_snapshot_data_view_stats(data)
     successful_data_views = _successful_data_view_rows(data)
     high_similarity_pairs = org_report_high_similarity_pairs(data)
     sim_pairs = _mapping_list(data.get("similarity_pairs", []))
@@ -235,7 +238,8 @@ def _extract_snapshot_from_json(
     return TrendingSnapshot(
         timestamp=str(timestamp),
         org_id=str(metadata["org_id"]) if metadata.get("org_id") is not None else None,
-        data_view_count=int(metadata["data_views_total"]),
+        data_view_count=data_view_stats.reported_total,
+        analyzed_data_view_count=data_view_stats.analyzed_total,
         component_count=int(metadata["total_unique_components"]),
         core_count=int(metadata["core_count"]),
         isolated_count=int(metadata["isolated_count"]),

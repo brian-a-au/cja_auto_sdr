@@ -250,6 +250,29 @@ class OrgReportCache:
         return sorted(snapshots, key=cls._snapshot_metadata_sort_key)
 
     @staticmethod
+    def _snapshot_counts_against_keep_last(snapshot: dict[str, Any]) -> bool:
+        """Return True when a snapshot should consume keep-last quota."""
+        return bool(snapshot.get("history_eligible"))
+
+    @classmethod
+    def _retained_keep_last_paths(
+        cls,
+        snapshots: list[dict[str, Any]],
+        *,
+        keep_last: int,
+    ) -> set[str]:
+        """Return normalized paths for snapshots protected by keep-last retention."""
+        if keep_last <= 0:
+            return set()
+
+        counted_snapshots = [snapshot for snapshot in snapshots if cls._snapshot_counts_against_keep_last(snapshot)]
+        return {
+            snapshot_path_text(snapshot.get("filepath"))
+            for snapshot in counted_snapshots[:keep_last]
+            if snapshot.get("filepath")
+        }
+
+    @staticmethod
     def _should_retain_snapshot(
         snapshot: dict[str, Any],
         *,
@@ -342,11 +365,7 @@ class OrgReportCache:
 
             retained_paths: set[str] = set()
             if keep_last > 0:
-                retained_paths = {
-                    snapshot_path_text(snapshot.get("filepath"))
-                    for snapshot in sorted_snapshots[:keep_last]
-                    if snapshot.get("filepath")
-                }
+                retained_paths = self._retained_keep_last_paths(sorted_snapshots, keep_last=keep_last)
             retained_paths.update(preserved_paths)
 
             for snapshot in sorted_snapshots:

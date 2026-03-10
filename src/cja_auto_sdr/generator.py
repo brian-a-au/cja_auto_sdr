@@ -8088,21 +8088,32 @@ def compare_org_reports(current: OrgReportResult, previous_path: str) -> OrgRepo
     with open(previous_path, encoding="utf-8") as f:
         prev_data = json.load(f)
 
+    from cja_auto_sdr.org.snapshot_utils import (
+        org_report_component_count,
+        org_report_core_count,
+        org_report_high_similarity_pairs,
+        org_report_isolated_count,
+        org_report_snapshot_data_view_stats,
+        successful_org_report_data_view_rows,
+    )
+
     # Extract data view IDs from both
     current_dv_ids = {s.data_view_id for s in current.data_view_summaries if not s.has_error}
     current_dv_names = {s.data_view_id: s.data_view_name for s in current.data_view_summaries}
+    current_comparison_dv_count = len(current_dv_ids)
 
-    prev_dv_ids = set()
+    prev_dv_ids: set[str] = set()
     prev_dv_names = {}
-    for dv in prev_data.get("data_views", []):
+    for dv in successful_org_report_data_view_rows(prev_data):
         dv_id = dv.get("data_view_id", dv.get("id", ""))
         if dv_id:
             prev_dv_ids.add(dv_id)
             prev_dv_names[dv_id] = dv.get("data_view_name", dv.get("name", "Unknown"))
+    prev_dv_stats = org_report_snapshot_data_view_stats(prev_data)
 
     # Component counts
     current_components = len(current.component_index)
-    prev_components = prev_data.get("summary", {}).get("total_unique_components", 0)
+    prev_components = org_report_component_count(prev_data)
     current_component_ids = set(current.component_index)
     prev_component_ids = None
     prev_component_index = prev_data.get("component_index")
@@ -8112,21 +8123,8 @@ def compare_org_reports(current: OrgReportResult, previous_path: str) -> OrgRepo
     # Distribution deltas
     current_core = current.distribution.total_core
     current_isolated = current.distribution.total_isolated
-    prev_dist = prev_data.get("distribution", {})
-    prev_core = prev_dist.get("core", {}).get("total")
-    prev_isolated = prev_dist.get("isolated", {}).get("total")
-
-    # Backward/forward compatible totals from metrics/dimensions counts
-    if prev_core is None:
-        prev_core = prev_dist.get("core", {}).get("metrics_count", 0) + prev_dist.get("core", {}).get(
-            "dimensions_count",
-            0,
-        )
-    if prev_isolated is None:
-        prev_isolated = prev_dist.get("isolated", {}).get("metrics_count", 0) + prev_dist.get("isolated", {}).get(
-            "dimensions_count",
-            0,
-        )
+    prev_core = org_report_core_count(prev_data)
+    prev_isolated = org_report_isolated_count(prev_data)
 
     # High-similarity pairs comparison (normalize order for stability)
     def _pair_key(dv1: str, dv2: str) -> tuple[str, str]:
@@ -8138,24 +8136,15 @@ def compare_org_reports(current: OrgReportResult, previous_path: str) -> OrgRepo
             if p.jaccard_similarity >= 0.9:
                 current_high_sim.add(_pair_key(p.dv1_id, p.dv2_id))
 
-    prev_high_sim = set()
-    for p in prev_data.get("similarity_pairs", []):
-        if p.get("jaccard_similarity", 0) >= 0.9:
-            if "dv1_id" in p or "dv2_id" in p:
-                dv1 = p.get("dv1_id", "")
-                dv2 = p.get("dv2_id", "")
-            else:
-                dv1 = p.get("data_view_1", {}).get("id", "")
-                dv2 = p.get("data_view_2", {}).get("id", "")
-            if dv1 and dv2:
-                prev_high_sim.add(_pair_key(dv1, dv2))
+    prev_high_sim = org_report_high_similarity_pairs(prev_data)
 
     return build_org_report_comparison(
         previous=OrgReportComparisonInput(
             timestamp=prev_data.get("generated_at", prev_data.get("timestamp", "unknown")),
             data_view_ids=prev_dv_ids,
             data_view_names=prev_dv_names,
-            data_view_count=len(prev_dv_ids),
+            data_view_count=prev_dv_stats.reported_total,
+            comparison_data_view_count=prev_dv_stats.analyzed_total,
             component_count=prev_components,
             component_ids=prev_component_ids,
             core_count=prev_core,
@@ -8166,7 +8155,8 @@ def compare_org_reports(current: OrgReportResult, previous_path: str) -> OrgRepo
             timestamp=current.timestamp,
             data_view_ids=current_dv_ids,
             data_view_names=current_dv_names,
-            data_view_count=len(current_dv_ids),
+            data_view_count=current.total_data_views,
+            comparison_data_view_count=current_comparison_dv_count,
             component_count=current_components,
             component_ids=current_component_ids,
             core_count=current_core,
