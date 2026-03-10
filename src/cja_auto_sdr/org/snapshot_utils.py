@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 _EARLIEST_UTC = datetime.min.replace(tzinfo=UTC)
+ORG_REPORT_SNAPSHOT_ROOT_DIRNAME = "org_report_snapshots"
 
 
 def parse_snapshot_timestamp(raw_timestamp: Any) -> datetime | None:
@@ -100,6 +101,70 @@ def org_report_snapshot_dir_candidates(org_id: Any) -> tuple[str, ...]:
     if legacy == preferred:
         return (preferred,)
     return (preferred, legacy)
+
+
+def _dedupe_paths(paths: Iterable[Path]) -> tuple[Path, ...]:
+    """Return paths de-duplicated by normalized absolute path, preserving order."""
+    deduped: list[Path] = []
+    seen_paths: set[str] = set()
+    for path in paths:
+        normalized = snapshot_path_text(path)
+        if normalized in seen_paths:
+            continue
+        seen_paths.add(normalized)
+        deduped.append(Path(normalized))
+    return tuple(deduped)
+
+
+def org_report_snapshot_dir_paths(snapshot_root: str | Path, org_id: Any = None) -> tuple[Path, ...]:
+    """Return per-org snapshot directories beneath the persistent snapshot root."""
+    root = Path(snapshot_root)
+    if org_id is not None:
+        return tuple(root / dir_key for dir_key in org_report_snapshot_dir_candidates(org_id))
+
+    if not root.exists() or not root.is_dir():
+        return ()
+    return tuple(sorted(path for path in root.iterdir() if path.is_dir()))
+
+
+def org_report_snapshot_search_dirs(cache_dir: str | Path, org_id: Any = None) -> tuple[Path, ...]:
+    """Return directories that may contain org-report snapshots for one discovery request.
+
+    Supports callers passing either:
+    - the persistent snapshot root directory,
+    - a specific per-org snapshot directory, or
+    - a generic directory of JSON reports used in tests/manual workflows.
+    """
+    cache_path = Path(cache_dir)
+    if org_id is None:
+        if cache_path.name == ORG_REPORT_SNAPSHOT_ROOT_DIRNAME:
+            return org_report_snapshot_dir_paths(cache_path)
+        return (cache_path,)
+
+    candidate_names = set(org_report_snapshot_dir_candidates(org_id))
+    if cache_path.name == ORG_REPORT_SNAPSHOT_ROOT_DIRNAME:
+        return org_report_snapshot_dir_paths(cache_path, org_id=org_id)
+    if cache_path.name in candidate_names:
+        return _dedupe_paths(cache_path.parent / dir_key for dir_key in org_report_snapshot_dir_candidates(org_id))
+    return (cache_path,)
+
+
+def iter_org_report_snapshot_files(cache_dir: str | Path, org_id: Any = None) -> tuple[Path, ...]:
+    """Return JSON snapshot files for a discovery request, de-duplicated by path."""
+    snapshot_files: list[Path] = []
+    seen_paths: set[str] = set()
+
+    for snapshot_dir in org_report_snapshot_search_dirs(cache_dir, org_id=org_id):
+        if not snapshot_dir.exists() or not snapshot_dir.is_dir():
+            continue
+        for snapshot_file in sorted(snapshot_dir.glob("*.json")):
+            normalized = snapshot_path_text(snapshot_file)
+            if normalized in seen_paths:
+                continue
+            seen_paths.add(normalized)
+            snapshot_files.append(Path(normalized))
+
+    return tuple(snapshot_files)
 
 
 def snapshot_identity_tokens(

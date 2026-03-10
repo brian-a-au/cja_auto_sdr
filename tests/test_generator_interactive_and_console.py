@@ -461,6 +461,60 @@ def test_run_org_report_trending_window_uses_persistent_snapshot_cache(tmp_path:
     assert len(list(snapshot_dir.glob("*.json"))) == 2
 
 
+def test_run_org_report_trending_window_includes_legacy_snapshot_history(tmp_path: Path, rich_org_report_result):
+    baseline = deepcopy(rich_org_report_result)
+    baseline.timestamp = "2026-02-01T00:00:00Z"
+    baseline.org_id = "test_org@AdobeOrg"
+    baseline.is_sampled = False
+
+    current = deepcopy(rich_org_report_result)
+    current.timestamp = "2026-03-01T00:00:00Z"
+    current.org_id = "test_org@AdobeOrg"
+    current.is_sampled = False
+
+    snapshot_cache_root = tmp_path / "cache"
+    cache = OrgReportCache(cache_dir=snapshot_cache_root)
+    legacy_dir = cache.get_org_report_snapshot_root_dir() / "test_org_AdobeOrg"
+    legacy_dir.mkdir(parents=True, exist_ok=True)
+    legacy_path = legacy_dir / "baseline.json"
+    legacy_path.write_text(json.dumps(build_org_report_json_data(baseline)), encoding="utf-8")
+
+    def _cache_factory(*args, **kwargs):
+        return OrgReportCache(cache_dir=snapshot_cache_root, logger=kwargs.get("logger"))
+
+    with (
+        patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "mock", {"org_id": "test_org@AdobeOrg"})),
+        patch("cja_auto_sdr.generator.cjapy") as mock_cjapy,
+        patch("cja_auto_sdr.generator.OrgReportCache", side_effect=_cache_factory),
+        patch("cja_auto_sdr.generator.OrgComponentAnalyzer") as mock_analyzer_cls,
+        patch("cja_auto_sdr.generator.write_org_report_console") as mock_console,
+        patch("cja_auto_sdr.generator.build_org_step_summary", return_value="summary"),
+        patch("cja_auto_sdr.generator.append_github_step_summary"),
+    ):
+        mock_cjapy.CJA.return_value = Mock()
+        analyzer = Mock()
+        analyzer.run_analysis.return_value = current
+        mock_analyzer_cls.return_value = analyzer
+
+        ok, exceeded = generator.run_org_report(
+            config_file="config.json",
+            output_format="console",
+            output_path=None,
+            output_dir=str(tmp_path / "run"),
+            org_config=OrgReportConfig(),
+            quiet=False,
+            trending_window=3,
+        )
+
+    assert ok is True
+    assert exceeded is False
+
+    trending = mock_console.call_args.kwargs.get("trending")
+    assert trending is not None
+    assert [snapshot.timestamp for snapshot in trending.snapshots] == ["2026-02-01T00:00:00Z", "2026-03-01T00:00:00Z"]
+    assert trending.snapshots[0].source_path == str(legacy_path.resolve(strict=False))
+
+
 def test_run_org_report_trending_window_prunes_snapshot_history(tmp_path: Path, rich_org_report_result):
     result = deepcopy(rich_org_report_result)
     result.timestamp = "2026-03-01T00:00:00Z"

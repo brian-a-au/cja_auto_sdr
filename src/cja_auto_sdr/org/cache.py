@@ -21,9 +21,11 @@ from typing import Any
 from cja_auto_sdr.core.locks.manager import LockManager
 from cja_auto_sdr.org.models import DataViewSummary
 from cja_auto_sdr.org.snapshot_utils import (
+    ORG_REPORT_SNAPSHOT_ROOT_DIRNAME,
+    iter_org_report_snapshot_files,
     newest_first_snapshot_sort_fields,
-    org_report_snapshot_dir_candidates,
     org_report_snapshot_dir_key,
+    org_report_snapshot_dir_paths,
     snapshot_epoch,
     snapshot_path_text,
     snapshot_slug,
@@ -190,17 +192,11 @@ class OrgReportCache:
 
     def _iter_org_report_snapshot_dirs(self, org_id: str | None = None) -> list[Path]:
         """Return snapshot directories to scan, including legacy layouts for one org."""
-        snapshot_root = self.get_org_report_snapshot_root_dir()
-        if org_id is not None:
-            return [snapshot_root / dir_key for dir_key in org_report_snapshot_dir_candidates(org_id)]
-
-        if not snapshot_root.exists():
-            return []
-        return sorted(path for path in snapshot_root.iterdir() if path.is_dir())
+        return list(org_report_snapshot_dir_paths(self.get_org_report_snapshot_root_dir(), org_id=org_id))
 
     def get_org_report_snapshot_root_dir(self) -> Path:
         """Return the root directory containing per-org snapshot history."""
-        return self.cache_dir / "org_report_snapshots"
+        return self.cache_dir / ORG_REPORT_SNAPSHOT_ROOT_DIRNAME
 
     @staticmethod
     def _canonical_org_report_snapshot_payload(report_data: dict[str, Any]) -> dict[str, Any]:
@@ -356,18 +352,13 @@ class OrgReportCache:
 
     def list_org_report_snapshots(self, org_id: str | None = None) -> list[dict[str, Any]]:
         """List persisted org-report snapshots, optionally filtered to one org."""
-        snapshot_dirs = self._iter_org_report_snapshot_dirs(org_id=org_id)
-
         snapshots: list[dict[str, Any]] = []
-        for snapshot_dir in snapshot_dirs:
-            if not snapshot_dir.exists():
-                continue
-            for snapshot_file in sorted(snapshot_dir.glob("*.json")):
-                metadata = self._load_org_report_snapshot_metadata(snapshot_file)
-                if metadata is not None:
-                    if org_id is not None and str(metadata.get("org_id") or "unknown") != str(org_id):
-                        continue
-                    snapshots.append(metadata)
+        for snapshot_file in iter_org_report_snapshot_files(self.get_org_report_snapshot_root_dir(), org_id=org_id):
+            metadata = self._load_org_report_snapshot_metadata(snapshot_file)
+            if metadata is not None:
+                if org_id is not None and str(metadata.get("org_id") or "unknown") != str(org_id):
+                    continue
+                snapshots.append(metadata)
 
         return self._sort_snapshot_metadata(snapshots)
 

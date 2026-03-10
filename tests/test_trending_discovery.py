@@ -4,6 +4,7 @@ import json
 
 import pytest
 
+from cja_auto_sdr.org.cache import OrgReportCache
 from cja_auto_sdr.org.models import OrgReportTrending, TrendingSnapshot
 from cja_auto_sdr.org.trending import (
     _data_view_row_has_error,
@@ -295,6 +296,44 @@ class TestDiscoverSnapshots:
         assert len(result) == 3
         assert result[0].timestamp == "2026-01-01T00:00:00Z"
         assert result[2].timestamp == "2026-03-01T00:00:00Z"
+
+    def test_discovers_persisted_snapshots_from_root_directory(self, tmp_path):
+        cache = OrgReportCache(cache_dir=tmp_path)
+        snapshot_dir = cache.get_org_report_snapshot_dir("org_a")
+        snapshot_dir.mkdir(parents=True, exist_ok=True)
+
+        _write_report(
+            snapshot_dir, "older.json", _make_org_report_json(timestamp="2026-01-01T00:00:00Z", org_id="org_a")
+        )
+        _write_report(
+            snapshot_dir, "newer.json", _make_org_report_json(timestamp="2026-02-01T00:00:00Z", org_id="org_a")
+        )
+
+        result = discover_snapshots(cache.get_org_report_snapshot_root_dir(), window_size=10)
+
+        assert [snapshot.timestamp for snapshot in result] == ["2026-01-01T00:00:00Z", "2026-02-01T00:00:00Z"]
+
+    def test_discovers_legacy_sibling_snapshots_when_given_current_org_dir(self, tmp_path):
+        cache = OrgReportCache(cache_dir=tmp_path)
+        current_dir = cache.get_org_report_snapshot_dir("org@test.example")
+        legacy_dir = cache.get_org_report_snapshot_root_dir() / "org_test_example"
+        current_dir.mkdir(parents=True, exist_ok=True)
+        legacy_dir.mkdir(parents=True, exist_ok=True)
+
+        _write_report(
+            legacy_dir,
+            "legacy.json",
+            _make_org_report_json(timestamp="2026-01-01T00:00:00Z", org_id="org@test.example"),
+        )
+        _write_report(
+            current_dir,
+            "current.json",
+            _make_org_report_json(timestamp="2026-02-01T00:00:00Z", org_id="org@test.example"),
+        )
+
+        result = discover_snapshots(current_dir, window_size=10, org_id="org@test.example")
+
+        assert [snapshot.timestamp for snapshot in result] == ["2026-01-01T00:00:00Z", "2026-02-01T00:00:00Z"]
 
     def test_window_trims_to_most_recent(self, tmp_path):
         for i in range(5):

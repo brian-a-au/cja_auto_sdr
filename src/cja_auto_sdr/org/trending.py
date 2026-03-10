@@ -15,6 +15,7 @@ from cja_auto_sdr.org.models import (
 )
 from cja_auto_sdr.org.snapshot_utils import (
     chronological_snapshot_sort_fields,
+    iter_org_report_snapshot_files,
     org_report_snapshot_history_eligible,
     snapshot_identity_tokens,
 )
@@ -377,16 +378,13 @@ def discover_snapshots(
         List of TrendingSnapshot ordered oldest-to-newest, trimmed to
         *window_size*.  May be empty if no valid snapshots are found.
     """
-    cache_path = Path(cache_dir)
     snapshots: list[TrendingSnapshot] = []
     seen_snapshot_identities: set[tuple[str, ...]] = set()
     pinned_snapshot_identities = _resolve_explicit_snapshot_identities(explicit_file, org_id=org_id)
     explicit_path = Path(explicit_file) if explicit_file is not None else None
 
-    # Collect JSON files from the directory
-    json_files: list[Path] = []
-    if cache_path.is_dir():
-        json_files = sorted(cache_path.glob("*.json"))
+    # Collect JSON files from the resolved snapshot search scope.
+    json_files = list(iter_org_report_snapshot_files(cache_dir, org_id=org_id))
 
     # Include explicit file if provided
     if explicit_path is not None and explicit_path.is_file() and explicit_path not in json_files:

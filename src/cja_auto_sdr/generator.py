@@ -8232,7 +8232,7 @@ def run_org_report(
             from cja_auto_sdr.org.writers import build_org_report_json_data as _build_json_for_snapshot
 
             snapshot_cache = cache if cache is not None else OrgReportCache(logger=logger)
-            snapshot_cache_dir = snapshot_cache.get_org_report_snapshot_dir(result.org_id)
+            snapshot_cache_dir = snapshot_cache.get_org_report_snapshot_root_dir()
 
             try:
                 current_json = _build_json_for_snapshot(result)
