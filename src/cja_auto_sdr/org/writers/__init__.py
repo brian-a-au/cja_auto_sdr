@@ -26,6 +26,7 @@ from cja_auto_sdr.org.models import (
     OrgReportConfig,
     OrgReportResult,
     OrgReportTrending,
+    TrendingDelta,
     TrendingSnapshot,
 )
 
@@ -49,6 +50,15 @@ __all__ = [
 ]
 
 
+_TRENDING_METRIC_SPECS: tuple[tuple[str, str, str], ...] = (
+    ("Data Views", "data_view_count", "data_view_delta"),
+    ("Components", "component_count", "component_delta"),
+    ("Core", "core_count", "core_delta"),
+    ("Isolated", "isolated_count", "isolated_delta"),
+    ("High-Sim Pairs", "high_sim_pair_count", "high_sim_pair_delta"),
+)
+
+
 def _format_trending_timestamp_short(ts: str) -> str:
     """Format an ISO timestamp to a short month-day label like 'Jan 12'."""
     try:
@@ -58,20 +68,37 @@ def _format_trending_timestamp_short(ts: str) -> str:
         return ts[:10]
 
 
-def _trending_metric_rows(
-    snapshots: list[TrendingSnapshot],
+def _build_trending_metric_rows(
+    records: list[TrendingSnapshot] | list[TrendingDelta],
+    *,
+    delta: bool,
 ) -> list[tuple[str, list[int]]]:
-    """Return the standard metric rows for trending tables."""
+    """Return standard trending metric rows for snapshots or period deltas."""
+    attr_selector = 2 if delta else 1
     return [
-        ("Data Views", [s.data_view_count for s in snapshots]),
-        ("Components", [s.component_count for s in snapshots]),
-        ("Core", [s.core_count for s in snapshots]),
-        ("Isolated", [s.isolated_count for s in snapshots]),
-        ("High-Sim Pairs", [s.high_sim_pair_count for s in snapshots]),
+        (
+            label,
+            [getattr(record, delta_attr if attr_selector == 2 else snapshot_attr) for record in records],
+        )
+        for label, snapshot_attr, delta_attr in _TRENDING_METRIC_SPECS
     ]
 
 
-def _trending_excel_column_specs(
+def _trending_snapshot_metric_rows(
+    snapshots: list[TrendingSnapshot],
+) -> list[tuple[str, list[int]]]:
+    """Return the standard snapshot metric rows for trending tables."""
+    return _build_trending_metric_rows(snapshots, delta=False)
+
+
+def _trending_delta_metric_rows(
+    deltas: list[TrendingDelta],
+) -> list[tuple[str, list[int]]]:
+    """Return the standard delta metric rows for trending tables."""
+    return _build_trending_metric_rows(deltas, delta=True)
+
+
+def _trending_snapshot_column_specs(
     snapshots: list[TrendingSnapshot],
 ) -> list[tuple[str, str]]:
     """Return unique worksheet keys paired with display labels for trending snapshots."""
@@ -79,6 +106,156 @@ def _trending_excel_column_specs(
         (f"snapshot_{index + 1}", _format_trending_timestamp_short(snapshot.timestamp))
         for index, snapshot in enumerate(snapshots)
     ]
+
+
+def _format_trending_period_label(from_timestamp: str, to_timestamp: str) -> str:
+    """Return a compact human-readable label for one trending period."""
+    return f"{_format_trending_timestamp_short(from_timestamp)} -> {_format_trending_timestamp_short(to_timestamp)}"
+
+
+def _trending_delta_column_specs(
+    deltas: list[TrendingDelta],
+) -> list[tuple[str, str]]:
+    """Return unique worksheet keys paired with display labels for period deltas."""
+    return [
+        (f"period_{index + 1}", _format_trending_period_label(delta.from_timestamp, delta.to_timestamp))
+        for index, delta in enumerate(deltas)
+    ]
+
+
+def _format_signed_trending_value(value: int) -> str:
+    """Return a signed integer string for trend deltas."""
+    if value > 0:
+        return f"+{value}"
+    return str(value)
+
+
+def _stringify_trending_value(value: int) -> str:
+    """Return a plain string representation for trend table cells."""
+    return str(value)
+
+
+def _render_console_trending_table(
+    column_labels: list[str],
+    metric_rows: list[tuple[str, list[int]]],
+    *,
+    value_formatter: Callable[[int], str] | None = None,
+) -> list[str]:
+    """Render one console-friendly trending table."""
+    if not column_labels or not metric_rows:
+        return []
+
+    render_value = value_formatter or _stringify_trending_value
+    label_width = max(20, *(len(label) for label, _values in metric_rows))
+    column_width = max(9, *(len(label) for label in column_labels))
+
+    lines = [f"{'':{label_width}s}" + "".join(f"{label:>{column_width}s}" for label in column_labels)]
+    for label, values in metric_rows:
+        lines.append(
+            f"{label:{label_width}s}" + "".join(f"{render_value(value):>{column_width}s}" for value in values),
+        )
+    return lines
+
+
+def _render_markdown_trending_table(
+    column_labels: list[str],
+    metric_rows: list[tuple[str, list[int]]],
+    *,
+    value_formatter: Callable[[int], str] | None = None,
+) -> list[str]:
+    """Render one Markdown trending table."""
+    if not column_labels or not metric_rows:
+        return []
+
+    render_value = value_formatter or _stringify_trending_value
+    lines = ["| Metric | " + " | ".join(column_labels) + " |"]
+    lines.append("|--------|" + "|".join("---------:" for _ in column_labels) + "|")
+    for label, values in metric_rows:
+        lines.append(f"| {label} | " + " | ".join(render_value(value) for value in values) + " |")
+    return lines
+
+
+def _render_html_trending_table(
+    column_labels: list[str],
+    metric_rows: list[tuple[str, list[int]]],
+    *,
+    value_formatter: Callable[[int], str] | None = None,
+) -> str:
+    """Render one HTML trending table."""
+    if not column_labels or not metric_rows:
+        return ""
+
+    render_value = value_formatter or _stringify_trending_value
+    rows = [
+        "                    <tr>"
+        f"<td>{html.escape(label)}</td>"
+        + "".join(f"<td>{html.escape(render_value(value))}</td>" for value in values)
+        + "</tr>"
+        for label, values in metric_rows
+    ]
+    return (
+        '        <div class="card">\n'
+        "            <table>\n"
+        "                <thead>\n"
+        "                    <tr><th>Metric</th>"
+        + "".join(f"<th>{html.escape(label)}</th>" for label in column_labels)
+        + "</tr>\n"
+        "                </thead>\n"
+        "                <tbody>\n"
+        + "\n".join(rows)
+        + "\n                </tbody>\n"
+        "            </table>\n"
+        "        </div>\n"
+    )
+
+
+def _trending_matrix_rows(
+    column_specs: list[tuple[str, str]],
+    metric_rows: list[tuple[str, list[int]]],
+) -> list[dict[str, Any]]:
+    """Return tabular rows for Excel export of a trending metric matrix."""
+    return [
+        {"Metric": label, **{key: value for (key, _), value in zip(column_specs, values, strict=True)}}
+        for label, values in metric_rows
+    ]
+
+
+def _trending_snapshot_csv_rows(
+    snapshots: list[TrendingSnapshot],
+) -> list[dict[str, Any]]:
+    """Return row-oriented CSV records for absolute trending snapshots."""
+    rows: list[dict[str, Any]] = []
+    for snapshot in snapshots:
+        for _label, snapshot_attr, _delta_attr in _TRENDING_METRIC_SPECS:
+            rows.append(
+                {
+                    "Snapshot Timestamp": snapshot.timestamp,
+                    "Metric": snapshot_attr,
+                    "Value": getattr(snapshot, snapshot_attr),
+                }
+            )
+    return rows
+
+
+def _trending_delta_csv_rows(
+    deltas: list[TrendingDelta],
+) -> list[dict[str, Any]]:
+    """Return row-oriented CSV records for period-over-period deltas."""
+    rows: list[dict[str, Any]] = []
+    for delta in deltas:
+        period_label = _format_trending_period_label(delta.from_timestamp, delta.to_timestamp)
+        for label, _snapshot_attr, delta_attr in _TRENDING_METRIC_SPECS:
+            rows.append(
+                {
+                    "From Snapshot Timestamp": delta.from_timestamp,
+                    "To Snapshot Timestamp": delta.to_timestamp,
+                    "Period": period_label,
+                    "Metric": delta_attr,
+                    "Metric Label": label,
+                    "Value": getattr(delta, delta_attr),
+                }
+            )
+    return rows
 
 
 def _top_drift_scores(drift_scores: dict[str, float], limit: int = 10) -> list[tuple[str, float]]:
@@ -146,13 +323,19 @@ def _render_trending_console(trending: OrgReportTrending) -> str:
 
     # Column headers
     col_labels = [_format_trending_timestamp_short(s.timestamp) for s in snapshots]
-    header = f"{'':20s}" + "".join(f"{lbl:>9s}" for lbl in col_labels)
-    lines.append(header)
+    lines.extend(_render_console_trending_table(col_labels, _trending_snapshot_metric_rows(snapshots)))
 
-    # Metric rows
-    for label, values in _trending_metric_rows(snapshots):
-        row = f"{label:20s}" + "".join(f"{v:>9d}" for v in values)
-        lines.append(row)
+    if trending.deltas:
+        lines.append("")
+        lines.append("Period Deltas:")
+        delta_labels = [label for _key, label in _trending_delta_column_specs(trending.deltas)]
+        lines.extend(
+            _render_console_trending_table(
+                delta_labels,
+                _trending_delta_metric_rows(trending.deltas),
+                value_formatter=_format_signed_trending_value,
+            )
+        )
 
     # Drift scores
     if trending.drift_scores:
@@ -210,14 +393,20 @@ def _render_trending_markdown(trending: OrgReportTrending) -> str:
 
     # Table header
     col_labels = [_format_trending_timestamp_short(s.timestamp) for s in snapshots]
-    header = "| Metric | " + " | ".join(col_labels) + " |"
-    separator = "|--------|" + "|".join("---------:" for _ in col_labels) + "|"
-    lines.append(header)
-    lines.append(separator)
+    lines.extend(_render_markdown_trending_table(col_labels, _trending_snapshot_metric_rows(snapshots)))
+    lines.append("")
 
-    for label, values in _trending_metric_rows(snapshots):
-        row = f"| {label} | " + " | ".join(str(v) for v in values) + " |"
-        lines.append(row)
+    if trending.deltas:
+        lines.append("### Period Deltas")
+        lines.append("")
+        delta_labels = [label for _key, label in _trending_delta_column_specs(trending.deltas)]
+        lines.extend(
+            _render_markdown_trending_table(
+                delta_labels,
+                _trending_delta_metric_rows(trending.deltas),
+                value_formatter=_format_signed_trending_value,
+            )
+        )
 
     lines.append("")
 
@@ -241,25 +430,23 @@ def _render_trending_html(trending: OrgReportTrending) -> str:
         return ""
 
     date_range = _trending_date_range(snapshots)
-    col_labels = [html.escape(_format_trending_timestamp_short(s.timestamp)) for s in snapshots]
+    col_labels = [_format_trending_timestamp_short(s.timestamp) for s in snapshots]
 
     html_out = f"""
         <h2>Trending ({len(snapshots)} snapshots, {html.escape(date_range)})</h2>
-        <div class="card">
-            <table>
-                <thead>
-                    <tr><th>Metric</th>{"".join(f"<th>{lbl}</th>" for lbl in col_labels)}</tr>
-                </thead>
-                <tbody>
 """
-    for label, values in _trending_metric_rows(snapshots):
-        cells = "".join(f"<td>{v}</td>" for v in values)
-        html_out += f"                    <tr><td>{html.escape(label)}</td>{cells}</tr>\n"
+    html_out += _render_html_trending_table(col_labels, _trending_snapshot_metric_rows(snapshots))
 
-    html_out += """                </tbody>
-            </table>
-        </div>
+    if trending.deltas:
+        html_out += """
+        <h3>Period Deltas</h3>
 """
+        delta_labels = [label for _key, label in _trending_delta_column_specs(trending.deltas)]
+        html_out += _render_html_trending_table(
+            delta_labels,
+            _trending_delta_metric_rows(trending.deltas),
+            value_formatter=_format_signed_trending_value,
+        )
 
     if trending.drift_scores:
         html_out += """
@@ -1400,43 +1587,22 @@ def write_org_report_excel(
 
         # Sheet 7: Trending (v3.4.0)
         if trending is not None and len(trending.snapshots) >= 2:
-            # Snapshot metrics table (transposed: metrics as rows, timestamps as columns)
             snapshots = trending.snapshots
-            column_specs = _trending_excel_column_specs(snapshots)
-            trending_rows = [
-                {
-                    "Metric": "Data Views",
-                    **{key: s.data_view_count for (key, _), s in zip(column_specs, snapshots, strict=True)},
-                },
-                {
-                    "Metric": "Components",
-                    **{key: s.component_count for (key, _), s in zip(column_specs, snapshots, strict=True)},
-                },
-                {"Metric": "Core", **{key: s.core_count for (key, _), s in zip(column_specs, snapshots, strict=True)}},
-                {
-                    "Metric": "Isolated",
-                    **{key: s.isolated_count for (key, _), s in zip(column_specs, snapshots, strict=True)},
-                },
-                {
-                    "Metric": "High-Sim Pairs",
-                    **{key: s.high_sim_pair_count for (key, _), s in zip(column_specs, snapshots, strict=True)},
-                },
-            ]
-            trending_df = pd.DataFrame(trending_rows)
+            snapshot_column_specs = _trending_snapshot_column_specs(snapshots)
+            snapshot_rows = _trending_matrix_rows(snapshot_column_specs, _trending_snapshot_metric_rows(snapshots))
+            trending_df = pd.DataFrame(snapshot_rows)
             trending_df.to_excel(writer, sheet_name="Trending", index=False)
             worksheet = writer.sheets["Trending"]
             worksheet.set_column("A:A", 20)
-            # Set width for each snapshot column
-            for col_idx, (_key, display_label) in enumerate(column_specs, start=1):
+            for col_idx, (_key, display_label) in enumerate(snapshot_column_specs, start=1):
                 worksheet.write(0, col_idx, display_label)
                 worksheet.set_column(col_idx, col_idx, 14)
 
-            # Highlight change intensity across the snapshot metric matrix.
             worksheet.conditional_format(
                 1,
                 1,
-                len(trending_rows),
-                len(column_specs),
+                len(snapshot_rows),
+                len(snapshot_column_specs),
                 {
                     "type": "3_color_scale",
                     "min_color": "#F4CCCC",
@@ -1445,9 +1611,34 @@ def write_org_report_excel(
                 },
             )
 
-            # Drift scores table below the snapshot data
+            next_start_row = len(snapshot_rows) + 2
+
+            if trending.deltas:
+                delta_column_specs = _trending_delta_column_specs(trending.deltas)
+                delta_rows = _trending_matrix_rows(delta_column_specs, _trending_delta_metric_rows(trending.deltas))
+                worksheet.write(next_start_row, 0, "Period Deltas")
+                delta_df = pd.DataFrame(delta_rows)
+                delta_df.to_excel(writer, sheet_name="Trending", index=False, startrow=next_start_row + 1)
+                for col_idx, (_key, display_label) in enumerate(delta_column_specs, start=1):
+                    worksheet.write(next_start_row + 1, col_idx, display_label)
+                    worksheet.set_column(col_idx, col_idx, max(14, len(display_label) + 2))
+                worksheet.conditional_format(
+                    next_start_row + 2,
+                    1,
+                    next_start_row + 1 + len(delta_rows),
+                    len(delta_column_specs),
+                    {
+                        "type": "3_color_scale",
+                        "min_color": "#F4CCCC",
+                        "mid_color": "#FFF2CC",
+                        "max_color": "#D9EAD3",
+                    },
+                )
+                next_start_row += len(delta_rows) + 4
+
             if trending.drift_scores:
-                drift_start_row = len(trending_rows) + 3  # leave a gap
+                worksheet.write(next_start_row, 0, "Drift Scores")
+                drift_start_row = next_start_row + 1
                 drift_data = [
                     {
                         "Data View ID": entry["data_view_id"],
@@ -2055,6 +2246,7 @@ def write_org_report_csv(
     - org_report_similarity.csv: Similarity pairs (if computed)
     - org_report_distribution.csv: Distribution bucket counts
     - org_report_trending.csv: Trending snapshot data (if provided)
+    - org_report_trending_deltas.csv: Period-over-period trending deltas (if provided)
 
     Args:
         result: OrgReportResult from analysis
@@ -2231,20 +2423,14 @@ def write_org_report_csv(
 
     # 7. Trending CSV (if provided)
     if trending is not None and len(trending.snapshots) >= 2:
-        trending_rows = []
-        metric_names = ["data_view_count", "component_count", "core_count", "isolated_count", "high_sim_pair_count"]
-        for snapshot in trending.snapshots:
-            trending_rows.extend(
-                {
-                    "Snapshot Timestamp": snapshot.timestamp,
-                    "Metric": metric_name,
-                    "Value": getattr(snapshot, metric_name),
-                }
-                for metric_name in metric_names
-            )
-        trending_df = pd.DataFrame(trending_rows)
+        trending_df = pd.DataFrame(_trending_snapshot_csv_rows(trending.snapshots))
         trending_path = csv_dir / "org_report_trending.csv"
         trending_df.to_csv(trending_path, index=False, encoding="utf-8")
+
+        if trending.deltas:
+            delta_df = pd.DataFrame(_trending_delta_csv_rows(trending.deltas))
+            delta_path = csv_dir / "org_report_trending_deltas.csv"
+            delta_df.to_csv(delta_path, index=False, encoding="utf-8")
 
         # Drift scores CSV
         if trending.drift_scores:

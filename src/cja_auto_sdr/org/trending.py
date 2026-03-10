@@ -22,6 +22,67 @@ from cja_auto_sdr.org.snapshot_utils import (
 logger = logging.getLogger(__name__)
 
 
+def _coerce_int(value: Any) -> int | None:
+    """Best-effort integer coercion for serialized snapshot counts."""
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return None
+        try:
+            return int(stripped)
+        except ValueError:
+            return None
+    return None
+
+
+def _coerce_float(value: Any) -> float | None:
+    """Best-effort float coercion for serialized snapshot metrics."""
+    if isinstance(value, bool):
+        return float(value)
+    if isinstance(value, int | float):
+        return float(value)
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return None
+        try:
+            return float(stripped)
+        except ValueError:
+            return None
+    return None
+
+
+def _mapping_int(mapping: dict[str, Any], *keys: str) -> int | None:
+    """Return the first available integer-like value from a mapping."""
+    for key in keys:
+        if key not in mapping:
+            continue
+        coerced = _coerce_int(mapping.get(key))
+        if coerced is not None:
+            return coerced
+    return None
+
+
+def _mapping_dict(value: Any) -> dict[str, Any]:
+    """Return a dict value or a safe empty mapping."""
+    if isinstance(value, dict):
+        return value
+    return {}
+
+
+def _mapping_list(value: Any) -> list[Any]:
+    """Return a list value or a safe empty list."""
+    if isinstance(value, list):
+        return value
+    return []
+
+
 def _canonical_snapshot_payload(data: dict[str, Any]) -> dict[str, Any]:
     """Return the stable subset of a snapshot payload used for hashing."""
     return {key: value for key, value in data.items() if key != "_snapshot_meta"}
@@ -148,9 +209,7 @@ def _data_view_row_has_error(data_view: Any) -> bool:
 
 def _successful_data_view_rows(data: dict[str, Any]) -> list[dict[str, Any]]:
     """Return only successfully analyzed data-view rows from a snapshot payload."""
-    data_views = data.get("data_views", [])
-    if not isinstance(data_views, list):
-        return []
+    data_views = _mapping_list(data.get("data_views", []))
     return [
         data_view for data_view in data_views if isinstance(data_view, dict) and not _data_view_row_has_error(data_view)
     ]
@@ -171,39 +230,50 @@ def _extract_snapshot_from_json(
     if not org_report_snapshot_history_eligible(data):
         return None
 
-    summary = data.get("summary", {})
-    distribution = data.get("distribution", {})
+    summary = _mapping_dict(data.get("summary", {}))
+    distribution = _mapping_dict(data.get("distribution", {}))
     org_id = data.get("org_id")
     snapshot_meta = data.get("_snapshot_meta", {})
     if not isinstance(snapshot_meta, dict):
         snapshot_meta = {}
     successful_data_views = _successful_data_view_rows(data)
+    raw_data_views = _mapping_list(data.get("data_views", []))
 
-    # Data view count
-    dv_count = summary.get("data_views_analyzed")
-    if dv_count in (None, 0):
-        dv_count = summary.get("data_views_total", summary.get("total_data_views"))
-    if dv_count in (None, 0):
-        dv_count = len(successful_data_views) if successful_data_views else len(data.get("data_views", []))
+    # Prefer explicit analyzed counts, including legitimate zero-analyzed outage snapshots.
+    dv_count = _mapping_int(summary, "data_views_analyzed")
+    if dv_count is None:
+        dv_count = _mapping_int(summary, "data_views_total", "total_data_views")
+        if dv_count == 0:
+            dv_count = None
+    if dv_count is None:
+        dv_count = len(successful_data_views) if successful_data_views else len(raw_data_views)
 
     # Component count
-    comp_count = summary.get("total_unique_components", 0)
+    comp_count = _mapping_int(summary, "total_unique_components") or 0
 
     # Core / isolated from distribution
-    core_section = distribution.get("core", {})
-    isolated_section = distribution.get("isolated", {})
+    core_section = _mapping_dict(distribution.get("core", {}))
+    isolated_section = _mapping_dict(distribution.get("isolated", {}))
 
-    core_count = core_section.get("total")
+    core_count = _mapping_int(core_section, "total")
     if core_count is None:
-        core_count = core_section.get("metrics_count", 0) + core_section.get("dimensions_count", 0)
+        core_count = (_mapping_int(core_section, "metrics_count") or 0) + (
+            _mapping_int(core_section, "dimensions_count") or 0
+        )
 
-    isolated_count = isolated_section.get("total")
+    isolated_count = _mapping_int(isolated_section, "total")
     if isolated_count is None:
-        isolated_count = isolated_section.get("metrics_count", 0) + isolated_section.get("dimensions_count", 0)
+        isolated_count = (_mapping_int(isolated_section, "metrics_count") or 0) + (
+            _mapping_int(isolated_section, "dimensions_count") or 0
+        )
 
     # High-similarity pairs
-    sim_pairs = data.get("similarity_pairs", [])
-    high_sim_count = sum(1 for p in sim_pairs if p.get("jaccard_similarity", 0) >= 0.9)
+    sim_pairs = _mapping_list(data.get("similarity_pairs", []))
+    high_sim_count = sum(
+        1
+        for pair in sim_pairs
+        if isinstance(pair, dict) and (_coerce_float(pair.get("jaccard_similarity")) or 0.0) >= 0.9
+    )
 
     # Per-DV metrics for drift scoring (single pass over data_views)
     dv_component_counts: dict[str, int] = {}
@@ -216,35 +286,35 @@ def _extract_snapshot_from_json(
     # (shared across >= threshold% of DVs).  Approximated from the global
     # core component list — a DV's core ratio is len(its_components ∩ core) / total.
     core_ids: set[str] = set()
-    core_section = distribution.get("core", {})
+    core_section = _mapping_dict(distribution.get("core", {}))
     for comp_id_list_key in (("metrics", "core_metrics"), ("dimensions", "core_dimensions")):
         for key in comp_id_list_key:
-            values = core_section.get(key, [])
-            if isinstance(values, list):
+            values = _mapping_list(core_section.get(key, []))
+            if values:
                 core_ids.update(str(value) for value in values)
                 break
 
     dv_core_component_counts: dict[str, int] = {}
 
     for dv in successful_data_views:
-        dv_id = dv.get("data_view_id") or dv.get("id", "")
+        dv_id = str(dv.get("data_view_id") or dv.get("id") or "")
         if not dv_id:
             continue
         dv_ids.add(dv_id)
-        metrics = dv.get("metrics_count", dv.get("metric_count", 0))
-        dims = dv.get("dimensions_count", dv.get("dimension_count", 0))
+        metrics = _mapping_int(dv, "metrics_count", "metric_count") or 0
+        dims = _mapping_int(dv, "dimensions_count", "dimension_count") or 0
         dv_component_counts[dv_id] = metrics + dims
-        dv_names[dv_id] = dv.get("data_view_name") or dv.get("name") or dv_id
+        dv_names[dv_id] = str(dv.get("data_view_name") or dv.get("name") or dv_id)
         dv_core_component_counts[dv_id] = 0
         dv_max_similarity[dv_id] = 0.0
 
-    component_index = data.get("component_index", {})
-    if isinstance(component_index, dict) and core_ids:
+    component_index = _mapping_dict(data.get("component_index", {}))
+    if component_index and core_ids:
         for comp_id in core_ids:
             comp_info = component_index.get(comp_id)
             if not isinstance(comp_info, dict):
                 continue
-            for dv_id in comp_info.get("data_views", []):
+            for dv_id in _mapping_list(comp_info.get("data_views", [])):
                 if dv_id in dv_core_component_counts:
                     dv_core_component_counts[dv_id] += 1
 
@@ -256,9 +326,11 @@ def _extract_snapshot_from_json(
 
     # Max similarity per DV
     for pair in sim_pairs:
-        dv1 = pair.get("dv1_id") or pair.get("data_view_1", {}).get("id", "")
-        dv2 = pair.get("dv2_id") or pair.get("data_view_2", {}).get("id", "")
-        sim = pair.get("jaccard_similarity", 0.0)
+        if not isinstance(pair, dict):
+            continue
+        dv1 = str(pair.get("dv1_id") or _mapping_dict(pair.get("data_view_1", {})).get("id") or "")
+        dv2 = str(pair.get("dv2_id") or _mapping_dict(pair.get("data_view_2", {})).get("id") or "")
+        sim = _coerce_float(pair.get("jaccard_similarity")) or 0.0
         if dv1 in dv_ids and dv2 in dv_ids:
             dv_max_similarity[dv1] = max(dv_max_similarity.get(dv1, 0.0), sim)
             dv_max_similarity[dv2] = max(dv_max_similarity.get(dv2, 0.0), sim)

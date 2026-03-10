@@ -115,6 +115,8 @@ class TestConsoleWithTrending:
         output = capsys.readouterr().out
         assert "TRENDING" in output
         assert "Data Views" in output
+        assert "Period Deltas" in output
+        assert "+2" in output
         assert "Components" in output
         assert "Top Drift" in output
         assert "Test DV 1 (dv1)" in output
@@ -221,15 +223,22 @@ class TestExcelWithTrending:
         assert ws["A2"].value == "Data Views"
         assert ws["B2"].value == 10
         assert ws["C2"].value == 12
-        assert ws["A9"].value == "Data View ID"
-        assert ws["B9"].value == "Data View Name"
-        assert ws["C9"].value == "Drift Score"
-        assert ws["A10"].value == "dv1"
-        assert ws["B10"].value == "Test DV 1"
-        assert ws["C10"].value == 0.82
+        assert ws["A8"].value == "Period Deltas"
+        assert ws["A9"].value == "Metric"
+        assert ws["B9"].value == "Jan 01 -> Feb 01"
+        assert ws["A10"].value == "Data Views"
+        assert ws["B10"].value == 2
+        assert ws["A17"].value == "Drift Scores"
+        assert ws["A18"].value == "Data View ID"
+        assert ws["B18"].value == "Data View Name"
+        assert ws["C18"].value == "Drift Score"
+        assert ws["A19"].value == "dv1"
+        assert ws["B19"].value == "Test DV 1"
+        assert ws["C19"].value == 0.82
         conditional_ranges = {str(rule.sqref) for rule in ws.conditional_formatting}
         assert "B2:C6" in conditional_ranges
-        assert "C10:C12" in conditional_ranges
+        assert "B10:B14" in conditional_ranges
+        assert "C19:C21" in conditional_ranges
         wb.close()
 
     def test_trending_supports_snapshot_columns_beyond_z(self, tmp_path):
@@ -326,6 +335,8 @@ class TestMarkdownWithTrending:
         content = open(path, encoding="utf-8").read()
         assert "## Trending" in content
         assert "Data Views" in content
+        assert "### Period Deltas" in content
+        assert "| Data Views | +2 |" in content
         assert "Drift Scores" in content
         assert "Test DV 1" in content
 
@@ -350,6 +361,8 @@ class TestHtmlWithTrending:
         path = write_org_report_html(result, tmp_path / "test.html", str(tmp_path), logger, trending=trending)
         content = open(path, encoding="utf-8").read()
         assert "Trending" in content
+        assert "Period Deltas" in content
+        assert ">+2<" in content
         assert "drift" in content.lower()
         assert "Test DV 1" in content
 
@@ -395,6 +408,58 @@ class TestCsvWithTrending:
             "Metric": "high_sim_pair_count",
             "Value": "3",
         }
+
+    def test_trending_delta_csv_rows_match_delta_schema(self, tmp_path):
+        result = _make_result()
+        logger = MagicMock()
+        trending = _make_trending()
+        csv_dir = Path(write_org_report_csv(result, None, str(tmp_path), logger, trending=trending))
+
+        with (csv_dir / "org_report_trending_deltas.csv").open(encoding="utf-8", newline="") as handle:
+            rows = list(csv.DictReader(handle))
+
+        assert rows == [
+            {
+                "From Snapshot Timestamp": "2026-01-01T00:00:00Z",
+                "To Snapshot Timestamp": "2026-02-01T00:00:00Z",
+                "Period": "Jan 01 -> Feb 01",
+                "Metric": "data_view_delta",
+                "Metric Label": "Data Views",
+                "Value": "2",
+            },
+            {
+                "From Snapshot Timestamp": "2026-01-01T00:00:00Z",
+                "To Snapshot Timestamp": "2026-02-01T00:00:00Z",
+                "Period": "Jan 01 -> Feb 01",
+                "Metric": "component_delta",
+                "Metric Label": "Components",
+                "Value": "20",
+            },
+            {
+                "From Snapshot Timestamp": "2026-01-01T00:00:00Z",
+                "To Snapshot Timestamp": "2026-02-01T00:00:00Z",
+                "Period": "Jan 01 -> Feb 01",
+                "Metric": "core_delta",
+                "Metric Label": "Core",
+                "Value": "15",
+            },
+            {
+                "From Snapshot Timestamp": "2026-01-01T00:00:00Z",
+                "To Snapshot Timestamp": "2026-02-01T00:00:00Z",
+                "Period": "Jan 01 -> Feb 01",
+                "Metric": "isolated_delta",
+                "Metric Label": "Isolated",
+                "Value": "5",
+            },
+            {
+                "From Snapshot Timestamp": "2026-01-01T00:00:00Z",
+                "To Snapshot Timestamp": "2026-02-01T00:00:00Z",
+                "Period": "Jan 01 -> Feb 01",
+                "Metric": "high_sim_pair_delta",
+                "Metric Label": "High-Sim Pairs",
+                "Value": "1",
+            },
+        ]
 
     def test_trending_drift_csv_rows_sorted_descending(self, tmp_path):
         result = _make_result()

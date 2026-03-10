@@ -161,6 +161,23 @@ class TestExtractSnapshotFromJson:
         assert snap.dv_core_ratios == {"dv_ok": pytest.approx(0.2, abs=0.0001)}
         assert snap.dv_max_similarity == {"dv_ok": 0.0}
 
+    def test_zero_analyzed_count_is_preserved_for_failed_snapshots(self):
+        data = _make_org_report_json(
+            dv_count=5,
+            data_views=[
+                {"id": "dv1", "name": "Failed 1", "error": "timeout"},
+                {"id": "dv2", "name": "Failed 2", "error": "forbidden"},
+            ],
+        )
+        data["summary"]["data_views_analyzed"] = 0
+
+        snap = _extract_snapshot_from_json(data)
+
+        assert snap is not None
+        assert snap.data_view_count == 0
+        assert snap.dv_ids == set()
+        assert snap.dv_component_counts == {}
+
     def test_per_dv_component_counts(self):
         data = _make_org_report_json(
             data_views=[
@@ -649,6 +666,26 @@ class TestBuildTrending:
         result = build_trending(tmp_path, current_snapshot=current, org_id="org_a")
         assert result is not None
         assert [snapshot.org_id for snapshot in result.snapshots] == ["org_a", "org_a"]
+
+    def test_build_trending_preserves_zero_analyzed_failed_snapshots(self, tmp_path):
+        failed = _make_org_report_json(timestamp="2026-01-01", dv_count=5, comp_count=100)
+        failed["summary"]["data_views_analyzed"] = 0
+        failed["data_views"] = [{"id": "dv_fail", "error": "timeout"}]
+        succeeding = _make_org_report_json(timestamp="2026-02-01", dv_count=5, comp_count=120)
+        succeeding["summary"]["data_views_analyzed"] = 5
+        succeeding["data_views"] = [
+            {"id": "dv1", "metrics_count": 10, "dimensions_count": 5},
+            {"id": "dv2", "metrics_count": 10, "dimensions_count": 5},
+        ]
+
+        _write_report(tmp_path, "failed.json", failed)
+        _write_report(tmp_path, "succeeding.json", succeeding)
+
+        result = build_trending(tmp_path)
+
+        assert result is not None
+        assert [snapshot.data_view_count for snapshot in result.snapshots] == [0, 5]
+        assert result.deltas[0].data_view_delta == 5
 
 
 def test_resolve_explicit_snapshot_identities_respects_org_scope(tmp_path):
