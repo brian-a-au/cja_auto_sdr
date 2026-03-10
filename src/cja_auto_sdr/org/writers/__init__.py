@@ -387,7 +387,7 @@ def _trending_snapshots_to_dicts(trending: OrgReportTrending) -> dict[str, Any]:
             }
             for d in trending.deltas
         ],
-        "drift_scores": {dv_id: score for dv_id, score in _sorted_drift_score_items(trending.drift_scores)},
+        "drift_scores": dict(_sorted_drift_score_items(trending.drift_scores)),
         "drift_details": _ranked_drift_entries(trending),
     }
 
