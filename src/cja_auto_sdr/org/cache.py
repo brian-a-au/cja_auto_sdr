@@ -224,9 +224,15 @@ class OrgReportCache:
         file_path = snapshot_dir / (
             f"org_report_{self._sanitize_org_id(resolved_org_id)}_{timestamp_slug}_{snapshot_id[:8]}.json"
         )
-
-        with open(file_path, "w", encoding="utf-8") as f:
-            json.dump(payload, f, indent=2, ensure_ascii=False)
+        tmp_path = file_path.with_name(f".{file_path.name}.{uuid.uuid4().hex}.tmp")
+        try:
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                json.dump(payload, f, indent=2, ensure_ascii=False)
+            os.replace(tmp_path, file_path)
+        except (OSError, TypeError, ValueError):
+            with contextlib.suppress(OSError):
+                tmp_path.unlink()
+            raise
 
         return file_path
 

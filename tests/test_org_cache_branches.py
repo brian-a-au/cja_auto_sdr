@@ -237,6 +237,23 @@ def test_save_org_report_snapshot_writes_json_file(tmp_path: Path):
     assert payload["_snapshot_meta"]["history_exclusion_reason"] is None
 
 
+def test_save_org_report_snapshot_failed_write_does_not_leave_partial_json(tmp_path: Path):
+    cache = OrgReportCache(cache_dir=tmp_path)
+    report = {
+        "generated_at": "2026-03-01T00:00:00Z",
+        "org_id": "org@test.example",
+        "summary": {"data_views_total": 2, "total_unique_components": 5},
+    }
+    snapshot_dir = cache.get_org_report_snapshot_dir("org@test.example")
+
+    with patch("cja_auto_sdr.org.cache.json.dump", side_effect=OSError("disk full")):
+        with pytest.raises(OSError, match="disk full"):
+            cache.save_org_report_snapshot(report)
+
+    assert snapshot_dir.exists()
+    assert list(snapshot_dir.iterdir()) == []
+
+
 def test_save_org_report_snapshot_persists_history_eligibility_metadata(tmp_path: Path):
     cache = OrgReportCache(cache_dir=tmp_path)
     report = {
