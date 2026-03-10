@@ -1080,6 +1080,16 @@ def build_org_report_json_data(
 ) -> dict[str, Any]:
     """Build org report JSON payload."""
     effective_overlap_threshold = min(result.parameters.overlap_threshold, 0.9)
+    similarity_analysis_complete = result.similarity_pairs is not None
+    if result.parameters.org_stats_only:
+        similarity_analysis_mode = "org_stats_only"
+    elif result.parameters.skip_similarity:
+        similarity_analysis_mode = "skip_similarity"
+    elif similarity_analysis_complete:
+        similarity_analysis_mode = "complete"
+    else:
+        similarity_analysis_mode = "runtime_skipped"
+
     data: dict[str, Any] = {
         "report_type": "org_analysis",
         "version": "1.0",
@@ -1096,9 +1106,13 @@ def build_org_report_json_data(
             "include_component_types": result.parameters.include_component_types,
             "include_metadata": result.parameters.include_metadata,
             "include_drift": result.parameters.include_drift,
+            "skip_similarity": result.parameters.skip_similarity,
             "sample_size": result.parameters.sample_size,
             "sample_seed": result.parameters.sample_seed,
             "enable_clustering": result.parameters.enable_clustering,
+            "similarity_max_dvs": result.parameters.similarity_max_dvs,
+            "force_similarity": result.parameters.force_similarity,
+            "org_stats_only": result.parameters.org_stats_only,
         },
         "summary": {
             "data_views_total": result.total_data_views,
@@ -1106,6 +1120,8 @@ def build_org_report_json_data(
             "data_views_failed": result.failed_data_views,
             "total_available_data_views": result.total_available_data_views,
             "is_sampled": result.is_sampled,
+            "similarity_analysis_complete": similarity_analysis_complete,
+            "similarity_analysis_mode": similarity_analysis_mode,
             "total_unique_metrics": result.total_unique_metrics,
             "total_unique_dimensions": result.total_unique_dimensions,
             "total_unique_components": result.total_unique_components,

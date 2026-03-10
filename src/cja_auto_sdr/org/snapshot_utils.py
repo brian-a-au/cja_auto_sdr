@@ -12,6 +12,7 @@ from typing import Any
 
 _EARLIEST_UTC = datetime.min.replace(tzinfo=UTC)
 ORG_REPORT_SNAPSHOT_ROOT_DIRNAME = "org_report_snapshots"
+_VOLATILE_ORG_REPORT_SNAPSHOT_KEYS = frozenset({"_snapshot_meta", "trending"})
 
 
 def parse_snapshot_timestamp(raw_timestamp: Any) -> datetime | None:
@@ -192,12 +193,57 @@ def snapshot_identity_tokens(
     return (("fallback", *normalized_fallback),)
 
 
+def coerce_snapshot_bool(value: Any) -> bool | None:
+    """Best-effort boolean coercion for serialized org-report flags."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int | float):
+        return bool(value)
+    if isinstance(value, str):
+        stripped = value.strip().lower()
+        if stripped in {"1", "true", "yes", "y", "on", "complete", "full"}:
+            return True
+        if stripped in {"0", "false", "no", "n", "off", "skipped", "partial", "incomplete"}:
+            return False
+    return None
+
+
+def org_report_snapshot_history_exclusion_reason(data: Mapping[str, Any]) -> str | None:
+    """Return the reason an org-report payload should stay out of trending history."""
+    snapshot_meta = snapshot_mapping_dict(data.get("_snapshot_meta", {}))
+    explicit_history_eligible = coerce_snapshot_bool(snapshot_meta.get("history_eligible"))
+    if explicit_history_eligible is not None:
+        if explicit_history_eligible:
+            return None
+        explicit_reason = str(snapshot_meta.get("history_exclusion_reason") or "").strip()
+        return explicit_reason or "history_ineligible"
+
+    summary = snapshot_mapping_dict(data.get("summary", {}))
+    if coerce_snapshot_bool(summary.get("is_sampled")) is True:
+        return "sampled"
+
+    similarity_analysis_complete = coerce_snapshot_bool(summary.get("similarity_analysis_complete"))
+    if similarity_analysis_complete is False:
+        explicit_mode = str(summary.get("similarity_analysis_mode") or "").strip()
+        return explicit_mode or "similarity_incomplete"
+    if similarity_analysis_complete is True:
+        return None
+
+    parameters = snapshot_mapping_dict(data.get("parameters", {}))
+    if coerce_snapshot_bool(parameters.get("org_stats_only")) is True:
+        return "org_stats_only"
+    if coerce_snapshot_bool(parameters.get("skip_similarity")) is True:
+        return "skip_similarity"
+
+    if "similarity_pairs" in data and data.get("similarity_pairs") is None:
+        return "similarity_incomplete"
+
+    return None
+
+
 def org_report_snapshot_history_eligible(data: Mapping[str, Any]) -> bool:
     """Return True when an org-report payload should participate in trending history."""
-    summary = data.get("summary", {})
-    if not isinstance(summary, Mapping):
-        return True
-    return not bool(summary.get("is_sampled"))
+    return org_report_snapshot_history_exclusion_reason(data) is None
 
 
 def coerce_snapshot_int(value: Any) -> int | None:
@@ -289,7 +335,7 @@ def is_org_report_snapshot_payload(data: Any) -> bool:
 
 def canonical_org_report_snapshot_payload(report_data: Mapping[str, Any]) -> dict[str, Any]:
     """Return the stable payload used for org-report snapshot hashing."""
-    return {key: value for key, value in report_data.items() if key != "_snapshot_meta"}
+    return {key: value for key, value in report_data.items() if key not in _VOLATILE_ORG_REPORT_SNAPSHOT_KEYS}
 
 
 def org_report_snapshot_content_hash(report_data: Mapping[str, Any]) -> str:
@@ -427,6 +473,8 @@ def org_report_snapshot_metadata(
     source = Path(source_path) if source_path is not None else None
     reported_data_view_count = reported_org_report_data_view_count(data)
 
+    history_exclusion_reason = org_report_snapshot_history_exclusion_reason(data)
+
     metadata: dict[str, Any] = {
         "org_id": str(data.get("org_id") or "unknown"),
         "generated_at": timestamp,
@@ -442,6 +490,8 @@ def org_report_snapshot_metadata(
         "high_similarity_pairs": len(org_report_high_similarity_pairs(data)),
         "snapshot_id": snapshot_meta.get("snapshot_id"),
         "content_hash": snapshot_meta.get("content_hash") or org_report_snapshot_content_hash(data),
+        "history_eligible": history_exclusion_reason is None,
+        "history_exclusion_reason": history_exclusion_reason,
     }
 
     if include_data_views:

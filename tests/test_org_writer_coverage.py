@@ -1185,6 +1185,8 @@ class TestBuildOrgReportJsonData:
         assert "component_index" in data
         assert "recommendations" in data
         assert data["summary"]["data_views_failed"] == 0
+        assert data["summary"]["similarity_analysis_complete"] is True
+        assert data["summary"]["similarity_analysis_mode"] == "complete"
         assert data["data_view_fetch_failures"]["count"] == 0
         assert data["data_view_fetch_failures"]["data_view_ids"] == []
         assert data["data_view_fetch_failures"]["failure_reason_counts"] == {}
@@ -1252,6 +1254,8 @@ class TestBuildOrgReportJsonData:
         data = build_org_report_json_data(result)
 
         assert data["similarity_pairs"] == []
+        assert data["summary"]["similarity_analysis_complete"] is False
+        assert data["summary"]["similarity_analysis_mode"] == "runtime_skipped"
 
     def test_json_data_governance_fields(self):
         result = _make_org_result(

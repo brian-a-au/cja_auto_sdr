@@ -8285,7 +8285,10 @@ def run_org_report(
         # Trending analysis (v3.4.0)
         trending = None
         if trending_window is not None:
-            from cja_auto_sdr.org.snapshot_utils import org_report_snapshot_history_eligible
+            from cja_auto_sdr.org.snapshot_utils import (
+                org_report_snapshot_history_eligible,
+                org_report_snapshot_history_exclusion_reason,
+            )
             from cja_auto_sdr.org.trending import _extract_snapshot_from_json, build_trending
             from cja_auto_sdr.org.writers import build_org_report_json_data as _build_json_for_snapshot
 
@@ -8294,6 +8297,7 @@ def run_org_report(
 
             try:
                 current_json = _build_json_for_snapshot(result)
+                history_exclusion_reason = org_report_snapshot_history_exclusion_reason(current_json)
                 if org_report_snapshot_history_eligible(current_json):
                     # Persist the current run so console/default workflows accumulate history.
                     current_snapshot = _extract_snapshot_from_json(current_json)
@@ -8326,10 +8330,13 @@ def run_org_report(
                             ),
                         )
                 elif not quiet:
+                    history_note = (
+                        "Note: Sampled org reports are excluded from persistent trending history — trending skipped."
+                        if history_exclusion_reason == "sampled"
+                        else "Note: Org reports without full similarity analysis are excluded from persistent trending history — trending skipped."
+                    )
                     _status_print(
-                        ConsoleColors.warning(
-                            "Note: Sampled org reports are excluded from persistent trending history — trending skipped."
-                        ),
+                        ConsoleColors.warning(history_note),
                     )
             except OSError as e:
                 if not quiet:

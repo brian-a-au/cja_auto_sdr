@@ -67,7 +67,7 @@ def _make_result(org_id="test_org"):
             core_dimensions=[],
             isolated_dimensions=[],
         ),
-        similarity_pairs=None,
+        similarity_pairs=[],
         recommendations=[],
         duration=1.5,
     )

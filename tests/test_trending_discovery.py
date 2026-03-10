@@ -441,12 +441,43 @@ class TestDiscoverSnapshots:
 
         assert len(result) == 1
 
+    def test_explicit_trending_report_deduplicates_against_cached_snapshot(self, tmp_path):
+        cached_payload = _make_org_report_json(timestamp="2026-01-01")
+        cached_payload["_snapshot_meta"] = {"snapshot_id": "persisted-123"}
+        _write_report(tmp_path, "cached.json", cached_payload)
+
+        explicit_dir = tmp_path / "explicit"
+        explicit_dir.mkdir()
+        explicit_payload = _make_org_report_json(timestamp="2026-01-01")
+        explicit_payload["trending"] = {
+            "window_size": 2,
+            "snapshots": [{"timestamp": "2025-12-01T00:00:00Z"}],
+        }
+        _write_report(explicit_dir, "baseline.json", explicit_payload)
+
+        result = discover_snapshots(tmp_path, window_size=10, explicit_file=explicit_dir / "baseline.json")
+
+        assert len(result) == 1
+
     def test_sampled_snapshots_are_ignored_during_discovery(self, tmp_path):
         retained = _make_org_report_json(timestamp="2026-02-01")
         sampled = _make_org_report_json(timestamp="2026-01-15")
         sampled["summary"]["is_sampled"] = True
         _write_report(tmp_path, "retained.json", retained)
         _write_report(tmp_path, "sampled.json", sampled)
+
+        result = discover_snapshots(tmp_path, window_size=10)
+
+        assert [snapshot.timestamp for snapshot in result] == ["2026-02-01"]
+
+    def test_similarity_incomplete_snapshots_are_ignored_during_discovery(self, tmp_path):
+        retained = _make_org_report_json(timestamp="2026-02-01")
+        retained["summary"]["similarity_analysis_complete"] = True
+        low_fidelity = _make_org_report_json(timestamp="2026-01-15")
+        low_fidelity["summary"]["similarity_analysis_complete"] = False
+        low_fidelity["summary"]["similarity_analysis_mode"] = "org_stats_only"
+        _write_report(tmp_path, "retained.json", retained)
+        _write_report(tmp_path, "low_fidelity.json", low_fidelity)
 
         result = discover_snapshots(tmp_path, window_size=10)
 

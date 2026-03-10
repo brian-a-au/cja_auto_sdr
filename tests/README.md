@@ -99,7 +99,7 @@ tests/
 └── README.md                        # This file
 ```
 
-**Total: 5,630 comprehensive tests**
+**Total: 5,635 comprehensive tests**
 
 ### Test Count Breakdown
 
@@ -173,7 +173,7 @@ tests/
 | `test_config_and_resolution.py` | 108 | Config status, validation, stats, name resolution |
 | `test_derived_fields_edge_cases.py` | 34 | Derived fields edge cases and coverage |
 | `test_diff_command_coverage.py` | 45 | Diff command edge cases and coverage |
-| `test_generator_interactive_and_console.py` | 32 | Generator interactive and console tests |
+| `test_generator_interactive_and_console.py` | 33 | Generator interactive and console tests |
 | `test_generator_remaining_coverage.py` | 82 | Generator remaining coverage edge cases |
 | `test_interactive_discovery_coverage.py` | 112 | Interactive discovery and helpers coverage |
 | `test_lock_backends.py` | 46 | Lock backends edge cases and coverage |
@@ -193,11 +193,11 @@ tests/
 | `test_exception_narrowing.py` | 50 | Exception narrowing boundary tests |
 | `test_coverage_hardening.py` | 108 | Coverage hardening tests |
 | `test_trending_models.py` | 15 | Trending dataclass construction and bridge tests |
-| `test_trending_discovery.py` | 60 | Snapshot cache discovery, deltas, drift scoring |
+| `test_trending_discovery.py` | 62 | Snapshot cache discovery, deltas, drift scoring |
 | `test_trending_cli.py` | 9 | --trending-window CLI flag parsing |
 | `test_trending_output.py` | 22 | Trending output across all 6 formats |
 | `test_trending_integration.py` | 15 | Trending backwards compatibility and integration |
-| **Total** | **5,630** | **Collected via pytest --collect-only** |
+| **Total** | **5,635** | **Collected via pytest --collect-only** |
 
 ## Running Tests
 
@@ -601,7 +601,7 @@ Check for drift (CI-friendly):
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (5,630 tests total)
+- [x] Comprehensive test coverage (5,635 tests total)
 - [x] Org-wide analysis tests (test_org_report.py) - 175 tests (including large org scaling, output path aliases, memory warnings, smart cache invalidation)
 - [x] Org-wide analysis integration tests (test_org_report_integration.py) - 17 tests (end-to-end flows, caching, filtering, governance thresholds)
 - [x] Profile management tests (test_profiles.py) - 77 tests

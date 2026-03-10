@@ -8,9 +8,11 @@ from pathlib import Path
 from cja_auto_sdr.org.snapshot_utils import (
     chronological_snapshot_sort_fields,
     newest_first_snapshot_sort_fields,
+    org_report_snapshot_content_hash,
     org_report_snapshot_dir_candidates,
     org_report_snapshot_dir_key,
     org_report_snapshot_history_eligible,
+    org_report_snapshot_history_exclusion_reason,
     parse_snapshot_timestamp,
     snapshot_epoch,
     snapshot_identity_tokens,
@@ -64,3 +66,54 @@ def test_snapshot_identity_tokens_fall_back_when_no_primary_identity():
 def test_org_report_snapshot_history_eligible_accepts_non_mapping_summary():
     assert org_report_snapshot_history_eligible({"summary": []}) is True
     assert org_report_snapshot_history_eligible({"summary": {"is_sampled": True}}) is False
+
+
+def test_org_report_snapshot_history_eligible_rejects_similarity_incomplete_payloads():
+    assert (
+        org_report_snapshot_history_eligible(
+            {
+                "summary": {
+                    "similarity_analysis_complete": False,
+                    "similarity_analysis_mode": "org_stats_only",
+                }
+            }
+        )
+        is False
+    )
+    assert (
+        org_report_snapshot_history_exclusion_reason(
+            {
+                "summary": {
+                    "similarity_analysis_complete": False,
+                    "similarity_analysis_mode": "org_stats_only",
+                }
+            }
+        )
+        == "org_stats_only"
+    )
+    assert (
+        org_report_snapshot_history_eligible(
+            {
+                "parameters": {"skip_similarity": True},
+                "similarity_pairs": [],
+            }
+        )
+        is False
+    )
+
+
+def test_org_report_snapshot_content_hash_ignores_trending_and_snapshot_meta():
+    base_payload = {
+        "generated_at": "2026-03-01T00:00:00Z",
+        "org_id": "test_org",
+        "report_type": "org_analysis",
+        "summary": {"data_views_total": 3, "similarity_analysis_complete": True},
+        "similarity_pairs": [],
+    }
+    enriched_payload = {
+        **base_payload,
+        "_snapshot_meta": {"snapshot_id": "persisted-123"},
+        "trending": {"window_size": 2, "snapshots": [{"timestamp": "2026-02-01T00:00:00Z"}]},
+    }
+
+    assert org_report_snapshot_content_hash(base_payload) == org_report_snapshot_content_hash(enriched_payload)
