@@ -266,13 +266,36 @@ class TestExcelWithTrending:
         result = _make_result()
         logger = MagicMock()
         snapshots = [
-            TrendingSnapshot(timestamp="2026-01-01T00:00:00Z", data_view_count=10, component_count=100, core_count=80, isolated_count=20, high_sim_pair_count=2),
-            TrendingSnapshot(timestamp="2026-01-01T12:00:00Z", data_view_count=11, component_count=101, core_count=81, isolated_count=20, high_sim_pair_count=3),
-            TrendingSnapshot(timestamp="2027-01-01T00:00:00Z", data_view_count=12, component_count=102, core_count=82, isolated_count=20, high_sim_pair_count=4),
+            TrendingSnapshot(
+                timestamp="2026-01-01T00:00:00Z",
+                data_view_count=10,
+                component_count=100,
+                core_count=80,
+                isolated_count=20,
+                high_sim_pair_count=2,
+            ),
+            TrendingSnapshot(
+                timestamp="2026-01-01T12:00:00Z",
+                data_view_count=11,
+                component_count=101,
+                core_count=81,
+                isolated_count=20,
+                high_sim_pair_count=3,
+            ),
+            TrendingSnapshot(
+                timestamp="2027-01-01T00:00:00Z",
+                data_view_count=12,
+                component_count=102,
+                core_count=82,
+                isolated_count=20,
+                high_sim_pair_count=4,
+            ),
         ]
         trending = OrgReportTrending(snapshots=snapshots, deltas=[], drift_scores={}, window_size=3)
 
-        path = write_org_report_excel(result, tmp_path / "duplicate_dates.xlsx", str(tmp_path), logger, trending=trending)
+        path = write_org_report_excel(
+            result, tmp_path / "duplicate_dates.xlsx", str(tmp_path), logger, trending=trending
+        )
         import openpyxl
 
         wb = openpyxl.load_workbook(path)

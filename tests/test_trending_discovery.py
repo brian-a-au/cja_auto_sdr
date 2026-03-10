@@ -578,7 +578,9 @@ class TestBuildTrending:
         _write_report(subdir, "baseline.json", _make_org_report_json(timestamp="2026-01-01"))
 
         current = TrendingSnapshot(timestamp="2026-05-01", data_view_count=20, component_count=200)
-        result = build_trending(tmp_path, window_size=3, explicit_file=subdir / "baseline.json", current_snapshot=current)
+        result = build_trending(
+            tmp_path, window_size=3, explicit_file=subdir / "baseline.json", current_snapshot=current
+        )
 
         assert result is not None
         assert [snapshot.timestamp for snapshot in result.snapshots] == ["2026-01-01", "2026-04-01", "2026-05-01"]
