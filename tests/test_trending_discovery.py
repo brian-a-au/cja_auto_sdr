@@ -140,6 +140,25 @@ class TestExtractSnapshotFromJson:
         snap = _extract_snapshot_from_json(data)
         assert snap.high_sim_pair_count == 2
 
+    def test_component_ids_and_high_similarity_pairs_are_extracted(self):
+        data = _make_org_report_json(
+            component_index={
+                "m1": {"type": "metric", "data_views": ["a", "b"]},
+                "d1": {"type": "dimension", "data_views": ["a"]},
+            },
+            similarity_pairs=[
+                {"dv1_id": "b", "dv2_id": "a", "jaccard_similarity": 0.95},
+                {"data_view_1": {"id": "c"}, "data_view_2": {"id": "d"}, "jaccard_similarity": 0.91},
+                {"dv1_id": "e", "dv2_id": "f", "jaccard_similarity": 0.75},
+            ],
+        )
+
+        snap = _extract_snapshot_from_json(data)
+
+        assert snap is not None
+        assert snap.component_ids == {"m1", "d1"}
+        assert snap.high_similarity_pairs == {("a", "b"), ("c", "d")}
+
     def test_failed_data_views_are_excluded_from_drift_inputs(self):
         data = _make_org_report_json(
             dv_count=2,

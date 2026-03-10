@@ -84,6 +84,15 @@ def _mapping_list(value: Any) -> list[Any]:
     return []
 
 
+def _normalized_similarity_pair_ids(pair: dict[str, Any]) -> tuple[str, str] | None:
+    """Extract a stable high-similarity pair identity from serialized report data."""
+    dv1 = str(pair.get("dv1_id") or _mapping_dict(pair.get("data_view_1", {})).get("id") or "").strip()
+    dv2 = str(pair.get("dv2_id") or _mapping_dict(pair.get("data_view_2", {})).get("id") or "").strip()
+    if not dv1 or not dv2:
+        return None
+    return tuple(sorted((dv1, dv2)))
+
+
 def _canonical_snapshot_payload(data: dict[str, Any]) -> dict[str, Any]:
     """Return the stable subset of a snapshot payload used for hashing."""
     return {key: value for key, value in data.items() if key != "_snapshot_meta"}
@@ -270,11 +279,16 @@ def _extract_snapshot_from_json(
 
     # High-similarity pairs
     sim_pairs = _mapping_list(data.get("similarity_pairs", []))
-    high_sim_count = sum(
-        1
-        for pair in sim_pairs
-        if isinstance(pair, dict) and (_coerce_float(pair.get("jaccard_similarity")) or 0.0) >= 0.9
-    )
+    high_similarity_pairs: set[tuple[str, str]] = set()
+    for pair in sim_pairs:
+        if not isinstance(pair, dict):
+            continue
+        if (_coerce_float(pair.get("jaccard_similarity")) or 0.0) < 0.9:
+            continue
+        normalized_pair = _normalized_similarity_pair_ids(pair)
+        if normalized_pair is not None:
+            high_similarity_pairs.add(normalized_pair)
+    high_sim_count = len(high_similarity_pairs)
 
     # Per-DV metrics for drift scoring (single pass over data_views)
     dv_component_counts: dict[str, int] = {}
@@ -309,7 +323,11 @@ def _extract_snapshot_from_json(
         dv_core_component_counts[dv_id] = 0
         dv_max_similarity[dv_id] = 0.0
 
-    component_index = _mapping_dict(data.get("component_index", {}))
+    raw_component_index = data.get("component_index")
+    component_index = _mapping_dict(raw_component_index)
+    component_ids: set[str] | None = None
+    if isinstance(raw_component_index, dict):
+        component_ids = {str(component_id) for component_id in raw_component_index if str(component_id)}
     if component_index and core_ids:
         for comp_id in core_ids:
             comp_info = component_index.get(comp_id)
@@ -347,6 +365,8 @@ def _extract_snapshot_from_json(
         snapshot_id=str(snapshot_meta["snapshot_id"]) if snapshot_meta.get("snapshot_id") is not None else None,
         content_hash=str(snapshot_meta.get("content_hash") or _snapshot_content_hash(data)),
         source_path=str(source_path) if source_path is not None else None,
+        component_ids=component_ids,
+        high_similarity_pairs=high_similarity_pairs,
         dv_component_counts=dv_component_counts,
         dv_core_ratios=dv_core_ratios,
         dv_max_similarity=dv_max_similarity,

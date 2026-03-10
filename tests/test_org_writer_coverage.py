@@ -443,6 +443,46 @@ class TestCompareOrgReports:
         assert "dv_001" in comparison.data_views_removed
         assert "dv_001" not in comparison.data_views_added
 
+    def test_compare_uses_exact_component_ids_when_available(self, tmp_path):
+        prev_report = {
+            "generated_at": "2024-08-01T10:00:00Z",
+            "data_views": [{"data_view_id": "dv_001", "data_view_name": "Data View 1"}],
+            "summary": {"total_unique_components": 2},
+            "component_index": {
+                "shared": {"type": "metric", "data_views": ["dv_001"]},
+                "removed": {"type": "dimension", "data_views": ["dv_001"]},
+            },
+            "distribution": {
+                "core": {"total": 1},
+                "isolated": {"total": 1},
+            },
+            "similarity_pairs": [],
+        }
+        prev_path = tmp_path / "prev_exact_components.json"
+        prev_path.write_text(json.dumps(prev_report), encoding="utf-8")
+
+        current = OrgReportResult(
+            timestamp="2025-01-15T10:00:00Z",
+            org_id="test_org",
+            parameters=OrgReportConfig(),
+            data_view_summaries=[_make_data_view_summary("dv_001", "Data View 1")],
+            component_index={
+                "shared": _make_component_info("shared", data_views=["dv_001"]),
+                "added_1": _make_component_info("added_1", data_views=["dv_001"]),
+                "added_2": _make_component_info("added_2", data_views=["dv_001"]),
+            },
+            distribution=ComponentDistribution(),
+            similarity_pairs=[],
+            recommendations=[],
+            duration=1.0,
+        )
+
+        comparison = compare_org_reports(current, str(prev_path))
+
+        assert comparison.components_added == 2
+        assert comparison.components_removed == 1
+        assert comparison.summary["components_delta"] == 1
+
 
 # ===================================================================
 # write_org_report_console

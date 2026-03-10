@@ -67,7 +67,18 @@ class TestTrendingDelta:
 
 
 class TestOrgReportTrending:
-    def _make_snapshot(self, timestamp, dv_count=10, comp_count=100, core=80, iso=20, sim=2, dv_ids=None):
+    def _make_snapshot(
+        self,
+        timestamp,
+        dv_count=10,
+        comp_count=100,
+        core=80,
+        iso=20,
+        sim=2,
+        dv_ids=None,
+        component_ids=None,
+        high_similarity_pairs=None,
+    ):
         return TrendingSnapshot(
             timestamp=timestamp,
             data_view_count=dv_count,
@@ -76,6 +87,8 @@ class TestOrgReportTrending:
             isolated_count=iso,
             high_sim_pair_count=sim,
             dv_ids=dv_ids or set(),
+            component_ids=component_ids,
+            high_similarity_pairs=high_similarity_pairs or set(),
         )
 
     def test_empty_construction(self):
@@ -181,3 +194,44 @@ class TestOrgReportTrending:
         assert comparison.core_delta == 0
         assert comparison.isolated_delta == 0
         assert comparison.summary["data_views_delta"] == 0
+
+    def test_to_comparison_preserves_component_replacements_with_exact_ids(self):
+        snaps = [
+            self._make_snapshot(
+                "2026-01-01",
+                comp_count=2,
+                component_ids={"A", "B"},
+            ),
+            self._make_snapshot(
+                "2026-02-01",
+                comp_count=3,
+                component_ids={"B", "C", "D"},
+            ),
+        ]
+
+        comparison = OrgReportTrending(snapshots=snaps, window_size=2).to_comparison()
+
+        assert comparison is not None
+        assert comparison.components_added == 2
+        assert comparison.components_removed == 1
+        assert comparison.summary["components_delta"] == 1
+
+    def test_to_comparison_tracks_high_similarity_pair_changes(self):
+        snaps = [
+            self._make_snapshot(
+                "2026-01-01",
+                high_similarity_pairs={("dv1", "dv2")},
+            ),
+            self._make_snapshot(
+                "2026-02-01",
+                high_similarity_pairs={("dv1", "dv3")},
+            ),
+        ]
+
+        comparison = OrgReportTrending(snapshots=snaps, window_size=2).to_comparison()
+
+        assert comparison is not None
+        assert comparison.new_high_similarity_pairs == [{"dv1_id": "dv1", "dv2_id": "dv3"}]
+        assert comparison.resolved_pairs == [{"dv1_id": "dv1", "dv2_id": "dv2"}]
+        assert comparison.summary["new_duplicates"] == 1
+        assert comparison.summary["resolved_duplicates"] == 1

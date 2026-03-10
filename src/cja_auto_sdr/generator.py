@@ -196,9 +196,11 @@ from cja_auto_sdr.org.models import (
     DataViewCluster,
     DataViewSummary,
     OrgReportComparison,
+    OrgReportComparisonInput,
     OrgReportConfig,
     OrgReportResult,
     SimilarityPair,
+    build_org_report_comparison,
 )
 
 # ==================== LEGACY ORG-WIDE DEFINITIONS (REMOVED) ====================
@@ -1328,10 +1330,10 @@ def _infer_run_status(exit_code: int, run_state: dict[str, Any]) -> str:
     return "error"
 
 
-def _infer_run_mode_enum(args: argparse.Namespace) -> RunMode:
-    """Infer run mode using the same precedence as command dispatch in _main_impl."""
+def _run_mode_checks(args: argparse.Namespace) -> tuple[tuple[RunMode, bool], ...]:
+    """Build run-mode checks once so inference and validation share precedence."""
     completion_shell = _completion_shell_from_args(args)
-    mode_checks: tuple[tuple[RunMode, bool], ...] = (
+    return (
         (RunMode.EXIT_CODES, getattr(args, "exit_codes", False)),
         (RunMode.COMPLETION, completion_shell is not None),
         (RunMode.SAMPLE_CONFIG, getattr(args, "sample_config", False)),
@@ -1384,10 +1386,66 @@ def _infer_run_mode_enum(args: argparse.Namespace) -> RunMode:
         (RunMode.DRY_RUN, getattr(args, "dry_run", False)),
         (RunMode.INVENTORY_SUMMARY, getattr(args, "inventory_summary", False)),
     )
-    for mode, is_active in mode_checks:
+
+
+def _infer_run_mode_enum(args: argparse.Namespace) -> RunMode:
+    """Infer run mode using the same precedence as command dispatch in _main_impl."""
+    for mode, is_active in _run_mode_checks(args):
         if is_active:
             return mode
     return RunMode.SDR
+
+
+def _active_run_modes(args: argparse.Namespace) -> list[RunMode]:
+    """Return all active primary run modes for defensive conflict validation."""
+    return [mode for mode, is_active in _run_mode_checks(args) if is_active]
+
+
+def _validate_org_report_snapshot_cli_args(
+    args: argparse.Namespace,
+    *,
+    active_modes: Collection[RunMode],
+) -> None:
+    """Fail closed for mixed or unsupported org-report snapshot maintenance invocations."""
+    snapshot_actions = (
+        ("--list-org-report-snapshots", bool(getattr(args, "list_org_report_snapshots", False))),
+        ("--inspect-org-report-snapshot", bool(getattr(args, "inspect_org_report_snapshot", None))),
+        ("--prune-org-report-snapshots", bool(getattr(args, "prune_org_report_snapshots", False))),
+    )
+    active_actions = [label for label, is_active in snapshot_actions if is_active]
+    if not active_actions:
+        return
+
+    if len(active_actions) > 1:
+        _exit_error(
+            "Use only one of --list-org-report-snapshots, --inspect-org-report-snapshot, or --prune-org-report-snapshots",
+        )
+
+    conflicting_modes = sorted(
+        {mode for mode in active_modes if mode != RunMode.ORG_REPORT_SNAPSHOTS}, key=lambda m: m.value
+    )
+    if conflicting_modes:
+        if conflicting_modes == [RunMode.ORG_REPORT]:
+            _exit_error("Org-report snapshot maintenance commands cannot be combined with --org-report")
+        conflict_labels = ", ".join(mode.value for mode in conflicting_modes)
+        _exit_error(
+            f"Org-report snapshot maintenance commands cannot be combined with other command modes ({conflict_labels})",
+        )
+
+    if getattr(args, "data_views", []):
+        _exit_error("Org-report snapshot maintenance commands do not accept positional data view arguments")
+
+    if getattr(args, "inspect_org_report_snapshot", None) and getattr(args, "org_report_snapshot_org", None):
+        _exit_error(
+            "--org-report-snapshot-org can only be used with --list-org-report-snapshots or --prune-org-report-snapshots",
+        )
+
+    if not getattr(args, "prune_org_report_snapshots", False) and (
+        getattr(args, "org_report_keep_last", 0) > 0 or getattr(args, "org_report_keep_since", None)
+    ):
+        _exit_error(
+            "--org-report-keep-last and --org-report-keep-since are only supported with --prune-org-report-snapshots",
+        )
 
 
 def _completion_shell_from_args(args: argparse.Namespace) -> str | None:
@@ -8031,13 +8089,14 @@ def compare_org_reports(current: OrgReportResult, previous_path: str) -> OrgRepo
             prev_dv_ids.add(dv_id)
             prev_dv_names[dv_id] = dv.get("data_view_name", dv.get("name", "Unknown"))
 
-    # Compute deltas
-    added_ids = list(current_dv_ids - prev_dv_ids)
-    removed_ids = list(prev_dv_ids - current_dv_ids)
-
     # Component counts
     current_components = len(current.component_index)
     prev_components = prev_data.get("summary", {}).get("total_unique_components", 0)
+    current_component_ids = set(current.component_index)
+    prev_component_ids = None
+    prev_component_index = prev_data.get("component_index")
+    if isinstance(prev_component_index, dict):
+        prev_component_ids = {str(component_id) for component_id in prev_component_index if str(component_id)}
 
     # Distribution deltas
     current_core = current.distribution.total_core
@@ -8080,30 +8139,29 @@ def compare_org_reports(current: OrgReportResult, previous_path: str) -> OrgRepo
             if dv1 and dv2:
                 prev_high_sim.add(_pair_key(dv1, dv2))
 
-    new_pairs = current_high_sim - prev_high_sim
-    resolved_pairs = prev_high_sim - current_high_sim
-
-    return OrgReportComparison(
-        current_timestamp=current.timestamp,
-        previous_timestamp=prev_data.get("generated_at", prev_data.get("timestamp", "unknown")),
-        data_views_added=added_ids,
-        data_views_removed=removed_ids,
-        data_views_added_names=[current_dv_names.get(dv_id, "Unknown") for dv_id in added_ids],
-        data_views_removed_names=[prev_dv_names.get(dv_id, "Unknown") for dv_id in removed_ids],
-        components_added=max(0, current_components - prev_components),
-        components_removed=max(0, prev_components - current_components),
-        core_delta=current_core - prev_core,
-        isolated_delta=current_isolated - prev_isolated,
-        new_high_similarity_pairs=[{"dv1_id": p[0], "dv2_id": p[1]} for p in new_pairs],
-        resolved_pairs=[{"dv1_id": p[0], "dv2_id": p[1]} for p in resolved_pairs],
-        summary={
-            "data_views_delta": len(current_dv_ids) - len(prev_dv_ids),
-            "components_delta": current_components - prev_components,
-            "core_delta": current_core - prev_core,
-            "isolated_delta": current_isolated - prev_isolated,
-            "new_duplicates": len(new_pairs),
-            "resolved_duplicates": len(resolved_pairs),
-        },
+    return build_org_report_comparison(
+        previous=OrgReportComparisonInput(
+            timestamp=prev_data.get("generated_at", prev_data.get("timestamp", "unknown")),
+            data_view_ids=prev_dv_ids,
+            data_view_names=prev_dv_names,
+            data_view_count=len(prev_dv_ids),
+            component_count=prev_components,
+            component_ids=prev_component_ids,
+            core_count=prev_core,
+            isolated_count=prev_isolated,
+            high_similarity_pairs=prev_high_sim,
+        ),
+        current=OrgReportComparisonInput(
+            timestamp=current.timestamp,
+            data_view_ids=current_dv_ids,
+            data_view_names=current_dv_names,
+            data_view_count=len(current_dv_ids),
+            component_count=current_components,
+            component_ids=current_component_ids,
+            core_count=current_core,
+            isolated_count=current_isolated,
+            high_similarity_pairs=current_high_sim,
+        ),
     )
 
 
@@ -9192,7 +9250,9 @@ def _main_impl(run_state: dict[str, Any] | None = None):
     # Parse arguments (will show error and help if no data views provided)
     args = parse_arguments()
     inferred_mode = _infer_run_mode_enum(args)
+    active_modes = _active_run_modes(args)
     _sync_run_summary_cli_metadata(run_state, args, inferred_mode=inferred_mode)
+    _validate_org_report_snapshot_cli_args(args, active_modes=active_modes)
 
     # Dispatch early command modes before unrelated validation. Use inferred
     # mode so dispatch precedence cannot diverge from run-mode classification.
@@ -9283,18 +9343,6 @@ def _main_impl(run_state: dict[str, Any] | None = None):
         _exit_error("--allow-partial cannot be used with --quality-report")
     if getattr(args, "allow_partial", False) and getattr(args, "fail_on_quality", None):
         _exit_error("--allow-partial cannot be used with --fail-on-quality")
-
-    org_report_snapshot_actions = (
-        bool(getattr(args, "list_org_report_snapshots", False)),
-        bool(getattr(args, "inspect_org_report_snapshot", None)),
-        bool(getattr(args, "prune_org_report_snapshots", False)),
-    )
-    if sum(org_report_snapshot_actions) > 1:
-        _exit_error(
-            "Use only one of --list-org-report-snapshots, --inspect-org-report-snapshot, or --prune-org-report-snapshots",
-        )
-    if any(org_report_snapshot_actions) and getattr(args, "org_report", False):
-        _exit_error("Org-report snapshot maintenance commands cannot be combined with --org-report")
 
     if getattr(args, "list_snapshots", False) and getattr(args, "prune_snapshots", False):
         _exit_error("Use either --list-snapshots or --prune-snapshots, not both")

@@ -1678,6 +1678,57 @@ class TestMainImplOrgReportSnapshots:
         assert exc_info.value.code == 1
         assert "Use only one of --list-org-report-snapshots" in capsys.readouterr().err
 
+    @patch("cja_auto_sdr.generator._cli_option_specified", _mock_cli_option_specified)
+    @patch("cja_auto_sdr.generator.list_dataviews")
+    def test_org_report_snapshot_commands_reject_other_primary_modes(self, mock_list_dataviews, capsys):
+        with pytest.raises(SystemExit) as exc_info:
+            with patch("cja_auto_sdr.generator.parse_arguments") as mock_pa:
+                mock_pa.return_value = parse_arguments(["--list-dataviews", "--list-org-report-snapshots"])
+                _main_impl()
+
+        assert exc_info.value.code == 1
+        assert "cannot be combined with other command modes" in capsys.readouterr().err
+        mock_list_dataviews.assert_not_called()
+
+    @patch("cja_auto_sdr.generator._cli_option_specified", _mock_cli_option_specified)
+    @patch("cja_auto_sdr.generator._handle_completion_prevalidation")
+    def test_org_report_snapshot_commands_reject_completion_mode(self, mock_completion, capsys):
+        with pytest.raises(SystemExit) as exc_info:
+            with patch("cja_auto_sdr.generator.parse_arguments") as mock_pa:
+                mock_pa.return_value = parse_arguments(["--completion", "bash", "--list-org-report-snapshots"])
+                _main_impl()
+
+        assert exc_info.value.code == 1
+        assert "cannot be combined with other command modes" in capsys.readouterr().err
+        mock_completion.assert_not_called()
+
+    @patch("cja_auto_sdr.generator._cli_option_specified", _mock_cli_option_specified)
+    def test_org_report_snapshot_commands_reject_positional_data_views(self, capsys):
+        with pytest.raises(SystemExit) as exc_info:
+            with patch("cja_auto_sdr.generator.parse_arguments") as mock_pa:
+                mock_pa.return_value = parse_arguments(["dv_123", "--list-org-report-snapshots"])
+                _main_impl()
+
+        assert exc_info.value.code == 1
+        assert "do not accept positional data view arguments" in capsys.readouterr().err
+
+    @patch("cja_auto_sdr.generator._cli_option_specified", _mock_cli_option_specified)
+    def test_inspect_org_report_snapshot_rejects_org_filter(self, capsys):
+        with pytest.raises(SystemExit) as exc_info:
+            with patch("cja_auto_sdr.generator.parse_arguments") as mock_pa:
+                mock_pa.return_value = parse_arguments(
+                    [
+                        "--inspect-org-report-snapshot",
+                        "cached.json",
+                        "--org-report-snapshot-org",
+                        "test_org@AdobeOrg",
+                    ]
+                )
+                _main_impl()
+
+        assert exc_info.value.code == 1
+        assert "--org-report-snapshot-org can only be used" in capsys.readouterr().err
+
 
 # ==================== _main_impl: --list-snapshots ====================
 
