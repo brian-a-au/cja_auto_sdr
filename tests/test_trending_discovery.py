@@ -103,6 +103,10 @@ class TestExtractSnapshotFromJson:
         data = {"summary": {"data_views_total": 5}}
         assert _extract_snapshot_from_json(data) is None
 
+    def test_non_snapshot_payload_returns_none(self):
+        data = {"generated_at": "2026-01-01T00:00:00Z", "note": "not an org-report snapshot"}
+        assert _extract_snapshot_from_json(data) is None
+
     def test_fallback_timestamp_key(self):
         data = {"timestamp": "2026-06-01", "summary": {"data_views_total": 5}, "org_id": "test_org"}
         snap = _extract_snapshot_from_json(data)
@@ -315,6 +319,14 @@ class TestDiscoverSnapshots:
         assert len(result) == 3
         assert result[0].timestamp == "2026-01-01T00:00:00Z"
         assert result[2].timestamp == "2026-03-01T00:00:00Z"
+
+    def test_skips_timestamped_non_snapshot_json_objects(self, tmp_path):
+        _write_report(tmp_path, "bogus.json", {"generated_at": "2026-01-15T00:00:00Z", "note": "not a snapshot"})
+        _write_report(tmp_path, "valid.json", _make_org_report_json(timestamp="2026-02-01T00:00:00Z"))
+
+        result = discover_snapshots(tmp_path, window_size=10)
+
+        assert [snapshot.timestamp for snapshot in result] == ["2026-02-01T00:00:00Z"]
 
     def test_discovers_persisted_snapshots_from_root_directory(self, tmp_path):
         cache = OrgReportCache(cache_dir=tmp_path)

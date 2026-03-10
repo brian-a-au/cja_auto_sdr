@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import contextlib
 import errno
-import hashlib
 import json
 import logging
 import os
@@ -22,11 +21,13 @@ from cja_auto_sdr.core.locks.manager import LockManager
 from cja_auto_sdr.org.models import DataViewSummary
 from cja_auto_sdr.org.snapshot_utils import (
     ORG_REPORT_SNAPSHOT_ROOT_DIRNAME,
+    is_org_report_snapshot_payload,
     iter_org_report_snapshot_files,
     newest_first_snapshot_sort_fields,
     org_report_snapshot_dir_key,
     org_report_snapshot_dir_paths,
-    snapshot_epoch,
+    org_report_snapshot_content_hash,
+    org_report_snapshot_metadata,
     snapshot_path_text,
     snapshot_slug,
 )
@@ -198,26 +199,11 @@ class OrgReportCache:
         """Return the root directory containing per-org snapshot history."""
         return self.cache_dir / ORG_REPORT_SNAPSHOT_ROOT_DIRNAME
 
-    @staticmethod
-    def _canonical_org_report_snapshot_payload(report_data: dict[str, Any]) -> dict[str, Any]:
-        """Return the stable payload used for snapshot content hashing."""
-        return {key: value for key, value in report_data.items() if key != "_snapshot_meta"}
-
-    @classmethod
-    def _compute_org_report_snapshot_content_hash(cls, report_data: dict[str, Any]) -> str:
-        """Return a deterministic hash for an org-report snapshot payload."""
-        canonical_payload = cls._canonical_org_report_snapshot_payload(report_data)
-        serialized = json.dumps(
-            canonical_payload,
-            sort_keys=True,
-            separators=(",", ":"),
-            ensure_ascii=False,
-            default=str,
-        )
-        return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
-
     def save_org_report_snapshot(self, report_data: dict[str, Any], org_id: str | None = None) -> Path:
         """Persist an org-report JSON payload for future trending windows."""
+        if not is_org_report_snapshot_payload(report_data):
+            raise ValueError("Invalid org-report snapshot payload")
+
         resolved_org_id = org_id or str(report_data.get("org_id") or "unknown")
         snapshot_dir = self.get_org_report_snapshot_dir(resolved_org_id)
         snapshot_dir.mkdir(parents=True, exist_ok=True)
@@ -228,7 +214,7 @@ class OrgReportCache:
         payload = dict(report_data)
         payload["_snapshot_meta"] = {
             "snapshot_id": snapshot_id,
-            "content_hash": self._compute_org_report_snapshot_content_hash(report_data),
+            "content_hash": org_report_snapshot_content_hash(report_data),
         }
         file_path = snapshot_dir / (
             f"org_report_{self._sanitize_org_id(resolved_org_id)}_{timestamp_slug}_{snapshot_id[:8]}.json"
@@ -290,64 +276,10 @@ class OrgReportCache:
             self.logger.warning("Skipping org-report snapshot %s: expected JSON object", path)
             return None
 
-        summary = payload.get("summary", {})
-        if not isinstance(summary, dict):
-            summary = {}
-        distribution = payload.get("distribution", {})
-        if not isinstance(distribution, dict):
-            distribution = {}
-
-        core_section = distribution.get("core", {})
-        if not isinstance(core_section, dict):
-            core_section = {}
-        isolated_section = distribution.get("isolated", {})
-        if not isinstance(isolated_section, dict):
-            isolated_section = {}
-
-        generated_at = payload.get("generated_at") or payload.get("timestamp")
-        snapshot_meta = payload.get("_snapshot_meta", {})
-        if not isinstance(snapshot_meta, dict):
-            snapshot_meta = {}
-        data_views = payload.get("data_views", [])
-        if not isinstance(data_views, list):
-            data_views = []
-
-        metadata: dict[str, Any] = {
-            "org_id": str(payload.get("org_id") or "unknown"),
-            "generated_at": str(generated_at or ""),
-            "generated_at_epoch": snapshot_epoch(generated_at),
-            "filepath": snapshot_path_text(path),
-            "filename": path.name,
-            "data_views_total": summary.get("data_views_total", len(data_views)),
-            "total_unique_components": summary.get("total_unique_components", 0),
-            "core_count": core_section.get(
-                "total",
-                core_section.get("metrics_count", 0) + core_section.get("dimensions_count", 0),
-            ),
-            "isolated_count": isolated_section.get(
-                "total",
-                isolated_section.get("metrics_count", 0) + isolated_section.get("dimensions_count", 0),
-            ),
-            "high_similarity_pairs": sum(
-                1
-                for pair in payload.get("similarity_pairs", [])
-                if isinstance(pair, dict) and pair.get("jaccard_similarity", 0) >= 0.9
-            ),
-            "snapshot_id": snapshot_meta.get("snapshot_id"),
-            "content_hash": snapshot_meta.get("content_hash"),
-        }
-
-        if include_data_views:
-            data_view_names = [
-                str(dv.get("data_view_name") or dv.get("name") or dv.get("data_view_id") or dv.get("id") or "")
-                for dv in data_views
-                if isinstance(dv, dict)
-            ]
-            data_view_names = [name for name in data_view_names if name]
-            metadata["data_view_names_preview"] = data_view_names[:10]
-            metadata["data_view_names_total"] = len(data_view_names)
-            metadata["data_view_names_truncated"] = len(data_view_names) > 10
-
+        metadata = org_report_snapshot_metadata(payload, source_path=path, include_data_views=include_data_views)
+        if metadata is None:
+            self.logger.warning("Skipping org-report snapshot %s: expected org-report snapshot payload", path)
+            return None
         return metadata
 
     def list_org_report_snapshots(self, org_id: str | None = None) -> list[dict[str, Any]]:

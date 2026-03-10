@@ -235,6 +235,13 @@ def test_save_org_report_snapshot_writes_json_file(tmp_path: Path):
     assert payload["_snapshot_meta"]["content_hash"]
 
 
+def test_save_org_report_snapshot_rejects_non_snapshot_payload(tmp_path: Path):
+    cache = OrgReportCache(cache_dir=tmp_path)
+
+    with pytest.raises(ValueError, match="Invalid org-report snapshot payload"):
+        cache.save_org_report_snapshot({"generated_at": "2026-03-01T00:00:00Z", "note": "not a snapshot"})
+
+
 def test_save_org_report_snapshot_same_timestamp_creates_unique_files(tmp_path: Path):
     cache = OrgReportCache(cache_dir=tmp_path)
     report_a = {
@@ -348,6 +355,42 @@ def test_inspect_org_report_snapshot_includes_data_view_preview(tmp_path: Path):
     assert snapshot["data_view_names_total"] == 2
 
 
+def test_snapshot_maintenance_skips_non_snapshot_json_objects(tmp_path: Path):
+    cache = OrgReportCache(cache_dir=tmp_path)
+    snapshot_dir = cache.get_org_report_snapshot_dir("org@test.example")
+    snapshot_dir.mkdir(parents=True, exist_ok=True)
+
+    bogus_path = snapshot_dir / "bogus.json"
+    bogus_path.write_text(
+        json.dumps({"generated_at": "2026-02-01T00:00:00Z", "note": "not an org-report snapshot"}),
+        encoding="utf-8",
+    )
+    valid_path = snapshot_dir / "valid.json"
+    valid_path.write_text(
+        json.dumps(
+            {
+                "generated_at": "2026-03-01T00:00:00Z",
+                "org_id": "org@test.example",
+                "summary": {"data_views_total": 1, "total_unique_components": 2},
+                "distribution": {"core": {"total": 1}, "isolated": {"total": 1}},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    snapshots = cache.list_org_report_snapshots("org@test.example")
+
+    assert [Path(snapshot["filepath"]).name for snapshot in snapshots] == ["valid.json"]
+    with pytest.raises(ValueError, match="Invalid org-report snapshot"):
+        cache.inspect_org_report_snapshot(bogus_path)
+
+    deleted = cache.prune_org_report_snapshots(org_id="org@test.example", keep_last=1)
+
+    assert deleted == []
+    assert bogus_path.exists()
+    assert valid_path.exists()
+
+
 def test_load_org_report_snapshot_metadata_normalizes_malformed_sections(tmp_path: Path):
     cache = OrgReportCache(cache_dir=tmp_path)
     snapshot_path = cache.get_org_report_snapshot_dir("org@test.example") / "report.json"
@@ -375,6 +418,43 @@ def test_load_org_report_snapshot_metadata_normalizes_malformed_sections(tmp_pat
     assert metadata["snapshot_id"] is None
     assert metadata["data_view_names_total"] == 12
     assert metadata["data_view_names_truncated"] is True
+
+
+def test_load_org_report_snapshot_metadata_prefers_analyzed_counts(tmp_path: Path):
+    cache = OrgReportCache(cache_dir=tmp_path)
+    snapshot_path = cache.get_org_report_snapshot_dir("org@test.example") / "report.json"
+    snapshot_path.parent.mkdir(parents=True, exist_ok=True)
+    snapshot_path.write_text(
+        json.dumps(
+            {
+                "generated_at": "2026-03-01T00:00:00Z",
+                "org_id": "org@test.example",
+                "summary": {
+                    "data_views_total": 5,
+                    "data_views_analyzed": 3,
+                    "data_views_failed": 2,
+                    "total_unique_components": 8,
+                },
+                "distribution": {"core": {"total": 5}, "isolated": {"total": 3}},
+                "data_views": [
+                    {"data_view_id": "dv_1", "data_view_name": "One"},
+                    {"data_view_id": "dv_2", "data_view_name": "Two"},
+                    {"data_view_id": "dv_3", "data_view_name": "Three"},
+                    {"data_view_id": "dv_4", "data_view_name": "Four", "error": "timeout"},
+                    {"data_view_id": "dv_5", "data_view_name": "Five", "error": "forbidden"},
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    metadata = cache._load_org_report_snapshot_metadata(snapshot_path, include_data_views=True)
+
+    assert metadata is not None
+    assert metadata["data_views_total"] == 3
+    assert metadata["data_views_analyzed"] == 3
+    assert metadata["data_views_total_reported"] == 5
+    assert metadata["data_view_names_total"] == 5
 
 
 def test_should_retain_snapshot_uses_normalized_preserved_paths_and_cutoff(tmp_path: Path):

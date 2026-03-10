@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 from pathlib import Path
@@ -15,99 +14,26 @@ from cja_auto_sdr.org.models import (
 )
 from cja_auto_sdr.org.snapshot_utils import (
     chronological_snapshot_sort_fields,
+    coerce_snapshot_float,
+    is_org_report_snapshot_payload,
     iter_org_report_snapshot_files,
+    org_report_data_view_row_has_error,
+    org_report_high_similarity_pairs,
+    org_report_snapshot_content_hash,
     org_report_snapshot_history_eligible,
+    org_report_snapshot_metadata,
     snapshot_identity_tokens,
+    snapshot_mapping_dict,
+    snapshot_mapping_int,
+    snapshot_mapping_list,
+    successful_org_report_data_view_rows,
 )
 
 logger = logging.getLogger(__name__)
 
-
-def _coerce_int(value: Any) -> int | None:
-    """Best-effort integer coercion for serialized snapshot counts."""
-    if isinstance(value, bool):
-        return int(value)
-    if isinstance(value, int):
-        return value
-    if isinstance(value, float):
-        return int(value)
-    if isinstance(value, str):
-        stripped = value.strip()
-        if not stripped:
-            return None
-        try:
-            return int(stripped)
-        except ValueError:
-            return None
-    return None
-
-
-def _coerce_float(value: Any) -> float | None:
-    """Best-effort float coercion for serialized snapshot metrics."""
-    if isinstance(value, bool):
-        return float(value)
-    if isinstance(value, int | float):
-        return float(value)
-    if isinstance(value, str):
-        stripped = value.strip()
-        if not stripped:
-            return None
-        try:
-            return float(stripped)
-        except ValueError:
-            return None
-    return None
-
-
-def _mapping_int(mapping: dict[str, Any], *keys: str) -> int | None:
-    """Return the first available integer-like value from a mapping."""
-    for key in keys:
-        if key not in mapping:
-            continue
-        coerced = _coerce_int(mapping.get(key))
-        if coerced is not None:
-            return coerced
-    return None
-
-
-def _mapping_dict(value: Any) -> dict[str, Any]:
-    """Return a dict value or a safe empty mapping."""
-    if isinstance(value, dict):
-        return value
-    return {}
-
-
-def _mapping_list(value: Any) -> list[Any]:
-    """Return a list value or a safe empty list."""
-    if isinstance(value, list):
-        return value
-    return []
-
-
-def _normalized_similarity_pair_ids(pair: dict[str, Any]) -> tuple[str, str] | None:
-    """Extract a stable high-similarity pair identity from serialized report data."""
-    dv1 = str(pair.get("dv1_id") or _mapping_dict(pair.get("data_view_1", {})).get("id") or "").strip()
-    dv2 = str(pair.get("dv2_id") or _mapping_dict(pair.get("data_view_2", {})).get("id") or "").strip()
-    if not dv1 or not dv2:
-        return None
-    return tuple(sorted((dv1, dv2)))
-
-
-def _canonical_snapshot_payload(data: dict[str, Any]) -> dict[str, Any]:
-    """Return the stable subset of a snapshot payload used for hashing."""
-    return {key: value for key, value in data.items() if key != "_snapshot_meta"}
-
-
-def _snapshot_content_hash(data: dict[str, Any]) -> str:
-    """Return a deterministic content hash for an org-report JSON payload."""
-    serialized = json.dumps(
-        _canonical_snapshot_payload(data),
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
-        default=str,
-    )
-    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+_mapping_dict = snapshot_mapping_dict
+_mapping_int = snapshot_mapping_int
+_mapping_list = snapshot_mapping_list
 
 
 def _snapshot_identity_tokens(snapshot: TrendingSnapshot) -> tuple[tuple[str, ...], ...]:
@@ -212,17 +138,12 @@ def _trim_snapshot_window(
 
 def _data_view_row_has_error(data_view: Any) -> bool:
     """Return True when a serialized data-view row represents a failed fetch."""
-    if not isinstance(data_view, dict):
-        return True
-    return data_view.get("error") not in (None, "")
+    return org_report_data_view_row_has_error(data_view)
 
 
 def _successful_data_view_rows(data: dict[str, Any]) -> list[dict[str, Any]]:
     """Return only successfully analyzed data-view rows from a snapshot payload."""
-    data_views = _mapping_list(data.get("data_views", []))
-    return [
-        data_view for data_view in data_views if isinstance(data_view, dict) and not _data_view_row_has_error(data_view)
-    ]
+    return successful_org_report_data_view_rows(data)
 
 
 def _extract_snapshot_from_json(
@@ -234,61 +155,17 @@ def _extract_snapshot_from_json(
 
     Returns None if the payload is missing required top-level keys.
     """
-    timestamp = data.get("generated_at") or data.get("timestamp")
-    if not timestamp:
+    metadata = org_report_snapshot_metadata(data, source_path=source_path)
+    if metadata is None:
         return None
     if not org_report_snapshot_history_eligible(data):
         return None
 
-    summary = _mapping_dict(data.get("summary", {}))
+    timestamp = metadata["generated_at"]
     distribution = _mapping_dict(data.get("distribution", {}))
-    org_id = data.get("org_id")
-    snapshot_meta = data.get("_snapshot_meta", {})
-    if not isinstance(snapshot_meta, dict):
-        snapshot_meta = {}
     successful_data_views = _successful_data_view_rows(data)
-    raw_data_views = _mapping_list(data.get("data_views", []))
-
-    # Prefer explicit analyzed counts, including legitimate zero-analyzed outage snapshots.
-    dv_count = _mapping_int(summary, "data_views_analyzed")
-    if dv_count is None:
-        dv_count = _mapping_int(summary, "data_views_total", "total_data_views")
-        if dv_count == 0:
-            dv_count = None
-    if dv_count is None:
-        dv_count = len(successful_data_views) if successful_data_views else len(raw_data_views)
-
-    # Component count
-    comp_count = _mapping_int(summary, "total_unique_components") or 0
-
-    # Core / isolated from distribution
-    core_section = _mapping_dict(distribution.get("core", {}))
-    isolated_section = _mapping_dict(distribution.get("isolated", {}))
-
-    core_count = _mapping_int(core_section, "total")
-    if core_count is None:
-        core_count = (_mapping_int(core_section, "metrics_count") or 0) + (
-            _mapping_int(core_section, "dimensions_count") or 0
-        )
-
-    isolated_count = _mapping_int(isolated_section, "total")
-    if isolated_count is None:
-        isolated_count = (_mapping_int(isolated_section, "metrics_count") or 0) + (
-            _mapping_int(isolated_section, "dimensions_count") or 0
-        )
-
-    # High-similarity pairs
+    high_similarity_pairs = org_report_high_similarity_pairs(data)
     sim_pairs = _mapping_list(data.get("similarity_pairs", []))
-    high_similarity_pairs: set[tuple[str, str]] = set()
-    for pair in sim_pairs:
-        if not isinstance(pair, dict):
-            continue
-        if (_coerce_float(pair.get("jaccard_similarity")) or 0.0) < 0.9:
-            continue
-        normalized_pair = _normalized_similarity_pair_ids(pair)
-        if normalized_pair is not None:
-            high_similarity_pairs.add(normalized_pair)
-    high_sim_count = len(high_similarity_pairs)
 
     # Per-DV metrics for drift scoring (single pass over data_views)
     dv_component_counts: dict[str, int] = {}
@@ -349,21 +226,21 @@ def _extract_snapshot_from_json(
             continue
         dv1 = str(pair.get("dv1_id") or _mapping_dict(pair.get("data_view_1", {})).get("id") or "")
         dv2 = str(pair.get("dv2_id") or _mapping_dict(pair.get("data_view_2", {})).get("id") or "")
-        sim = _coerce_float(pair.get("jaccard_similarity")) or 0.0
+        sim = coerce_snapshot_float(pair.get("jaccard_similarity")) or 0.0
         if dv1 in dv_ids and dv2 in dv_ids:
             dv_max_similarity[dv1] = max(dv_max_similarity.get(dv1, 0.0), sim)
             dv_max_similarity[dv2] = max(dv_max_similarity.get(dv2, 0.0), sim)
 
     return TrendingSnapshot(
         timestamp=str(timestamp),
-        org_id=str(org_id) if org_id is not None else None,
-        data_view_count=dv_count,
-        component_count=comp_count,
-        core_count=core_count,
-        isolated_count=isolated_count,
-        high_sim_pair_count=high_sim_count,
-        snapshot_id=str(snapshot_meta["snapshot_id"]) if snapshot_meta.get("snapshot_id") is not None else None,
-        content_hash=str(snapshot_meta.get("content_hash") or _snapshot_content_hash(data)),
+        org_id=str(metadata["org_id"]) if metadata.get("org_id") is not None else None,
+        data_view_count=int(metadata["data_views_total"]),
+        component_count=int(metadata["total_unique_components"]),
+        core_count=int(metadata["core_count"]),
+        isolated_count=int(metadata["isolated_count"]),
+        high_sim_pair_count=int(metadata["high_similarity_pairs"]),
+        snapshot_id=str(metadata["snapshot_id"]) if metadata.get("snapshot_id") is not None else None,
+        content_hash=str(metadata.get("content_hash") or org_report_snapshot_content_hash(data)),
         source_path=str(source_path) if source_path is not None else None,
         component_ids=component_ids,
         high_similarity_pairs=high_similarity_pairs,
@@ -444,8 +321,7 @@ def _load_snapshot_from_file(json_file: Path) -> TrendingSnapshot | None:
         logger.warning("Skipping %s: not a JSON object", json_file)
         return None
 
-    # Basic heuristic: org-report JSONs have a "summary" or "data_views" key
-    if "summary" not in data and "data_views" not in data:
+    if not is_org_report_snapshot_payload(data):
         return None
 
     return _extract_snapshot_from_json(data, source_path=json_file)

@@ -1,8 +1,9 @@
-"""Shared helpers for org-report snapshot identity, retention, and ordering."""
+"""Shared helpers for org-report snapshot identity, parsing, retention, and ordering."""
 
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 from collections.abc import Iterable, Mapping
 from datetime import UTC, datetime
@@ -197,3 +198,261 @@ def org_report_snapshot_history_eligible(data: Mapping[str, Any]) -> bool:
     if not isinstance(summary, Mapping):
         return True
     return not bool(summary.get("is_sampled"))
+
+
+def coerce_snapshot_int(value: Any) -> int | None:
+    """Best-effort integer coercion for serialized org-report counts."""
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return None
+        try:
+            return int(stripped)
+        except ValueError:
+            return None
+    return None
+
+
+def coerce_snapshot_float(value: Any) -> float | None:
+    """Best-effort float coercion for serialized org-report metrics."""
+    if isinstance(value, bool):
+        return float(value)
+    if isinstance(value, int | float):
+        return float(value)
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return None
+        try:
+            return float(stripped)
+        except ValueError:
+            return None
+    return None
+
+
+def snapshot_mapping_int(mapping: Mapping[str, Any], *keys: str) -> int | None:
+    """Return the first integer-like value found in a mapping."""
+    for key in keys:
+        if key not in mapping:
+            continue
+        coerced = coerce_snapshot_int(mapping.get(key))
+        if coerced is not None:
+            return coerced
+    return None
+
+
+def snapshot_mapping_dict(value: Any) -> dict[str, Any]:
+    """Return a dict-like value or a safe empty mapping."""
+    if isinstance(value, Mapping):
+        return dict(value)
+    return {}
+
+
+def snapshot_mapping_list(value: Any) -> list[Any]:
+    """Return a list value or a safe empty list."""
+    if isinstance(value, list):
+        return value
+    return []
+
+
+def org_report_snapshot_timestamp(data: Mapping[str, Any]) -> str | None:
+    """Return the normalized timestamp string for one org-report payload."""
+    raw_timestamp = data.get("generated_at") or data.get("timestamp")
+    if raw_timestamp in (None, ""):
+        return None
+    timestamp_text = str(raw_timestamp).strip()
+    return timestamp_text or None
+
+
+def is_org_report_snapshot_payload(data: Any) -> bool:
+    """Return True when parsed JSON looks like an org-report snapshot payload."""
+    if not isinstance(data, Mapping):
+        return False
+    if org_report_snapshot_timestamp(data) is None:
+        return False
+    if data.get("report_type") == "org_analysis":
+        return True
+    return any(
+        (
+            isinstance(data.get("summary"), Mapping),
+            isinstance(data.get("distribution"), Mapping),
+            isinstance(data.get("data_views"), list),
+        ),
+    )
+
+
+def canonical_org_report_snapshot_payload(report_data: Mapping[str, Any]) -> dict[str, Any]:
+    """Return the stable payload used for org-report snapshot hashing."""
+    return {key: value for key, value in report_data.items() if key != "_snapshot_meta"}
+
+
+def org_report_snapshot_content_hash(report_data: Mapping[str, Any]) -> str:
+    """Return a deterministic content hash for an org-report snapshot payload."""
+    serialized = json.dumps(
+        canonical_org_report_snapshot_payload(report_data),
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        default=str,
+    )
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def org_report_data_view_row_has_error(data_view: Any) -> bool:
+    """Return True when a serialized data-view row represents a failed fetch."""
+    if not isinstance(data_view, dict):
+        return True
+    return data_view.get("error") not in (None, "")
+
+
+def successful_org_report_data_view_rows(data: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Return only successfully analyzed data-view rows from an org-report payload."""
+    data_views = snapshot_mapping_list(data.get("data_views", []))
+    return [
+        data_view
+        for data_view in data_views
+        if isinstance(data_view, dict) and not org_report_data_view_row_has_error(data_view)
+    ]
+
+
+def normalized_similarity_pair_ids(pair: Mapping[str, Any]) -> tuple[str, str] | None:
+    """Extract a stable high-similarity pair identity from serialized report data."""
+    dv1 = str(pair.get("dv1_id") or snapshot_mapping_dict(pair.get("data_view_1", {})).get("id") or "").strip()
+    dv2 = str(pair.get("dv2_id") or snapshot_mapping_dict(pair.get("data_view_2", {})).get("id") or "").strip()
+    if not dv1 or not dv2:
+        return None
+    return tuple(sorted((dv1, dv2)))
+
+
+def effective_org_report_data_view_count(data: Mapping[str, Any]) -> int:
+    """Return the data-view count used consistently across snapshot consumers."""
+    summary = snapshot_mapping_dict(data.get("summary", {}))
+    successful_data_views = successful_org_report_data_view_rows(data)
+    raw_data_views = snapshot_mapping_list(data.get("data_views", []))
+
+    # Prefer explicit analyzed counts, including legitimate zero-analyzed outage snapshots.
+    data_view_count = snapshot_mapping_int(summary, "data_views_analyzed")
+    if data_view_count is None:
+        data_view_count = snapshot_mapping_int(summary, "data_views_total", "total_data_views")
+        if data_view_count == 0:
+            data_view_count = None
+    if data_view_count is None:
+        data_view_count = len(successful_data_views) if successful_data_views else len(raw_data_views)
+    return data_view_count
+
+
+def reported_org_report_data_view_count(data: Mapping[str, Any]) -> int | None:
+    """Return the raw total-data-view count reported by the snapshot, if any."""
+    summary = snapshot_mapping_dict(data.get("summary", {}))
+    data_view_count = snapshot_mapping_int(summary, "data_views_total", "total_data_views")
+    if data_view_count is not None:
+        return data_view_count
+
+    raw_data_views = snapshot_mapping_list(data.get("data_views", []))
+    if raw_data_views:
+        return len(raw_data_views)
+    return None
+
+
+def org_report_component_count(data: Mapping[str, Any]) -> int:
+    """Return the total unique component count recorded in an org-report snapshot."""
+    summary = snapshot_mapping_dict(data.get("summary", {}))
+    return snapshot_mapping_int(summary, "total_unique_components") or 0
+
+
+def org_report_core_count(data: Mapping[str, Any]) -> int:
+    """Return the normalized core-component count recorded in an org-report snapshot."""
+    distribution = snapshot_mapping_dict(data.get("distribution", {}))
+    core_section = snapshot_mapping_dict(distribution.get("core", {}))
+    core_count = snapshot_mapping_int(core_section, "total")
+    if core_count is None:
+        core_count = (snapshot_mapping_int(core_section, "metrics_count") or 0) + (
+            snapshot_mapping_int(core_section, "dimensions_count") or 0
+        )
+    return core_count
+
+
+def org_report_isolated_count(data: Mapping[str, Any]) -> int:
+    """Return the normalized isolated-component count recorded in an org-report snapshot."""
+    distribution = snapshot_mapping_dict(data.get("distribution", {}))
+    isolated_section = snapshot_mapping_dict(distribution.get("isolated", {}))
+    isolated_count = snapshot_mapping_int(isolated_section, "total")
+    if isolated_count is None:
+        isolated_count = (snapshot_mapping_int(isolated_section, "metrics_count") or 0) + (
+            snapshot_mapping_int(isolated_section, "dimensions_count") or 0
+        )
+    return isolated_count
+
+
+def org_report_high_similarity_pairs(
+    data: Mapping[str, Any],
+    *,
+    threshold: float = 0.9,
+) -> set[tuple[str, str]]:
+    """Return stable data-view pair identities meeting the similarity threshold."""
+    similarity_pairs: set[tuple[str, str]] = set()
+    for pair in snapshot_mapping_list(data.get("similarity_pairs", [])):
+        if not isinstance(pair, Mapping):
+            continue
+        if (coerce_snapshot_float(pair.get("jaccard_similarity")) or 0.0) < threshold:
+            continue
+        normalized_pair = normalized_similarity_pair_ids(pair)
+        if normalized_pair is not None:
+            similarity_pairs.add(normalized_pair)
+    return similarity_pairs
+
+
+def org_report_snapshot_metadata(
+    data: Mapping[str, Any],
+    *,
+    source_path: str | Path | None = None,
+    include_data_views: bool = False,
+) -> dict[str, Any] | None:
+    """Return normalized metadata for one org-report snapshot payload."""
+    if not is_org_report_snapshot_payload(data):
+        return None
+
+    timestamp = org_report_snapshot_timestamp(data)
+    assert timestamp is not None
+
+    summary = snapshot_mapping_dict(data.get("summary", {}))
+    snapshot_meta = snapshot_mapping_dict(data.get("_snapshot_meta", {}))
+    data_views = snapshot_mapping_list(data.get("data_views", []))
+    source = Path(source_path) if source_path is not None else None
+    reported_data_view_count = reported_org_report_data_view_count(data)
+
+    metadata: dict[str, Any] = {
+        "org_id": str(data.get("org_id") or "unknown"),
+        "generated_at": timestamp,
+        "generated_at_epoch": snapshot_epoch(timestamp),
+        "filepath": snapshot_path_text(source),
+        "filename": source.name if source is not None else "",
+        "data_views_total": effective_org_report_data_view_count(data),
+        "data_views_analyzed": snapshot_mapping_int(summary, "data_views_analyzed"),
+        "data_views_total_reported": reported_data_view_count,
+        "total_unique_components": org_report_component_count(data),
+        "core_count": org_report_core_count(data),
+        "isolated_count": org_report_isolated_count(data),
+        "high_similarity_pairs": len(org_report_high_similarity_pairs(data)),
+        "snapshot_id": snapshot_meta.get("snapshot_id"),
+        "content_hash": snapshot_meta.get("content_hash") or org_report_snapshot_content_hash(data),
+    }
+
+    if include_data_views:
+        data_view_names = [
+            str(dv.get("data_view_name") or dv.get("name") or dv.get("data_view_id") or dv.get("id") or "")
+            for dv in data_views
+            if isinstance(dv, Mapping)
+        ]
+        data_view_names = [name for name in data_view_names if name]
+        metadata["data_view_names_preview"] = data_view_names[:10]
+        metadata["data_view_names_total"] = len(data_view_names)
+        metadata["data_view_names_truncated"] = len(data_view_names) > 10
+
+    return metadata
