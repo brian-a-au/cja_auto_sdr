@@ -8874,6 +8874,10 @@ def _build_org_report_snapshot_listing_rows(snapshots: list[dict[str, Any]]) -> 
             "core_count": snapshot.get("core_count", 0),
             "isolated_count": snapshot.get("isolated_count", 0),
             "high_similarity_pairs": snapshot.get("high_similarity_pairs", 0),
+            "history_eligible": (
+                snapshot.get("history_eligible", "") if snapshot.get("history_eligible") is not None else ""
+            ),
+            "history_exclusion_reason": snapshot.get("history_exclusion_reason") or "",
             "filepath": str(snapshot.get("filepath") or snapshot.get("filename") or ""),
         }
         for snapshot in snapshots
@@ -8921,6 +8925,8 @@ def _handle_org_report_snapshot_cli(
                         "core_count",
                         "isolated_count",
                         "high_similarity_pairs",
+                        "history_eligible",
+                        "history_exclusion_reason",
                         "filepath",
                     ],
                     rows,
@@ -8981,6 +8987,8 @@ def _handle_org_report_snapshot_cli(
                         "core_count",
                         "isolated_count",
                         "high_similarity_pairs",
+                        "history_eligible",
+                        "history_exclusion_reason",
                         "filepath",
                     ],
                     [snapshot],
@@ -9000,6 +9008,8 @@ def _handle_org_report_snapshot_cli(
                 f"Core components:      {snapshot.get('core_count', 0)}",
                 f"Isolated components:  {snapshot.get('isolated_count', 0)}",
                 f"High-similarity pairs:{snapshot.get('high_similarity_pairs', 0)}",
+                f"History eligible:     {snapshot.get('history_eligible', '')}",
+                f"History exclusion:    {snapshot.get('history_exclusion_reason') or ''}",
                 f"File:                 {snapshot.get('filepath', '')}",
             ]
             preview_names = snapshot.get("data_view_names_preview", [])

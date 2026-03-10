@@ -233,6 +233,38 @@ def test_save_org_report_snapshot_writes_json_file(tmp_path: Path):
     assert payload["org_id"] == "org@test.example"
     assert payload["_snapshot_meta"]["snapshot_id"]
     assert payload["_snapshot_meta"]["content_hash"]
+    assert payload["_snapshot_meta"]["history_eligible"] is True
+    assert payload["_snapshot_meta"]["history_exclusion_reason"] is None
+
+
+def test_save_org_report_snapshot_persists_history_eligibility_metadata(tmp_path: Path):
+    cache = OrgReportCache(cache_dir=tmp_path)
+    report = {
+        "generated_at": "2026-03-01T00:00:00Z",
+        "org_id": "org@test.example",
+        "summary": {
+            "data_views_total": 2,
+            "total_unique_components": 5,
+            "similarity_analysis_complete": False,
+            "similarity_analysis_mode": "org_stats_only",
+        },
+        "distribution": {"core": {"total": 2}, "isolated": {"total": 3}},
+        "similarity_pairs": [],
+    }
+
+    path = cache.save_org_report_snapshot(report)
+
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert payload["_snapshot_meta"]["history_eligible"] is False
+    assert payload["_snapshot_meta"]["history_exclusion_reason"] == "org_stats_only"
+
+    listed = cache.list_org_report_snapshots("org@test.example")
+    assert listed[0]["history_eligible"] is False
+    assert listed[0]["history_exclusion_reason"] == "org_stats_only"
+
+    inspected = cache.inspect_org_report_snapshot(path)
+    assert inspected["history_eligible"] is False
+    assert inspected["history_exclusion_reason"] == "org_stats_only"
 
 
 def test_save_org_report_snapshot_rejects_non_snapshot_payload(tmp_path: Path):
@@ -353,6 +385,29 @@ def test_inspect_org_report_snapshot_includes_data_view_preview(tmp_path: Path):
 
     assert snapshot["data_view_names_preview"] == ["Orders", "Visitors"]
     assert snapshot["data_view_names_total"] == 2
+
+
+def test_inspect_org_report_snapshot_derives_history_metadata_for_legacy_payload(tmp_path: Path):
+    cache = OrgReportCache(cache_dir=tmp_path)
+    snapshot_path = cache.get_org_report_snapshot_dir("org@test.example") / "legacy.json"
+    snapshot_path.parent.mkdir(parents=True, exist_ok=True)
+    snapshot_path.write_text(
+        json.dumps(
+            {
+                "generated_at": "2026-03-01T00:00:00Z",
+                "org_id": "org@test.example",
+                "summary": {"data_views_total": 2, "total_unique_components": 4},
+                "distribution": {"core": {"total": 2}, "isolated": {"total": 2}},
+                "similarity_pairs": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    snapshot = cache.inspect_org_report_snapshot(snapshot_path)
+
+    assert snapshot["history_eligible"] is True
+    assert snapshot["history_exclusion_reason"] is None
 
 
 def test_snapshot_maintenance_skips_non_snapshot_json_objects(tmp_path: Path):

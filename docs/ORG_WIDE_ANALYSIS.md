@@ -871,6 +871,12 @@ The persisted history lives under `~/.cja_auto_sdr/cache/org_report_snapshots/<O
 is used, the current run is saved there even for console output, and older entries are pruned automatically to keep
 the cache bounded.
 
+If you created local trending history with early v3.4.0 builds before snapshot-fidelity hardening landed and later
+see suspicious deltas, prune that cache and rebuild it from fresh full-fidelity org reports. Use
+`cja_auto_sdr --inspect-org-report-snapshot <FILE> --format json` to review `history_eligible` and
+`history_exclusion_reason` for current snapshots, and `cja_auto_sdr --prune-org-report-snapshots ...` to remove
+older entries.
+
 ## Related Documentation
 
 - [CLI Reference](CLI_REFERENCE.md) - Complete command-line options

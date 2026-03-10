@@ -265,6 +265,9 @@ cja_auto_sdr --inspect-org-report-snapshot ./org_report_test_org_AdobeOrg_2026_0
 # Prune cached org-report snapshots
 cja_auto_sdr --prune-org-report-snapshots --org-report-keep-last 10
 
+# Review snapshot history eligibility metadata before pruning
+cja_auto_sdr --inspect-org-report-snapshot ./org_report_test_org_AdobeOrg_2026_03_01T00_00_00Z.json --format json
+
 # --- Naming Audit ---
 # Audit naming conventions
 cja_auto_sdr --org-report --audit-naming

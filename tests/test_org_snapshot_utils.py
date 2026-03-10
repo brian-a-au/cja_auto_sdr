@@ -102,6 +102,53 @@ def test_org_report_snapshot_history_eligible_rejects_similarity_incomplete_payl
     )
 
 
+def test_org_report_snapshot_history_explicit_meta_overrides_derived_fields():
+    explicitly_ineligible = {
+        "_snapshot_meta": {
+            "history_eligible": False,
+            "history_exclusion_reason": "manual_override",
+        },
+        "summary": {"similarity_analysis_complete": True},
+    }
+    explicitly_eligible = {
+        "_snapshot_meta": {
+            "history_eligible": True,
+            "history_exclusion_reason": "sampled",
+        },
+        "summary": {"is_sampled": True},
+    }
+
+    assert org_report_snapshot_history_eligible(explicitly_ineligible) is False
+    assert org_report_snapshot_history_exclusion_reason(explicitly_ineligible) == "manual_override"
+    assert org_report_snapshot_history_eligible(explicitly_eligible) is True
+    assert org_report_snapshot_history_exclusion_reason(explicitly_eligible) is None
+
+
+def test_org_report_snapshot_history_coerces_legacy_string_flags():
+    sampled_payload = {"summary": {"is_sampled": "yes"}}
+    complete_payload = {"summary": {"similarity_analysis_complete": "complete"}}
+    skipped_payload = {
+        "parameters": {"skip_similarity": "on"},
+    }
+
+    assert org_report_snapshot_history_exclusion_reason(sampled_payload) == "sampled"
+    assert org_report_snapshot_history_eligible(complete_payload) is True
+    assert org_report_snapshot_history_exclusion_reason(skipped_payload) == "skip_similarity"
+
+
+def test_org_report_snapshot_history_legacy_payload_without_fidelity_fields_stays_compatible():
+    legacy_payload = {
+        "generated_at": "2026-03-01T00:00:00Z",
+        "org_id": "test_org",
+        "report_type": "org_analysis",
+        "summary": {"data_views_total": 3, "total_unique_components": 6},
+        "similarity_pairs": [],
+    }
+
+    assert org_report_snapshot_history_eligible(legacy_payload) is True
+    assert org_report_snapshot_history_exclusion_reason(legacy_payload) is None
+
+
 def test_org_report_snapshot_content_hash_ignores_trending_and_snapshot_meta():
     base_payload = {
         "generated_at": "2026-03-01T00:00:00Z",

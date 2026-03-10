@@ -408,7 +408,7 @@ Cache is stored in `~/.cja_auto_sdr/cache/org_report_cache.json`.
 | `--compare-org-report PREV.json` | Compare current org-report to a previous JSON report for trending/drift analysis | - |
 | `--trending-window [N]` | Show trending across the last N cached org-report snapshots (default: 10). Renders in all output formats. | None |
 | `--list-org-report-snapshots` | List cached org-report snapshots from the persistent trending history store | False |
-| `--inspect-org-report-snapshot FILE` | Inspect one cached org-report snapshot JSON without running a fresh org-report | - |
+| `--inspect-org-report-snapshot FILE` | Inspect one cached org-report snapshot JSON, including history eligibility metadata, without running a fresh org-report | - |
 | `--prune-org-report-snapshots` | Apply retention policies to cached org-report snapshots in the persistent trending history store | False |
 | `--org-report-snapshot-org ORG_ID` | Filter org-report snapshot listing/pruning to one org ID | - |
 | `--org-report-keep-last N` | For `--prune-org-report-snapshots`, keep only the last N snapshots per org (0 = keep all) | 0 |
