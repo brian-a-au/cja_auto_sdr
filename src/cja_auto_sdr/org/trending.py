@@ -398,9 +398,7 @@ def _accumulate_pairwise_drift(
         raw_component[dv_id] += abs(
             current.dv_component_counts.get(dv_id, 0) - previous.dv_component_counts.get(dv_id, 0)
         )
-        raw_core_ratio[dv_id] += abs(
-            current.dv_core_ratios.get(dv_id, 0.0) - previous.dv_core_ratios.get(dv_id, 0.0)
-        )
+        raw_core_ratio[dv_id] += abs(current.dv_core_ratios.get(dv_id, 0.0) - previous.dv_core_ratios.get(dv_id, 0.0))
         raw_similarity[dv_id] += abs(
             current.dv_max_similarity.get(dv_id, 0.0) - previous.dv_max_similarity.get(dv_id, 0.0)
         )
