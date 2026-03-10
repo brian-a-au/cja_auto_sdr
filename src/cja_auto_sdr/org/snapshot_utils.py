@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import re
 from collections.abc import Iterable, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
@@ -69,6 +71,37 @@ def newest_first_snapshot_sort_fields(
     )
 
 
+def snapshot_path_text(path: str | Path | None) -> str:
+    """Return a normalized absolute path string for snapshot identity checks."""
+    if path in (None, ""):
+        return ""
+    return str(Path(path).resolve(strict=False))
+
+
+def snapshot_slug(value: Any, *, fallback: str = "unknown") -> str:
+    """Return a filesystem-safe slug for snapshot file and directory labels."""
+    if value in (None, ""):
+        return fallback
+    normalized = re.sub(r"[^0-9A-Za-z_-]+", "_", str(value)).strip("_")
+    return normalized or fallback
+
+
+def org_report_snapshot_dir_key(org_id: Any) -> str:
+    """Return a collision-resistant directory key for one org-report history."""
+    normalized_org_id = str(org_id or "unknown")
+    digest = hashlib.sha256(normalized_org_id.encode("utf-8")).hexdigest()[:16]
+    return f"{snapshot_slug(normalized_org_id)}__{digest}"
+
+
+def org_report_snapshot_dir_candidates(org_id: Any) -> tuple[str, ...]:
+    """Return directory keys to scan for an org, newest scheme first."""
+    preferred = org_report_snapshot_dir_key(org_id)
+    legacy = snapshot_slug(org_id)
+    if legacy == preferred:
+        return (preferred,)
+    return (preferred, legacy)
+
+
 def snapshot_identity_tokens(
     *,
     snapshot_id: Any = None,
@@ -84,7 +117,7 @@ def snapshot_identity_tokens(
     if content_hash not in (None, ""):
         identities.append(("content_hash", str(content_hash)))
     if source_path not in (None, ""):
-        identities.append(("source_path", str(Path(source_path).resolve(strict=False))))
+        identities.append(("source_path", snapshot_path_text(source_path)))
 
     if identities:
         return tuple(identities)

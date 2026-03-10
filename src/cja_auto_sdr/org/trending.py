@@ -139,6 +139,23 @@ def _trim_snapshot_window(
 # ---------------------------------------------------------------------------
 
 
+def _data_view_row_has_error(data_view: Any) -> bool:
+    """Return True when a serialized data-view row represents a failed fetch."""
+    if not isinstance(data_view, dict):
+        return True
+    return data_view.get("error") not in (None, "")
+
+
+def _successful_data_view_rows(data: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return only successfully analyzed data-view rows from a snapshot payload."""
+    data_views = data.get("data_views", [])
+    if not isinstance(data_views, list):
+        return []
+    return [
+        data_view for data_view in data_views if isinstance(data_view, dict) and not _data_view_row_has_error(data_view)
+    ]
+
+
 def _extract_snapshot_from_json(
     data: dict[str, Any],
     *,
@@ -160,11 +177,14 @@ def _extract_snapshot_from_json(
     snapshot_meta = data.get("_snapshot_meta", {})
     if not isinstance(snapshot_meta, dict):
         snapshot_meta = {}
+    successful_data_views = _successful_data_view_rows(data)
 
     # Data view count
-    dv_count = summary.get("data_views_total", summary.get("total_data_views", 0))
-    if not dv_count:
-        dv_count = len(data.get("data_views", []))
+    dv_count = summary.get("data_views_analyzed")
+    if dv_count in (None, 0):
+        dv_count = summary.get("data_views_total", summary.get("total_data_views"))
+    if dv_count in (None, 0):
+        dv_count = len(successful_data_views) if successful_data_views else len(data.get("data_views", []))
 
     # Component count
     comp_count = summary.get("total_unique_components", 0)
@@ -206,7 +226,7 @@ def _extract_snapshot_from_json(
 
     dv_core_component_counts: dict[str, int] = {}
 
-    for dv in data.get("data_views", []):
+    for dv in successful_data_views:
         dv_id = dv.get("data_view_id") or dv.get("id", "")
         if not dv_id:
             continue
@@ -216,6 +236,7 @@ def _extract_snapshot_from_json(
         dv_component_counts[dv_id] = metrics + dims
         dv_names[dv_id] = dv.get("data_view_name") or dv.get("name") or dv_id
         dv_core_component_counts[dv_id] = 0
+        dv_max_similarity[dv_id] = 0.0
 
     component_index = data.get("component_index", {})
     if isinstance(component_index, dict) and core_ids:
@@ -238,9 +259,8 @@ def _extract_snapshot_from_json(
         dv1 = pair.get("dv1_id") or pair.get("data_view_1", {}).get("id", "")
         dv2 = pair.get("dv2_id") or pair.get("data_view_2", {}).get("id", "")
         sim = pair.get("jaccard_similarity", 0.0)
-        if dv1:
+        if dv1 in dv_ids and dv2 in dv_ids:
             dv_max_similarity[dv1] = max(dv_max_similarity.get(dv1, 0.0), sim)
-        if dv2:
             dv_max_similarity[dv2] = max(dv_max_similarity.get(dv2, 0.0), sim)
 
     return TrendingSnapshot(

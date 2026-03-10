@@ -120,6 +120,28 @@ class TestExtractSnapshotFromJson:
         snap = _extract_snapshot_from_json(data)
         assert snap.high_sim_pair_count == 2
 
+    def test_failed_data_views_are_excluded_from_drift_inputs(self):
+        data = _make_org_report_json(
+            dv_count=2,
+            data_views=[
+                {"id": "dv_ok", "name": "Healthy", "metrics_count": 3, "dimensions_count": 2, "error": None},
+                {"id": "dv_err", "name": "Errored", "metrics_count": 0, "dimensions_count": 0, "error": "timeout"},
+            ],
+            core_metrics=["m1"],
+            component_index={"m1": {"type": "metric", "data_views": ["dv_ok", "dv_err"]}},
+            similarity_pairs=[{"dv1_id": "dv_ok", "dv2_id": "dv_err", "jaccard_similarity": 0.97}],
+        )
+
+        snap = _extract_snapshot_from_json(data)
+
+        assert snap is not None
+        assert snap.data_view_count == 2
+        assert snap.dv_ids == {"dv_ok"}
+        assert snap.dv_component_counts == {"dv_ok": 5}
+        assert snap.dv_names == {"dv_ok": "Healthy"}
+        assert snap.dv_core_ratios == {"dv_ok": pytest.approx(0.2, abs=0.0001)}
+        assert snap.dv_max_similarity == {"dv_ok": 0.0}
+
     def test_per_dv_component_counts(self):
         data = _make_org_report_json(
             data_views=[
@@ -151,6 +173,11 @@ class TestExtractSnapshotFromJson:
 
     def test_dv_max_similarity(self):
         data = _make_org_report_json(
+            data_views=[
+                {"id": "a", "metrics_count": 1, "dimensions_count": 1},
+                {"id": "b", "metrics_count": 1, "dimensions_count": 1},
+                {"id": "c", "metrics_count": 1, "dimensions_count": 1},
+            ],
             similarity_pairs=[
                 {"dv1_id": "a", "dv2_id": "b", "jaccard_similarity": 0.8},
                 {"dv1_id": "a", "dv2_id": "c", "jaccard_similarity": 0.9},

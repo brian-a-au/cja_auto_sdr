@@ -13,7 +13,6 @@ import hashlib
 import json
 import logging
 import os
-import re
 import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -21,7 +20,14 @@ from typing import Any
 
 from cja_auto_sdr.core.locks.manager import LockManager
 from cja_auto_sdr.org.models import DataViewSummary
-from cja_auto_sdr.org.snapshot_utils import newest_first_snapshot_sort_fields, snapshot_epoch
+from cja_auto_sdr.org.snapshot_utils import (
+    newest_first_snapshot_sort_fields,
+    org_report_snapshot_dir_candidates,
+    org_report_snapshot_dir_key,
+    snapshot_epoch,
+    snapshot_path_text,
+    snapshot_slug,
+)
 
 DEFAULT_ORG_REPORT_SNAPSHOT_KEEP_LAST = 25
 
@@ -176,13 +182,21 @@ class OrgReportCache:
     @staticmethod
     def _sanitize_org_id(org_id: str | None) -> str:
         """Return a filesystem-safe org identifier."""
-        if not org_id:
-            return "unknown"
-        return re.sub(r"[^a-zA-Z0-9_-]", "_", str(org_id))
+        return snapshot_slug(org_id)
 
     def get_org_report_snapshot_dir(self, org_id: str | None = None) -> Path:
         """Return the persistent snapshot directory for org-report trending history."""
-        return self.get_org_report_snapshot_root_dir() / self._sanitize_org_id(org_id)
+        return self.get_org_report_snapshot_root_dir() / org_report_snapshot_dir_key(org_id)
+
+    def _iter_org_report_snapshot_dirs(self, org_id: str | None = None) -> list[Path]:
+        """Return snapshot directories to scan, including legacy layouts for one org."""
+        snapshot_root = self.get_org_report_snapshot_root_dir()
+        if org_id is not None:
+            return [snapshot_root / dir_key for dir_key in org_report_snapshot_dir_candidates(org_id)]
+
+        if not snapshot_root.exists():
+            return []
+        return sorted(path for path in snapshot_root.iterdir() if path.is_dir())
 
     def get_org_report_snapshot_root_dir(self) -> Path:
         """Return the root directory containing per-org snapshot history."""
@@ -213,7 +227,7 @@ class OrgReportCache:
         snapshot_dir.mkdir(parents=True, exist_ok=True)
 
         timestamp = str(report_data.get("generated_at") or datetime.now(UTC).isoformat())
-        timestamp_slug = re.sub(r"[^0-9A-Za-z_-]", "_", timestamp)
+        timestamp_slug = snapshot_slug(timestamp, fallback="snapshot")
         snapshot_id = uuid.uuid4().hex
         payload = dict(report_data)
         payload["_snapshot_meta"] = {
@@ -250,7 +264,7 @@ class OrgReportCache:
         cutoff: datetime | None,
     ) -> bool:
         """Return True when a snapshot satisfies at least one retention rule."""
-        filepath = str(snapshot.get("filepath") or "")
+        filepath = snapshot_path_text(snapshot.get("filepath"))
         if filepath and filepath in retained_paths:
             return True
         if cutoff is None:
@@ -306,7 +320,7 @@ class OrgReportCache:
             "org_id": str(payload.get("org_id") or "unknown"),
             "generated_at": str(generated_at or ""),
             "generated_at_epoch": snapshot_epoch(generated_at),
-            "filepath": str(path),
+            "filepath": snapshot_path_text(path),
             "filename": path.name,
             "data_views_total": summary.get("data_views_total", len(data_views)),
             "total_unique_components": summary.get("total_unique_components", 0),
@@ -342,13 +356,7 @@ class OrgReportCache:
 
     def list_org_report_snapshots(self, org_id: str | None = None) -> list[dict[str, Any]]:
         """List persisted org-report snapshots, optionally filtered to one org."""
-        snapshot_dirs: list[Path] = []
-        if org_id:
-            snapshot_dirs = [self.get_org_report_snapshot_dir(org_id)]
-        else:
-            snapshot_root = self.get_org_report_snapshot_root_dir()
-            if snapshot_root.exists():
-                snapshot_dirs = sorted(path for path in snapshot_root.iterdir() if path.is_dir())
+        snapshot_dirs = self._iter_org_report_snapshot_dirs(org_id=org_id)
 
         snapshots: list[dict[str, Any]] = []
         for snapshot_dir in snapshot_dirs:
@@ -357,6 +365,8 @@ class OrgReportCache:
             for snapshot_file in sorted(snapshot_dir.glob("*.json")):
                 metadata = self._load_org_report_snapshot_metadata(snapshot_file)
                 if metadata is not None:
+                    if org_id is not None and str(metadata.get("org_id") or "unknown") != str(org_id):
+                        continue
                     snapshots.append(metadata)
 
         return self._sort_snapshot_metadata(snapshots)
@@ -374,12 +384,16 @@ class OrgReportCache:
         org_id: str | None = None,
         keep_last: int = 0,
         keep_since_days: int | None = None,
+        preserved_snapshot_paths: list[str | Path] | tuple[str | Path, ...] = (),
     ) -> list[str]:
         """Delete persisted org-report snapshots outside the requested retention window."""
         if keep_last <= 0 and keep_since_days is None:
             return []
 
         snapshots = self.list_org_report_snapshots(org_id=org_id)
+        preserved_paths = {
+            normalized for normalized in (snapshot_path_text(path) for path in preserved_snapshot_paths) if normalized
+        }
         grouped: dict[str, list[dict[str, Any]]] = {}
         for snapshot in snapshots:
             grouped.setdefault(str(snapshot.get("org_id") or "unknown"), []).append(snapshot)
@@ -395,13 +409,14 @@ class OrgReportCache:
             retained_paths: set[str] = set()
             if keep_last > 0:
                 retained_paths = {
-                    str(snapshot.get("filepath"))
+                    snapshot_path_text(snapshot.get("filepath"))
                     for snapshot in sorted_snapshots[:keep_last]
                     if snapshot.get("filepath")
                 }
+            retained_paths.update(preserved_paths)
 
             for snapshot in sorted_snapshots:
-                filepath = str(snapshot.get("filepath") or "")
+                filepath = snapshot_path_text(snapshot.get("filepath"))
                 if not filepath:
                     continue
                 if not self._should_retain_snapshot(snapshot, retained_paths=retained_paths, cutoff=cutoff):

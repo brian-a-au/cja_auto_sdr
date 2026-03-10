@@ -8239,11 +8239,10 @@ def run_org_report(
                 if org_report_snapshot_history_eligible(current_json):
                     # Persist the current run so console/default workflows accumulate history.
                     current_snapshot = _extract_snapshot_from_json(current_json)
+                    saved_snapshot_path = None
                     if current_snapshot is not None:
-                        snapshot_cache.save_org_report_snapshot(current_json, org_id=result.org_id)
-                        snapshot_cache.prune_org_report_snapshots(
-                            org_id=result.org_id,
-                            keep_last=max(DEFAULT_ORG_REPORT_SNAPSHOT_KEEP_LAST, trending_window),
+                        saved_snapshot_path = snapshot_cache.save_org_report_snapshot(
+                            current_json, org_id=result.org_id
                         )
 
                     trending = build_trending(
@@ -8253,6 +8252,15 @@ def run_org_report(
                         current_snapshot=current_snapshot,
                         org_id=result.org_id,
                     )
+                    if saved_snapshot_path is not None:
+                        preserved_snapshot_paths: list[str | Path] = [saved_snapshot_path]
+                        if org_config.compare_org_report:
+                            preserved_snapshot_paths.append(org_config.compare_org_report)
+                        snapshot_cache.prune_org_report_snapshots(
+                            org_id=result.org_id,
+                            keep_last=max(DEFAULT_ORG_REPORT_SNAPSHOT_KEEP_LAST, trending_window),
+                            preserved_snapshot_paths=preserved_snapshot_paths,
+                        )
                     if trending is None and not quiet:
                         _status_print(
                             ConsoleColors.warning(

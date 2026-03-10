@@ -499,10 +499,69 @@ def test_run_org_report_trending_window_prunes_snapshot_history(tmp_path: Path, 
 
     assert ok is True
     assert exceeded is False
-    mock_prune.assert_called_once_with(
-        org_id="test_org@AdobeOrg",
-        keep_last=max(DEFAULT_ORG_REPORT_SNAPSHOT_KEEP_LAST, 3),
-    )
+    mock_prune.assert_called_once()
+    assert mock_prune.call_args.kwargs["org_id"] == "test_org@AdobeOrg"
+    assert mock_prune.call_args.kwargs["keep_last"] == max(DEFAULT_ORG_REPORT_SNAPSHOT_KEEP_LAST, 3)
+    assert len(mock_prune.call_args.kwargs["preserved_snapshot_paths"]) == 1
+
+
+def test_run_org_report_trending_window_preserves_explicit_baseline_before_prune(
+    tmp_path: Path, rich_org_report_result
+):
+    current = deepcopy(rich_org_report_result)
+    current.timestamp = "2026-03-01T00:00:00Z"
+    current.org_id = "test_org@AdobeOrg"
+    current.is_sampled = False
+
+    snapshot_cache_root = tmp_path / "cache"
+    cache = OrgReportCache(cache_dir=snapshot_cache_root)
+    explicit_baseline = None
+    for day in range(1, DEFAULT_ORG_REPORT_SNAPSHOT_KEEP_LAST + 6):
+        baseline_result = deepcopy(rich_org_report_result)
+        baseline_result.timestamp = f"2026-01-{day:02d}T00:00:00Z"
+        baseline_result.org_id = "test_org@AdobeOrg"
+        baseline_result.is_sampled = False
+        snapshot_path = cache.save_org_report_snapshot(
+            build_org_report_json_data(baseline_result), org_id=baseline_result.org_id
+        )
+        if day == 1:
+            explicit_baseline = snapshot_path
+
+    assert explicit_baseline is not None
+
+    def _cache_factory(*args, **kwargs):
+        return OrgReportCache(cache_dir=snapshot_cache_root, logger=kwargs.get("logger"))
+
+    with (
+        patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "mock", {"org_id": "test_org@AdobeOrg"})),
+        patch("cja_auto_sdr.generator.cjapy") as mock_cjapy,
+        patch("cja_auto_sdr.generator.OrgReportCache", side_effect=_cache_factory),
+        patch("cja_auto_sdr.generator.OrgComponentAnalyzer") as mock_analyzer_cls,
+        patch("cja_auto_sdr.generator.write_org_report_console") as mock_console,
+        patch("cja_auto_sdr.generator.build_org_step_summary", return_value="summary"),
+        patch("cja_auto_sdr.generator.append_github_step_summary"),
+    ):
+        mock_cjapy.CJA.return_value = Mock()
+        analyzer = Mock()
+        analyzer.run_analysis.return_value = current
+        mock_analyzer_cls.return_value = analyzer
+
+        ok, exceeded = generator.run_org_report(
+            config_file="config.json",
+            output_format="console",
+            output_path=None,
+            output_dir=str(tmp_path),
+            org_config=OrgReportConfig(compare_org_report=str(explicit_baseline)),
+            quiet=False,
+            trending_window=3,
+        )
+
+    assert ok is True
+    assert exceeded is False
+    trending = mock_console.call_args.kwargs.get("trending")
+    assert trending is not None
+    assert trending.snapshots[0].source_path == str(explicit_baseline.resolve(strict=False))
+    assert explicit_baseline.exists()
 
 
 def test_run_org_report_trending_window_renders_across_file_formats_with_persistent_cache(

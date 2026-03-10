@@ -146,10 +146,33 @@ def test_get_stats_reports_file_size(tmp_path: Path):
     assert stats_after["cache_file"].endswith("org_report_cache.json")
 
 
-def test_get_org_report_snapshot_dir_sanitizes_org_id(tmp_path: Path):
+def test_get_org_report_snapshot_dir_uses_collision_resistant_org_key(tmp_path: Path):
     cache = OrgReportCache(cache_dir=tmp_path)
     snapshot_dir = cache.get_org_report_snapshot_dir("org@test.example")
-    assert snapshot_dir == tmp_path / "org_report_snapshots" / "org_test_example"
+    assert snapshot_dir.parent == tmp_path / "org_report_snapshots"
+    assert snapshot_dir.name.startswith("org_test_example__")
+
+
+def test_org_report_snapshot_dirs_do_not_collide_for_distinct_org_ids(tmp_path: Path):
+    cache = OrgReportCache(cache_dir=tmp_path)
+
+    report_a = {
+        "generated_at": "2026-03-01T00:00:00Z",
+        "org_id": "a.b@AdobeOrg",
+        "summary": {"data_views_total": 1, "total_unique_components": 1},
+    }
+    report_b = {
+        "generated_at": "2026-03-01T00:00:00Z",
+        "org_id": "a_b@AdobeOrg",
+        "summary": {"data_views_total": 1, "total_unique_components": 1},
+    }
+
+    path_a = cache.save_org_report_snapshot(report_a)
+    path_b = cache.save_org_report_snapshot(report_b)
+
+    assert path_a.parent != path_b.parent
+    assert [snapshot["org_id"] for snapshot in cache.list_org_report_snapshots("a.b@AdobeOrg")] == ["a.b@AdobeOrg"]
+    assert [snapshot["org_id"] for snapshot in cache.list_org_report_snapshots("a_b@AdobeOrg")] == ["a_b@AdobeOrg"]
 
 
 def test_save_org_report_snapshot_writes_json_file(tmp_path: Path):
@@ -358,6 +381,41 @@ def test_prune_org_report_snapshots_keeps_entries_matching_either_retention_rule
 
     assert [Path(path).name for path in deleted] == ["old.json"]
     assert [Path(snapshot["filepath"]).name for snapshot in remaining] == ["newest.json", "recent.json"]
+
+
+def test_prune_org_report_snapshots_preserves_explicit_paths(tmp_path: Path):
+    cache = OrgReportCache(cache_dir=tmp_path)
+    retained = cache.save_org_report_snapshot(
+        {
+            "generated_at": "2026-01-01T00:00:00Z",
+            "org_id": "org@test.example",
+            "summary": {"data_views_total": 1, "total_unique_components": 1},
+        }
+    )
+    middle = cache.save_org_report_snapshot(
+        {
+            "generated_at": "2026-02-01T00:00:00Z",
+            "org_id": "org@test.example",
+            "summary": {"data_views_total": 1, "total_unique_components": 1},
+        }
+    )
+    newest = cache.save_org_report_snapshot(
+        {
+            "generated_at": "2026-03-01T00:00:00Z",
+            "org_id": "org@test.example",
+            "summary": {"data_views_total": 1, "total_unique_components": 1},
+        }
+    )
+
+    deleted = cache.prune_org_report_snapshots(
+        org_id="org@test.example",
+        keep_last=1,
+        preserved_snapshot_paths=[retained],
+    )
+    remaining = cache.list_org_report_snapshots("org@test.example")
+
+    assert [Path(path).name for path in deleted] == [middle.name]
+    assert [Path(snapshot["filepath"]).name for snapshot in remaining] == [newest.name, retained.name]
 
 
 def test_lock_property_and_health_delegate_to_manager(tmp_path: Path):
