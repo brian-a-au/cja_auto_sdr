@@ -51,3 +51,6 @@ CLAUDE.md
 # Git worktrees
 .worktrees/
 plan.md
+
+# Superpowers plans/specs (local only)
+docs/superpowers/

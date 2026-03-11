@@ -19,6 +19,7 @@ correct patch targets are the sub-module paths, e.g.
 from __future__ import annotations
 
 import logging
+import typing
 from unittest.mock import MagicMock, patch
 
 from cja_auto_sdr.generator import _build_org_report_trending_window
@@ -106,7 +107,7 @@ def _call(result, cache, *, quiet=False, explicit_history_file=None, status_fn=N
     )
 
 
-def _collector(warnings: list) -> None:
+def _collector(warnings: list) -> typing.Callable[[str], None]:
     """Return a status_print callable that appends messages to warnings."""
 
     def _append(msg):
@@ -136,8 +137,8 @@ class TestSnapshotPersistenceFailure:
         ):
             _call(result, cache, quiet=False, status_fn=_collector(warnings))
 
-        assert any("persist" in w.lower() or "snapshot" in w.lower() for w in warnings), (
-            f"Expected a persistence warning but got: {warnings}"
+        assert any("persist" in w.lower() for w in warnings), (
+            f"Expected a persistence-failure warning but got: {warnings}"
         )
 
     def test_returns_none_gracefully_on_persistence_failure(self):
