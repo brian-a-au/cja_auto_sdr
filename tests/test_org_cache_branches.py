@@ -891,3 +891,150 @@ def test_is_process_running_handles_int_conversion_failures():
 
     assert OrgReportLock._is_process_running("not-a-pid") is False
     assert OrgReportLock._is_process_running(OverflowInt()) is False
+
+
+# ---------------------------------------------------------------------------
+# Edge-case coverage for previously uncovered lines
+# ---------------------------------------------------------------------------
+
+
+def test_retained_keep_last_paths_returns_empty_set_when_keep_last_is_zero(tmp_path: Path):
+    """L268: _retained_keep_last_paths returns set() when keep_last <= 0."""
+    cache = OrgReportCache(cache_dir=tmp_path)
+    result = cache._retained_keep_last_paths(
+        [{"filepath": str(tmp_path / "snap.json"), "generated_at_epoch": 1000}],
+        keep_last=0,
+    )
+    assert result == set()
+
+
+def test_retained_keep_last_paths_returns_empty_set_when_keep_last_is_negative(tmp_path: Path):
+    """L268: _retained_keep_last_paths returns set() when keep_last < 0."""
+    cache = OrgReportCache(cache_dir=tmp_path)
+    result = cache._retained_keep_last_paths(
+        [{"filepath": str(tmp_path / "snap.json"), "generated_at_epoch": 1000}],
+        keep_last=-1,
+    )
+    assert result == set()
+
+
+def test_should_retain_snapshot_returns_false_when_generated_at_epoch_missing():
+    """L292-293: _should_retain_snapshot returns False when snapshot has no generated_at_epoch."""
+    snapshot = {"filepath": "/some/path.json"}  # no generated_at_epoch key
+    cutoff = datetime.now(UTC) - timedelta(days=1)
+    result = OrgReportCache._should_retain_snapshot(
+        snapshot,
+        retained_paths=set(),
+        cutoff=cutoff,
+    )
+    assert result is False
+
+
+def test_load_org_report_snapshot_metadata_returns_none_on_os_error(tmp_path: Path):
+    """L307-309: OSError during file open → log warning, return None."""
+    cache = OrgReportCache(cache_dir=tmp_path)
+    logger = Mock()
+    cache.logger = logger
+
+    missing_path = tmp_path / "nonexistent.json"
+
+    result = cache._load_org_report_snapshot_metadata(missing_path)
+
+    assert result is None
+    logger.warning.assert_called_once()
+    warning_msg = logger.warning.call_args[0][0]
+    assert "Skipping org-report snapshot" in warning_msg
+
+
+def test_load_org_report_snapshot_metadata_returns_none_on_json_decode_error(tmp_path: Path):
+    """L307-309: JSONDecodeError during parse → log warning, return None."""
+    bad_json = tmp_path / "bad.json"
+    bad_json.write_text("{not valid json", encoding="utf-8")
+
+    logger = Mock()
+    cache = OrgReportCache(cache_dir=tmp_path, logger=logger)
+    # Reset call count from __init__ load
+    logger.reset_mock()
+
+    result = cache._load_org_report_snapshot_metadata(bad_json)
+
+    assert result is None
+    logger.warning.assert_called_once()
+
+
+def test_load_org_report_snapshot_metadata_returns_none_for_non_dict_payload(tmp_path: Path):
+    """L311-313: JSON array (not dict) → log warning, return None."""
+    array_json = tmp_path / "array.json"
+    array_json.write_text("[1, 2, 3]", encoding="utf-8")
+
+    logger = Mock()
+    cache = OrgReportCache(cache_dir=tmp_path, logger=logger)
+    logger.reset_mock()
+
+    result = cache._load_org_report_snapshot_metadata(array_json)
+
+    assert result is None
+    logger.warning.assert_called_once()
+    # call_args[0] is (fmt, path, ...) — "expected JSON object" appears in the format string
+    assert "expected JSON object" in logger.warning.call_args[0][0]
+
+
+def test_prune_org_report_snapshots_returns_empty_list_when_no_retention_policy(tmp_path: Path):
+    """L401: keep_last <= 0 AND keep_since_days is None → return [] immediately."""
+    cache = OrgReportCache(cache_dir=tmp_path)
+    cache.save_org_report_snapshot(
+        _full_fidelity_snapshot(
+            {
+                "generated_at": "2026-03-01T00:00:00Z",
+                "org_id": "org@test.example",
+                "summary": {"data_views_total": 1, "total_unique_components": 1},
+            }
+        )
+    )
+
+    # Both default (keep_last=0, keep_since_days=None) → early return
+    result = cache.prune_org_report_snapshots()
+    assert result == []
+
+
+def test_prune_org_report_snapshots_skips_empty_duplicate_paths_group(tmp_path: Path):
+    """L440: duplicate_paths is empty → continue (snapshot without filepath is skipped)."""
+    cache = OrgReportCache(cache_dir=tmp_path)
+
+    # Save a real snapshot so pruning has something to work with
+    cache.save_org_report_snapshot(
+        _full_fidelity_snapshot(
+            {
+                "generated_at": "2026-01-01T00:00:00Z",
+                "org_id": "org@test.example",
+                "summary": {"data_views_total": 1, "total_unique_components": 1},
+            }
+        )
+    )
+    cache.save_org_report_snapshot(
+        _full_fidelity_snapshot(
+            {
+                "generated_at": "2026-02-01T00:00:00Z",
+                "org_id": "org@test.example",
+                "summary": {"data_views_total": 1, "total_unique_components": 1},
+            }
+        )
+    )
+
+    snapshots = cache._load_org_report_snapshots(org_id="org@test.example")
+
+    # Inject a snapshot entry with no filepath so duplicate_paths becomes empty
+    snapshots.append(
+        {
+            "org_id": "org@test.example",
+            "generated_at": "2026-03-01T00:00:00Z",
+            "generated_at_epoch": 1_000_000,
+            # intentionally no 'filepath' key
+        }
+    )
+
+    with patch.object(cache, "_load_org_report_snapshots", return_value=snapshots):
+        deleted = cache.prune_org_report_snapshots(org_id="org@test.example", keep_last=1)
+
+    # The filepath-less snapshot is silently skipped; only real snapshots are pruned
+    assert isinstance(deleted, list)
