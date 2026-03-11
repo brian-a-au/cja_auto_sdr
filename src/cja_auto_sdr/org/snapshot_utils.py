@@ -141,6 +141,55 @@ def org_report_snapshot_dir_paths(snapshot_root: str | Path, org_id: Any = None)
     return tuple(sorted(path for path in root.iterdir() if path.is_dir()))
 
 
+def is_org_report_snapshot_root_dir(path: str | Path) -> bool:
+    """Return True when a path is the persistent org-report snapshot root."""
+    return Path(path).name == ORG_REPORT_SNAPSHOT_ROOT_DIRNAME
+
+
+def org_report_snapshot_dedupe_key(
+    *,
+    org_id: Any = None,
+    content_hash: Any = None,
+    snapshot_id: Any = None,
+    generated_at: Any = None,
+    source_path: str | Path | None = None,
+) -> tuple[str, ...]:
+    """Return a stable key for de-duplicating equivalent org-report snapshots."""
+    normalized_org_id = str(org_id or "unknown")
+    if content_hash not in (None, ""):
+        return ("content_hash", normalized_org_id, str(content_hash))
+    if snapshot_id not in (None, ""):
+        return ("snapshot_id", normalized_org_id, str(snapshot_id))
+    return ("fallback", normalized_org_id, str(generated_at or ""), snapshot_path_text(source_path))
+
+
+def org_report_snapshot_source_rank(source_path: str | Path | None, org_id: Any = None) -> int:
+    """Return how strongly a snapshot path matches the preferred per-org layout."""
+    normalized_path = snapshot_path_text(source_path)
+    if not normalized_path:
+        return 0
+
+    parent_name = Path(normalized_path).parent.name
+    candidate_names = org_report_snapshot_dir_candidates(org_id)
+    for index, candidate_name in enumerate(candidate_names):
+        if parent_name == candidate_name:
+            return len(candidate_names) - index
+    return 0
+
+
+def org_report_snapshot_preference_key(
+    *,
+    org_id: Any = None,
+    source_path: str | Path | None = None,
+    snapshot_id: Any = None,
+) -> tuple[int, int]:
+    """Return a deterministic preference key for equivalent snapshot copies."""
+    return (
+        org_report_snapshot_source_rank(source_path, org_id),
+        int(snapshot_id not in (None, "")),
+    )
+
+
 def org_report_snapshot_search_dirs(cache_dir: str | Path, org_id: Any = None) -> tuple[Path, ...]:
     """Return directories that may contain org-report snapshots for one discovery request.
 

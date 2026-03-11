@@ -82,6 +82,37 @@ Still open or only partially covered:
   - dry-run orchestration (`run_dry_run()`)
   - compatibility wrappers still living in `generator.py`
 
+## Endgame for the open PR
+
+Current position:
+
+- Local CI-equivalent validation is green on the latest pushed commit (`7384003`).
+- The org-report trending history review findings have been addressed with centralized snapshot history policy and regression coverage.
+- The main remaining risk is widening scope again before merge, not an identified defect in the current trending patch set.
+
+What to do on this PR before merge:
+
+- Keep scope frozen to merge-hardening work only. Do not continue broad `generator.py` decomposition here unless a real regression or CI failure requires it.
+- Add a small operator-facing note in docs or release notes that early v3.4.0 org-report trending caches may need manual pruning if they were generated before the snapshot history hardening landed.
+- Add the last defensive tests around snapshot history compatibility:
+  - `_snapshot_meta.history_eligible` / `history_exclusion_reason` override precedence
+  - string-typed legacy boolean/fidelity values in serialized snapshots
+  - round-trip persistence/list/inspect coverage for `history_eligible` and `history_exclusion_reason`
+  - one compatibility fixture for older persisted snapshot payloads without the newer fidelity fields
+- Let GitHub CI on the open PR be the final gate and respond only to concrete failures in lint, full tests/coverage, smoke tests, build/install, or test-count/version-sync workflows.
+
+What not to do on this PR:
+
+- Do not resume large structural extraction work in `generator.py`, `pipeline/`, or CLI dispatch just because that decomposition remains incomplete.
+- Do not expand drift scoring semantics or component-level drift explanations in this branch.
+- Do not add automatic migration or cleanup heuristics for already-persisted pre-hardening caches unless a safe discriminator is identified first.
+
+Merge gate for this PR:
+
+- GitHub workflows are green on the latest pushed ref.
+- No new review findings appear against the final patch set.
+- The branch remains limited to trending hardening, compatibility, and merge-readiness changes.
+
 ## Pending / open to do
 
 - [x] Extract config/status/sample-config helpers from `generator.py`:
@@ -377,8 +408,8 @@ Note:
 
 - [x] `uv run ruff check src/ tests/`
 - [x] `uv run ruff format --check src/ tests/`
-- [x] `uv run pytest tests/ --collect-only -q` (5576 collected)
-- [x] `uv run pytest tests/ -x -q` (5575 passed, 1 skipped)
+- [x] `uv run pytest tests/ --collect-only -q` (5648 collected)
+- [x] `uv run pytest tests/ -x -q` (5647 passed, 1 skipped)
 - [x] `uv run pytest --cov=src/cja_auto_sdr --cov-report=term -q` (96% total coverage)
 - [x] Targeted trending contract tests
 - [x] Targeted org-report backwards compatibility tests

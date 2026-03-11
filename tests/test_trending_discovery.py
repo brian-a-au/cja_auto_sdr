@@ -365,6 +365,36 @@ class TestDiscoverSnapshots:
 
         assert [snapshot.timestamp for snapshot in result] == ["2026-01-01T00:00:00Z", "2026-02-01T00:00:00Z"]
 
+    def test_discovers_root_snapshots_once_when_legacy_and_current_copies_exist(self, tmp_path):
+        cache = OrgReportCache(cache_dir=tmp_path)
+        current_dir = cache.get_org_report_snapshot_dir("org@test.example")
+        legacy_dir = cache.get_org_report_snapshot_root_dir() / "org_test_example"
+        current_dir.mkdir(parents=True, exist_ok=True)
+        legacy_dir.mkdir(parents=True, exist_ok=True)
+
+        payload = _make_org_report_json(timestamp="2026-02-01T00:00:00Z", org_id="org@test.example")
+        payload["_snapshot_meta"] = {"snapshot_id": "persisted-123"}
+        _write_report(legacy_dir, "legacy.json", payload)
+        current_path = _write_report(current_dir, "current.json", payload)
+
+        result = discover_snapshots(cache.get_org_report_snapshot_root_dir(), window_size=10)
+
+        assert len(result) == 1
+        assert result[0].source_path == str(current_path)
+
+    def test_rejects_multi_org_snapshot_root_without_org_id(self, tmp_path):
+        cache = OrgReportCache(cache_dir=tmp_path)
+        org_a_dir = cache.get_org_report_snapshot_dir("org_a")
+        org_b_dir = cache.get_org_report_snapshot_dir("org_b")
+        org_a_dir.mkdir(parents=True, exist_ok=True)
+        org_b_dir.mkdir(parents=True, exist_ok=True)
+
+        _write_report(org_a_dir, "a.json", _make_org_report_json(timestamp="2026-01-01T00:00:00Z", org_id="org_a"))
+        _write_report(org_b_dir, "b.json", _make_org_report_json(timestamp="2026-02-01T00:00:00Z", org_id="org_b"))
+
+        with pytest.raises(ValueError, match="pass org_id"):
+            discover_snapshots(cache.get_org_report_snapshot_root_dir(), window_size=10)
+
     def test_discovers_legacy_sibling_snapshots_when_given_current_org_dir(self, tmp_path):
         cache = OrgReportCache(cache_dir=tmp_path)
         current_dir = cache.get_org_report_snapshot_dir("org@test.example")
@@ -850,6 +880,19 @@ class TestBuildTrending:
         result = build_trending(tmp_path, current_snapshot=current, org_id="org_a")
         assert result is not None
         assert [snapshot.org_id for snapshot in result.snapshots] == ["org_a", "org_a"]
+
+    def test_rejects_multi_org_snapshot_root_without_org_id(self, tmp_path):
+        cache = OrgReportCache(cache_dir=tmp_path)
+        org_a_dir = cache.get_org_report_snapshot_dir("org_a")
+        org_b_dir = cache.get_org_report_snapshot_dir("org_b")
+        org_a_dir.mkdir(parents=True, exist_ok=True)
+        org_b_dir.mkdir(parents=True, exist_ok=True)
+
+        _write_report(org_a_dir, "a.json", _make_org_report_json(timestamp="2026-01-01", org_id="org_a"))
+        _write_report(org_b_dir, "b.json", _make_org_report_json(timestamp="2026-02-01", org_id="org_b"))
+
+        with pytest.raises(ValueError, match="pass org_id"):
+            build_trending(cache.get_org_report_snapshot_root_dir())
 
     def test_build_trending_preserves_zero_analyzed_failed_snapshots(self, tmp_path):
         failed = _make_org_report_json(timestamp="2026-01-01", dv_count=5, comp_count=100)

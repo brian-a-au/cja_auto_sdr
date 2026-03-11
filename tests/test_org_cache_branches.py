@@ -217,6 +217,26 @@ def test_list_org_report_snapshots_reads_legacy_dir_and_filters_mismatched_org_m
     assert [Path(snapshot["filepath"]).name for snapshot in snapshots] == ["match.json"]
 
 
+def test_list_org_report_snapshots_deduplicates_migrated_copies_and_prefers_current_dir(tmp_path: Path):
+    cache = OrgReportCache(cache_dir=tmp_path)
+    current_path = cache.save_org_report_snapshot(
+        {
+            "generated_at": "2026-03-01T00:00:00Z",
+            "org_id": "org@test.example",
+            "summary": {"data_views_total": 1, "total_unique_components": 1},
+        }
+    )
+    legacy_dir = cache.get_org_report_snapshot_root_dir() / "org_test_example"
+    legacy_dir.mkdir(parents=True, exist_ok=True)
+    legacy_copy = legacy_dir / current_path.name
+    legacy_copy.write_text(current_path.read_text(encoding="utf-8"), encoding="utf-8")
+
+    snapshots = cache.list_org_report_snapshots()
+
+    assert len(snapshots) == 1
+    assert snapshots[0]["filepath"] == str(current_path.resolve(strict=False))
+
+
 def test_save_org_report_snapshot_writes_json_file(tmp_path: Path):
     cache = OrgReportCache(cache_dir=tmp_path)
     report = {
@@ -567,6 +587,39 @@ def test_prune_org_report_snapshots_keeps_latest_per_org(tmp_path: Path):
     assert len(deleted) == 1
     assert len(remaining) == 2
     assert [snapshot["generated_at"] for snapshot in remaining] == ["2026-03-01T00:00:00Z", "2026-02-01T00:00:00Z"]
+
+
+def test_prune_org_report_snapshots_removes_redundant_legacy_duplicates_and_keeps_preferred_copy(tmp_path: Path):
+    cache = OrgReportCache(cache_dir=tmp_path)
+    older_path = cache.save_org_report_snapshot(
+        {
+            "generated_at": "2026-01-01T00:00:00Z",
+            "org_id": "org@test.example",
+            "summary": {"data_views_total": 1, "total_unique_components": 1},
+        }
+    )
+    current_path = cache.save_org_report_snapshot(
+        {
+            "generated_at": "2026-02-01T00:00:00Z",
+            "org_id": "org@test.example",
+            "summary": {"data_views_total": 1, "total_unique_components": 1},
+        }
+    )
+    legacy_dir = cache.get_org_report_snapshot_root_dir() / "org_test_example"
+    legacy_dir.mkdir(parents=True, exist_ok=True)
+    legacy_copy = legacy_dir / current_path.name
+    legacy_copy.write_text(current_path.read_text(encoding="utf-8"), encoding="utf-8")
+
+    deleted = cache.prune_org_report_snapshots(org_id="org@test.example", keep_last=1)
+    remaining = cache.list_org_report_snapshots("org@test.example")
+
+    assert set(deleted) == {
+        str(older_path.resolve(strict=False)),
+        str(legacy_copy.resolve(strict=False)),
+    }
+    assert current_path.exists()
+    assert not legacy_copy.exists()
+    assert [snapshot["filepath"] for snapshot in remaining] == [str(current_path.resolve(strict=False))]
 
 
 def test_prune_org_report_snapshots_prefers_dated_entries_over_undated_ones(tmp_path: Path):

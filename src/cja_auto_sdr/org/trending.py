@@ -17,13 +17,16 @@ from cja_auto_sdr.org.snapshot_utils import (
     chronological_snapshot_sort_fields,
     coerce_snapshot_float,
     is_org_report_snapshot_payload,
+    is_org_report_snapshot_root_dir,
     iter_org_report_snapshot_files,
     org_report_data_view_row_has_error,
     org_report_high_similarity_pairs,
     org_report_snapshot_content_hash,
     org_report_snapshot_data_view_stats,
+    org_report_snapshot_dedupe_key,
     org_report_snapshot_history_eligible,
     org_report_snapshot_metadata,
+    org_report_snapshot_preference_key,
     snapshot_identity_tokens,
     snapshot_mapping_dict,
     snapshot_mapping_int,
@@ -45,6 +48,26 @@ def _snapshot_identity_tokens(snapshot: TrendingSnapshot) -> tuple[tuple[str, ..
         content_hash=snapshot.content_hash,
         source_path=snapshot.source_path,
         fallback_parts=(snapshot.org_id or "", snapshot.timestamp),
+    )
+
+
+def _snapshot_identity_key(snapshot: TrendingSnapshot) -> tuple[str, ...]:
+    """Return the logical identity for one trending snapshot."""
+    return org_report_snapshot_dedupe_key(
+        org_id=snapshot.org_id,
+        content_hash=snapshot.content_hash,
+        snapshot_id=snapshot.snapshot_id,
+        generated_at=snapshot.timestamp,
+        source_path=snapshot.source_path,
+    )
+
+
+def _snapshot_preference(snapshot: TrendingSnapshot) -> tuple[int, int]:
+    """Return how strongly one snapshot copy should be preferred."""
+    return org_report_snapshot_preference_key(
+        org_id=snapshot.org_id,
+        source_path=snapshot.source_path,
+        snapshot_id=snapshot.snapshot_id,
     )
 
 
@@ -280,8 +303,8 @@ def discover_snapshots(
         List of TrendingSnapshot ordered oldest-to-newest, trimmed to
         *window_size*.  May be empty if no valid snapshots are found.
     """
-    snapshots: list[TrendingSnapshot] = []
-    seen_snapshot_identities: set[tuple[str, ...]] = set()
+    snapshots_by_identity: dict[tuple[str, ...], TrendingSnapshot] = {}
+    ordered_identities: list[tuple[str, ...]] = []
     pinned_snapshot_identities = _resolve_explicit_snapshot_identities(explicit_file, org_id=org_id)
     explicit_path = Path(explicit_file) if explicit_file is not None else None
 
@@ -298,10 +321,21 @@ def discover_snapshots(
             continue
         if org_id is not None and snapshot.org_id != org_id:
             continue
-        snapshot_identities = set(_snapshot_identity_tokens(snapshot))
-        if snapshot_identities.isdisjoint(seen_snapshot_identities):
-            snapshots.append(snapshot)
-            seen_snapshot_identities.update(snapshot_identities)
+        snapshot_identity = _snapshot_identity_key(snapshot)
+        existing_snapshot = snapshots_by_identity.get(snapshot_identity)
+        if existing_snapshot is None:
+            snapshots_by_identity[snapshot_identity] = snapshot
+            ordered_identities.append(snapshot_identity)
+        elif _snapshot_preference(snapshot) > _snapshot_preference(existing_snapshot):
+            snapshots_by_identity[snapshot_identity] = snapshot
+
+    snapshots = [snapshots_by_identity[snapshot_identity] for snapshot_identity in ordered_identities]
+    if org_id is None and is_org_report_snapshot_root_dir(cache_dir):
+        snapshot_org_ids = {snapshot.org_id or "unknown" for snapshot in snapshots}
+        if len(snapshot_org_ids) > 1:
+            raise ValueError(
+                f"Multiple org snapshot histories found under {Path(cache_dir)}; pass org_id to scope discovery."
+            )
 
     return _trim_snapshot_window(
         snapshots,

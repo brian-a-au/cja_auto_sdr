@@ -25,11 +25,13 @@ from cja_auto_sdr.org.snapshot_utils import (
     iter_org_report_snapshot_files,
     newest_first_snapshot_sort_fields,
     org_report_snapshot_content_hash,
+    org_report_snapshot_dedupe_key,
     org_report_snapshot_dir_key,
     org_report_snapshot_dir_paths,
     org_report_snapshot_history_eligible,
     org_report_snapshot_history_exclusion_reason,
     org_report_snapshot_metadata,
+    org_report_snapshot_preference_key,
     snapshot_path_text,
     snapshot_slug,
 )
@@ -316,17 +318,68 @@ class OrgReportCache:
             return None
         return metadata
 
-    def list_org_report_snapshots(self, org_id: str | None = None) -> list[dict[str, Any]]:
-        """List persisted org-report snapshots, optionally filtered to one org."""
+    @staticmethod
+    def _snapshot_identity_key(snapshot: dict[str, Any]) -> tuple[str, ...]:
+        """Return the logical identity for one persisted snapshot."""
+        return org_report_snapshot_dedupe_key(
+            org_id=snapshot.get("org_id"),
+            content_hash=snapshot.get("content_hash"),
+            snapshot_id=snapshot.get("snapshot_id"),
+            generated_at=snapshot.get("generated_at"),
+            source_path=snapshot.get("filepath"),
+        )
+
+    @staticmethod
+    def _snapshot_preference_key(snapshot: dict[str, Any]) -> tuple[int, int]:
+        """Return how strongly one physical snapshot copy should be preferred."""
+        return org_report_snapshot_preference_key(
+            org_id=snapshot.get("org_id"),
+            source_path=snapshot.get("filepath"),
+            snapshot_id=snapshot.get("snapshot_id"),
+        )
+
+    @classmethod
+    def _canonical_snapshot_metadata(cls, snapshots: list[dict[str, Any]]) -> dict[str, Any]:
+        """Return the preferred physical copy for one logical snapshot."""
+        preferred_snapshot = snapshots[0]
+        preferred_key = cls._snapshot_preference_key(preferred_snapshot)
+        for snapshot in snapshots[1:]:
+            snapshot_key = cls._snapshot_preference_key(snapshot)
+            if snapshot_key > preferred_key:
+                preferred_snapshot = snapshot
+                preferred_key = snapshot_key
+        return preferred_snapshot
+
+    @classmethod
+    def _group_snapshot_metadata_by_identity(
+        cls,
+        snapshots: list[dict[str, Any]],
+    ) -> dict[tuple[str, ...], list[dict[str, Any]]]:
+        """Group physical snapshot files by logical snapshot identity."""
+        grouped: dict[tuple[str, ...], list[dict[str, Any]]] = {}
+        for snapshot in snapshots:
+            grouped.setdefault(cls._snapshot_identity_key(snapshot), []).append(snapshot)
+        return grouped
+
+    def _load_org_report_snapshots(self, org_id: str | None = None) -> list[dict[str, Any]]:
+        """Load raw org-report snapshot metadata, one entry per physical file."""
         snapshots: list[dict[str, Any]] = []
         for snapshot_file in iter_org_report_snapshot_files(self.get_org_report_snapshot_root_dir(), org_id=org_id):
             metadata = self._load_org_report_snapshot_metadata(snapshot_file)
-            if metadata is not None:
-                if org_id is not None and str(metadata.get("org_id") or "unknown") != str(org_id):
-                    continue
-                snapshots.append(metadata)
+            if metadata is None:
+                continue
+            if org_id is not None and str(metadata.get("org_id") or "unknown") != str(org_id):
+                continue
+            snapshots.append(metadata)
+        return snapshots
 
-        return self._sort_snapshot_metadata(snapshots)
+    def list_org_report_snapshots(self, org_id: str | None = None) -> list[dict[str, Any]]:
+        """List persisted org-report snapshots, optionally filtered to one org."""
+        grouped_snapshots = self._group_snapshot_metadata_by_identity(self._load_org_report_snapshots(org_id=org_id))
+        canonical_snapshots = [
+            self._canonical_snapshot_metadata(group_snapshots) for group_snapshots in grouped_snapshots.values()
+        ]
+        return self._sort_snapshot_metadata(canonical_snapshots)
 
     def inspect_org_report_snapshot(self, snapshot_file: str | Path) -> dict[str, Any]:
         """Return detailed summary metadata for one persisted org-report snapshot."""
@@ -347,32 +400,55 @@ class OrgReportCache:
         if keep_last <= 0 and keep_since_days is None:
             return []
 
-        snapshots = self.list_org_report_snapshots(org_id=org_id)
+        snapshots = self._load_org_report_snapshots(org_id=org_id)
         preserved_paths = {
             normalized for normalized in (snapshot_path_text(path) for path in preserved_snapshot_paths) if normalized
         }
-        grouped: dict[str, list[dict[str, Any]]] = {}
-        for snapshot in snapshots:
-            grouped.setdefault(str(snapshot.get("org_id") or "unknown"), []).append(snapshot)
+        grouped: dict[str, list[tuple[dict[str, Any], list[dict[str, Any]]]]] = {}
+        for duplicate_group in self._group_snapshot_metadata_by_identity(snapshots).values():
+            canonical_snapshot = self._canonical_snapshot_metadata(duplicate_group)
+            grouped.setdefault(str(canonical_snapshot.get("org_id") or "unknown"), []).append(
+                (canonical_snapshot, duplicate_group)
+            )
 
         cutoff: datetime | None = None
         if keep_since_days is not None and keep_since_days >= 0:
             cutoff = datetime.now(UTC) - timedelta(days=keep_since_days)
 
         deleted_paths: list[str] = []
-        for org_snapshots in grouped.values():
-            sorted_snapshots = self._sort_snapshot_metadata(org_snapshots)
+        for org_snapshot_groups in grouped.values():
+            sorted_snapshots = self._sort_snapshot_metadata(
+                [canonical_snapshot for canonical_snapshot, _ in org_snapshot_groups]
+            )
+            duplicate_groups_by_key = {
+                self._snapshot_identity_key(canonical_snapshot): duplicate_group
+                for canonical_snapshot, duplicate_group in org_snapshot_groups
+            }
 
             retained_paths: set[str] = set()
             if keep_last > 0:
                 retained_paths = self._retained_keep_last_paths(sorted_snapshots, keep_last=keep_last)
-            retained_paths.update(preserved_paths)
 
             for snapshot in sorted_snapshots:
-                filepath = snapshot_path_text(snapshot.get("filepath"))
-                if not filepath:
+                duplicate_group = duplicate_groups_by_key.get(self._snapshot_identity_key(snapshot), [])
+                duplicate_paths = {
+                    filepath
+                    for filepath in (snapshot_path_text(item.get("filepath")) for item in duplicate_group)
+                    if filepath
+                }
+                if not duplicate_paths:
                     continue
-                if not self._should_retain_snapshot(snapshot, retained_paths=retained_paths, cutoff=cutoff):
+
+                keep_group = self._should_retain_snapshot(snapshot, retained_paths=retained_paths, cutoff=cutoff)
+                preserved_duplicate_paths = duplicate_paths & preserved_paths
+                keep_group = keep_group or bool(preserved_duplicate_paths)
+
+                kept_paths = set(preserved_duplicate_paths)
+                canonical_path = snapshot_path_text(snapshot.get("filepath"))
+                if keep_group and canonical_path:
+                    kept_paths.add(canonical_path)
+
+                for filepath in sorted(duplicate_paths - kept_paths):
                     with contextlib.suppress(OSError):
                         Path(filepath).unlink()
                     if not Path(filepath).exists():
