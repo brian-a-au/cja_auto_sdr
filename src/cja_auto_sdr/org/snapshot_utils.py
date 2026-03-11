@@ -117,6 +117,14 @@ def org_report_snapshot_dir_candidates(org_id: Any) -> tuple[str, ...]:
     return (preferred, legacy)
 
 
+def sorted_snapshot_strings(values: Iterable[Any], *, limit: int | None = None) -> list[str]:
+    """Return normalized string values in deterministic lexical order."""
+    normalized = sorted(str(value) for value in values if value not in (None, ""))
+    if limit is not None:
+        return normalized[:limit]
+    return normalized
+
+
 def _dedupe_paths(paths: Iterable[Path]) -> tuple[Path, ...]:
     """Return paths de-duplicated by normalized absolute path, preserving order."""
     deduped: list[Path] = []
@@ -394,9 +402,33 @@ def is_org_report_snapshot_payload(data: Any) -> bool:
     )
 
 
+def _canonical_snapshot_sort_key(value: Any) -> str:
+    """Return a stable sort key for order-insensitive snapshot collections."""
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str)
+
+
+def _canonicalize_snapshot_value(value: Any) -> Any:
+    """Recursively normalize snapshot values for deterministic content hashing.
+
+    Org-report snapshot hashing treats collection order as non-semantic so
+    equivalent payloads remain stable across set iteration and differing input
+    ordering from separate CLI processes.
+    """
+    if isinstance(value, Mapping):
+        return {key: _canonicalize_snapshot_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple, set, frozenset)):
+        normalized_items = [_canonicalize_snapshot_value(item) for item in value]
+        return sorted(normalized_items, key=_canonical_snapshot_sort_key)
+    return value
+
+
 def canonical_org_report_snapshot_payload(report_data: Mapping[str, Any]) -> dict[str, Any]:
     """Return the stable payload used for org-report snapshot hashing."""
-    return {key: value for key, value in report_data.items() if key not in _VOLATILE_ORG_REPORT_SNAPSHOT_KEYS}
+    return {
+        key: _canonicalize_snapshot_value(value)
+        for key, value in report_data.items()
+        if key not in _VOLATILE_ORG_REPORT_SNAPSHOT_KEYS
+    }
 
 
 def org_report_snapshot_content_hash(report_data: Mapping[str, Any]) -> str:

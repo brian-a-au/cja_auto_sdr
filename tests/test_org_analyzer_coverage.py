@@ -664,6 +664,20 @@ class TestAuditNamingConventions:
         stale_ids = [s["component_id"] for s in audit["stale_patterns"]]
         assert "temp_data" in stale_ids
 
+    def test_stale_pattern_data_views_are_sorted(self, mock_cja, logger):
+        analyzer = _make_analyzer(mock_cja, logger)
+        index = {
+            "old_metric": _make_component(
+                "old_metric",
+                name="old_metric",
+                data_views={"dv10", "dv2", "dv1"},
+            ),
+        }
+
+        audit = analyzer._audit_naming_conventions(index)
+
+        assert audit["stale_patterns"][0]["data_views"] == ["dv1", "dv10", "dv2"]
+
 
 # ===================================================================
 # 8. _detect_stale_components
@@ -790,6 +804,20 @@ class TestDetectStaleComponents:
         result = analyzer._detect_stale_components(index)
         assert len(result) == 1
         assert len(result[0]["data_views"]) <= 5
+
+    def test_stale_component_data_views_are_sorted_before_capping(self, mock_cja, logger):
+        analyzer = _make_analyzer(mock_cja, logger)
+        index = {
+            "test_metric": _make_component(
+                "test_metric",
+                name="test_metric",
+                data_views={"dv10", "dv2", "dv1", "dv3", "dv4", "dv5"},
+            ),
+        }
+
+        result = analyzer._detect_stale_components(index)
+
+        assert result[0]["data_views"] == ["dv1", "dv10", "dv2", "dv3", "dv4"]
 
 
 # ===================================================================

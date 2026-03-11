@@ -492,6 +492,50 @@ class TestDiscoverSnapshots:
 
         assert len(result) == 1
 
+    def test_explicit_file_deduplicates_when_equivalent_collection_order_differs(self, tmp_path):
+        cached_payload = _make_org_report_json(
+            timestamp="2026-01-01",
+            data_views=[
+                {"id": "dv_b", "name": "B", "error": None},
+                {"id": "dv_a", "name": "A", "error": None},
+            ],
+            component_index={
+                "metric_b": {"type": "metric", "data_views": ["dv_b", "dv_a"]},
+                "metric_a": {"type": "metric", "data_views": ["dv_a"]},
+            },
+        )
+        cached_payload["distribution"]["core"]["metrics"] = ["metric_b", "metric_a"]
+        cached_payload["stale_components"] = [
+            {"component_id": "metric_b", "data_views": ["dv_b", "dv_a"]},
+            {"component_id": "metric_a", "data_views": ["dv_a"]},
+        ]
+        cached_payload["_snapshot_meta"] = {"snapshot_id": "persisted-123"}
+        _write_report(tmp_path, "cached.json", cached_payload)
+
+        explicit_dir = tmp_path / "explicit"
+        explicit_dir.mkdir()
+        explicit_payload = _make_org_report_json(
+            timestamp="2026-01-01",
+            data_views=[
+                {"id": "dv_a", "name": "A", "error": None},
+                {"id": "dv_b", "name": "B", "error": None},
+            ],
+            component_index={
+                "metric_a": {"type": "metric", "data_views": ["dv_a"]},
+                "metric_b": {"type": "metric", "data_views": ["dv_a", "dv_b"]},
+            },
+        )
+        explicit_payload["distribution"]["core"]["metrics"] = ["metric_a", "metric_b"]
+        explicit_payload["stale_components"] = [
+            {"component_id": "metric_a", "data_views": ["dv_a"]},
+            {"component_id": "metric_b", "data_views": ["dv_a", "dv_b"]},
+        ]
+        _write_report(explicit_dir, "baseline.json", explicit_payload)
+
+        result = discover_snapshots(tmp_path, window_size=10, explicit_file=explicit_dir / "baseline.json")
+
+        assert len(result) == 1
+
     def test_explicit_trending_report_deduplicates_against_cached_snapshot(self, tmp_path):
         cached_payload = _make_org_report_json(timestamp="2026-01-01")
         cached_payload["_snapshot_meta"] = {"snapshot_id": "persisted-123"}

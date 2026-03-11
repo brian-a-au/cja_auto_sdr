@@ -1308,6 +1308,23 @@ class TestBuildOrgReportJsonData:
         assert data["owner_summary"] is not None
         assert data["stale_components"] is not None
 
+    def test_json_data_sorts_order_insensitive_snapshot_collections(self):
+        result = _make_org_result()
+        result.distribution.core_metrics = ["core_metric_1", "core_metric_0"]
+        result.distribution.common_dimensions = ["common_d_1", "common_d_0"]
+        result.component_index = {
+            "zeta": _make_component_info("zeta", data_views=["dv_010", "dv_002", "dv_001"]),
+            "alpha": _make_component_info("alpha", data_views=["dv_003", "dv_001"]),
+        }
+
+        data = build_org_report_json_data(result)
+
+        assert data["distribution"]["core"]["metrics"] == ["core_metric_0", "core_metric_1"]
+        assert data["distribution"]["common"]["dimensions"] == ["common_d_0", "common_d_1"]
+        assert list(data["component_index"]) == ["alpha", "zeta"]
+        assert data["component_index"]["alpha"]["data_views"] == ["dv_001", "dv_003"]
+        assert data["component_index"]["zeta"]["data_views"] == ["dv_001", "dv_002", "dv_010"]
+
 
 # ===================================================================
 # _render_distribution_bar

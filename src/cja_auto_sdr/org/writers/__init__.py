@@ -29,6 +29,7 @@ from cja_auto_sdr.org.models import (
     TrendingDelta,
     TrendingSnapshot,
 )
+from cja_auto_sdr.org.snapshot_utils import sorted_snapshot_strings
 
 __all__ = [
     "_flatten_recommendation_for_tabular",
@@ -1154,26 +1155,26 @@ def build_org_report_json_data(
             "core": {
                 "metrics_count": len(result.distribution.core_metrics),
                 "dimensions_count": len(result.distribution.core_dimensions),
-                "metrics": result.distribution.core_metrics,
-                "dimensions": result.distribution.core_dimensions,
+                "metrics": sorted(result.distribution.core_metrics),
+                "dimensions": sorted(result.distribution.core_dimensions),
             },
             "common": {
                 "metrics_count": len(result.distribution.common_metrics),
                 "dimensions_count": len(result.distribution.common_dimensions),
-                "metrics": result.distribution.common_metrics,
-                "dimensions": result.distribution.common_dimensions,
+                "metrics": sorted(result.distribution.common_metrics),
+                "dimensions": sorted(result.distribution.common_dimensions),
             },
             "limited": {
                 "metrics_count": len(result.distribution.limited_metrics),
                 "dimensions_count": len(result.distribution.limited_dimensions),
-                "metrics": result.distribution.limited_metrics,
-                "dimensions": result.distribution.limited_dimensions,
+                "metrics": sorted(result.distribution.limited_metrics),
+                "dimensions": sorted(result.distribution.limited_dimensions),
             },
             "isolated": {
                 "metrics_count": len(result.distribution.isolated_metrics),
                 "dimensions_count": len(result.distribution.isolated_dimensions),
-                "metrics": result.distribution.isolated_metrics,
-                "dimensions": result.distribution.isolated_dimensions,
+                "metrics": sorted(result.distribution.isolated_metrics),
+                "dimensions": sorted(result.distribution.isolated_dimensions),
             },
         },
         "data_views": [
@@ -1205,9 +1206,9 @@ def build_org_report_json_data(
                 "type": info.component_type,
                 "name": info.name,
                 "data_view_count": info.presence_count,
-                "data_views": list(info.data_views),
+                "data_views": sorted_snapshot_strings(info.data_views),
             }
-            for comp_id, info in result.component_index.items()
+            for comp_id, info in sorted(result.component_index.items())
         },
         "similarity_pairs": [
             {

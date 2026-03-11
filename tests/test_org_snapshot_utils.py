@@ -204,3 +204,106 @@ def test_org_report_snapshot_content_hash_ignores_trending_and_snapshot_meta():
     }
 
     assert org_report_snapshot_content_hash(base_payload) == org_report_snapshot_content_hash(enriched_payload)
+
+
+def test_org_report_snapshot_content_hash_is_order_insensitive_for_equivalent_collections():
+    base_payload = {
+        "generated_at": "2026-03-01T00:00:00Z",
+        "org_id": "test_org",
+        "report_type": "org_analysis",
+        "summary": {"data_views_total": 2, "total_unique_components": 3},
+        "distribution": {
+            "core": {
+                "metrics_count": 2,
+                "dimensions_count": 0,
+                "metrics": ["metric_b", "metric_a"],
+                "dimensions": [],
+            },
+        },
+        "data_views": [
+            {"id": "dv_b", "name": "B", "error": None},
+            {"id": "dv_a", "name": "A", "error": None},
+        ],
+        "component_index": {
+            "metric_b": {"type": "metric", "data_views": ["dv_b", "dv_a"]},
+            "metric_a": {"type": "metric", "data_views": ["dv_a"]},
+        },
+        "similarity_pairs": [
+            {
+                "data_view_1": {"id": "dv_b", "name": "B"},
+                "data_view_2": {"id": "dv_a", "name": "A"},
+                "jaccard_similarity": 0.95,
+                "shared_components": 2,
+                "union_size": 3,
+            },
+        ],
+        "naming_audit": {
+            "stale_patterns": [
+                {"component_id": "metric_b", "data_views": ["dv_b", "dv_a"]},
+            ],
+        },
+        "owner_summary": {
+            "by_owner": {
+                "Alice": {
+                    "data_view_ids": ["dv_b", "dv_a"],
+                    "data_view_names": ["B", "A"],
+                },
+            },
+            "owners_sorted_by_dv_count": ["Alice"],
+        },
+        "stale_components": [
+            {"component_id": "metric_b", "data_views": ["dv_b", "dv_a"]},
+            {"component_id": "metric_a", "data_views": ["dv_a"]},
+        ],
+    }
+    reordered_payload = {
+        "generated_at": "2026-03-01T00:00:00Z",
+        "org_id": "test_org",
+        "report_type": "org_analysis",
+        "summary": {"data_views_total": 2, "total_unique_components": 3},
+        "distribution": {
+            "core": {
+                "metrics_count": 2,
+                "dimensions_count": 0,
+                "metrics": ["metric_a", "metric_b"],
+                "dimensions": [],
+            },
+        },
+        "data_views": [
+            {"id": "dv_a", "name": "A", "error": None},
+            {"id": "dv_b", "name": "B", "error": None},
+        ],
+        "component_index": {
+            "metric_a": {"type": "metric", "data_views": ["dv_a"]},
+            "metric_b": {"type": "metric", "data_views": ["dv_a", "dv_b"]},
+        },
+        "similarity_pairs": [
+            {
+                "data_view_1": {"id": "dv_b", "name": "B"},
+                "data_view_2": {"id": "dv_a", "name": "A"},
+                "jaccard_similarity": 0.95,
+                "shared_components": 2,
+                "union_size": 3,
+            },
+        ],
+        "naming_audit": {
+            "stale_patterns": [
+                {"component_id": "metric_b", "data_views": ["dv_a", "dv_b"]},
+            ],
+        },
+        "owner_summary": {
+            "by_owner": {
+                "Alice": {
+                    "data_view_ids": ["dv_a", "dv_b"],
+                    "data_view_names": ["A", "B"],
+                },
+            },
+            "owners_sorted_by_dv_count": ["Alice"],
+        },
+        "stale_components": [
+            {"component_id": "metric_a", "data_views": ["dv_a"]},
+            {"component_id": "metric_b", "data_views": ["dv_a", "dv_b"]},
+        ],
+    }
+
+    assert org_report_snapshot_content_hash(base_payload) == org_report_snapshot_content_hash(reordered_payload)

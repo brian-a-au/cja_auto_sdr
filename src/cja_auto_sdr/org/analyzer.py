@@ -35,6 +35,7 @@ from cja_auto_sdr.org.models import (
     OrgReportResult,
     SimilarityPair,
 )
+from cja_auto_sdr.org.snapshot_utils import sorted_snapshot_strings
 
 if TYPE_CHECKING:
     import cjapy
@@ -1468,7 +1469,7 @@ class OrgComponentAnalyzer:
                         "component_id": comp_id,
                         "name": name,
                         "pattern": "stale_keyword",
-                        "data_views": list(info.data_views)[:3],  # First 3 DVs
+                        "data_views": sorted_snapshot_strings(info.data_views, limit=3),
                     },
                 )
             elif _VERSION_SUFFIX_RE.search(name):
@@ -1477,7 +1478,7 @@ class OrgComponentAnalyzer:
                         "component_id": comp_id,
                         "name": name,
                         "pattern": "version_suffix",
-                        "data_views": list(info.data_views)[:3],
+                        "data_views": sorted_snapshot_strings(info.data_views, limit=3),
                     },
                 )
             elif _DATE_PATTERN_RE.search(name):
@@ -1486,7 +1487,7 @@ class OrgComponentAnalyzer:
                         "component_id": comp_id,
                         "name": name,
                         "pattern": "date_pattern",
-                        "data_views": list(info.data_views)[:3],
+                        "data_views": sorted_snapshot_strings(info.data_views, limit=3),
                     },
                 )
 
@@ -1673,7 +1674,7 @@ class OrgComponentAnalyzer:
                         "type": info.component_type,
                         "pattern": pattern_matched,
                         "presence_count": info.presence_count,
-                        "data_views": list(info.data_views)[:5],  # First 5 DVs
+                        "data_views": sorted_snapshot_strings(info.data_views, limit=5),
                     },
                 )
 
