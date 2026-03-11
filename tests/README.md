@@ -108,7 +108,7 @@ tests/
 └── README.md                        # This file
 ```
 
-**Total: 6,128 comprehensive tests**
+**Total: 6,132 comprehensive tests**
 
 ### Test Count Breakdown
 
@@ -182,7 +182,7 @@ tests/
 | `test_config_and_resolution.py` | 108 | Config status, validation, stats, name resolution |
 | `test_derived_fields_edge_cases.py` | 34 | Derived fields edge cases and coverage |
 | `test_diff_command_coverage.py` | 45 | Diff command edge cases and coverage |
-| `test_generator_interactive_and_console.py` | 35 | Generator interactive and console tests |
+| `test_generator_interactive_and_console.py` | 36 | Generator interactive and console tests |
 | `test_generator_remaining_coverage.py` | 82 | Generator remaining coverage edge cases |
 | `test_interactive_discovery_coverage.py` | 112 | Interactive discovery and helpers coverage |
 | `test_lock_backends.py` | 46 | Lock backends edge cases and coverage |
@@ -190,7 +190,7 @@ tests/
 | `test_main_impl_coverage.py` | 57 | _main_impl coverage edge cases |
 | `test_near_100_coverage.py` | 4 | Near-100% coverage gap tests |
 | `test_org_cache_branches.py` | 48 | Org cache branch coverage |
-| `test_org_writer_coverage.py` | 128 | Org writer edge cases and coverage |
+| `test_org_writer_coverage.py` | 129 | Org writer edge cases and coverage |
 | `test_output_writer_coverage.py` | 36 | Output writer edge cases and coverage |
 | `test_backwards_compat.py` | 34 | Backwards compatibility tests |
 | `test_exception_contracts.py` | 19 | Exception boundary contract tests |
@@ -214,8 +214,8 @@ tests/
 | `test_cli_commands_config_coverage.py` | 20 | Config command edge cases and coverage |
 | `test_cli_execution.py` | 18 | CLI execution edge cases and coverage |
 | `test_diff_git_coverage.py` | 27 | Diff/git subprocess error path coverage |
-| `test_generator_trending_coverage.py` | 17 | Generator trending integration coverage |
-| **Total** | **6,128** | **Collected via pytest --collect-only** |
+| `test_generator_trending_coverage.py` | 19 | Generator trending integration coverage |
+| **Total** | **6,132** | **Collected via pytest --collect-only** |
 
 ## Running Tests
 
@@ -619,7 +619,7 @@ Check for drift (CI-friendly):
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (6,128 tests total)
+- [x] Comprehensive test coverage (6,132 tests total)
 - [x] Org-wide analysis tests (test_org_report.py) - 175 tests (including large org scaling, output path aliases, memory warnings, smart cache invalidation)
 - [x] Org-wide analysis integration tests (test_org_report_integration.py) - 17 tests (end-to-end flows, caching, filtering, governance thresholds)
 - [x] Profile management tests (test_profiles.py) - 77 tests
