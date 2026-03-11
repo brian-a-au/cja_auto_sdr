@@ -827,6 +827,67 @@ def test_run_org_report_trending_window_persists_sampled_history_for_inspection(
     assert snapshots[0]["history_exclusion_reason"] == "sampled"
 
 
+def test_run_org_report_trending_window_preserves_eligible_history_across_ineligible_retention_pressure(
+    tmp_path: Path, rich_org_report_result
+):
+    baseline = deepcopy(rich_org_report_result)
+    baseline.timestamp = "2026-01-01T00:00:00Z"
+    baseline.org_id = "test_org@AdobeOrg"
+    baseline.is_sampled = False
+
+    current = deepcopy(rich_org_report_result)
+    current.timestamp = "2026-04-15T00:00:00Z"
+    current.org_id = "test_org@AdobeOrg"
+    current.is_sampled = False
+    current.parameters.org_stats_only = True
+    current.similarity_pairs = None
+
+    snapshot_cache_root = tmp_path / "cache"
+    snapshot_cache = OrgReportCache(cache_dir=snapshot_cache_root)
+    baseline_path = snapshot_cache.save_org_report_snapshot(build_org_report_json_data(baseline), org_id=baseline.org_id)
+
+    for day in range(1, DEFAULT_ORG_REPORT_SNAPSHOT_KEEP_LAST + 6):
+        sampled = deepcopy(rich_org_report_result)
+        sampled.timestamp = f"2026-03-{day:02d}T00:00:00Z"
+        sampled.org_id = "test_org@AdobeOrg"
+        sampled.is_sampled = True
+        snapshot_cache.save_org_report_snapshot(build_org_report_json_data(sampled), org_id=sampled.org_id)
+
+    def _cache_factory(*args, **kwargs):
+        return OrgReportCache(cache_dir=snapshot_cache_root, logger=kwargs.get("logger"))
+
+    with (
+        patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "mock", {"org_id": "test_org@AdobeOrg"})),
+        patch("cja_auto_sdr.generator.cjapy") as mock_cjapy,
+        patch("cja_auto_sdr.generator.OrgReportCache", side_effect=_cache_factory),
+        patch("cja_auto_sdr.generator.OrgComponentAnalyzer") as mock_analyzer_cls,
+        patch("cja_auto_sdr.generator.write_org_report_console"),
+        patch("cja_auto_sdr.generator.build_org_step_summary", return_value="summary"),
+        patch("cja_auto_sdr.generator.append_github_step_summary"),
+    ):
+        mock_cjapy.CJA.return_value = Mock()
+        analyzer = Mock()
+        analyzer.run_analysis.return_value = current
+        mock_analyzer_cls.return_value = analyzer
+
+        ok, exceeded = generator.run_org_report(
+            config_file="config.json",
+            output_format="console",
+            output_path=None,
+            output_dir=str(tmp_path),
+            org_config=OrgReportConfig(org_stats_only=True),
+            quiet=True,
+            trending_window=2,
+        )
+
+    snapshots = snapshot_cache.list_org_report_snapshots("test_org@AdobeOrg")
+    assert ok is True
+    assert exceeded is False
+    assert Path(baseline_path).exists()
+    assert any(snapshot["generated_at"] == "2026-01-01T00:00:00Z" for snapshot in snapshots)
+    assert len(snapshots) < DEFAULT_ORG_REPORT_SNAPSHOT_KEEP_LAST + 7
+
+
 def test_run_org_report_without_trending_window_leaves_output_unchanged(tmp_path: Path, rich_org_report_result):
     result = deepcopy(rich_org_report_result)
     result.timestamp = "2026-03-01T00:00:00Z"

@@ -8167,6 +8167,46 @@ def _requested_org_report_baseline_path(org_config: OrgReportConfig) -> Path | N
     return Path(org_config.compare_org_report)
 
 
+def _org_report_trending_preserved_snapshot_paths(
+    *,
+    snapshot_cache_dir: Path,
+    org_id: str,
+    trending_window: int,
+    saved_snapshot_path: str | Path,
+    explicit_history_file: str | Path | None,
+    trending: OrgReportTrending | None,
+) -> list[str]:
+    """Return normalized snapshot paths that must survive auto-prune."""
+    from cja_auto_sdr.org.snapshot_utils import snapshot_path_text
+    from cja_auto_sdr.org.trending import discover_snapshots
+
+    eligible_window = (
+        trending.snapshots
+        if trending is not None
+        else discover_snapshots(
+            cache_dir=snapshot_cache_dir,
+            window_size=trending_window,
+            explicit_file=explicit_history_file,
+            org_id=org_id,
+        )
+    )
+
+    preserved_paths: list[str] = []
+    seen_paths: set[str] = set()
+    for raw_path in (
+        saved_snapshot_path,
+        explicit_history_file,
+        *(snapshot.source_path for snapshot in eligible_window),
+    ):
+        normalized_path = snapshot_path_text(raw_path)
+        if not normalized_path or normalized_path in seen_paths:
+            continue
+        seen_paths.add(normalized_path)
+        preserved_paths.append(normalized_path)
+
+    return preserved_paths
+
+
 def _build_org_report_trending_window(
     *,
     result: OrgReportResult,
@@ -8231,9 +8271,14 @@ def _build_org_report_trending_window(
             )
 
     if saved_snapshot_path is not None:
-        preserved_snapshot_paths: list[str | Path] = [saved_snapshot_path]
-        if explicit_history_file is not None:
-            preserved_snapshot_paths.append(explicit_history_file)
+        preserved_snapshot_paths = _org_report_trending_preserved_snapshot_paths(
+            snapshot_cache_dir=snapshot_cache_dir,
+            org_id=result.org_id,
+            trending_window=trending_window,
+            saved_snapshot_path=saved_snapshot_path,
+            explicit_history_file=explicit_history_file,
+            trending=trending,
+        )
         try:
             snapshot_cache.prune_org_report_snapshots(
                 org_id=result.org_id,

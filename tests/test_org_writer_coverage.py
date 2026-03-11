@@ -2140,6 +2140,35 @@ class TestRenderTrendingMarkdownOneSnapshot:
         assert result == ""
 
 
+class TestRenderTrendingMarkdownEscaping:
+    """Trending Markdown should escape DV cells so drift tables remain valid."""
+
+    def test_drift_rows_escape_pipes_and_backticks(self):
+        trending = OrgReportTrending(
+            snapshots=[
+                TrendingSnapshot(
+                    timestamp="2026-03-01T00:00:00Z",
+                    data_view_count=1,
+                    dv_ids={"dv|1"},
+                    dv_names={"dv|1": "Name | Broken `Table`"},
+                ),
+                TrendingSnapshot(
+                    timestamp="2026-03-02T00:00:00Z",
+                    data_view_count=1,
+                    dv_ids={"dv|1"},
+                    dv_names={"dv|1": "Name | Broken `Table`"},
+                ),
+            ],
+            drift_scores={"dv|1": 1.0},
+            window_size=2,
+        )
+
+        result = _render_trending_markdown(trending)
+
+        assert "| dv\\|1 | Name \\| Broken \\`Table\\` | 1.00 |" in result
+        assert "| dv|1 | Name | Broken `Table` | 1.00 |" not in result
+
+
 class TestRenderTrendingHtmlOneSnapshot:
     """Tests for _render_trending_html with <2 snapshots (L443)."""
 

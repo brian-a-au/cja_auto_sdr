@@ -169,11 +169,28 @@ def _render_markdown_trending_table(
         return []
 
     render_value = value_formatter or _stringify_trending_value
-    lines = ["| Metric | " + " | ".join(column_labels) + " |"]
+    lines = ["| Metric | " + " | ".join(_escape_markdown_table_cell(label) for label in column_labels) + " |"]
     lines.append("|--------|" + "|".join("---------:" for _ in column_labels) + "|")
     for label, values in metric_rows:
-        lines.append(f"| {label} | " + " | ".join(render_value(value) for value in values) + " |")
+        lines.append(
+            f"| {_escape_markdown_table_cell(label)} | "
+            + " | ".join(_escape_markdown_table_cell(render_value(value)) for value in values)
+            + " |"
+        )
     return lines
+
+
+def _escape_markdown_table_cell(value: Any) -> str:
+    """Escape Markdown table cell content without changing readable text."""
+    return (
+        str(value)
+        .replace("\\", "\\\\")
+        .replace("|", "\\|")
+        .replace("`", "\\`")
+        .replace("\r\n", "<br>")
+        .replace("\n", "<br>")
+        .replace("\r", "<br>")
+    )
 
 
 def _render_html_trending_table(
@@ -429,8 +446,9 @@ def _render_trending_markdown(trending: OrgReportTrending) -> str:
         lines.append("| Data View ID | Data View Name | Drift Score |")
         lines.append("|--------------|----------------|------------:|")
         for entry in _ranked_drift_entries(trending, limit=10):
-            dv_name = entry["data_view_name"] or ""
-            lines.append(f"| `{entry['data_view_id']}` | {dv_name} | {entry['drift_score']:.2f} |")
+            dv_id = _escape_markdown_table_cell(entry["data_view_id"])
+            dv_name = _escape_markdown_table_cell(entry["data_view_name"] or "")
+            lines.append(f"| {dv_id} | {dv_name} | {entry['drift_score']:.2f} |")
         lines.append("")
 
     return "\n".join(lines)

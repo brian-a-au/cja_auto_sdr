@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import logging
 import typing
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from cja_auto_sdr.generator import _build_org_report_trending_window
@@ -29,6 +30,8 @@ from cja_auto_sdr.org.models import (
     DataViewSummary,
     OrgReportConfig,
     OrgReportResult,
+    OrgReportTrending,
+    TrendingSnapshot,
 )
 
 # ---------------------------------------------------------------------------
@@ -39,6 +42,7 @@ _PATCH_BUILD_JSON = "cja_auto_sdr.org.writers.build_org_report_json_data"
 _PATCH_EXCL_REASON = "cja_auto_sdr.org.snapshot_utils.org_report_snapshot_history_exclusion_reason"
 _PATCH_EXTRACT = "cja_auto_sdr.org.trending._extract_snapshot_from_json"
 _PATCH_BUILD_TRENDING = "cja_auto_sdr.org.trending.build_trending"
+_PATCH_DISCOVER_SNAPSHOTS = "cja_auto_sdr.org.trending.discover_snapshots"
 
 
 # ---------------------------------------------------------------------------
@@ -413,6 +417,60 @@ class TestExplicitHistoryFile:
         assert prune_call is not None
         preserved = prune_call.kwargs.get("preserved_snapshot_paths") or (prune_call.args[0] if prune_call.args else [])
         assert any(str(p) == "/some/history.json" for p in preserved)
+
+
+class TestPrunePreservesEligibleHistoryWindow:
+    """Pruning should preserve the eligible history window that informed the current run."""
+
+    def test_preserves_source_paths_from_returned_trending_window(self):
+        result = _make_result()
+        cache = _make_cache()
+        trending = OrgReportTrending(
+            snapshots=[
+                TrendingSnapshot(timestamp="2026-01-01T00:00:00Z", source_path="/tmp/older.json"),
+                TrendingSnapshot(timestamp="2026-02-01T00:00:00Z", source_path="/tmp/newer.json"),
+            ],
+            window_size=2,
+        )
+
+        with (
+            patch(_PATCH_BUILD_JSON, return_value={}),
+            patch(_PATCH_EXCL_REASON, return_value=None),
+            patch(_PATCH_EXTRACT, return_value=MagicMock()),
+            patch(_PATCH_BUILD_TRENDING, return_value=trending),
+        ):
+            _call(result, cache, quiet=True)
+
+        preserved = cache.prune_org_report_snapshots.call_args.kwargs["preserved_snapshot_paths"]
+        normalized = {str(path) for path in preserved}
+        assert str(Path("/tmp/fake_cache/snap.json").resolve(strict=False)) in normalized
+        assert str(Path("/tmp/older.json").resolve(strict=False)) in normalized
+        assert str(Path("/tmp/newer.json").resolve(strict=False)) in normalized
+
+    def test_preserves_discovered_eligible_snapshots_even_when_trending_is_none(self):
+        result = _make_result()
+        cache = _make_cache()
+        discovered = [TrendingSnapshot(timestamp="2026-02-01T00:00:00Z", source_path="/tmp/eligible.json")]
+
+        with (
+            patch(_PATCH_BUILD_JSON, return_value={}),
+            patch(_PATCH_EXCL_REASON, return_value="sampled"),
+            patch(_PATCH_EXTRACT, return_value=MagicMock()),
+            patch(_PATCH_BUILD_TRENDING, return_value=None),
+            patch(_PATCH_DISCOVER_SNAPSHOTS, return_value=discovered) as mock_discover,
+        ):
+            _call(result, cache, quiet=True)
+
+        mock_discover.assert_called_once_with(
+            cache_dir="/tmp/fake_cache",
+            window_size=5,
+            explicit_file=None,
+            org_id="test_org",
+        )
+        preserved = cache.prune_org_report_snapshots.call_args.kwargs["preserved_snapshot_paths"]
+        normalized = {str(path) for path in preserved}
+        assert str(Path("/tmp/fake_cache/snap.json").resolve(strict=False)) in normalized
+        assert str(Path("/tmp/eligible.json").resolve(strict=False)) in normalized
 
 
 # ---------------------------------------------------------------------------
