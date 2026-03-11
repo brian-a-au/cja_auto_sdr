@@ -243,9 +243,7 @@ class TestResolveInventoryModeConfiguration:
         )
         gen = self._make_gen_for_resolve()
         with patch("cja_auto_sdr.cli.execution._generator_module", return_value=gen):
-            result = resolve_inventory_mode_configuration(
-                args, argv=["dv_123", "--include-derived"]
-            )
+            result = resolve_inventory_mode_configuration(args, argv=["dv_123", "--include-derived"])
         assert result == ["derived"]
 
     def test_include_calculated_only_returns_calculated(self):
@@ -259,9 +257,7 @@ class TestResolveInventoryModeConfiguration:
         )
         gen = self._make_gen_for_resolve()
         with patch("cja_auto_sdr.cli.execution._generator_module", return_value=gen):
-            result = resolve_inventory_mode_configuration(
-                args, argv=["dv_123", "--include-calculated"]
-            )
+            result = resolve_inventory_mode_configuration(args, argv=["dv_123", "--include-calculated"])
         assert result == ["calculated"]
 
     def test_include_segments_only_returns_segments(self):
@@ -275,9 +271,7 @@ class TestResolveInventoryModeConfiguration:
         )
         gen = self._make_gen_for_resolve()
         with patch("cja_auto_sdr.cli.execution._generator_module", return_value=gen):
-            result = resolve_inventory_mode_configuration(
-                args, argv=["dv_123", "--include-segments"]
-            )
+            result = resolve_inventory_mode_configuration(args, argv=["dv_123", "--include-segments"])
         assert result == ["segments"]
 
     def test_all_three_flags_respects_cli_order(self):

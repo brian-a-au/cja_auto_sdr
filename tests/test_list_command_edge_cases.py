@@ -330,9 +330,7 @@ class TestFetchConnectionsDataFramePath:
         cja = MagicMock()
         cja.getConnections.return_value = []  # empty → triggers fallback path
         # Return a DataFrame instead of a list
-        cja.getDataViews.return_value = pd.DataFrame(
-            [{"id": "dv1", "name": "DV1", "parentDataGroupId": "conn_abc"}]
-        )
+        cja.getDataViews.return_value = pd.DataFrame([{"id": "dv1", "name": "DV1", "parentDataGroupId": "conn_abc"}])
 
         fetcher = _fetch_connections(output_format="table")
         result = fetcher(cja, is_machine_readable=False)
@@ -425,13 +423,9 @@ class TestFetchDatasetsEdgeCases:
         cja = MagicMock()
         # getConnections returns a raw dict → _extract_connections_list extracts 'content'
         cja.getConnections.return_value = {
-            "content": [
-                {"id": "conn1", "name": "Connection 1", "dataSets": [{"id": "ds1", "name": "DS1"}]}
-            ]
+            "content": [{"id": "conn1", "name": "Connection 1", "dataSets": [{"id": "ds1", "name": "DS1"}]}]
         }
-        cja.getDataViews.return_value = [
-            {"id": "dv1", "name": "DV1", "parentDataGroupId": "conn1"}
-        ]
+        cja.getDataViews.return_value = [{"id": "dv1", "name": "DV1", "parentDataGroupId": "conn1"}]
 
         fetcher = _fetch_datasets(output_format="table")
         result = fetcher(cja, is_machine_readable=False)
@@ -445,9 +439,7 @@ class TestFetchDatasetsEdgeCases:
             "not-a-dict",  # skipped at L913
             {"id": "conn1", "name": "Connection 1", "dataSets": []},
         ]
-        cja.getDataViews.return_value = [
-            {"id": "dv1", "name": "DV1", "parentDataGroupId": "conn1"}
-        ]
+        cja.getDataViews.return_value = [{"id": "dv1", "name": "DV1", "parentDataGroupId": "conn1"}]
 
         fetcher = _fetch_datasets(output_format="table")
         result = fetcher(cja, is_machine_readable=False)
@@ -459,9 +451,7 @@ class TestFetchDatasetsEdgeCases:
         cja.getConnections.return_value = [
             {"id": "conn1", "name": "Connection 1", "dataSets": "invalid-string"},
         ]
-        cja.getDataViews.return_value = [
-            {"id": "dv1", "name": "DV1", "parentDataGroupId": "conn1"}
-        ]
+        cja.getDataViews.return_value = [{"id": "dv1", "name": "DV1", "parentDataGroupId": "conn1"}]
 
         fetcher = _fetch_datasets(output_format="table")
         result = fetcher(cja, is_machine_readable=False)
@@ -473,9 +463,7 @@ class TestFetchDatasetsEdgeCases:
         """L920-921: getDataViews returns DataFrame → converted to records."""
         cja = MagicMock()
         cja.getConnections.return_value = []
-        cja.getDataViews.return_value = pd.DataFrame(
-            [{"id": "dv1", "name": "DV1", "parentDataGroupId": "conn1"}]
-        )
+        cja.getDataViews.return_value = pd.DataFrame([{"id": "dv1", "name": "DV1", "parentDataGroupId": "conn1"}])
 
         fetcher = _fetch_datasets(output_format="table")
         result = fetcher(cja, is_machine_readable=False)
@@ -511,9 +499,7 @@ class TestFetchDatasetsOutputBranches:
         cja.getConnections.return_value = [
             {"id": "conn1", "name": "Connection 1", "dataSets": []},
         ]
-        cja.getDataViews.return_value = [
-            {"id": "dv1", "name": "DV1", "parentDataGroupId": "conn1"}
-        ]
+        cja.getDataViews.return_value = [{"id": "dv1", "name": "DV1", "parentDataGroupId": "conn1"}]
 
         fetcher = _fetch_datasets(output_format="csv")
         result = fetcher(cja, is_machine_readable=True)
@@ -527,9 +513,7 @@ class TestFetchDatasetsOutputBranches:
         cja.getConnections.return_value = [
             {"id": "conn1", "name": "My Connection", "dataSets": [{"id": "ds1", "name": "DS1"}]},
         ]
-        cja.getDataViews.return_value = [
-            {"id": "dv1", "name": "DV1", "parentDataGroupId": "conn1"}
-        ]
+        cja.getDataViews.return_value = [{"id": "dv1", "name": "DV1", "parentDataGroupId": "conn1"}]
 
         fetcher = _fetch_datasets(output_format="table")
         result = fetcher(cja, is_machine_readable=False)
@@ -540,9 +524,7 @@ class TestFetchDatasetsOutputBranches:
         """L1038: connection without name shows just 'Connection: id'."""
         cja = MagicMock()
         cja.getConnections.return_value = []
-        cja.getDataViews.return_value = [
-            {"id": "dv1", "name": "DV1", "parentDataGroupId": "conn_no_name"}
-        ]
+        cja.getDataViews.return_value = [{"id": "dv1", "name": "DV1", "parentDataGroupId": "conn_no_name"}]
 
         fetcher = _fetch_datasets(output_format="table")
         result = fetcher(cja, is_machine_readable=False)
@@ -558,9 +540,7 @@ class TestFetchDatasetsOutputBranches:
                 "dataSets": [{"id": "ds1", "name": "Dataset 1"}, {"id": "ds2", "name": "Dataset 2"}],
             },
         ]
-        cja.getDataViews.return_value = [
-            {"id": "dv1", "name": "DV1", "parentDataGroupId": "conn1"}
-        ]
+        cja.getDataViews.return_value = [{"id": "dv1", "name": "DV1", "parentDataGroupId": "conn1"}]
 
         fetcher = _fetch_datasets(output_format="table")
         result = fetcher(cja, is_machine_readable=False)
@@ -573,9 +553,7 @@ class TestFetchDatasetsOutputBranches:
         cja = MagicMock()
         # Empty connections → no_conn_details = True for a DV with a parentDataGroupId
         cja.getConnections.return_value = []
-        cja.getDataViews.return_value = [
-            {"id": "dv1", "name": "DV1", "parentDataGroupId": "conn_unknown"}
-        ]
+        cja.getDataViews.return_value = [{"id": "dv1", "name": "DV1", "parentDataGroupId": "conn_unknown"}]
 
         fetcher = _fetch_datasets(output_format="table")
         result = fetcher(cja, is_machine_readable=False)
@@ -589,9 +567,7 @@ class TestFetchDatasetsOutputBranches:
         cja.getConnections.return_value = [
             {"id": "conn1", "name": "Connection 1", "dataSets": []},
         ]
-        cja.getDataViews.return_value = [
-            {"id": "dv1", "name": "DV1", "parentDataGroupId": "conn1"}
-        ]
+        cja.getDataViews.return_value = [{"id": "dv1", "name": "DV1", "parentDataGroupId": "conn1"}]
 
         fetcher = _fetch_datasets(output_format="table")
         result = fetcher(cja, is_machine_readable=False)
@@ -607,9 +583,7 @@ class TestFetchDatasetsOutputBranches:
                 "dataSets": [{"id": "ds1", "name": "Dataset 1"}],
             }
         ]
-        cja.getDataViews.return_value = [
-            {"id": "dv1", "name": "DV1", "parentDataGroupId": "conn1"}
-        ]
+        cja.getDataViews.return_value = [{"id": "dv1", "name": "DV1", "parentDataGroupId": "conn1"}]
 
         fetcher = _fetch_datasets(output_format="csv")
         result = fetcher(cja, is_machine_readable=True)

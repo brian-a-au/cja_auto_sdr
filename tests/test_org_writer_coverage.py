@@ -1954,6 +1954,7 @@ class TestMainImplWorkersValidation:
 # L320, L400, L443, L1088)
 # ===================================================================
 
+
 def _make_trending(num_snapshots: int = 2) -> OrgReportTrending:
     """Build a minimal OrgReportTrending with *num_snapshots* entries."""
     snapshots = [

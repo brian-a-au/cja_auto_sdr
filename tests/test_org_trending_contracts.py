@@ -427,7 +427,9 @@ class TestDiscoverSnapshotsContract:
 class TestComputeDeltasContract:
     """Contract tests for compute_deltas() public API."""
 
-    def _snap(self, ts: str, dv: int = 10, comp: int = 100, core: int = 80, iso: int = 20, sim: int = 2) -> TrendingSnapshot:
+    def _snap(
+        self, ts: str, dv: int = 10, comp: int = 100, core: int = 80, iso: int = 20, sim: int = 2
+    ) -> TrendingSnapshot:
         return TrendingSnapshot(
             timestamp=ts,
             data_view_count=dv,
