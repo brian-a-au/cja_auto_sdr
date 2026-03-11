@@ -9,7 +9,9 @@ from cja_auto_sdr.org.models import OrgReportTrending, TrendingSnapshot
 from cja_auto_sdr.org.trending import (
     _data_view_row_has_error,
     _extract_snapshot_from_json,
+    _normalize_drift_dimension,
     _resolve_explicit_snapshot_identities,
+    _snapshots_equivalent,
     _successful_data_view_rows,
     _trim_snapshot_window,
     build_trending,
@@ -1027,3 +1029,195 @@ def test_trim_snapshot_window_prefers_pinned_entries_when_pins_exceed_window():
     )
 
     assert [snapshot.snapshot_id for snapshot in trimmed] == ["two", "three"]
+
+
+# ---------------------------------------------------------------------------
+# Edge-case tests targeting specific uncovered lines
+# ---------------------------------------------------------------------------
+
+
+# L85 — _snapshots_equivalent: both have snapshot_id, compare them
+def test_snapshots_equivalent_compares_snapshot_ids_when_both_present():
+    left = TrendingSnapshot(timestamp="2026-01-01", org_id="org", snapshot_id="abc")
+    right_same = TrendingSnapshot(timestamp="2026-01-01", org_id="org", snapshot_id="abc")
+    right_different = TrendingSnapshot(timestamp="2026-01-01", org_id="org", snapshot_id="xyz")
+
+    assert _snapshots_equivalent(left, right_same) is True
+    assert _snapshots_equivalent(left, right_different) is False
+
+
+# L88 — _snapshots_equivalent: neither has snapshot_id nor content_hash,
+#        falls back to field-by-field comparison
+def test_snapshots_equivalent_field_by_field_fallback():
+    left = TrendingSnapshot(
+        timestamp="2026-01-01",
+        org_id="org",
+        data_view_count=5,
+        component_count=100,
+        core_count=20,
+        isolated_count=10,
+        high_sim_pair_count=3,
+        dv_component_counts={"dv1": 50},
+        dv_core_ratios={"dv1": 0.5},
+        dv_max_similarity={"dv1": 0.7},
+        dv_ids={"dv1"},
+        dv_names={"dv1": "Data View 1"},
+    )
+    right_same = TrendingSnapshot(
+        timestamp="2026-01-01",
+        org_id="org",
+        data_view_count=5,
+        component_count=100,
+        core_count=20,
+        isolated_count=10,
+        high_sim_pair_count=3,
+        dv_component_counts={"dv1": 50},
+        dv_core_ratios={"dv1": 0.5},
+        dv_max_similarity={"dv1": 0.7},
+        dv_ids={"dv1"},
+        dv_names={"dv1": "Data View 1"},
+    )
+    right_different = TrendingSnapshot(
+        timestamp="2026-01-01",
+        org_id="org",
+        data_view_count=99,
+        component_count=100,
+        core_count=20,
+        isolated_count=10,
+        high_sim_pair_count=3,
+        dv_component_counts={"dv1": 50},
+        dv_core_ratios={"dv1": 0.5},
+        dv_max_similarity={"dv1": 0.7},
+        dv_ids={"dv1"},
+        dv_names={"dv1": "Data View 1"},
+    )
+
+    assert _snapshots_equivalent(left, right_same) is True
+    assert _snapshots_equivalent(left, right_different) is False
+
+
+# L128 — _trim_snapshot_window: window_size <= 0 returns []
+def test_trim_snapshot_window_zero_returns_empty():
+    snapshots = [TrendingSnapshot(timestamp="2026-01-01")]
+    assert _trim_snapshot_window(snapshots, window_size=0) == []
+
+
+def test_trim_snapshot_window_negative_returns_empty():
+    snapshots = [TrendingSnapshot(timestamp="2026-01-01"), TrendingSnapshot(timestamp="2026-02-01")]
+    assert _trim_snapshot_window(snapshots, window_size=-5) == []
+
+
+# L222 — _extract_snapshot_from_json: skip data view missing both id/data_view_id
+def test_extract_snapshot_skips_data_view_missing_id():
+    data = _make_org_report_json(
+        timestamp="2026-01-01T00:00:00Z",
+        dv_count=2,
+        comp_count=50,
+        data_views=[
+            # This row has neither 'id' nor 'data_view_id' — should be skipped
+            {"metrics_count": 10, "dimensions_count": 5, "data_view_name": "No ID DV"},
+            # This row has a valid id
+            {"id": "dv_valid", "metrics_count": 8, "dimensions_count": 4, "data_view_name": "Valid DV"},
+        ],
+    )
+    snapshot = _extract_snapshot_from_json(data)
+    assert snapshot is not None
+    # Only the valid DV should appear in dv_ids
+    assert "dv_valid" in snapshot.dv_ids
+    assert len(snapshot.dv_ids) == 1
+
+
+# L240 — _extract_snapshot_from_json: skip non-dict component info in component_index
+def test_extract_snapshot_skips_non_dict_component_index_entry():
+    data = _make_org_report_json(
+        timestamp="2026-01-01T00:00:00Z",
+        dv_count=1,
+        comp_count=20,
+        core_metrics=["m1", "m2"],
+        data_views=[{"id": "dv1", "metrics_count": 5, "dimensions_count": 5}],
+        component_index={
+            "m1": "not-a-dict",  # non-dict value — should be skipped (L240)
+            "m2": {"data_views": ["dv1"]},
+        },
+    )
+    snapshot = _extract_snapshot_from_json(data)
+    assert snapshot is not None
+    # m1 entry was skipped, m2 was counted; dv1 should have at least 1 core component
+    assert snapshot.dv_core_ratios.get("dv1", 0.0) > 0.0
+
+
+# L254 — _extract_snapshot_from_json: skip non-dict similarity pair
+def test_extract_snapshot_skips_non_dict_similarity_pair():
+    data = _make_org_report_json(
+        timestamp="2026-01-01T00:00:00Z",
+        dv_count=2,
+        comp_count=50,
+        data_views=[
+            {"id": "dv1", "metrics_count": 10, "dimensions_count": 5},
+            {"id": "dv2", "metrics_count": 10, "dimensions_count": 5},
+        ],
+        similarity_pairs=[
+            "not-a-dict",  # non-dict — should be skipped (L254)
+            {"dv1_id": "dv1", "dv2_id": "dv2", "jaccard_similarity": 0.8},
+        ],
+    )
+    snapshot = _extract_snapshot_from_json(data)
+    assert snapshot is not None
+    # The valid pair should still be processed
+    assert snapshot.dv_max_similarity.get("dv1", 0.0) == pytest.approx(0.8)
+    assert snapshot.dv_max_similarity.get("dv2", 0.0) == pytest.approx(0.8)
+
+
+# L362-363 — _extract_snapshot_from_json: populate dv_ids and dv_max_similarity
+#             from similarity pairs when both DVs are in dv_ids
+def test_extract_snapshot_updates_dv_max_similarity_for_both_dvs():
+    data = _make_org_report_json(
+        timestamp="2026-01-01T00:00:00Z",
+        dv_count=3,
+        comp_count=100,
+        data_views=[
+            {"id": "dv_a", "metrics_count": 20, "dimensions_count": 10},
+            {"id": "dv_b", "metrics_count": 20, "dimensions_count": 10},
+            {"id": "dv_c", "metrics_count": 20, "dimensions_count": 10},
+        ],
+        similarity_pairs=[
+            {"dv1_id": "dv_a", "dv2_id": "dv_b", "jaccard_similarity": 0.9},
+            {"dv1_id": "dv_b", "dv2_id": "dv_c", "jaccard_similarity": 0.5},
+        ],
+    )
+    snapshot = _extract_snapshot_from_json(data)
+    assert snapshot is not None
+    # dv_b appears in both pairs — its max should be 0.9
+    assert snapshot.dv_max_similarity["dv_a"] == pytest.approx(0.9)
+    assert snapshot.dv_max_similarity["dv_b"] == pytest.approx(0.9)
+    assert snapshot.dv_max_similarity["dv_c"] == pytest.approx(0.5)
+
+
+# L362-363 — _load_snapshot_from_file: skip JSON that is valid but not a dict
+def test_discover_snapshots_skips_non_dict_json_file(tmp_path):
+    # A valid JSON array (not a dict) — should be silently skipped
+    array_file = tmp_path / "not_an_object.json"
+    array_file.write_text(json.dumps([1, 2, 3]), encoding="utf-8")
+    # Also write a valid report so discover_snapshots returns something
+    _write_report(tmp_path, "valid.json", _make_org_report_json(timestamp="2026-01-01T00:00:00Z"))
+    _write_report(tmp_path, "valid2.json", _make_org_report_json(timestamp="2026-02-01T00:00:00Z"))
+
+    result = discover_snapshots(tmp_path)
+    # The non-dict file is skipped; only 2 valid snapshots are found
+    assert len(result) == 2
+
+
+# L416 — _normalize_drift_dimension: empty values dict returns {}
+def test_normalize_drift_dimension_empty_returns_empty():
+    assert _normalize_drift_dimension({}) == {}
+
+
+# L542 — build_trending: assign org_id to current_snapshot when missing
+def test_build_trending_assigns_org_id_to_current_snapshot_when_missing(tmp_path):
+    _write_report(tmp_path, "a.json", _make_org_report_json(timestamp="2026-01-01T00:00:00Z", org_id="test_org"))
+    # current_snapshot has no org_id; build_trending should infer it from the cache
+    current = TrendingSnapshot(timestamp="2026-02-01", data_view_count=15, component_count=200, org_id=None)
+    result = build_trending(tmp_path, current_snapshot=current, org_id="test_org")
+    assert result is not None
+    # After build_trending the current_snapshot.org_id should be assigned
+    assert current.org_id == "test_org"
