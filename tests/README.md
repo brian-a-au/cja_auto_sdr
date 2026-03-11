@@ -96,10 +96,19 @@ tests/
 ├── test_trending_cli.py            # --trending-window CLI flag parsing
 ├── test_trending_output.py         # Trending output across all 6 formats
 ├── test_trending_integration.py    # Trending backwards compatibility and integration
+├── test_org_snapshot_utils.py     # Org snapshot helper utilities edge cases
+├── test_org_trending_contracts.py # Org/trending public API contract tests
+├── test_org_trending_adversarial.py # Adversarial and stress tests for trending
+├── test_cli_diff_contracts.py     # CLI/diff public API contract tests
+├── test_list_command_edge_cases.py # List command edge cases and coverage
+├── test_cli_commands_config_coverage.py # Config command edge cases and coverage
+├── test_cli_execution.py          # CLI execution edge cases and coverage
+├── test_diff_git_coverage.py      # Diff/git subprocess error path coverage
+├── test_generator_trending_coverage.py # Generator trending integration coverage
 └── README.md                        # This file
 ```
 
-**Total: 5,672 comprehensive tests**
+**Total: 6,128 comprehensive tests**
 
 ### Test Count Breakdown
 
@@ -180,8 +189,8 @@ tests/
 | `test_main_impl_cli_coverage.py` | 90 | _main_impl CLI path coverage |
 | `test_main_impl_coverage.py` | 57 | _main_impl coverage edge cases |
 | `test_near_100_coverage.py` | 4 | Near-100% coverage gap tests |
-| `test_org_cache_branches.py` | 40 | Org cache branch coverage |
-| `test_org_writer_coverage.py` | 102 | Org writer edge cases and coverage |
+| `test_org_cache_branches.py` | 48 | Org cache branch coverage |
+| `test_org_writer_coverage.py` | 128 | Org writer edge cases and coverage |
 | `test_output_writer_coverage.py` | 36 | Output writer edge cases and coverage |
 | `test_backwards_compat.py` | 34 | Backwards compatibility tests |
 | `test_exception_contracts.py` | 19 | Exception boundary contract tests |
@@ -192,12 +201,21 @@ tests/
 | `test_completion.py` | 43 | Shell completion flag (--completion bash/zsh/fish) |
 | `test_exception_narrowing.py` | 50 | Exception narrowing boundary tests |
 | `test_coverage_hardening.py` | 108 | Coverage hardening tests |
-| `test_trending_models.py` | 18 | Trending dataclass construction and bridge tests |
-| `test_trending_discovery.py` | 70 | Snapshot cache discovery, deltas, drift scoring |
+| `test_trending_models.py` | 31 | Trending dataclass construction and bridge tests |
+| `test_trending_discovery.py` | 81 | Snapshot cache discovery, deltas, drift scoring |
 | `test_trending_cli.py` | 9 | --trending-window CLI flag parsing |
 | `test_trending_output.py` | 22 | Trending output across all 6 formats |
 | `test_trending_integration.py` | 15 | Trending backwards compatibility and integration |
-| **Total** | **5,672** | **Collected via pytest --collect-only** |
+| `test_org_snapshot_utils.py` | 71 | Org snapshot helper utilities edge cases |
+| `test_org_trending_contracts.py` | 99 | Org/trending public API contract tests |
+| `test_org_trending_adversarial.py` | 51 | Adversarial and stress tests for trending |
+| `test_cli_diff_contracts.py` | 69 | CLI/diff public API contract tests |
+| `test_list_command_edge_cases.py` | 45 | List command edge cases and coverage |
+| `test_cli_commands_config_coverage.py` | 20 | Config command edge cases and coverage |
+| `test_cli_execution.py` | 18 | CLI execution edge cases and coverage |
+| `test_diff_git_coverage.py` | 27 | Diff/git subprocess error path coverage |
+| `test_generator_trending_coverage.py` | 17 | Generator trending integration coverage |
+| **Total** | **6,128** | **Collected via pytest --collect-only** |
 
 ## Running Tests
 
@@ -601,7 +619,7 @@ Check for drift (CI-friendly):
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (5,672 tests total)
+- [x] Comprehensive test coverage (6,128 tests total)
 - [x] Org-wide analysis tests (test_org_report.py) - 175 tests (including large org scaling, output path aliases, memory warnings, smart cache invalidation)
 - [x] Org-wide analysis integration tests (test_org_report_integration.py) - 17 tests (end-to-end flows, caching, filtering, governance thresholds)
 - [x] Profile management tests (test_profiles.py) - 77 tests
