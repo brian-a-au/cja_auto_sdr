@@ -8089,12 +8089,7 @@ def compare_org_reports(current: OrgReportResult, previous_path: str) -> OrgRepo
         prev_data = json.load(f)
 
     from cja_auto_sdr.org.snapshot_utils import (
-        org_report_component_count,
-        org_report_core_count,
-        org_report_high_similarity_pairs,
-        org_report_isolated_count,
-        org_report_snapshot_data_view_stats,
-        successful_org_report_data_view_rows,
+        org_report_snapshot_comparison_input,
     )
 
     # Extract data view IDs from both
@@ -8102,29 +8097,13 @@ def compare_org_reports(current: OrgReportResult, previous_path: str) -> OrgRepo
     current_dv_names = {s.data_view_id: s.data_view_name for s in current.data_view_summaries}
     current_comparison_dv_count = len(current_dv_ids)
 
-    prev_dv_ids: set[str] = set()
-    prev_dv_names = {}
-    for dv in successful_org_report_data_view_rows(prev_data):
-        dv_id = dv.get("data_view_id", dv.get("id", ""))
-        if dv_id:
-            prev_dv_ids.add(dv_id)
-            prev_dv_names[dv_id] = dv.get("data_view_name", dv.get("name", "Unknown"))
-    prev_dv_stats = org_report_snapshot_data_view_stats(prev_data)
-
     # Component counts
     current_components = len(current.component_index)
-    prev_components = org_report_component_count(prev_data)
     current_component_ids = set(current.component_index)
-    prev_component_ids = None
-    prev_component_index = prev_data.get("component_index")
-    if isinstance(prev_component_index, dict):
-        prev_component_ids = {str(component_id) for component_id in prev_component_index if str(component_id)}
 
     # Distribution deltas
     current_core = current.distribution.total_core
     current_isolated = current.distribution.total_isolated
-    prev_core = org_report_core_count(prev_data)
-    prev_isolated = org_report_isolated_count(prev_data)
 
     # High-similarity pairs comparison (normalize order for stability)
     def _pair_key(dv1: str, dv2: str) -> tuple[str, str]:
@@ -8136,22 +8115,13 @@ def compare_org_reports(current: OrgReportResult, previous_path: str) -> OrgRepo
             if p.jaccard_similarity >= 0.9:
                 current_high_sim.add(_pair_key(p.dv1_id, p.dv2_id))
 
-    prev_high_sim = org_report_high_similarity_pairs(prev_data)
+    try:
+        previous_snapshot = org_report_snapshot_comparison_input(prev_data, require_history_eligible=True)
+    except ValueError as exc:
+        raise ValueError(f"Previous report {previous_path} is not eligible for comparison: {exc}") from exc
 
     return build_org_report_comparison(
-        previous=OrgReportComparisonInput(
-            timestamp=prev_data.get("generated_at", prev_data.get("timestamp", "unknown")),
-            data_view_ids=prev_dv_ids,
-            has_data_view_ids=isinstance(prev_data.get("data_views"), list),
-            data_view_names=prev_dv_names,
-            data_view_count=prev_dv_stats.reported_total,
-            comparison_data_view_count=prev_dv_stats.analyzed_total,
-            component_count=prev_components,
-            component_ids=prev_component_ids,
-            core_count=prev_core,
-            isolated_count=prev_isolated,
-            high_similarity_pairs=prev_high_sim,
-        ),
+        previous=previous_snapshot,
         current=OrgReportComparisonInput(
             timestamp=current.timestamp,
             data_view_ids=current_dv_ids,
@@ -8392,6 +8362,8 @@ def run_org_report(
                 _status_print(
                     ConsoleColors.error(f"ERROR: Invalid JSON in previous report: {requested_baseline_path}"),
                 )
+            except ValueError as exc:
+                _status_print(ConsoleColors.error(f"ERROR: {exc}"))
             except RECOVERABLE_API_EXCEPTIONS as e:
                 _status_print(ConsoleColors.warning(f"Warning: Could not compare reports: {e}"))
 

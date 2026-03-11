@@ -977,6 +977,8 @@ cja_auto_sdr --org-report --include-metadata --owner-summary
 cja_auto_sdr --org-report --format json --output current.json
 cja_auto_sdr --org-report --compare-org-report ./baseline.json
 
+# Baseline must be a full-fidelity report; legacy markerless JSON baselines are rejected.
+
 # --- CI/CD Governance Checks ---
 
 # Exit with code 2 if more than 5 high-similarity pairs exist

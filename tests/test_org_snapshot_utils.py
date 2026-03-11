@@ -103,7 +103,7 @@ def test_org_report_snapshot_history_eligible_rejects_similarity_incomplete_payl
     )
 
 
-def test_org_report_snapshot_history_explicit_meta_overrides_derived_fields():
+def test_org_report_snapshot_history_persisted_meta_can_tighten_derived_fidelity():
     explicitly_ineligible = {
         "_snapshot_meta": {
             "history_eligible": False,
@@ -111,6 +111,12 @@ def test_org_report_snapshot_history_explicit_meta_overrides_derived_fields():
         },
         "summary": {"similarity_analysis_complete": True},
     }
+
+    assert org_report_snapshot_history_eligible(explicitly_ineligible) is False
+    assert org_report_snapshot_history_exclusion_reason(explicitly_ineligible) == "manual_override"
+
+
+def test_org_report_snapshot_history_persisted_meta_cannot_widen_payload_exclusions():
     explicitly_eligible = {
         "_snapshot_meta": {
             "history_eligible": True,
@@ -119,10 +125,8 @@ def test_org_report_snapshot_history_explicit_meta_overrides_derived_fields():
         "summary": {"is_sampled": True},
     }
 
-    assert org_report_snapshot_history_eligible(explicitly_ineligible) is False
-    assert org_report_snapshot_history_exclusion_reason(explicitly_ineligible) == "manual_override"
-    assert org_report_snapshot_history_eligible(explicitly_eligible) is True
-    assert org_report_snapshot_history_exclusion_reason(explicitly_eligible) is None
+    assert org_report_snapshot_history_eligible(explicitly_eligible) is False
+    assert org_report_snapshot_history_exclusion_reason(explicitly_eligible) == "sampled"
 
 
 def test_org_report_snapshot_history_coerces_legacy_string_flags():
@@ -137,7 +141,7 @@ def test_org_report_snapshot_history_coerces_legacy_string_flags():
     assert org_report_snapshot_history_exclusion_reason(skipped_payload) == "skip_similarity"
 
 
-def test_org_report_snapshot_history_legacy_payload_without_fidelity_fields_stays_compatible():
+def test_org_report_snapshot_history_legacy_payload_without_fidelity_fields_is_ineligible():
     legacy_payload = {
         "generated_at": "2026-03-01T00:00:00Z",
         "org_id": "test_org",
@@ -146,8 +150,28 @@ def test_org_report_snapshot_history_legacy_payload_without_fidelity_fields_stay
         "similarity_pairs": [],
     }
 
-    assert org_report_snapshot_history_eligible(legacy_payload) is True
-    assert org_report_snapshot_history_exclusion_reason(legacy_payload) is None
+    assert org_report_snapshot_history_eligible(legacy_payload) is False
+    assert org_report_snapshot_history_exclusion_reason(legacy_payload) == "legacy_missing_fidelity_markers"
+
+
+def test_org_report_snapshot_history_reclassifies_markerless_cached_payloads_with_stale_meta():
+    legacy_cached_payload = {
+        "generated_at": "2026-03-01T00:00:00Z",
+        "org_id": "test_org",
+        "_snapshot_meta": {
+            "snapshot_id": "persisted-123",
+            "history_eligible": True,
+            "history_exclusion_reason": None,
+        },
+        "summary": {"data_views_total": 3, "total_unique_components": 6},
+        "distribution": {"core": {"total": 4}, "isolated": {"total": 2}},
+        "data_views": [],
+        "component_index": {},
+        "similarity_pairs": [],
+    }
+
+    assert org_report_snapshot_history_eligible(legacy_cached_payload) is False
+    assert org_report_snapshot_history_exclusion_reason(legacy_cached_payload) == "legacy_missing_fidelity_markers"
 
 
 def test_org_report_snapshot_data_view_stats_preserve_reported_total_and_successful_subset():

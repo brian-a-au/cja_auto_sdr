@@ -45,6 +45,22 @@ from cja_auto_sdr.org.cache import OrgReportLock
 XLSX_NS = {"x": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
 
 
+def _mark_full_fidelity_baseline(payload):
+    payload = dict(payload)
+    parameters = dict(payload.get("parameters", {}))
+    parameters.setdefault("skip_similarity", False)
+    parameters.setdefault("org_stats_only", False)
+    payload["parameters"] = parameters
+
+    summary = dict(payload.get("summary", {}))
+    summary.setdefault("similarity_analysis_complete", True)
+    summary.setdefault("similarity_analysis_mode", "complete")
+    payload["summary"] = summary
+
+    payload.setdefault("similarity_pairs", [])
+    return payload
+
+
 def _write_signal(path: str, value: str) -> None:
     Path(path).write_text(value, encoding="utf-8")
 
@@ -3280,27 +3296,29 @@ class TestOrgReportComparison:
         )
 
         # Create previous report JSON with 2 DVs
-        prev_data = {
-            "generated_at": "2024-01-01T10:00:00",
-            "data_views": [
-                {"data_view_id": "dv_1", "data_view_name": "DV 1"},
-                {"data_view_id": "dv_2", "data_view_name": "DV 2"},
-            ],
-            "summary": {"total_unique_components": 50},
-            "distribution": {
-                "core": {"metrics_count": 6, "dimensions_count": 4},
-                "isolated": {"metrics_count": 7, "dimensions_count": 8},
-            },
-            "similarity_pairs": [
-                {
-                    "data_view_1": {"id": "dv_1", "name": "DV 1"},
-                    "data_view_2": {"id": "dv_2", "name": "DV 2"},
-                    "jaccard_similarity": 0.95,
-                    "shared_components": 10,
-                    "union_size": 12,
+        prev_data = _mark_full_fidelity_baseline(
+            {
+                "generated_at": "2024-01-01T10:00:00",
+                "data_views": [
+                    {"data_view_id": "dv_1", "data_view_name": "DV 1"},
+                    {"data_view_id": "dv_2", "data_view_name": "DV 2"},
+                ],
+                "summary": {"total_unique_components": 50},
+                "distribution": {
+                    "core": {"metrics_count": 6, "dimensions_count": 4},
+                    "isolated": {"metrics_count": 7, "dimensions_count": 8},
                 },
-            ],
-        }
+                "similarity_pairs": [
+                    {
+                        "data_view_1": {"id": "dv_1", "name": "DV 1"},
+                        "data_view_2": {"id": "dv_2", "name": "DV 2"},
+                        "jaccard_similarity": 0.95,
+                        "shared_components": 10,
+                        "union_size": 12,
+                    },
+                ],
+            }
+        )
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             json.dump(prev_data, f)
@@ -3335,27 +3353,29 @@ class TestOrgReportComparison:
         )
 
         # Previous had 2 DVs
-        prev_data = {
-            "generated_at": "2024-01-01T10:00:00",
-            "data_views": [
-                {"data_view_id": "dv_1", "data_view_name": "DV 1"},
-                {"data_view_id": "dv_2", "data_view_name": "DV 2"},
-            ],
-            "summary": {"total_unique_components": 50},
-            "distribution": {
-                "core": {"metrics_count": 6, "dimensions_count": 4},
-                "isolated": {"metrics_count": 7, "dimensions_count": 8},
-            },
-            "similarity_pairs": [
-                {
-                    "data_view_1": {"id": "dv_1", "name": "DV 1"},
-                    "data_view_2": {"id": "dv_2", "name": "DV 2"},
-                    "jaccard_similarity": 0.95,
-                    "shared_components": 10,
-                    "union_size": 12,
+        prev_data = _mark_full_fidelity_baseline(
+            {
+                "generated_at": "2024-01-01T10:00:00",
+                "data_views": [
+                    {"data_view_id": "dv_1", "data_view_name": "DV 1"},
+                    {"data_view_id": "dv_2", "data_view_name": "DV 2"},
+                ],
+                "summary": {"total_unique_components": 50},
+                "distribution": {
+                    "core": {"metrics_count": 6, "dimensions_count": 4},
+                    "isolated": {"metrics_count": 7, "dimensions_count": 8},
                 },
-            ],
-        }
+                "similarity_pairs": [
+                    {
+                        "data_view_1": {"id": "dv_1", "name": "DV 1"},
+                        "data_view_2": {"id": "dv_2", "name": "DV 2"},
+                        "jaccard_similarity": 0.95,
+                        "shared_components": 10,
+                        "union_size": 12,
+                    },
+                ],
+            }
+        )
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             json.dump(prev_data, f)
@@ -3402,27 +3422,29 @@ class TestOrgReportComparison:
             duration=1.0,
         )
 
-        prev_data = {
-            "generated_at": "2024-01-01T10:00:00",
-            "data_views": [
-                {"data_view_id": "dv_1", "data_view_name": "DV 1"},
-                {"data_view_id": "dv_2", "data_view_name": "DV 2"},
-            ],
-            "summary": {"total_unique_components": 50},
-            "distribution": {
-                "core": {"metrics_count": 6, "dimensions_count": 4},
-                "isolated": {"metrics_count": 7, "dimensions_count": 8},
-            },
-            "similarity_pairs": [
-                {
-                    "data_view_1": {"id": "dv_1", "name": "DV 1"},
-                    "data_view_2": {"id": "dv_2", "name": "DV 2"},
-                    "jaccard_similarity": 0.95,
-                    "shared_components": 10,
-                    "union_size": 12,
+        prev_data = _mark_full_fidelity_baseline(
+            {
+                "generated_at": "2024-01-01T10:00:00",
+                "data_views": [
+                    {"data_view_id": "dv_1", "data_view_name": "DV 1"},
+                    {"data_view_id": "dv_2", "data_view_name": "DV 2"},
+                ],
+                "summary": {"total_unique_components": 50},
+                "distribution": {
+                    "core": {"metrics_count": 6, "dimensions_count": 4},
+                    "isolated": {"metrics_count": 7, "dimensions_count": 8},
                 },
-            ],
-        }
+                "similarity_pairs": [
+                    {
+                        "data_view_1": {"id": "dv_1", "name": "DV 1"},
+                        "data_view_2": {"id": "dv_2", "name": "DV 2"},
+                        "jaccard_similarity": 0.95,
+                        "shared_components": 10,
+                        "union_size": 12,
+                    },
+                ],
+            }
+        )
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             json.dump(prev_data, f)

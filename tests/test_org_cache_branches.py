@@ -26,6 +26,21 @@ def _summary(dv_id: str) -> DataViewSummary:
     )
 
 
+def _full_fidelity_snapshot(payload: dict[str, object]) -> dict[str, object]:
+    summary = payload.setdefault("summary", {})
+    if isinstance(summary, dict):
+        summary.setdefault("similarity_analysis_complete", True)
+        summary.setdefault("similarity_analysis_mode", "complete")
+
+    parameters = payload.setdefault("parameters", {})
+    if isinstance(parameters, dict):
+        parameters.setdefault("skip_similarity", False)
+        parameters.setdefault("org_stats_only", False)
+
+    payload.setdefault("similarity_pairs", [])
+    return payload
+
+
 def test_cache_default_dir_uses_home(tmp_path: Path):
     with patch("cja_auto_sdr.org.cache.Path.home", return_value=tmp_path):
         cache = OrgReportCache()
@@ -239,11 +254,13 @@ def test_list_org_report_snapshots_deduplicates_migrated_copies_and_prefers_curr
 
 def test_save_org_report_snapshot_writes_json_file(tmp_path: Path):
     cache = OrgReportCache(cache_dir=tmp_path)
-    report = {
-        "generated_at": "2026-03-01T00:00:00Z",
-        "org_id": "org@test.example",
-        "summary": {"data_views_total": 2, "total_unique_components": 5},
-    }
+    report = _full_fidelity_snapshot(
+        {
+            "generated_at": "2026-03-01T00:00:00Z",
+            "org_id": "org@test.example",
+            "summary": {"data_views_total": 2, "total_unique_components": 5},
+        }
+    )
 
     path = cache.save_org_report_snapshot(report)
 
@@ -424,7 +441,7 @@ def test_inspect_org_report_snapshot_includes_data_view_preview(tmp_path: Path):
     assert snapshot["data_view_names_total"] == 2
 
 
-def test_inspect_org_report_snapshot_derives_history_metadata_for_legacy_payload(tmp_path: Path):
+def test_inspect_org_report_snapshot_marks_legacy_payload_without_fidelity_as_ineligible(tmp_path: Path):
     cache = OrgReportCache(cache_dir=tmp_path)
     snapshot_path = cache.get_org_report_snapshot_dir("org@test.example") / "legacy.json"
     snapshot_path.parent.mkdir(parents=True, exist_ok=True)
@@ -443,8 +460,8 @@ def test_inspect_org_report_snapshot_derives_history_metadata_for_legacy_payload
 
     snapshot = cache.inspect_org_report_snapshot(snapshot_path)
 
-    assert snapshot["history_eligible"] is True
-    assert snapshot["history_exclusion_reason"] is None
+    assert snapshot["history_eligible"] is False
+    assert snapshot["history_exclusion_reason"] == "legacy_missing_fidelity_markers"
 
 
 def test_snapshot_maintenance_skips_non_snapshot_json_objects(tmp_path: Path):
@@ -460,12 +477,14 @@ def test_snapshot_maintenance_skips_non_snapshot_json_objects(tmp_path: Path):
     valid_path = snapshot_dir / "valid.json"
     valid_path.write_text(
         json.dumps(
-            {
-                "generated_at": "2026-03-01T00:00:00Z",
-                "org_id": "org@test.example",
-                "summary": {"data_views_total": 1, "total_unique_components": 2},
-                "distribution": {"core": {"total": 1}, "isolated": {"total": 1}},
-            }
+            _full_fidelity_snapshot(
+                {
+                    "generated_at": "2026-03-01T00:00:00Z",
+                    "org_id": "org@test.example",
+                    "summary": {"data_views_total": 1, "total_unique_components": 2},
+                    "distribution": {"core": {"total": 1}, "isolated": {"total": 1}},
+                }
+            )
         ),
         encoding="utf-8",
     )
@@ -574,11 +593,13 @@ def test_prune_org_report_snapshots_keeps_latest_per_org(tmp_path: Path):
     cache = OrgReportCache(cache_dir=tmp_path)
     for month in ("01", "02", "03"):
         cache.save_org_report_snapshot(
-            {
-                "generated_at": f"2026-{month}-01T00:00:00Z",
-                "org_id": "org@test.example",
-                "summary": {"data_views_total": 1, "total_unique_components": 1},
-            }
+            _full_fidelity_snapshot(
+                {
+                    "generated_at": f"2026-{month}-01T00:00:00Z",
+                    "org_id": "org@test.example",
+                    "summary": {"data_views_total": 1, "total_unique_components": 1},
+                }
+            )
         )
 
     deleted = cache.prune_org_report_snapshots(org_id="org@test.example", keep_last=2)
@@ -592,18 +613,22 @@ def test_prune_org_report_snapshots_keeps_latest_per_org(tmp_path: Path):
 def test_prune_org_report_snapshots_removes_redundant_legacy_duplicates_and_keeps_preferred_copy(tmp_path: Path):
     cache = OrgReportCache(cache_dir=tmp_path)
     older_path = cache.save_org_report_snapshot(
-        {
-            "generated_at": "2026-01-01T00:00:00Z",
-            "org_id": "org@test.example",
-            "summary": {"data_views_total": 1, "total_unique_components": 1},
-        }
+        _full_fidelity_snapshot(
+            {
+                "generated_at": "2026-01-01T00:00:00Z",
+                "org_id": "org@test.example",
+                "summary": {"data_views_total": 1, "total_unique_components": 1},
+            }
+        )
     )
     current_path = cache.save_org_report_snapshot(
-        {
-            "generated_at": "2026-02-01T00:00:00Z",
-            "org_id": "org@test.example",
-            "summary": {"data_views_total": 1, "total_unique_components": 1},
-        }
+        _full_fidelity_snapshot(
+            {
+                "generated_at": "2026-02-01T00:00:00Z",
+                "org_id": "org@test.example",
+                "summary": {"data_views_total": 1, "total_unique_components": 1},
+            }
+        )
     )
     legacy_dir = cache.get_org_report_snapshot_root_dir() / "org_test_example"
     legacy_dir.mkdir(parents=True, exist_ok=True)
@@ -633,12 +658,14 @@ def test_prune_org_report_snapshots_prefers_dated_entries_over_undated_ones(tmp_
     ):
         (root / name).write_text(
             json.dumps(
-                {
-                    "generated_at": timestamp,
-                    "org_id": "org@test.example",
-                    "summary": {"data_views_total": 1, "total_unique_components": 1},
-                    "distribution": {"core": {"total": 1}, "isolated": {"total": 0}},
-                }
+                _full_fidelity_snapshot(
+                    {
+                        "generated_at": timestamp,
+                        "org_id": "org@test.example",
+                        "summary": {"data_views_total": 1, "total_unique_components": 1},
+                        "distribution": {"core": {"total": 1}, "isolated": {"total": 0}},
+                    }
+                )
             ),
             encoding="utf-8",
         )
@@ -663,12 +690,14 @@ def test_prune_org_report_snapshots_keeps_entries_matching_either_retention_rule
     ):
         (root / name).write_text(
             json.dumps(
-                {
-                    "generated_at": timestamp,
-                    "org_id": "org@test.example",
-                    "summary": {"data_views_total": 1, "total_unique_components": 1},
-                    "distribution": {"core": {"total": 1}, "isolated": {"total": 0}},
-                }
+                _full_fidelity_snapshot(
+                    {
+                        "generated_at": timestamp,
+                        "org_id": "org@test.example",
+                        "summary": {"data_views_total": 1, "total_unique_components": 1},
+                        "distribution": {"core": {"total": 1}, "isolated": {"total": 0}},
+                    }
+                )
             ),
             encoding="utf-8",
         )
@@ -683,25 +712,31 @@ def test_prune_org_report_snapshots_keeps_entries_matching_either_retention_rule
 def test_prune_org_report_snapshots_preserves_explicit_paths(tmp_path: Path):
     cache = OrgReportCache(cache_dir=tmp_path)
     retained = cache.save_org_report_snapshot(
-        {
-            "generated_at": "2026-01-01T00:00:00Z",
-            "org_id": "org@test.example",
-            "summary": {"data_views_total": 1, "total_unique_components": 1},
-        }
+        _full_fidelity_snapshot(
+            {
+                "generated_at": "2026-01-01T00:00:00Z",
+                "org_id": "org@test.example",
+                "summary": {"data_views_total": 1, "total_unique_components": 1},
+            }
+        )
     )
     middle = cache.save_org_report_snapshot(
-        {
-            "generated_at": "2026-02-01T00:00:00Z",
-            "org_id": "org@test.example",
-            "summary": {"data_views_total": 1, "total_unique_components": 1},
-        }
+        _full_fidelity_snapshot(
+            {
+                "generated_at": "2026-02-01T00:00:00Z",
+                "org_id": "org@test.example",
+                "summary": {"data_views_total": 1, "total_unique_components": 1},
+            }
+        )
     )
     newest = cache.save_org_report_snapshot(
-        {
-            "generated_at": "2026-03-01T00:00:00Z",
-            "org_id": "org@test.example",
-            "summary": {"data_views_total": 1, "total_unique_components": 1},
-        }
+        _full_fidelity_snapshot(
+            {
+                "generated_at": "2026-03-01T00:00:00Z",
+                "org_id": "org@test.example",
+                "summary": {"data_views_total": 1, "total_unique_components": 1},
+            }
+        )
     )
 
     deleted = cache.prune_org_report_snapshots(
@@ -715,7 +750,7 @@ def test_prune_org_report_snapshots_preserves_explicit_paths(tmp_path: Path):
     assert [Path(snapshot["filepath"]).name for snapshot in remaining] == [newest.name, retained.name]
 
 
-def test_prune_org_report_snapshots_keep_last_counts_ineligible_runs(tmp_path: Path):
+def test_prune_org_report_snapshots_keep_last_keeps_newest_by_recency_even_when_ineligible(tmp_path: Path):
     cache = OrgReportCache(cache_dir=tmp_path)
     eligible_old = cache.save_org_report_snapshot(
         {
@@ -766,6 +801,60 @@ def test_prune_org_report_snapshots_keep_last_counts_ineligible_runs(tmp_path: P
 
     assert deleted == [str(eligible_old.resolve(strict=False))]
     assert [Path(snapshot["filepath"]).name for snapshot in remaining] == [eligible_new.name, ineligible_new.name]
+
+
+def test_prune_org_report_snapshots_keep_last_keeps_recent_markerless_cached_snapshots(tmp_path: Path):
+    cache = OrgReportCache(cache_dir=tmp_path)
+    eligible_old = cache.save_org_report_snapshot(
+        _full_fidelity_snapshot(
+            {
+                "generated_at": "2026-01-01T00:00:00Z",
+                "org_id": "org@test.example",
+                "summary": {"data_views_total": 2, "total_unique_components": 5},
+                "distribution": {"core": {"total": 2}, "isolated": {"total": 3}},
+            }
+        )
+    )
+
+    legacy_cached = cache.get_org_report_snapshot_dir("org@test.example") / "legacy_cached.json"
+    legacy_cached.write_text(
+        json.dumps(
+            {
+                "generated_at": "2026-02-01T00:00:00Z",
+                "org_id": "org@test.example",
+                "_snapshot_meta": {
+                    "snapshot_id": "persisted-123",
+                    "history_eligible": True,
+                    "history_exclusion_reason": None,
+                },
+                "summary": {"data_views_total": 2, "total_unique_components": 5},
+                "distribution": {"core": {"total": 2}, "isolated": {"total": 3}},
+                "data_views": [],
+                "component_index": {},
+                "similarity_pairs": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    eligible_new = cache.save_org_report_snapshot(
+        _full_fidelity_snapshot(
+            {
+                "generated_at": "2026-03-01T00:00:00Z",
+                "org_id": "org@test.example",
+                "summary": {"data_views_total": 2, "total_unique_components": 5},
+                "distribution": {"core": {"total": 2}, "isolated": {"total": 3}},
+            }
+        )
+    )
+
+    deleted = cache.prune_org_report_snapshots(org_id="org@test.example", keep_last=2)
+    remaining = cache.list_org_report_snapshots("org@test.example")
+
+    assert deleted == [str(eligible_old.resolve(strict=False))]
+    assert [Path(snapshot["filepath"]).name for snapshot in remaining] == [eligible_new.name, legacy_cached.name]
+    assert remaining[1]["history_eligible"] is False
+    assert remaining[1]["history_exclusion_reason"] == "legacy_missing_fidelity_markers"
 
 
 def test_lock_property_and_health_delegate_to_manager(tmp_path: Path):

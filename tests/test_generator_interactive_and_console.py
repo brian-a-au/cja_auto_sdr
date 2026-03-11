@@ -559,9 +559,7 @@ def test_run_org_report_trending_window_prunes_snapshot_history(tmp_path: Path, 
     assert len(mock_prune.call_args.kwargs["preserved_snapshot_paths"]) == 1
 
 
-def test_run_org_report_trending_window_pins_compare_baseline_into_window(
-    tmp_path: Path, rich_org_report_result
-):
+def test_run_org_report_trending_window_pins_compare_baseline_into_window(tmp_path: Path, rich_org_report_result):
     current = deepcopy(rich_org_report_result)
     current.timestamp = "2026-03-01T00:00:00Z"
     current.org_id = "test_org@AdobeOrg"
@@ -898,6 +896,53 @@ def test_run_org_report_comparison_os_error_is_non_fatal(tmp_path: Path, rich_or
     mock_console.assert_called_once()
     out = capsys.readouterr().out
     assert "Warning: Could not compare reports: permission denied" in out
+
+
+def test_run_org_report_comparison_ineligible_legacy_baseline_is_non_fatal(
+    tmp_path: Path, rich_org_report_result, capsys
+):
+    result = rich_org_report_result
+    baseline_path = tmp_path / "legacy_baseline.json"
+    baseline_path.write_text(
+        json.dumps(
+            {
+                "generated_at": "2026-02-01T00:00:00Z",
+                "org_id": "test_org@AdobeOrg",
+                "summary": {"data_views_total": 2, "total_unique_components": 5},
+                "distribution": {"core": {"total": 2}, "isolated": {"total": 3}},
+                "similarity_pairs": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with (
+        patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "mock", {"org_id": "test_org@AdobeOrg"})),
+        patch("cja_auto_sdr.generator.cjapy") as mock_cjapy,
+        patch("cja_auto_sdr.generator.OrgComponentAnalyzer") as mock_analyzer_cls,
+        patch("cja_auto_sdr.generator.write_org_report_console") as mock_console,
+        patch("cja_auto_sdr.generator.build_org_step_summary", return_value="summary"),
+        patch("cja_auto_sdr.generator.append_github_step_summary"),
+    ):
+        mock_cjapy.CJA.return_value = Mock()
+        analyzer = Mock()
+        analyzer.run_analysis.return_value = result
+        mock_analyzer_cls.return_value = analyzer
+
+        ok, exceeded = generator.run_org_report(
+            config_file="config.json",
+            output_format="console",
+            output_path=None,
+            output_dir=str(tmp_path),
+            org_config=OrgReportConfig(compare_org_report=str(baseline_path)),
+            quiet=False,
+        )
+
+    assert ok is True
+    assert exceeded is False
+    mock_console.assert_called_once()
+    out = capsys.readouterr().out
+    assert "legacy_missing_fidelity_markers" in out
 
 
 def test_run_org_report_failure_paths(tmp_path: Path, rich_org_report_result):

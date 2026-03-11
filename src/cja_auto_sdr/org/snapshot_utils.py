@@ -11,9 +11,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from cja_auto_sdr.org.models import OrgReportComparisonInput
+
 _EARLIEST_UTC = datetime.min.replace(tzinfo=UTC)
 ORG_REPORT_SNAPSHOT_ROOT_DIRNAME = "org_report_snapshots"
 _VOLATILE_ORG_REPORT_SNAPSHOT_KEYS = frozenset({"_snapshot_meta", "trending"})
+LEGACY_MISSING_FIDELITY_MARKERS_REASON = "legacy_missing_fidelity_markers"
 
 
 @dataclass(frozen=True)
@@ -25,6 +28,15 @@ class OrgReportSnapshotDataViewStats:
     failed_total: int
     raw_total: int
     successful_row_total: int
+
+
+@dataclass(frozen=True)
+class OrgReportSnapshotHistoryAssessment:
+    """Normalized history-fidelity decision for one org-report payload."""
+
+    eligible: bool
+    exclusion_reason: str | None
+    fidelity_known: bool
 
 
 def parse_snapshot_timestamp(raw_timestamp: Any) -> datetime | None:
@@ -279,40 +291,114 @@ def coerce_snapshot_bool(value: Any) -> bool | None:
 
 def org_report_snapshot_history_exclusion_reason(data: Mapping[str, Any]) -> str | None:
     """Return the reason an org-report payload should stay out of trending history."""
+    return org_report_snapshot_history_assessment(data).exclusion_reason
+
+
+def _persisted_org_report_snapshot_history_assessment(
+    data: Mapping[str, Any],
+) -> OrgReportSnapshotHistoryAssessment | None:
+    """Return any persisted history-fidelity decision stored in snapshot metadata."""
     snapshot_meta = snapshot_mapping_dict(data.get("_snapshot_meta", {}))
     explicit_history_eligible = coerce_snapshot_bool(snapshot_meta.get("history_eligible"))
-    if explicit_history_eligible is not None:
-        if explicit_history_eligible:
-            return None
-        explicit_reason = str(snapshot_meta.get("history_exclusion_reason") or "").strip()
-        return explicit_reason or "history_ineligible"
+    if explicit_history_eligible is None:
+        return None
+    if explicit_history_eligible:
+        return OrgReportSnapshotHistoryAssessment(eligible=True, exclusion_reason=None, fidelity_known=True)
+    explicit_reason = str(snapshot_meta.get("history_exclusion_reason") or "").strip()
+    return OrgReportSnapshotHistoryAssessment(
+        eligible=False,
+        exclusion_reason=explicit_reason or "history_ineligible",
+        fidelity_known=True,
+    )
 
+
+def _derived_org_report_snapshot_history_assessment(data: Mapping[str, Any]) -> OrgReportSnapshotHistoryAssessment:
+    """Derive history fidelity from the snapshot payload itself."""
     summary = snapshot_mapping_dict(data.get("summary", {}))
     if coerce_snapshot_bool(summary.get("is_sampled")) is True:
-        return "sampled"
+        return OrgReportSnapshotHistoryAssessment(
+            eligible=False,
+            exclusion_reason="sampled",
+            fidelity_known=True,
+        )
 
     similarity_analysis_complete = coerce_snapshot_bool(summary.get("similarity_analysis_complete"))
+    similarity_analysis_mode = str(summary.get("similarity_analysis_mode") or "").strip()
     if similarity_analysis_complete is False:
-        explicit_mode = str(summary.get("similarity_analysis_mode") or "").strip()
-        return explicit_mode or "similarity_incomplete"
+        return OrgReportSnapshotHistoryAssessment(
+            eligible=False,
+            exclusion_reason=similarity_analysis_mode or "similarity_incomplete",
+            fidelity_known=True,
+        )
     if similarity_analysis_complete is True:
-        return None
+        return OrgReportSnapshotHistoryAssessment(eligible=True, exclusion_reason=None, fidelity_known=True)
+    if similarity_analysis_mode:
+        return OrgReportSnapshotHistoryAssessment(
+            eligible=similarity_analysis_mode == "complete",
+            exclusion_reason=None if similarity_analysis_mode == "complete" else similarity_analysis_mode,
+            fidelity_known=True,
+        )
 
     parameters = snapshot_mapping_dict(data.get("parameters", {}))
     if coerce_snapshot_bool(parameters.get("org_stats_only")) is True:
-        return "org_stats_only"
+        return OrgReportSnapshotHistoryAssessment(
+            eligible=False,
+            exclusion_reason="org_stats_only",
+            fidelity_known=True,
+        )
     if coerce_snapshot_bool(parameters.get("skip_similarity")) is True:
-        return "skip_similarity"
+        return OrgReportSnapshotHistoryAssessment(
+            eligible=False,
+            exclusion_reason="skip_similarity",
+            fidelity_known=True,
+        )
 
     if "similarity_pairs" in data and data.get("similarity_pairs") is None:
-        return "similarity_incomplete"
+        return OrgReportSnapshotHistoryAssessment(
+            eligible=False,
+            exclusion_reason="similarity_incomplete",
+            fidelity_known=True,
+        )
 
-    return None
+    if is_org_report_snapshot_payload(data):
+        return OrgReportSnapshotHistoryAssessment(
+            eligible=False,
+            exclusion_reason=LEGACY_MISSING_FIDELITY_MARKERS_REASON,
+            fidelity_known=False,
+        )
+
+    return OrgReportSnapshotHistoryAssessment(eligible=True, exclusion_reason=None, fidelity_known=False)
+
+
+def _merged_org_report_snapshot_history_assessment(
+    *,
+    derived: OrgReportSnapshotHistoryAssessment,
+    persisted: OrgReportSnapshotHistoryAssessment | None,
+) -> OrgReportSnapshotHistoryAssessment:
+    """Merge derived and persisted history-fidelity decisions with fail-closed semantics."""
+    if not derived.eligible:
+        return derived
+
+    # Persisted metadata is advisory only: it may tighten eligibility, but it must
+    # never widen eligibility because older cached snapshots can carry stale
+    # `_snapshot_meta.history_eligible` values from earlier releases.
+    if persisted is not None and not persisted.eligible:
+        return persisted
+
+    return derived
+
+
+def org_report_snapshot_history_assessment(data: Mapping[str, Any]) -> OrgReportSnapshotHistoryAssessment:
+    """Return the normalized history-fidelity assessment for one snapshot payload."""
+    return _merged_org_report_snapshot_history_assessment(
+        derived=_derived_org_report_snapshot_history_assessment(data),
+        persisted=_persisted_org_report_snapshot_history_assessment(data),
+    )
 
 
 def org_report_snapshot_history_eligible(data: Mapping[str, Any]) -> bool:
     """Return True when an org-report payload should participate in trending history."""
-    return org_report_snapshot_history_exclusion_reason(data) is None
+    return org_report_snapshot_history_assessment(data).eligible
 
 
 def coerce_snapshot_int(value: Any) -> int | None:
@@ -577,6 +663,49 @@ def org_report_high_similarity_pairs(
         if normalized_pair is not None:
             similarity_pairs.add(normalized_pair)
     return similarity_pairs
+
+
+def org_report_snapshot_comparison_input(
+    data: Mapping[str, Any],
+    *,
+    require_history_eligible: bool = True,
+) -> OrgReportComparisonInput:
+    """Normalize one snapshot payload into comparison input fields."""
+    metadata = org_report_snapshot_metadata(data)
+    if metadata is None:
+        raise ValueError("expected org-report snapshot payload")
+
+    history_exclusion_reason = str(metadata.get("history_exclusion_reason") or "").strip()
+    if require_history_eligible and history_exclusion_reason:
+        raise ValueError(f"snapshot is not eligible for comparison: {history_exclusion_reason}")
+
+    prev_dv_ids: set[str] = set()
+    prev_dv_names: dict[str, str] = {}
+    for dv in successful_org_report_data_view_rows(data):
+        dv_id = str(dv.get("data_view_id") or dv.get("id") or "")
+        if not dv_id:
+            continue
+        prev_dv_ids.add(dv_id)
+        prev_dv_names[dv_id] = str(dv.get("data_view_name") or dv.get("name") or "Unknown")
+
+    prev_component_ids = None
+    prev_component_index = data.get("component_index")
+    if isinstance(prev_component_index, dict):
+        prev_component_ids = {str(component_id) for component_id in prev_component_index if str(component_id)}
+
+    return OrgReportComparisonInput(
+        timestamp=str(metadata["generated_at"]),
+        data_view_ids=prev_dv_ids,
+        has_data_view_ids=isinstance(data.get("data_views"), list),
+        data_view_names=prev_dv_names,
+        data_view_count=int(metadata["data_views_total"]),
+        comparison_data_view_count=int(metadata["data_views_analyzed"]),
+        component_count=int(metadata["total_unique_components"]),
+        component_ids=prev_component_ids,
+        core_count=int(metadata["core_count"]),
+        isolated_count=int(metadata["isolated_count"]),
+        high_similarity_pairs=org_report_high_similarity_pairs(data),
+    )
 
 
 def org_report_snapshot_metadata(

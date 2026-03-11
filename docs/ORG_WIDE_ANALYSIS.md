@@ -682,6 +682,10 @@ cja_auto_sdr --org-report --compare-org-report baseline.json
 # - Resolved pairs
 ```
 
+`--compare-org-report` expects a full-fidelity baseline. Pre-v3.4 JSON reports that do not include
+snapshot-fidelity markers are treated as ineligible because the old format cannot distinguish full
+similarity runs from `--skip-similarity`/`--org-stats` baselines reliably.
+
 #### CI/CD Trending Example
 
 Track changes between org-report runs with GitHub Actions:
@@ -872,7 +876,8 @@ is used, the current run is saved there even for console output, and older entri
 the cache bounded.
 
 If you created local trending history with early v3.4.0 builds before snapshot-fidelity hardening landed and later
-see suspicious deltas, prune that cache and rebuild it from fresh full-fidelity org reports. Use
+see suspicious deltas, prune that cache and rebuild it from fresh full-fidelity org reports. Legacy markerless
+snapshots are now treated as ineligible rather than guessed as complete. Use
 `cja_auto_sdr --inspect-org-report-snapshot <FILE> --format json` to review `history_eligible` and
 `history_exclusion_reason` for current snapshots, and `cja_auto_sdr --prune-org-report-snapshots ...` to remove
 older entries.

@@ -40,9 +40,15 @@ def _make_org_report_json(
     return {
         "generated_at": timestamp,
         "org_id": org_id,
+        "parameters": {
+            "skip_similarity": False,
+            "org_stats_only": False,
+        },
         "summary": {
             "data_views_total": dv_count,
             "total_unique_components": comp_count,
+            "similarity_analysis_complete": True,
+            "similarity_analysis_mode": "complete",
         },
         "distribution": {
             "core": {
@@ -108,7 +114,17 @@ class TestExtractSnapshotFromJson:
         assert _extract_snapshot_from_json(data) is None
 
     def test_fallback_timestamp_key(self):
-        data = {"timestamp": "2026-06-01", "summary": {"data_views_total": 5}, "org_id": "test_org"}
+        data = {
+            "timestamp": "2026-06-01",
+            "org_id": "test_org",
+            "parameters": {"skip_similarity": False, "org_stats_only": False},
+            "summary": {
+                "data_views_total": 5,
+                "similarity_analysis_complete": True,
+                "similarity_analysis_mode": "complete",
+            },
+            "similarity_pairs": [],
+        }
         snap = _extract_snapshot_from_json(data)
         assert snap is not None
         assert snap.timestamp == "2026-06-01"
@@ -284,7 +300,12 @@ class TestExtractSnapshotFromJson:
         data = {
             "generated_at": "2026-01-01T00:00:00Z",
             "org_id": "test_org",
-            "summary": {"total_data_views": 4, "total_unique_components": 10},
+            "summary": {
+                "total_data_views": 4,
+                "total_unique_components": 10,
+                "similarity_analysis_complete": True,
+                "similarity_analysis_mode": "complete",
+            },
             "distribution": {
                 "core": {"core_metrics": ["m1"], "core_dimensions": ["d1"], "metrics_count": 1, "dimensions_count": 1},
                 "isolated": {"metrics_count": 1, "dimensions_count": 0},
@@ -573,6 +594,32 @@ class TestDiscoverSnapshots:
         low_fidelity["summary"]["similarity_analysis_mode"] = "org_stats_only"
         _write_report(tmp_path, "retained.json", retained)
         _write_report(tmp_path, "low_fidelity.json", low_fidelity)
+
+        result = discover_snapshots(tmp_path, window_size=10)
+
+        assert [snapshot.timestamp for snapshot in result] == ["2026-02-01"]
+
+    def test_cached_markerless_legacy_snapshots_are_ignored_during_discovery(self, tmp_path):
+        retained = _make_org_report_json(timestamp="2026-02-01")
+        legacy = {
+            "generated_at": "2026-01-15T00:00:00Z",
+            "org_id": "test_org",
+            "_snapshot_meta": {
+                "snapshot_id": "persisted-123",
+                "history_eligible": True,
+                "history_exclusion_reason": None,
+            },
+            "summary": {"data_views_total": 10, "total_unique_components": 100},
+            "distribution": {
+                "core": {"total": 5, "metrics_count": 5, "dimensions_count": 0},
+                "isolated": {"total": 2, "metrics_count": 2, "dimensions_count": 0},
+            },
+            "data_views": [],
+            "component_index": {},
+            "similarity_pairs": [],
+        }
+        _write_report(tmp_path, "retained.json", retained)
+        _write_report(tmp_path, "legacy.json", legacy)
 
         result = discover_snapshots(tmp_path, window_size=10)
 
