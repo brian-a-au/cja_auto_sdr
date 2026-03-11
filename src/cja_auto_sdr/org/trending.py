@@ -200,6 +200,7 @@ def _extract_snapshot_from_json(
     dv_max_similarity: dict[str, float] = {}
     dv_ids: set[str] = set()
     dv_names: dict[str, str] = {}
+    has_data_view_ids = isinstance(data.get("data_views"), list)
 
     # Core ratio per DV: fraction of DV's components that are "core"
     # (shared across >= threshold% of DVs).  Approximated from the global
@@ -277,6 +278,7 @@ def _extract_snapshot_from_json(
         dv_max_similarity=dv_max_similarity,
         dv_ids=dv_ids,
         dv_names=dv_names,
+        has_data_view_ids=has_data_view_ids,
     )
 
 

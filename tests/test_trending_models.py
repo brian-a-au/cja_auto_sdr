@@ -77,6 +77,7 @@ class TestOrgReportTrending:
         iso=20,
         sim=2,
         dv_ids=None,
+        has_data_view_ids=None,
         component_ids=None,
         high_similarity_pairs=None,
     ):
@@ -88,7 +89,8 @@ class TestOrgReportTrending:
             core_count=core,
             isolated_count=iso,
             high_sim_pair_count=sim,
-            dv_ids=dv_ids or set(),
+            dv_ids=set() if dv_ids is None else dv_ids,
+            has_data_view_ids=(dv_ids is not None) if has_data_view_ids is None else has_data_view_ids,
             component_ids=component_ids,
             high_similarity_pairs=high_similarity_pairs or set(),
         )
@@ -185,8 +187,8 @@ class TestOrgReportTrending:
 
     def test_to_comparison_uses_analyzed_count_when_snapshot_ids_are_unavailable(self):
         snaps = [
-            self._make_snapshot("2026-01-01", dv_count=10, analyzed_dv_count=8, dv_ids=set()),
-            self._make_snapshot("2026-02-01", dv_count=10, analyzed_dv_count=6, dv_ids=set()),
+            self._make_snapshot("2026-01-01", dv_count=10, analyzed_dv_count=8, dv_ids=None),
+            self._make_snapshot("2026-02-01", dv_count=10, analyzed_dv_count=6, dv_ids=None),
         ]
 
         comparison = OrgReportTrending(snapshots=snaps, window_size=2).to_comparison()
@@ -195,6 +197,24 @@ class TestOrgReportTrending:
         assert comparison.data_views_added == []
         assert comparison.data_views_removed == []
         assert comparison.summary["data_views_delta"] == -2
+
+    def test_to_comparison_suppresses_exact_dv_lists_when_only_one_side_has_ids(self):
+        snaps = [
+            self._make_snapshot("2026-01-01", dv_count=8, analyzed_dv_count=8, dv_ids=None),
+            self._make_snapshot(
+                "2026-02-01",
+                dv_count=10,
+                analyzed_dv_count=9,
+                dv_ids={f"dv_{index}" for index in range(9)},
+            ),
+        ]
+
+        comparison = OrgReportTrending(snapshots=snaps, window_size=2).to_comparison()
+
+        assert comparison is not None
+        assert comparison.data_views_added == []
+        assert comparison.data_views_removed == []
+        assert comparison.summary["data_views_delta"] == 1
 
     def test_to_comparison_summary_delta_matches_successful_ids_during_partial_failures(self):
         snaps = [

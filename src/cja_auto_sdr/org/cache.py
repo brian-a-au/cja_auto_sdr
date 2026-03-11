@@ -253,8 +253,8 @@ class OrgReportCache:
 
     @staticmethod
     def _snapshot_counts_against_keep_last(snapshot: dict[str, Any]) -> bool:
-        """Return True when a snapshot should consume keep-last quota."""
-        return bool(snapshot.get("history_eligible"))
+        """Return True when a persisted snapshot should consume keep-last quota."""
+        return bool(snapshot.get("filepath"))
 
     @classmethod
     def _retained_keep_last_paths(

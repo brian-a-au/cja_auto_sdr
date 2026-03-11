@@ -715,7 +715,7 @@ def test_prune_org_report_snapshots_preserves_explicit_paths(tmp_path: Path):
     assert [Path(snapshot["filepath"]).name for snapshot in remaining] == [newest.name, retained.name]
 
 
-def test_prune_org_report_snapshots_keep_last_ignores_ineligible_runs(tmp_path: Path):
+def test_prune_org_report_snapshots_keep_last_counts_ineligible_runs(tmp_path: Path):
     cache = OrgReportCache(cache_dir=tmp_path)
     eligible_old = cache.save_org_report_snapshot(
         {
@@ -764,8 +764,8 @@ def test_prune_org_report_snapshots_keep_last_ignores_ineligible_runs(tmp_path: 
     deleted = cache.prune_org_report_snapshots(org_id="org@test.example", keep_last=2)
     remaining = cache.list_org_report_snapshots("org@test.example")
 
-    assert deleted == [str(ineligible_new.resolve(strict=False))]
-    assert [Path(snapshot["filepath"]).name for snapshot in remaining] == [eligible_new.name, eligible_old.name]
+    assert deleted == [str(eligible_old.resolve(strict=False))]
+    assert [Path(snapshot["filepath"]).name for snapshot in remaining] == [eligible_new.name, ineligible_new.name]
 
 
 def test_lock_property_and_health_delegate_to_manager(tmp_path: Path):

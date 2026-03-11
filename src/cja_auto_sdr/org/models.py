@@ -430,6 +430,7 @@ class OrgReportComparisonInput:
 
     timestamp: str
     data_view_ids: set[str] = field(default_factory=set)
+    has_data_view_ids: bool = False
     data_view_names: dict[str, str] = field(default_factory=dict)
     data_view_count: int = 0
     comparison_data_view_count: int | None = None
@@ -442,7 +443,7 @@ class OrgReportComparisonInput:
 
 def _resolve_data_view_total(source: OrgReportComparisonInput) -> int:
     """Resolve the authoritative data-view total for summary deltas."""
-    if source.data_view_ids:
+    if source.has_data_view_ids:
         return len(source.data_view_ids)
     if source.comparison_data_view_count is not None:
         return _safe_non_negative_int(source.comparison_data_view_count)
@@ -499,14 +500,26 @@ def _serialize_similarity_pair_delta(pairs: set[tuple[str, str]]) -> list[dict[s
     return [{"dv1_id": dv1_id, "dv2_id": dv2_id} for dv1_id, dv2_id in sorted(pairs)]
 
 
+def _resolve_data_view_id_changes(
+    previous: OrgReportComparisonInput,
+    current: OrgReportComparisonInput,
+) -> tuple[list[str], list[str]]:
+    """Return exact added/removed data-view IDs when both sides expose them."""
+    if not previous.has_data_view_ids or not current.has_data_view_ids:
+        return [], []
+    return (
+        sorted(current.data_view_ids - previous.data_view_ids),
+        sorted(previous.data_view_ids - current.data_view_ids),
+    )
+
+
 def build_org_report_comparison(
     *,
     previous: OrgReportComparisonInput,
     current: OrgReportComparisonInput,
 ) -> OrgReportComparison:
     """Build a comparison from normalized org-report snapshot inputs."""
-    added_ids = sorted(current.data_view_ids - previous.data_view_ids)
-    removed_ids = sorted(previous.data_view_ids - current.data_view_ids)
+    added_ids, removed_ids = _resolve_data_view_id_changes(previous, current)
     components_added, components_removed = _resolve_component_change_counts(previous, current)
 
     current_dv_total = _resolve_data_view_total(current)
@@ -574,6 +587,12 @@ class TrendingSnapshot:
     dv_max_similarity: dict[str, float] = field(default_factory=dict)
     dv_ids: set[str] = field(default_factory=set)
     dv_names: dict[str, str] = field(default_factory=dict)
+    has_data_view_ids: bool = False
+
+    def __post_init__(self) -> None:
+        """Infer ID availability for manually constructed snapshots when possible."""
+        if not self.has_data_view_ids and (self.dv_ids or self.dv_names):
+            self.has_data_view_ids = True
 
 
 @dataclass
@@ -619,6 +638,7 @@ class OrgReportTrending:
             previous=OrgReportComparisonInput(
                 timestamp=prev.timestamp,
                 data_view_ids=set(prev.dv_ids),
+                has_data_view_ids=prev.has_data_view_ids,
                 data_view_names=dict(prev.dv_names),
                 data_view_count=prev.data_view_count,
                 comparison_data_view_count=prev.analyzed_data_view_count,
@@ -631,6 +651,7 @@ class OrgReportTrending:
             current=OrgReportComparisonInput(
                 timestamp=curr.timestamp,
                 data_view_ids=set(curr.dv_ids),
+                has_data_view_ids=curr.has_data_view_ids,
                 data_view_names=dict(curr.dv_names),
                 data_view_count=curr.data_view_count,
                 comparison_data_view_count=curr.analyzed_data_view_count,

@@ -8142,6 +8142,7 @@ def compare_org_reports(current: OrgReportResult, previous_path: str) -> OrgRepo
         previous=OrgReportComparisonInput(
             timestamp=prev_data.get("generated_at", prev_data.get("timestamp", "unknown")),
             data_view_ids=prev_dv_ids,
+            has_data_view_ids=isinstance(prev_data.get("data_views"), list),
             data_view_names=prev_dv_names,
             data_view_count=prev_dv_stats.reported_total,
             comparison_data_view_count=prev_dv_stats.analyzed_total,
@@ -8154,6 +8155,7 @@ def compare_org_reports(current: OrgReportResult, previous_path: str) -> OrgRepo
         current=OrgReportComparisonInput(
             timestamp=current.timestamp,
             data_view_ids=current_dv_ids,
+            has_data_view_ids=True,
             data_view_names=current_dv_names,
             data_view_count=current.total_data_views,
             comparison_data_view_count=current_comparison_dv_count,
