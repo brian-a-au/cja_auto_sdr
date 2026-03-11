@@ -5,6 +5,7 @@ from cja_auto_sdr.org.models import (
     OrgReportTrending,
     TrendingDelta,
     TrendingSnapshot,
+    _safe_non_negative_int,
 )
 
 
@@ -282,3 +283,53 @@ class TestOrgReportTrending:
         assert comparison.resolved_pairs == [{"dv1_id": "dv1", "dv2_id": "dv2"}]
         assert comparison.summary["new_duplicates"] == 1
         assert comparison.summary["resolved_duplicates"] == 1
+
+
+class TestSafeNonNegativeInt:
+    """Edge-case coverage for _safe_non_negative_int (L462-476)."""
+
+    def test_bool_true_returns_one(self):
+        # L462-463: isinstance(value, bool) → return int(value)
+        assert _safe_non_negative_int(True) == 1
+
+    def test_bool_false_returns_zero(self):
+        assert _safe_non_negative_int(False) == 0
+
+    def test_positive_int_passes_through(self):
+        # L464-465: isinstance(value, int) → max(0, value)
+        assert _safe_non_negative_int(42) == 42
+
+    def test_negative_int_clamps_to_zero(self):
+        assert _safe_non_negative_int(-5) == 0
+
+    def test_positive_float_truncates(self):
+        # L466-467: isinstance(value, float) → max(0, int(value))
+        assert _safe_non_negative_int(3.9) == 3
+
+    def test_negative_float_clamps_to_zero(self):
+        assert _safe_non_negative_int(-2.5) == 0
+
+    def test_string_integer_parses(self):
+        # L468-473: isinstance(value, str) → strip + int()
+        assert _safe_non_negative_int("  7  ") == 7
+
+    def test_string_negative_clamps_to_zero(self):
+        assert _safe_non_negative_int("-3") == 0
+
+    def test_empty_string_returns_zero(self):
+        # L470-471: stripped is empty → return 0
+        assert _safe_non_negative_int("   ") == 0
+
+    def test_non_numeric_string_returns_zero(self):
+        # L474-475: ValueError branch → return 0
+        assert _safe_non_negative_int("abc") == 0
+
+    def test_none_returns_zero(self):
+        # L476: fallback for unrecognised types
+        assert _safe_non_negative_int(None) == 0
+
+    def test_list_returns_zero(self):
+        assert _safe_non_negative_int([1, 2, 3]) == 0
+
+    def test_dict_returns_zero(self):
+        assert _safe_non_negative_int({"count": 5}) == 0
