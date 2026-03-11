@@ -8182,12 +8182,25 @@ def _org_report_history_exclusion_note(
     return f"{base_note} Fewer than 2 eligible cached snapshots found — trending skipped."
 
 
+def _requested_org_report_baseline_path(org_config: OrgReportConfig) -> Path | None:
+    """Return the explicitly requested org-report baseline, if any.
+
+    ``--compare-org-report`` serves two roles in the v3.4.0 org-report flow:
+    it is both the comparison baseline and an explicit history anchor that should
+    be folded into the trending window when trending is enabled. Centralizing the
+    path resolution here keeps both features wired to the same source of truth.
+    """
+    if not org_config.compare_org_report:
+        return None
+    return Path(org_config.compare_org_report)
+
+
 def _build_org_report_trending_window(
     *,
     result: OrgReportResult,
-    org_config: OrgReportConfig,
     trending_window: int,
     cache: OrgReportCache | None,
+    explicit_history_file: str | Path | None,
     logger: logging.Logger,
     quiet: bool,
     status_print: Callable[..., None],
@@ -8224,6 +8237,7 @@ def _build_org_report_trending_window(
         cache_dir=snapshot_cache_dir,
         window_size=trending_window,
         current_snapshot=current_snapshot,
+        explicit_file=explicit_history_file,
         org_id=result.org_id,
     )
 
@@ -8246,8 +8260,8 @@ def _build_org_report_trending_window(
 
     if saved_snapshot_path is not None:
         preserved_snapshot_paths: list[str | Path] = [saved_snapshot_path]
-        if org_config.compare_org_report:
-            preserved_snapshot_paths.append(org_config.compare_org_report)
+        if explicit_history_file is not None:
+            preserved_snapshot_paths.append(explicit_history_file)
         try:
             snapshot_cache.prune_org_report_snapshots(
                 org_id=result.org_id,
@@ -8355,6 +8369,7 @@ def run_org_report(
         # Run analysis
         analyzer = OrgComponentAnalyzer(cja, org_config, logger, org_id=org_id, cache=cache)
         result = analyzer.run_analysis()
+        requested_baseline_path = _requested_org_report_baseline_path(org_config)
 
         if result.total_data_views == 0:
             _status_print(ConsoleColors.warning("No data views found matching criteria"))
@@ -8362,18 +8377,18 @@ def run_org_report(
 
         # Handle org-report comparison (Feature 4)
         comparison = None
-        if org_config.compare_org_report:
+        if requested_baseline_path is not None:
             try:
                 if not quiet:
-                    _status_print(f"\nComparing to previous report: {org_config.compare_org_report}")
-                comparison = compare_org_reports(result, org_config.compare_org_report)
+                    _status_print(f"\nComparing to previous report: {requested_baseline_path}")
+                comparison = compare_org_reports(result, str(requested_baseline_path))
                 with contextlib.redirect_stdout(status_stream):
                     write_org_report_comparison_console(comparison, quiet)
             except FileNotFoundError:
-                _status_print(ConsoleColors.error(f"ERROR: Previous report not found: {org_config.compare_org_report}"))
+                _status_print(ConsoleColors.error(f"ERROR: Previous report not found: {requested_baseline_path}"))
             except json.JSONDecodeError:
                 _status_print(
-                    ConsoleColors.error(f"ERROR: Invalid JSON in previous report: {org_config.compare_org_report}"),
+                    ConsoleColors.error(f"ERROR: Invalid JSON in previous report: {requested_baseline_path}"),
                 )
             except RECOVERABLE_API_EXCEPTIONS as e:
                 _status_print(ConsoleColors.warning(f"Warning: Could not compare reports: {e}"))
@@ -8384,9 +8399,9 @@ def run_org_report(
             try:
                 trending = _build_org_report_trending_window(
                     result=result,
-                    org_config=org_config,
                     trending_window=trending_window,
                     cache=cache,
+                    explicit_history_file=requested_baseline_path,
                     logger=logger,
                     quiet=quiet,
                     status_print=_status_print,

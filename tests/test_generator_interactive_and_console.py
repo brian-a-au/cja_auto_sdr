@@ -559,7 +559,7 @@ def test_run_org_report_trending_window_prunes_snapshot_history(tmp_path: Path, 
     assert len(mock_prune.call_args.kwargs["preserved_snapshot_paths"]) == 1
 
 
-def test_run_org_report_trending_window_does_not_pin_compare_baseline_into_window(
+def test_run_org_report_trending_window_pins_compare_baseline_into_window(
     tmp_path: Path, rich_org_report_result
 ):
     current = deepcopy(rich_org_report_result)
@@ -569,19 +569,24 @@ def test_run_org_report_trending_window_does_not_pin_compare_baseline_into_windo
 
     snapshot_cache_root = tmp_path / "cache"
     cache = OrgReportCache(cache_dir=snapshot_cache_root)
-    explicit_baseline = None
-    for day in range(1, DEFAULT_ORG_REPORT_SNAPSHOT_KEEP_LAST + 6):
+    for day in range(2, DEFAULT_ORG_REPORT_SNAPSHOT_KEEP_LAST + 7):
         baseline_result = deepcopy(rich_org_report_result)
         baseline_result.timestamp = f"2026-01-{day:02d}T00:00:00Z"
         baseline_result.org_id = "test_org@AdobeOrg"
         baseline_result.is_sampled = False
-        snapshot_path = cache.save_org_report_snapshot(
-            build_org_report_json_data(baseline_result), org_id=baseline_result.org_id
-        )
-        if day == 1:
-            explicit_baseline = snapshot_path
+        cache.save_org_report_snapshot(build_org_report_json_data(baseline_result), org_id=baseline_result.org_id)
 
-    assert explicit_baseline is not None
+    explicit_dir = tmp_path / "explicit"
+    explicit_dir.mkdir()
+    explicit_baseline = explicit_dir / "baseline.json"
+    explicit_baseline_result = deepcopy(rich_org_report_result)
+    explicit_baseline_result.timestamp = "2026-01-01T00:00:00Z"
+    explicit_baseline_result.org_id = "test_org@AdobeOrg"
+    explicit_baseline_result.is_sampled = False
+    explicit_baseline.write_text(
+        json.dumps(build_org_report_json_data(explicit_baseline_result)),
+        encoding="utf-8",
+    )
 
     def _cache_factory(*args, **kwargs):
         return OrgReportCache(cache_dir=snapshot_cache_root, logger=kwargs.get("logger"))
@@ -615,7 +620,8 @@ def test_run_org_report_trending_window_does_not_pin_compare_baseline_into_windo
     trending = mock_console.call_args.kwargs.get("trending")
     assert trending is not None
     assert trending.window_size == 3
-    assert str(explicit_baseline.resolve(strict=False)) not in {snapshot.source_path for snapshot in trending.snapshots}
+    assert str(explicit_baseline.resolve(strict=False)) in {snapshot.source_path for snapshot in trending.snapshots}
+    assert trending.snapshots[0].timestamp == "2026-01-01T00:00:00Z"
     assert trending.snapshots[-1].timestamp == "2026-03-01T00:00:00Z"
     assert explicit_baseline.exists()
 
