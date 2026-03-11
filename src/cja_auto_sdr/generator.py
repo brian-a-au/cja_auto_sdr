@@ -199,6 +199,7 @@ from cja_auto_sdr.org.models import (
     OrgReportComparisonInput,
     OrgReportConfig,
     OrgReportResult,
+    OrgReportTrending,
     SimilarityPair,
     build_org_report_comparison,
 )

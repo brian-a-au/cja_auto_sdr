@@ -844,7 +844,9 @@ def test_run_org_report_trending_window_preserves_eligible_history_across_inelig
 
     snapshot_cache_root = tmp_path / "cache"
     snapshot_cache = OrgReportCache(cache_dir=snapshot_cache_root)
-    baseline_path = snapshot_cache.save_org_report_snapshot(build_org_report_json_data(baseline), org_id=baseline.org_id)
+    baseline_path = snapshot_cache.save_org_report_snapshot(
+        build_org_report_json_data(baseline), org_id=baseline.org_id
+    )
 
     for day in range(1, DEFAULT_ORG_REPORT_SNAPSHOT_KEEP_LAST + 6):
         sampled = deepcopy(rich_org_report_result)
