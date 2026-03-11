@@ -46,7 +46,21 @@ from cja_auto_sdr.org.models import (
     OrgReportComparison,
     OrgReportConfig,
     OrgReportResult,
+    OrgReportTrending,
     SimilarityPair,
+    TrendingDelta,
+    TrendingSnapshot,
+)
+from cja_auto_sdr.org.writers import (
+    _format_trending_timestamp_short,
+    _render_console_trending_table,
+    _render_html_trending_table,
+    _render_markdown_trending_table,
+    _render_trending_console,
+    _render_trending_html,
+    _render_trending_markdown,
+    _top_drift_scores,
+    _trending_date_range,
 )
 
 # ---------------------------------------------------------------------------
@@ -1933,3 +1947,231 @@ class TestMainImplWorkersValidation:
 
         with pytest.raises(SystemExit):
             _main_impl()
+
+
+# ===================================================================
+# org.writers edge-case tests (L68-69, L147, L169, L187, L267, L309,
+# L320, L400, L443, L1088)
+# ===================================================================
+
+def _make_trending(num_snapshots: int = 2) -> OrgReportTrending:
+    """Build a minimal OrgReportTrending with *num_snapshots* entries."""
+    snapshots = [
+        TrendingSnapshot(
+            timestamp=f"2025-0{i + 1}-01T00:00:00",
+            data_view_count=i + 3,
+            component_count=(i + 1) * 10,
+            core_count=(i + 1) * 5,
+            isolated_count=i,
+            high_sim_pair_count=i,
+        )
+        for i in range(num_snapshots)
+    ]
+    deltas = []
+    if num_snapshots >= 2:
+        for i in range(num_snapshots - 1):
+            deltas.append(
+                TrendingDelta(
+                    from_timestamp=snapshots[i].timestamp,
+                    to_timestamp=snapshots[i + 1].timestamp,
+                    data_view_delta=1,
+                    component_delta=10,
+                    core_delta=5,
+                    isolated_delta=1,
+                    high_sim_pair_delta=1,
+                )
+            )
+    return OrgReportTrending(
+        snapshots=snapshots,
+        deltas=deltas,
+        drift_scores={"dv_001": 0.8, "dv_002": 0.5},
+        window_size=num_snapshots,
+    )
+
+
+class TestFormatTrendingTimestampShortFallback:
+    """Tests for _format_trending_timestamp_short fallback (L68-69)."""
+
+    def test_valid_iso_timestamp_formats_correctly(self):
+        result = _format_trending_timestamp_short("2025-03-15T10:30:00")
+        assert result == "Mar 15"
+
+    def test_invalid_timestamp_returns_first_10_chars(self):
+        """ValueError path: non-ISO string triggers fallback (L68-69)."""
+        result = _format_trending_timestamp_short("not-a-real-date-string")
+        assert result == "not-a-real"
+
+    def test_short_invalid_timestamp_returns_truncated(self):
+        """ValueError path: short invalid string still returns ts[:10]."""
+        result = _format_trending_timestamp_short("bad")
+        assert result == "bad"
+
+    def test_empty_string_returns_empty(self):
+        """ValueError path: empty string triggers fallback returning empty."""
+        result = _format_trending_timestamp_short("")
+        assert result == ""
+
+
+class TestRenderConsoleTrendingTableEmpty:
+    """Tests for _render_console_trending_table empty-input guard (L147)."""
+
+    def test_empty_column_labels_returns_empty_list(self):
+        """L147: empty column_labels -> return []."""
+        result = _render_console_trending_table([], [("Metrics", [1, 2])])
+        assert result == []
+
+    def test_empty_metric_rows_returns_empty_list(self):
+        """L147: empty metric_rows -> return []."""
+        result = _render_console_trending_table(["Jan 01", "Feb 01"], [])
+        assert result == []
+
+    def test_both_empty_returns_empty_list(self):
+        """L147: both empty -> return []."""
+        result = _render_console_trending_table([], [])
+        assert result == []
+
+
+class TestRenderMarkdownTrendingTableEmpty:
+    """Tests for _render_markdown_trending_table empty-input guard (L169)."""
+
+    def test_empty_column_labels_returns_empty_list(self):
+        """L169: empty column_labels -> return []."""
+        result = _render_markdown_trending_table([], [("Metrics", [1, 2])])
+        assert result == []
+
+    def test_empty_metric_rows_returns_empty_list(self):
+        """L169: empty metric_rows -> return []."""
+        result = _render_markdown_trending_table(["Jan 01", "Feb 01"], [])
+        assert result == []
+
+    def test_both_empty_returns_empty_list(self):
+        """L169: both empty -> return []."""
+        result = _render_markdown_trending_table([], [])
+        assert result == []
+
+
+class TestRenderHtmlTrendingTableEmpty:
+    """Tests for _render_html_trending_table empty-input guard (L187)."""
+
+    def test_empty_column_labels_returns_empty_string(self):
+        """L187: empty column_labels -> return ''."""
+        result = _render_html_trending_table([], [("Metrics", [1, 2])])
+        assert result == ""
+
+    def test_empty_metric_rows_returns_empty_string(self):
+        """L187: empty metric_rows -> return ''."""
+        result = _render_html_trending_table(["Jan 01", "Feb 01"], [])
+        assert result == ""
+
+    def test_both_empty_returns_empty_string(self):
+        """L187: both empty -> return ''."""
+        result = _render_html_trending_table([], [])
+        assert result == ""
+
+
+class TestTopDriftScores:
+    """Tests for _top_drift_scores (L267)."""
+
+    def test_returns_top_n_entries(self):
+        """L267: result is sliced to limit."""
+        scores = {"dv_a": 0.9, "dv_b": 0.7, "dv_c": 0.5, "dv_d": 0.3}
+        result = _top_drift_scores(scores, limit=2)
+        assert len(result) == 2
+        assert result[0][0] == "dv_a"
+        assert result[1][0] == "dv_b"
+
+    def test_default_limit_is_ten(self):
+        """L267: default limit is 10."""
+        scores = {f"dv_{i:02d}": float(i) for i in range(20)}
+        result = _top_drift_scores(scores)
+        assert len(result) == 10
+
+    def test_empty_scores_returns_empty(self):
+        """L267: empty dict returns empty list."""
+        result = _top_drift_scores({})
+        assert result == []
+
+
+class TestTrendingDateRangeEmptySnapshots:
+    """Tests for _trending_date_range empty guard (L309)."""
+
+    def test_empty_snapshots_returns_empty_string(self):
+        """L309: empty snapshots list -> return ''."""
+        result = _trending_date_range([])
+        assert result == ""
+
+    def test_single_snapshot_returns_same_label_both_sides(self):
+        """L309 not triggered: single snapshot returns first == last."""
+        snapshots = [TrendingSnapshot(timestamp="2025-01-15T00:00:00")]
+        result = _trending_date_range(snapshots)
+        assert result == "Jan 15 \u2192 Jan 15"
+
+
+class TestRenderTrendingConsoleOneSnapshot:
+    """Tests for _render_trending_console with <2 snapshots (L320)."""
+
+    def test_single_snapshot_returns_empty_string(self):
+        """L320: len(snapshots) < 2 -> return ''."""
+        trending = _make_trending(num_snapshots=1)
+        result = _render_trending_console(trending)
+        assert result == ""
+
+    def test_no_snapshots_returns_empty_string(self):
+        """L320: no snapshots -> return ''."""
+        trending = OrgReportTrending(snapshots=[], deltas=[], drift_scores={}, window_size=0)
+        result = _render_trending_console(trending)
+        assert result == ""
+
+
+class TestRenderTrendingMarkdownOneSnapshot:
+    """Tests for _render_trending_markdown with <2 snapshots (L400)."""
+
+    def test_single_snapshot_returns_empty_string(self):
+        """L400: len(snapshots) < 2 -> return ''."""
+        trending = _make_trending(num_snapshots=1)
+        result = _render_trending_markdown(trending)
+        assert result == ""
+
+    def test_no_snapshots_returns_empty_string(self):
+        """L400: no snapshots -> return ''."""
+        trending = OrgReportTrending(snapshots=[], deltas=[], drift_scores={}, window_size=0)
+        result = _render_trending_markdown(trending)
+        assert result == ""
+
+
+class TestRenderTrendingHtmlOneSnapshot:
+    """Tests for _render_trending_html with <2 snapshots (L443)."""
+
+    def test_single_snapshot_returns_empty_string(self):
+        """L443: len(snapshots) < 2 -> return ''."""
+        trending = _make_trending(num_snapshots=1)
+        result = _render_trending_html(trending)
+        assert result == ""
+
+    def test_no_snapshots_returns_empty_string(self):
+        """L443: no snapshots -> return ''."""
+        trending = OrgReportTrending(snapshots=[], deltas=[], drift_scores={}, window_size=0)
+        result = _render_trending_html(trending)
+        assert result == ""
+
+
+class TestBuildOrgReportJsonDataSkipSimilarity:
+    """Tests for build_org_report_json_data skip_similarity path (L1088)."""
+
+    def test_skip_similarity_sets_mode(self):
+        """L1088: parameters.skip_similarity=True -> similarity_analysis_mode='skip_similarity'."""
+        result = _make_org_result(include_similarity=False, config_overrides={"skip_similarity": True})
+        data = build_org_report_json_data(result)
+
+        assert data["summary"]["similarity_analysis_mode"] == "skip_similarity"
+        assert data["summary"]["similarity_analysis_complete"] is False
+
+    def test_org_stats_only_takes_priority_over_skip_similarity(self):
+        """org_stats_only path (L1086) takes priority even if skip_similarity is also True."""
+        result = _make_org_result(
+            include_similarity=False,
+            config_overrides={"org_stats_only": True, "skip_similarity": True},
+        )
+        data = build_org_report_json_data(result)
+
+        assert data["summary"]["similarity_analysis_mode"] == "org_stats_only"
