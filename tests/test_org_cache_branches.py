@@ -31,6 +31,12 @@ def _full_fidelity_snapshot(payload: dict[str, object]) -> dict[str, object]:
     if isinstance(summary, dict):
         summary.setdefault("similarity_analysis_complete", True)
         summary.setdefault("similarity_analysis_mode", "complete")
+        data_views_total = summary.get("data_views_total") or summary.get("total_data_views")
+        if isinstance(data_views_total, int) and data_views_total >= 0 and "data_views" not in payload:
+            payload["data_views"] = [
+                {"id": f"dv_{index:03d}", "name": f"DV {index}", "metrics_count": 0, "dimensions_count": 0}
+                for index in range(1, data_views_total + 1)
+            ]
 
     parameters = payload.setdefault("parameters", {})
     if isinstance(parameters, dict):

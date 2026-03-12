@@ -31,6 +31,35 @@ class OrgReportSnapshotDataViewStats:
 
 
 @dataclass(frozen=True)
+class OrgReportSnapshotDataViewAssessment:
+    """Normalized DV counts plus consistency checks for one snapshot payload."""
+
+    stats: OrgReportSnapshotDataViewStats
+    explicit_reported_total: int | None
+    explicit_analyzed_total: int | None
+    explicit_failed_total: int | None
+    has_error_rows: bool
+    rows_match_reported_total: bool
+    successful_rows_match_analyzed_total: bool
+    identified_row_total: int
+    unique_id_total: int
+    missing_id_rows: int
+    duplicate_id_rows: int
+    ids_complete: bool
+    coverage_complete: bool
+    history_complete: bool
+
+
+@dataclass(frozen=True)
+class OrgReportSnapshotComparisonAssessment:
+    """Normalized comparison-fidelity decision for one org-report payload."""
+
+    eligible: bool
+    exclusion_reason: str | None
+    complete_high_similarity_pairs: bool
+
+
+@dataclass(frozen=True)
 class OrgReportSnapshotHistoryAssessment:
     """Normalized history-fidelity decision for one org-report payload."""
 
@@ -315,6 +344,15 @@ def _persisted_org_report_snapshot_history_assessment(
 def _derived_org_report_snapshot_history_assessment(data: Mapping[str, Any]) -> OrgReportSnapshotHistoryAssessment:
     """Derive history fidelity from the snapshot payload itself."""
     summary = snapshot_mapping_dict(data.get("summary", {}))
+    data_view_assessment = org_report_snapshot_data_view_assessment(data)
+
+    def _incomplete_data_views() -> OrgReportSnapshotHistoryAssessment:
+        return OrgReportSnapshotHistoryAssessment(
+            eligible=False,
+            exclusion_reason="incomplete_data_views",
+            fidelity_known=True,
+        )
+
     if coerce_snapshot_bool(summary.get("is_sampled")) is True:
         return OrgReportSnapshotHistoryAssessment(
             eligible=False,
@@ -331,8 +369,12 @@ def _derived_org_report_snapshot_history_assessment(data: Mapping[str, Any]) -> 
             fidelity_known=True,
         )
     if similarity_analysis_complete is True:
+        if not data_view_assessment.history_complete:
+            return _incomplete_data_views()
         return OrgReportSnapshotHistoryAssessment(eligible=True, exclusion_reason=None, fidelity_known=True)
     if similarity_analysis_mode:
+        if similarity_analysis_mode == "complete" and not data_view_assessment.history_complete:
+            return _incomplete_data_views()
         return OrgReportSnapshotHistoryAssessment(
             eligible=similarity_analysis_mode == "complete",
             exclusion_reason=None if similarity_analysis_mode == "complete" else similarity_analysis_mode,
@@ -401,6 +443,101 @@ def org_report_snapshot_history_eligible(data: Mapping[str, Any]) -> bool:
     return org_report_snapshot_history_assessment(data).eligible
 
 
+def _derived_org_report_snapshot_comparison_assessment(
+    data: Mapping[str, Any],
+    *,
+    derived_history: OrgReportSnapshotHistoryAssessment | None = None,
+) -> OrgReportSnapshotComparisonAssessment:
+    """Derive point-in-time comparison fidelity from the snapshot payload itself."""
+    summary = snapshot_mapping_dict(data.get("summary", {}))
+    if coerce_snapshot_bool(summary.get("is_sampled")) is True:
+        return OrgReportSnapshotComparisonAssessment(
+            eligible=False,
+            exclusion_reason="sampled",
+            complete_high_similarity_pairs=False,
+        )
+
+    data_view_assessment = org_report_snapshot_data_view_assessment(data)
+    if not data_view_assessment.history_complete:
+        return OrgReportSnapshotComparisonAssessment(
+            eligible=False,
+            exclusion_reason="incomplete_data_views",
+            complete_high_similarity_pairs=False,
+        )
+
+    derived_history = (
+        derived_history if derived_history is not None else _derived_org_report_snapshot_history_assessment(data)
+    )
+    if derived_history.exclusion_reason == LEGACY_MISSING_FIDELITY_MARKERS_REASON:
+        return OrgReportSnapshotComparisonAssessment(
+            eligible=False,
+            exclusion_reason=LEGACY_MISSING_FIDELITY_MARKERS_REASON,
+            complete_high_similarity_pairs=False,
+        )
+
+    return OrgReportSnapshotComparisonAssessment(
+        eligible=True,
+        exclusion_reason=None,
+        complete_high_similarity_pairs=derived_history.eligible,
+    )
+
+
+def _persisted_org_report_snapshot_comparison_assessment(
+    data: Mapping[str, Any],
+    *,
+    derived_history: OrgReportSnapshotHistoryAssessment,
+) -> OrgReportSnapshotComparisonAssessment | None:
+    """Return any persisted comparison-tightening decision stored in snapshot metadata."""
+    persisted = _persisted_org_report_snapshot_history_assessment(data)
+    if persisted is None or persisted.eligible:
+        return None
+
+    snapshot_meta = snapshot_mapping_dict(data.get("_snapshot_meta", {}))
+    explicit_reason = str(snapshot_meta.get("history_exclusion_reason") or "").strip()
+
+    # History metadata should not block point-in-time comparison when it merely
+    # restates a payload-derived history-only exclusion such as skip-similarity.
+    if not derived_history.eligible and (not explicit_reason or explicit_reason == derived_history.exclusion_reason):
+        return None
+
+    return OrgReportSnapshotComparisonAssessment(
+        eligible=False,
+        exclusion_reason=persisted.exclusion_reason,
+        complete_high_similarity_pairs=False,
+    )
+
+
+def _merged_org_report_snapshot_comparison_assessment(
+    *,
+    derived: OrgReportSnapshotComparisonAssessment,
+    persisted: OrgReportSnapshotComparisonAssessment | None,
+) -> OrgReportSnapshotComparisonAssessment:
+    """Merge derived and persisted comparison-fidelity decisions with fail-closed semantics."""
+    if not derived.eligible:
+        return derived
+
+    # Persisted metadata may tighten direct-comparison eligibility, but it must
+    # not widen it because older cached snapshots can carry stale positive flags.
+    if persisted is not None and not persisted.eligible:
+        return persisted
+
+    return derived
+
+
+def org_report_snapshot_comparison_assessment(data: Mapping[str, Any]) -> OrgReportSnapshotComparisonAssessment:
+    """Return the normalized comparison-fidelity assessment for one snapshot payload."""
+    derived_history = _derived_org_report_snapshot_history_assessment(data)
+    return _merged_org_report_snapshot_comparison_assessment(
+        derived=_derived_org_report_snapshot_comparison_assessment(data, derived_history=derived_history),
+        persisted=_persisted_org_report_snapshot_comparison_assessment(data, derived_history=derived_history),
+    )
+
+
+def org_report_snapshot_comparison_eligible(data: Mapping[str, Any]) -> bool:
+    """Return True when an org-report payload supports point-in-time comparison."""
+    return org_report_snapshot_comparison_assessment(data).eligible
+
+
 def coerce_snapshot_int(value: Any) -> int | None:
     """Best-effort integer coercion for serialized org-report counts."""
     if isinstance(value, bool):
@@ -460,6 +597,14 @@ def snapshot_mapping_list(value: Any) -> list[Any]:
     if isinstance(value, list):
         return value
     return []
+
+
+def _non_negative_snapshot_mapping_int(mapping: Mapping[str, Any], *keys: str) -> int | None:
+    """Return the first integer-like mapping value, clamped to zero or higher."""
+    value = snapshot_mapping_int(mapping, *keys)
+    if value is None:
+        return None
+    return max(0, value)
 
 
 def org_report_snapshot_timestamp(data: Mapping[str, Any]) -> str | None:
@@ -529,6 +674,18 @@ def org_report_snapshot_content_hash(report_data: Mapping[str, Any]) -> str:
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
+def normalize_org_report_data_view_id(value: Any) -> str:
+    """Normalize a data-view identifier for stable comparisons."""
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
+def org_report_data_view_row_id(data_view: Mapping[str, Any]) -> str:
+    """Extract one normalized data-view identifier from a serialized row."""
+    return normalize_org_report_data_view_id(data_view.get("data_view_id") or data_view.get("id"))
+
+
 def org_report_data_view_row_has_error(data_view: Any) -> bool:
     """Return True when a serialized data-view row represents a failed fetch."""
     if not isinstance(data_view, dict):
@@ -548,52 +705,113 @@ def successful_org_report_data_view_rows(data: Mapping[str, Any]) -> list[dict[s
     ]
 
 
-def org_report_snapshot_data_view_stats(data: Mapping[str, Any]) -> OrgReportSnapshotDataViewStats:
-    """Return normalized reported/analyzed/failed counts for one snapshot payload."""
+def org_report_snapshot_data_view_assessment(data: Mapping[str, Any]) -> OrgReportSnapshotDataViewAssessment:
+    """Return normalized DV counts plus consistency checks for one snapshot payload."""
     summary = snapshot_mapping_dict(data.get("summary", {}))
     raw_data_views = snapshot_mapping_list(data.get("data_views", []))
     successful_data_views = successful_org_report_data_view_rows(data)
 
     raw_total = len(raw_data_views)
     successful_row_total = len(successful_data_views)
+    has_error_rows = raw_total != successful_row_total
 
-    analyzed_total = snapshot_mapping_int(summary, "data_views_analyzed")
-    if analyzed_total is None:
-        analyzed_total = successful_row_total
-    analyzed_total = max(0, analyzed_total)
+    explicit_analyzed_total = _non_negative_snapshot_mapping_int(summary, "data_views_analyzed")
+    analyzed_total = successful_row_total if explicit_analyzed_total is None else explicit_analyzed_total
 
-    explicit_reported_total = snapshot_mapping_int(summary, "data_views_total", "total_data_views")
+    explicit_reported_total = _non_negative_snapshot_mapping_int(summary, "data_views_total", "total_data_views")
     reported_candidates = [successful_row_total, analyzed_total]
     if raw_total > 0:
         reported_candidates.append(raw_total)
     if explicit_reported_total is not None:
-        reported_candidates.append(max(0, explicit_reported_total))
+        reported_candidates.append(explicit_reported_total)
     reported_total = max(reported_candidates, default=0)
 
-    explicit_failed_total = snapshot_mapping_int(summary, "data_views_failed")
-    if explicit_failed_total is None:
-        explicit_failed_total = 0
-    explicit_failed_total = max(0, explicit_failed_total)
+    explicit_failed_total = _non_negative_snapshot_mapping_int(summary, "data_views_failed")
     failed_total = max(
-        explicit_failed_total,
+        explicit_failed_total or 0,
         raw_total - successful_row_total,
         reported_total - analyzed_total,
         0,
     )
 
-    return OrgReportSnapshotDataViewStats(
+    stats = OrgReportSnapshotDataViewStats(
         reported_total=reported_total,
         analyzed_total=analyzed_total,
         failed_total=failed_total,
         raw_total=raw_total,
         successful_row_total=successful_row_total,
     )
+    rows_match_reported_total = explicit_reported_total is None or raw_total == explicit_reported_total
+    successful_rows_match_analyzed_total = (
+        explicit_analyzed_total is None or successful_row_total == explicit_analyzed_total
+    )
+
+    normalized_ids: list[str] = []
+    missing_id_rows = 0
+    for data_view in raw_data_views:
+        if not isinstance(data_view, Mapping):
+            missing_id_rows += 1
+            continue
+        data_view_id = org_report_data_view_row_id(data_view)
+        if not data_view_id:
+            missing_id_rows += 1
+            continue
+        normalized_ids.append(data_view_id)
+
+    identified_row_total = len(normalized_ids)
+    unique_id_total = len(set(normalized_ids))
+    duplicate_id_rows = identified_row_total - unique_id_total
+    ids_complete = missing_id_rows == 0 and duplicate_id_rows == 0 and unique_id_total == stats.reported_total
+
+    coverage_complete = (
+        not has_error_rows
+        and (explicit_failed_total is None or explicit_failed_total == 0)
+        and rows_match_reported_total
+        and successful_rows_match_analyzed_total
+    )
+    history_complete = coverage_complete and ids_complete
+
+    return OrgReportSnapshotDataViewAssessment(
+        stats=stats,
+        explicit_reported_total=explicit_reported_total,
+        explicit_analyzed_total=explicit_analyzed_total,
+        explicit_failed_total=explicit_failed_total,
+        has_error_rows=has_error_rows,
+        rows_match_reported_total=rows_match_reported_total,
+        successful_rows_match_analyzed_total=successful_rows_match_analyzed_total,
+        identified_row_total=identified_row_total,
+        unique_id_total=unique_id_total,
+        missing_id_rows=missing_id_rows,
+        duplicate_id_rows=duplicate_id_rows,
+        ids_complete=ids_complete,
+        coverage_complete=coverage_complete,
+        history_complete=history_complete,
+    )
+
+
+def org_report_snapshot_data_view_stats(data: Mapping[str, Any]) -> OrgReportSnapshotDataViewStats:
+    """Return normalized reported/analyzed/failed counts for one snapshot payload."""
+    return org_report_snapshot_data_view_assessment(data).stats
+
+
+def org_report_snapshot_has_complete_data_view_coverage(data: Mapping[str, Any]) -> bool:
+    """Return True when DV rows and summary counts agree on full snapshot coverage."""
+    return org_report_snapshot_data_view_assessment(data).coverage_complete
+
+
+def org_report_snapshot_has_complete_data_view_ids(data: Mapping[str, Any]) -> bool:
+    """Return True when every reported data view has a unique, normalized stable ID."""
+    return org_report_snapshot_data_view_assessment(data).ids_complete
 
 
 def normalized_similarity_pair_ids(pair: Mapping[str, Any]) -> tuple[str, str] | None:
     """Extract a stable high-similarity pair identity from serialized report data."""
-    dv1 = str(pair.get("dv1_id") or snapshot_mapping_dict(pair.get("data_view_1", {})).get("id") or "").strip()
-    dv2 = str(pair.get("dv2_id") or snapshot_mapping_dict(pair.get("data_view_2", {})).get("id") or "").strip()
+    dv1 = normalize_org_report_data_view_id(
+        pair.get("dv1_id") or snapshot_mapping_dict(pair.get("data_view_1", {})).get("id")
+    )
+    dv2 = normalize_org_report_data_view_id(
+        pair.get("dv2_id") or snapshot_mapping_dict(pair.get("data_view_2", {})).get("id")
+    )
     if not dv1 or not dv2:
         return None
     return tuple(sorted((dv1, dv2)))
@@ -669,20 +887,30 @@ def org_report_snapshot_comparison_input(
     data: Mapping[str, Any],
     *,
     require_history_eligible: bool = True,
+    require_comparison_eligible: bool = False,
 ) -> OrgReportComparisonInput:
     """Normalize one snapshot payload into comparison input fields."""
     metadata = org_report_snapshot_metadata(data)
     if metadata is None:
         raise ValueError("expected org-report snapshot payload")
+    data_view_assessment = org_report_snapshot_data_view_assessment(data)
+    comparison_assessment = org_report_snapshot_comparison_assessment(data)
 
     history_exclusion_reason = str(metadata.get("history_exclusion_reason") or "").strip()
     if require_history_eligible and history_exclusion_reason:
         raise ValueError(f"snapshot is not eligible for comparison: {history_exclusion_reason}")
+    if require_comparison_eligible and not comparison_assessment.eligible:
+        raise ValueError(
+            "snapshot is not eligible for comparison: "
+            f"{comparison_assessment.exclusion_reason or 'comparison_ineligible'}"
+        )
 
     prev_dv_ids: set[str] = set()
     prev_dv_names: dict[str, str] = {}
-    for dv in successful_org_report_data_view_rows(data):
-        dv_id = str(dv.get("data_view_id") or dv.get("id") or "")
+    for dv in snapshot_mapping_list(data.get("data_views", [])):
+        if not isinstance(dv, Mapping):
+            continue
+        dv_id = org_report_data_view_row_id(dv)
         if not dv_id:
             continue
         prev_dv_ids.add(dv_id)
@@ -696,7 +924,8 @@ def org_report_snapshot_comparison_input(
     return OrgReportComparisonInput(
         timestamp=str(metadata["generated_at"]),
         data_view_ids=prev_dv_ids,
-        has_data_view_ids=isinstance(data.get("data_views"), list),
+        has_data_view_ids=bool(prev_dv_ids),
+        complete_data_view_ids=data_view_assessment.ids_complete,
         data_view_names=prev_dv_names,
         data_view_count=int(metadata["data_views_total"]),
         comparison_data_view_count=int(metadata["data_views_analyzed"]),
@@ -705,6 +934,7 @@ def org_report_snapshot_comparison_input(
         core_count=int(metadata["core_count"]),
         isolated_count=int(metadata["isolated_count"]),
         high_similarity_pairs=org_report_high_similarity_pairs(data),
+        complete_high_similarity_pairs=comparison_assessment.complete_high_similarity_pairs,
     )
 
 
@@ -724,7 +954,7 @@ def org_report_snapshot_metadata(
     snapshot_meta = snapshot_mapping_dict(data.get("_snapshot_meta", {}))
     data_views = snapshot_mapping_list(data.get("data_views", []))
     source = Path(source_path) if source_path is not None else None
-    data_view_stats = org_report_snapshot_data_view_stats(data)
+    data_view_stats = org_report_snapshot_data_view_assessment(data).stats
 
     history_exclusion_reason = org_report_snapshot_history_exclusion_reason(data)
 

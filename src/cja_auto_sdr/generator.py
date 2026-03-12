@@ -8093,49 +8093,27 @@ def compare_org_reports(current: OrgReportResult, previous_path: str) -> OrgRepo
         org_report_snapshot_comparison_input,
     )
 
-    # Extract data view IDs from both
-    current_dv_ids = {s.data_view_id for s in current.data_view_summaries if not s.has_error}
-    current_dv_names = {s.data_view_id: s.data_view_name for s in current.data_view_summaries}
-    current_comparison_dv_count = len(current_dv_ids)
-
-    # Component counts
-    current_components = len(current.component_index)
-    current_component_ids = set(current.component_index)
-
-    # Distribution deltas
-    current_core = current.distribution.total_core
-    current_isolated = current.distribution.total_isolated
-
-    # High-similarity pairs comparison (normalize order for stability)
-    def _pair_key(dv1: str, dv2: str) -> tuple[str, str]:
-        return tuple(sorted([dv1, dv2]))
-
-    current_high_sim = set()
-    if current.similarity_pairs:
-        for p in current.similarity_pairs:
-            if p.jaccard_similarity >= 0.9:
-                current_high_sim.add(_pair_key(p.dv1_id, p.dv2_id))
-
     try:
-        previous_snapshot = org_report_snapshot_comparison_input(prev_data, require_history_eligible=True)
+        previous_snapshot = org_report_snapshot_comparison_input(
+            prev_data,
+            require_history_eligible=False,
+            require_comparison_eligible=True,
+        )
     except ValueError as exc:
         raise ValueError(f"Previous report {previous_path} is not eligible for comparison: {exc}") from exc
 
+    try:
+        current_snapshot = org_report_snapshot_comparison_input(
+            build_org_report_json_data(current),
+            require_history_eligible=False,
+            require_comparison_eligible=True,
+        )
+    except ValueError as exc:
+        raise ValueError(f"Current org-report is not eligible for comparison: {exc}") from exc
+
     return build_org_report_comparison(
         previous=previous_snapshot,
-        current=OrgReportComparisonInput(
-            timestamp=current.timestamp,
-            data_view_ids=current_dv_ids,
-            has_data_view_ids=True,
-            data_view_names=current_dv_names,
-            data_view_count=current.total_data_views,
-            comparison_data_view_count=current_comparison_dv_count,
-            component_count=current_components,
-            component_ids=current_component_ids,
-            core_count=current_core,
-            isolated_count=current_isolated,
-            high_similarity_pairs=current_high_sim,
-        ),
+        current=current_snapshot,
     )
 
 

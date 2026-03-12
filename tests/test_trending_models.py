@@ -40,6 +40,17 @@ class TestTrendingSnapshot:
         assert snap.component_count == 395
         assert snap.dv_ids == {"dv1", "dv2"}
 
+    def test_complete_data_view_ids_defaults_false_when_counts_exceed_observed_ids(self):
+        snap = TrendingSnapshot(
+            timestamp="2026-03-08T12:00:00Z",
+            data_view_count=5,
+            analyzed_data_view_count=4,
+            dv_ids={"a", "b", "c", "d"},
+        )
+
+        assert snap.has_data_view_ids is True
+        assert snap.complete_data_view_ids is False
+
 
 class TestTrendingDelta:
     def test_default_construction(self):
@@ -79,6 +90,7 @@ class TestOrgReportTrending:
         sim=2,
         dv_ids=None,
         has_data_view_ids=None,
+        complete_data_view_ids=None,
         component_ids=None,
         high_similarity_pairs=None,
     ):
@@ -92,6 +104,7 @@ class TestOrgReportTrending:
             high_sim_pair_count=sim,
             dv_ids=set() if dv_ids is None else dv_ids,
             has_data_view_ids=(dv_ids is not None) if has_data_view_ids is None else has_data_view_ids,
+            complete_data_view_ids=complete_data_view_ids,
             component_ids=component_ids,
             high_similarity_pairs=high_similarity_pairs or set(),
         )
@@ -142,8 +155,8 @@ class TestOrgReportTrending:
 
     def test_to_comparison_with_two_snapshots(self):
         snaps = [
-            self._make_snapshot("2026-01-01", dv_count=10, comp_count=100, core=80, iso=20, dv_ids={"a", "b"}),
-            self._make_snapshot("2026-02-01", dv_count=12, comp_count=120, core=95, iso=25, dv_ids={"a", "b", "c"}),
+            self._make_snapshot("2026-01-01", dv_count=2, comp_count=100, core=80, iso=20, dv_ids={"a", "b"}),
+            self._make_snapshot("2026-02-01", dv_count=3, comp_count=120, core=95, iso=25, dv_ids={"a", "b", "c"}),
         ]
         trending = OrgReportTrending(snapshots=snaps, window_size=2)
         comparison = trending.to_comparison()
@@ -162,9 +175,9 @@ class TestOrgReportTrending:
 
     def test_to_comparison_uses_last_two_snapshots(self):
         snaps = [
-            self._make_snapshot("2026-01-01", dv_count=10, comp_count=100, dv_ids={"a"}),
-            self._make_snapshot("2026-02-01", dv_count=12, comp_count=120, dv_ids={"a", "b"}),
-            self._make_snapshot("2026-03-01", dv_count=15, comp_count=150, dv_ids={"a", "b", "c"}),
+            self._make_snapshot("2026-01-01", dv_count=1, comp_count=100, dv_ids={"a"}),
+            self._make_snapshot("2026-02-01", dv_count=2, comp_count=120, dv_ids={"a", "b"}),
+            self._make_snapshot("2026-03-01", dv_count=3, comp_count=150, dv_ids={"a", "b", "c"}),
         ]
         trending = OrgReportTrending(snapshots=snaps, window_size=3)
         comparison = trending.to_comparison()
@@ -186,7 +199,7 @@ class TestOrgReportTrending:
         assert comparison.components_removed == 100
         assert comparison.summary["components_delta"] == -100
 
-    def test_to_comparison_uses_analyzed_count_when_snapshot_ids_are_unavailable(self):
+    def test_to_comparison_uses_reported_count_when_snapshot_ids_are_unavailable(self):
         snaps = [
             self._make_snapshot("2026-01-01", dv_count=10, analyzed_dv_count=8, dv_ids=None),
             self._make_snapshot("2026-02-01", dv_count=10, analyzed_dv_count=6, dv_ids=None),
@@ -197,14 +210,14 @@ class TestOrgReportTrending:
         assert comparison is not None
         assert comparison.data_views_added == []
         assert comparison.data_views_removed == []
-        assert comparison.summary["data_views_delta"] == -2
+        assert comparison.summary["data_views_delta"] == 0
 
     def test_to_comparison_suppresses_exact_dv_lists_when_only_one_side_has_ids(self):
         snaps = [
             self._make_snapshot("2026-01-01", dv_count=8, analyzed_dv_count=8, dv_ids=None),
             self._make_snapshot(
                 "2026-02-01",
-                dv_count=10,
+                dv_count=9,
                 analyzed_dv_count=9,
                 dv_ids={f"dv_{index}" for index in range(9)},
             ),
@@ -217,17 +230,51 @@ class TestOrgReportTrending:
         assert comparison.data_views_removed == []
         assert comparison.summary["data_views_delta"] == 1
 
-    def test_to_comparison_summary_delta_matches_successful_ids_during_partial_failures(self):
+    def test_to_comparison_suppresses_exact_dv_lists_during_partial_failures(self):
         snaps = [
-            self._make_snapshot("2026-01-01", dv_count=5, analyzed_dv_count=5, dv_ids={"a", "b", "c", "d", "e"}),
-            self._make_snapshot("2026-02-01", dv_count=5, analyzed_dv_count=4, dv_ids={"a", "c", "d", "e"}),
+            self._make_snapshot(
+                "2026-01-01",
+                dv_count=5,
+                analyzed_dv_count=5,
+                dv_ids={"a", "b", "c", "d", "e"},
+                complete_data_view_ids=True,
+            ),
+            self._make_snapshot(
+                "2026-02-01",
+                dv_count=5,
+                analyzed_dv_count=4,
+                dv_ids={"a", "c", "d", "e"},
+                complete_data_view_ids=False,
+            ),
         ]
 
         comparison = OrgReportTrending(snapshots=snaps, window_size=2).to_comparison()
 
         assert comparison is not None
-        assert comparison.data_views_removed == ["b"]
-        assert comparison.summary["data_views_delta"] == -1
+        assert comparison.data_views_removed == []
+        assert comparison.summary["data_views_delta"] == 0
+
+    def test_to_comparison_infers_incomplete_manual_snapshot_ids_from_count_mismatch(self):
+        snaps = [
+            self._make_snapshot(
+                "2026-01-01",
+                dv_count=5,
+                analyzed_dv_count=5,
+                dv_ids={"a", "b", "c", "d", "e"},
+            ),
+            self._make_snapshot(
+                "2026-02-01",
+                dv_count=5,
+                analyzed_dv_count=4,
+                dv_ids={"a", "c", "d", "e"},
+            ),
+        ]
+
+        comparison = OrgReportTrending(snapshots=snaps, window_size=2).to_comparison()
+
+        assert comparison is not None
+        assert comparison.data_views_removed == []
+        assert comparison.summary["data_views_delta"] == 0
 
     def test_identical_snapshots_produce_zero_deltas(self):
         snap = self._make_snapshot("2026-01-01", dv_count=10, comp_count=100, core=80, iso=20, dv_ids={"a"})

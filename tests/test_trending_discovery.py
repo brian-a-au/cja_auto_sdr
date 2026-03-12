@@ -39,6 +39,11 @@ def _make_org_report_json(
     similarity_pairs=None,
 ):
     """Build a minimal org-report JSON dict."""
+    if data_views is None:
+        data_views = [
+            {"id": f"dv{index}", "name": f"DV {index}", "metrics_count": 0, "dimensions_count": 0}
+            for index in range(1, dv_count + 1)
+        ]
     return {
         "generated_at": timestamp,
         "org_id": org_id,
@@ -66,7 +71,7 @@ def _make_org_report_json(
                 "dimensions_count": len(isolated_dimensions or []),
             },
         },
-        "data_views": data_views or [],
+        "data_views": data_views,
         "component_index": component_index or {},
         "similarity_pairs": similarity_pairs or [],
     }
@@ -125,6 +130,10 @@ class TestExtractSnapshotFromJson:
                 "similarity_analysis_complete": True,
                 "similarity_analysis_mode": "complete",
             },
+            "data_views": [
+                {"id": f"dv{index}", "name": f"DV {index}", "metrics_count": 0, "dimensions_count": 0}
+                for index in range(1, 6)
+            ],
             "similarity_pairs": [],
         }
         snap = _extract_snapshot_from_json(data)
@@ -181,7 +190,7 @@ class TestExtractSnapshotFromJson:
         assert snap.component_ids == {"m1", "d1"}
         assert snap.high_similarity_pairs == {("a", "b"), ("c", "d")}
 
-    def test_failed_data_views_are_excluded_from_drift_inputs(self):
+    def test_failed_data_views_are_excluded_from_history(self):
         data = _make_org_report_json(
             dv_count=2,
             data_views=[
@@ -195,15 +204,9 @@ class TestExtractSnapshotFromJson:
 
         snap = _extract_snapshot_from_json(data)
 
-        assert snap is not None
-        assert snap.data_view_count == 2
-        assert snap.dv_ids == {"dv_ok"}
-        assert snap.dv_component_counts == {"dv_ok": 5}
-        assert snap.dv_names == {"dv_ok": "Healthy"}
-        assert snap.dv_core_ratios == {"dv_ok": pytest.approx(0.2, abs=0.0001)}
-        assert snap.dv_max_similarity == {"dv_ok": 0.0}
+        assert snap is None
 
-    def test_partial_failures_preserve_reported_headline_count(self):
+    def test_partial_failures_are_excluded_from_history(self):
         data = _make_org_report_json(
             dv_count=5,
             data_views=[
@@ -218,12 +221,9 @@ class TestExtractSnapshotFromJson:
 
         snap = _extract_snapshot_from_json(data)
 
-        assert snap is not None
-        assert snap.data_view_count == 5
-        assert snap.analyzed_data_view_count == 3
-        assert snap.dv_ids == {"dv1", "dv2", "dv3"}
+        assert snap is None
 
-    def test_zero_analyzed_count_is_preserved_for_failed_snapshots(self):
+    def test_zero_analyzed_failed_snapshots_are_excluded_from_history(self):
         data = _make_org_report_json(
             dv_count=5,
             data_views=[
@@ -235,14 +235,51 @@ class TestExtractSnapshotFromJson:
 
         snap = _extract_snapshot_from_json(data)
 
-        assert snap is not None
-        assert snap.data_view_count == 5
-        assert snap.analyzed_data_view_count == 0
-        assert snap.dv_ids == set()
-        assert snap.dv_component_counts == {}
+        assert snap is None
+
+    def test_compact_rows_that_disagree_with_summary_counts_are_excluded_from_history(self):
+        data = _make_org_report_json(
+            dv_count=3,
+            data_views=[
+                {"id": "dv1", "name": "Healthy 1", "metrics_count": 2, "dimensions_count": 1, "error": None},
+                {"id": "dv2", "name": "Healthy 2", "metrics_count": 2, "dimensions_count": 1, "error": None},
+            ],
+        )
+        data["summary"]["data_views_analyzed"] = 3
+
+        snap = _extract_snapshot_from_json(data)
+
+        assert snap is None
+
+    def test_missing_data_view_ids_with_matching_counts_are_excluded_from_history(self):
+        data = _make_org_report_json(
+            dv_count=2,
+            data_views=[
+                {"id": "dv1", "name": "Healthy 1", "metrics_count": 2, "dimensions_count": 1, "error": None},
+                {"name": "Missing ID", "metrics_count": 2, "dimensions_count": 1, "error": None},
+            ],
+        )
+
+        snap = _extract_snapshot_from_json(data)
+
+        assert snap is None
+
+    def test_duplicate_normalized_data_view_ids_are_excluded_from_history(self):
+        data = _make_org_report_json(
+            dv_count=2,
+            data_views=[
+                {"id": "dv1", "name": "Healthy 1", "metrics_count": 2, "dimensions_count": 1, "error": None},
+                {"id": " dv1 ", "name": "Duplicate", "metrics_count": 2, "dimensions_count": 1, "error": None},
+            ],
+        )
+
+        snap = _extract_snapshot_from_json(data)
+
+        assert snap is None
 
     def test_per_dv_component_counts(self):
         data = _make_org_report_json(
+            dv_count=2,
             data_views=[
                 {"id": "dv1", "name": "DV 1", "metrics_count": 50, "dimensions_count": 30},
                 {"id": "dv2", "name": "DV 2", "metrics_count": 20, "dimensions_count": 10},
@@ -251,10 +288,31 @@ class TestExtractSnapshotFromJson:
         snap = _extract_snapshot_from_json(data)
         assert snap.dv_component_counts == {"dv1": 80, "dv2": 30}
         assert snap.dv_ids == {"dv1", "dv2"}
+
+    def test_extraction_normalizes_whitespace_data_view_ids(self):
+        data = _make_org_report_json(
+            dv_count=2,
+            core_metrics=["m1"],
+            data_views=[
+                {"id": " dv1 ", "name": "DV 1", "metrics_count": 5, "dimensions_count": 3},
+                {"id": " dv2 ", "name": "DV 2", "metrics_count": 4, "dimensions_count": 2},
+            ],
+            component_index={"m1": {"type": "metric", "data_views": [" dv1 ", " dv2 "]}},
+            similarity_pairs=[{"dv1_id": " dv1 ", "dv2_id": " dv2 ", "jaccard_similarity": 0.91}],
+        )
+
+        snap = _extract_snapshot_from_json(data)
+
+        assert snap is not None
+        assert snap.dv_ids == {"dv1", "dv2"}
         assert snap.dv_names == {"dv1": "DV 1", "dv2": "DV 2"}
+        assert snap.dv_component_counts == {"dv1": 8, "dv2": 6}
+        assert snap.dv_core_ratios == {"dv1": pytest.approx(0.125, abs=0.0001), "dv2": pytest.approx(1 / 6, abs=0.0001)}
+        assert snap.dv_max_similarity == {"dv1": 0.91, "dv2": 0.91}
 
     def test_core_ratios_are_derived_from_component_index(self):
         data = _make_org_report_json(
+            dv_count=2,
             core_metrics=["m1"],
             core_dimensions=["d1"],
             data_views=[
@@ -272,6 +330,7 @@ class TestExtractSnapshotFromJson:
 
     def test_dv_max_similarity(self):
         data = _make_org_report_json(
+            dv_count=3,
             data_views=[
                 {"id": "a", "metrics_count": 1, "dimensions_count": 1},
                 {"id": "b", "metrics_count": 1, "dimensions_count": 1},
@@ -287,7 +346,7 @@ class TestExtractSnapshotFromJson:
         assert snap.dv_max_similarity["b"] == 0.8
         assert snap.dv_max_similarity["c"] == 0.9
 
-    def test_dv_count_fallback_to_data_views_length(self):
+    def test_rows_that_exceed_reported_total_are_excluded_from_history(self):
         data = _make_org_report_json(
             dv_count=0,
             data_views=[
@@ -295,8 +354,7 @@ class TestExtractSnapshotFromJson:
                 {"id": "dv2", "metrics_count": 10, "dimensions_count": 5},
             ],
         )
-        snap = _extract_snapshot_from_json(data)
-        assert snap.data_view_count == 2
+        assert _extract_snapshot_from_json(data) is None
 
     def test_legacy_summary_and_distribution_keys_still_supported(self):
         data = {
@@ -312,7 +370,12 @@ class TestExtractSnapshotFromJson:
                 "core": {"core_metrics": ["m1"], "core_dimensions": ["d1"], "metrics_count": 1, "dimensions_count": 1},
                 "isolated": {"metrics_count": 1, "dimensions_count": 0},
             },
-            "data_views": [{"data_view_id": "dv1", "metric_count": 2, "dimension_count": 1}],
+            "data_views": [
+                {"data_view_id": "dv1", "metric_count": 2, "dimension_count": 1},
+                {"data_view_id": "dv2", "metric_count": 0, "dimension_count": 0},
+                {"data_view_id": "dv3", "metric_count": 0, "dimension_count": 0},
+                {"data_view_id": "dv4", "metric_count": 0, "dimension_count": 0},
+            ],
             "component_index": {
                 "m1": {"data_views": ["dv1"]},
                 "d1": {"data_views": ["dv1"]},
@@ -330,7 +393,7 @@ class TestExtractSnapshotFromJson:
         assert _extract_snapshot_from_json(data) is None
 
     def test_non_dict_snapshot_meta_and_non_list_data_views_are_tolerated(self):
-        data = _make_org_report_json(data_views=[])
+        data = _make_org_report_json(dv_count=0, data_views=[])
         data["_snapshot_meta"] = "bad-meta"
         data["data_views"] = "bad-data-views"
 
@@ -518,6 +581,7 @@ class TestDiscoverSnapshots:
     def test_explicit_file_deduplicates_when_equivalent_collection_order_differs(self, tmp_path):
         cached_payload = _make_org_report_json(
             timestamp="2026-01-01",
+            dv_count=2,
             data_views=[
                 {"id": "dv_b", "name": "B", "error": None},
                 {"id": "dv_a", "name": "A", "error": None},
@@ -539,6 +603,7 @@ class TestDiscoverSnapshots:
         explicit_dir.mkdir()
         explicit_payload = _make_org_report_json(
             timestamp="2026-01-01",
+            dv_count=2,
             data_views=[
                 {"id": "dv_a", "name": "A", "error": None},
                 {"id": "dv_b", "name": "B", "error": None},
@@ -987,7 +1052,7 @@ class TestBuildTrending:
         with pytest.raises(ValueError, match="pass org_id"):
             build_trending(cache.get_org_report_snapshot_root_dir())
 
-    def test_build_trending_preserves_zero_analyzed_failed_snapshots(self, tmp_path):
+    def test_build_trending_skips_zero_analyzed_failed_snapshots(self, tmp_path):
         failed = _make_org_report_json(timestamp="2026-01-01", dv_count=5, comp_count=100)
         failed["summary"]["data_views_analyzed"] = 0
         failed["data_views"] = [{"id": "dv_fail", "error": "timeout"}]
@@ -1003,10 +1068,7 @@ class TestBuildTrending:
 
         result = build_trending(tmp_path)
 
-        assert result is not None
-        assert [snapshot.data_view_count for snapshot in result.snapshots] == [5, 5]
-        assert [snapshot.analyzed_data_view_count for snapshot in result.snapshots] == [0, 5]
-        assert result.deltas[0].data_view_delta == 0
+        assert result is None
 
 
 def test_resolve_explicit_snapshot_identities_respects_org_scope(tmp_path):
@@ -1107,24 +1169,20 @@ def test_trim_snapshot_window_negative_returns_empty():
     assert _trim_snapshot_window(snapshots, window_size=-5) == []
 
 
-# L222 — _extract_snapshot_from_json: skip data view missing both id/data_view_id
-def test_extract_snapshot_skips_data_view_missing_id():
+# L222 — _extract_snapshot_from_json: malformed DV rows fail closed
+def test_extract_snapshot_rejects_data_view_missing_id():
     data = _make_org_report_json(
         timestamp="2026-01-01T00:00:00Z",
         dv_count=2,
         comp_count=50,
         data_views=[
-            # This row has neither 'id' nor 'data_view_id' — should be skipped
+            # This row has neither 'id' nor 'data_view_id' and should invalidate history use.
             {"metrics_count": 10, "dimensions_count": 5, "data_view_name": "No ID DV"},
-            # This row has a valid id
             {"id": "dv_valid", "metrics_count": 8, "dimensions_count": 4, "data_view_name": "Valid DV"},
         ],
     )
     snapshot = _extract_snapshot_from_json(data)
-    assert snapshot is not None
-    # Only the valid DV should appear in dv_ids
-    assert "dv_valid" in snapshot.dv_ids
-    assert len(snapshot.dv_ids) == 1
+    assert snapshot is None
 
 
 # L240 — _extract_snapshot_from_json: skip non-dict component info in component_index

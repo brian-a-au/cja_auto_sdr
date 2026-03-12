@@ -53,6 +53,11 @@ def _make_org_report_json(
     similarity_pairs: list | None = None,
 ) -> dict:
     """Build a minimal, history-eligible org-report JSON dict."""
+    if data_views is None:
+        data_views = [
+            {"id": f"dv{index}", "name": f"DV {index}", "metrics_count": 0, "dimensions_count": 0}
+            for index in range(1, dv_count + 1)
+        ]
     return {
         "generated_at": timestamp,
         "org_id": org_id,
@@ -80,7 +85,7 @@ def _make_org_report_json(
                 "dimensions_count": len(isolated_dimensions or []),
             },
         },
-        "data_views": data_views or [],
+        "data_views": data_views,
         "component_index": component_index or {},
         "similarity_pairs": similarity_pairs or [],
     }

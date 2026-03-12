@@ -26,6 +26,18 @@ def _mock_data_views() -> list[dict[str, object]]:
     ]
 
 
+def _history_eligible_result(result):
+    eligible = deepcopy(result)
+    eligible.is_sampled = False
+    for summary in eligible.data_view_summaries:
+        if summary.error is not None:
+            summary.error = None
+            summary.status = "active"
+    if eligible.similarity_pairs is None:
+        eligible.similarity_pairs = []
+    return eligible
+
+
 @patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "mock", None))
 @patch("cja_auto_sdr.generator.cjapy")
 def test_interactive_select_dataviews_retries_and_parses_ranges(mock_cjapy: Mock, _mock_config: Mock):
@@ -397,15 +409,13 @@ def test_run_org_report_cache_and_comparison_error_paths(tmp_path: Path, rich_or
 
 
 def test_run_org_report_trending_window_uses_persistent_snapshot_cache(tmp_path: Path, rich_org_report_result):
-    first_result = deepcopy(rich_org_report_result)
+    first_result = _history_eligible_result(rich_org_report_result)
     first_result.timestamp = "2026-02-01T00:00:00Z"
     first_result.org_id = "test_org@AdobeOrg"
-    first_result.is_sampled = False
 
-    second_result = deepcopy(rich_org_report_result)
+    second_result = _history_eligible_result(rich_org_report_result)
     second_result.timestamp = "2026-03-01T00:00:00Z"
     second_result.org_id = "test_org@AdobeOrg"
-    second_result.is_sampled = False
 
     snapshot_cache_root = tmp_path / "cache"
 
@@ -462,15 +472,13 @@ def test_run_org_report_trending_window_uses_persistent_snapshot_cache(tmp_path:
 
 
 def test_run_org_report_trending_window_includes_legacy_snapshot_history(tmp_path: Path, rich_org_report_result):
-    baseline = deepcopy(rich_org_report_result)
+    baseline = _history_eligible_result(rich_org_report_result)
     baseline.timestamp = "2026-02-01T00:00:00Z"
     baseline.org_id = "test_org@AdobeOrg"
-    baseline.is_sampled = False
 
-    current = deepcopy(rich_org_report_result)
+    current = _history_eligible_result(rich_org_report_result)
     current.timestamp = "2026-03-01T00:00:00Z"
     current.org_id = "test_org@AdobeOrg"
-    current.is_sampled = False
 
     snapshot_cache_root = tmp_path / "cache"
     cache = OrgReportCache(cache_dir=snapshot_cache_root)
@@ -516,10 +524,9 @@ def test_run_org_report_trending_window_includes_legacy_snapshot_history(tmp_pat
 
 
 def test_run_org_report_trending_window_prunes_snapshot_history(tmp_path: Path, rich_org_report_result):
-    result = deepcopy(rich_org_report_result)
+    result = _history_eligible_result(rich_org_report_result)
     result.timestamp = "2026-03-01T00:00:00Z"
     result.org_id = "test_org@AdobeOrg"
-    result.is_sampled = False
 
     snapshot_cache_root = tmp_path / "cache"
 
@@ -560,27 +567,24 @@ def test_run_org_report_trending_window_prunes_snapshot_history(tmp_path: Path, 
 
 
 def test_run_org_report_trending_window_pins_compare_baseline_into_window(tmp_path: Path, rich_org_report_result):
-    current = deepcopy(rich_org_report_result)
+    current = _history_eligible_result(rich_org_report_result)
     current.timestamp = "2026-03-01T00:00:00Z"
     current.org_id = "test_org@AdobeOrg"
-    current.is_sampled = False
 
     snapshot_cache_root = tmp_path / "cache"
     cache = OrgReportCache(cache_dir=snapshot_cache_root)
     for day in range(2, DEFAULT_ORG_REPORT_SNAPSHOT_KEEP_LAST + 7):
-        baseline_result = deepcopy(rich_org_report_result)
+        baseline_result = _history_eligible_result(rich_org_report_result)
         baseline_result.timestamp = f"2026-01-{day:02d}T00:00:00Z"
         baseline_result.org_id = "test_org@AdobeOrg"
-        baseline_result.is_sampled = False
         cache.save_org_report_snapshot(build_org_report_json_data(baseline_result), org_id=baseline_result.org_id)
 
     explicit_dir = tmp_path / "explicit"
     explicit_dir.mkdir()
     explicit_baseline = explicit_dir / "baseline.json"
-    explicit_baseline_result = deepcopy(rich_org_report_result)
+    explicit_baseline_result = _history_eligible_result(rich_org_report_result)
     explicit_baseline_result.timestamp = "2026-01-01T00:00:00Z"
     explicit_baseline_result.org_id = "test_org@AdobeOrg"
-    explicit_baseline_result.is_sampled = False
     explicit_baseline.write_text(
         json.dumps(build_org_report_json_data(explicit_baseline_result)),
         encoding="utf-8",
@@ -627,15 +631,13 @@ def test_run_org_report_trending_window_pins_compare_baseline_into_window(tmp_pa
 def test_run_org_report_trending_window_deduplicates_explicit_previous_trending_report(
     tmp_path: Path, rich_org_report_result
 ):
-    baseline = deepcopy(rich_org_report_result)
+    baseline = _history_eligible_result(rich_org_report_result)
     baseline.timestamp = "2026-02-01T00:00:00Z"
     baseline.org_id = "test_org@AdobeOrg"
-    baseline.is_sampled = False
 
-    current = deepcopy(rich_org_report_result)
+    current = _history_eligible_result(rich_org_report_result)
     current.timestamp = "2026-03-01T00:00:00Z"
     current.org_id = "test_org@AdobeOrg"
-    current.is_sampled = False
 
     snapshot_cache_root = tmp_path / "cache"
     cache = OrgReportCache(cache_dir=snapshot_cache_root)
@@ -693,15 +695,13 @@ def test_run_org_report_trending_window_renders_across_file_formats_with_persist
 ):
     openpyxl = pytest.importorskip("openpyxl")
 
-    baseline = deepcopy(rich_org_report_result)
+    baseline = _history_eligible_result(rich_org_report_result)
     baseline.timestamp = "2026-02-01T00:00:00Z"
     baseline.org_id = "test_org@AdobeOrg"
-    baseline.is_sampled = False
 
-    current = deepcopy(rich_org_report_result)
+    current = _history_eligible_result(rich_org_report_result)
     current.timestamp = "2026-03-01T00:00:00Z"
     current.org_id = "test_org@AdobeOrg"
-    current.is_sampled = False
 
     snapshot_cache_root = tmp_path / "cache"
     OrgReportCache(cache_dir=snapshot_cache_root).save_org_report_snapshot(
@@ -830,15 +830,13 @@ def test_run_org_report_trending_window_persists_sampled_history_for_inspection(
 def test_run_org_report_trending_window_preserves_eligible_history_across_ineligible_retention_pressure(
     tmp_path: Path, rich_org_report_result
 ):
-    baseline = deepcopy(rich_org_report_result)
+    baseline = _history_eligible_result(rich_org_report_result)
     baseline.timestamp = "2026-01-01T00:00:00Z"
     baseline.org_id = "test_org@AdobeOrg"
-    baseline.is_sampled = False
 
-    current = deepcopy(rich_org_report_result)
+    current = _history_eligible_result(rich_org_report_result)
     current.timestamp = "2026-04-15T00:00:00Z"
     current.org_id = "test_org@AdobeOrg"
-    current.is_sampled = False
     current.parameters.org_stats_only = True
     current.similarity_pairs = None
 
@@ -973,6 +971,10 @@ def test_run_org_report_comparison_ineligible_legacy_baseline_is_non_fatal(
                 "org_id": "test_org@AdobeOrg",
                 "summary": {"data_views_total": 2, "total_unique_components": 5},
                 "distribution": {"core": {"total": 2}, "isolated": {"total": 3}},
+                "data_views": [
+                    {"data_view_id": "dv_001", "data_view_name": "Data View 1", "error": None},
+                    {"data_view_id": "dv_002", "data_view_name": "Data View 2", "error": None},
+                ],
                 "similarity_pairs": [],
             }
         ),
@@ -1152,20 +1154,17 @@ def test_run_org_report_org_stats_json_stdout_branch(tmp_path: Path, capsys, ric
 def test_run_org_report_org_stats_console_uses_cached_trending_for_low_fidelity_current_run(
     tmp_path: Path, capsys, rich_org_report_result
 ):
-    baseline_one = deepcopy(rich_org_report_result)
+    baseline_one = _history_eligible_result(rich_org_report_result)
     baseline_one.timestamp = "2026-01-01T00:00:00Z"
     baseline_one.org_id = "test_org@AdobeOrg"
-    baseline_one.is_sampled = False
 
-    baseline_two = deepcopy(rich_org_report_result)
+    baseline_two = _history_eligible_result(rich_org_report_result)
     baseline_two.timestamp = "2026-02-01T00:00:00Z"
     baseline_two.org_id = "test_org@AdobeOrg"
-    baseline_two.is_sampled = False
 
-    current = deepcopy(rich_org_report_result)
+    current = _history_eligible_result(rich_org_report_result)
     current.timestamp = "2026-03-01T00:00:00Z"
     current.org_id = "test_org@AdobeOrg"
-    current.is_sampled = False
     current.parameters.org_stats_only = True
     current.similarity_pairs = None
 
@@ -1223,15 +1222,13 @@ def test_run_org_report_org_stats_console_uses_cached_trending_for_low_fidelity_
 def test_run_org_report_trending_window_uses_current_snapshot_when_persist_fails(
     tmp_path: Path, capsys, rich_org_report_result
 ):
-    baseline = deepcopy(rich_org_report_result)
+    baseline = _history_eligible_result(rich_org_report_result)
     baseline.timestamp = "2026-02-01T00:00:00Z"
     baseline.org_id = "test_org@AdobeOrg"
-    baseline.is_sampled = False
 
-    current = deepcopy(rich_org_report_result)
+    current = _history_eligible_result(rich_org_report_result)
     current.timestamp = "2026-03-01T00:00:00Z"
     current.org_id = "test_org@AdobeOrg"
-    current.is_sampled = False
 
     snapshot_cache_root = tmp_path / "cache"
     OrgReportCache(cache_dir=snapshot_cache_root).save_org_report_snapshot(

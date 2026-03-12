@@ -17,6 +17,7 @@ from cja_auto_sdr.org.snapshot_utils import (
     newest_first_snapshot_sort_fields,
     normalized_similarity_pair_ids,
     org_report_high_similarity_pairs,
+    org_report_snapshot_comparison_assessment,
     org_report_snapshot_comparison_input,
     org_report_snapshot_content_hash,
     org_report_snapshot_data_view_stats,
@@ -24,6 +25,8 @@ from cja_auto_sdr.org.snapshot_utils import (
     org_report_snapshot_dir_candidates,
     org_report_snapshot_dir_key,
     org_report_snapshot_dir_paths,
+    org_report_snapshot_has_complete_data_view_coverage,
+    org_report_snapshot_has_complete_data_view_ids,
     org_report_snapshot_history_eligible,
     org_report_snapshot_history_exclusion_reason,
     org_report_snapshot_source_rank,
@@ -153,6 +156,189 @@ def test_org_report_snapshot_history_coerces_legacy_string_flags():
     assert org_report_snapshot_history_exclusion_reason(sampled_payload) == "sampled"
     assert org_report_snapshot_history_eligible(complete_payload) is True
     assert org_report_snapshot_history_exclusion_reason(skipped_payload) == "skip_similarity"
+
+
+def test_org_report_snapshot_comparison_honors_persisted_manual_override():
+    payload = {
+        "generated_at": "2026-03-01T00:00:00Z",
+        "org_id": "test_org",
+        "report_type": "org_analysis",
+        "_snapshot_meta": {
+            "history_eligible": False,
+            "history_exclusion_reason": "manual_override",
+        },
+        "summary": {
+            "data_views_total": 2,
+            "data_views_analyzed": 2,
+            "total_unique_components": 0,
+            "similarity_analysis_complete": True,
+        },
+        "distribution": {"core": {"total": 0}, "isolated": {"total": 0}},
+        "data_views": [
+            {"id": "dv1", "error": None},
+            {"id": "dv2", "error": None},
+        ],
+        "similarity_pairs": [],
+    }
+
+    assessment = org_report_snapshot_comparison_assessment(payload)
+    assert assessment.eligible is False
+    assert assessment.exclusion_reason == "manual_override"
+    assert assessment.complete_high_similarity_pairs is False
+
+    with pytest.raises(ValueError, match="manual_override"):
+        org_report_snapshot_comparison_input(
+            payload,
+            require_history_eligible=False,
+            require_comparison_eligible=True,
+        )
+
+
+def test_org_report_snapshot_comparison_ignores_persisted_skip_similarity_restating_payload():
+    payload = {
+        "generated_at": "2026-03-01T00:00:00Z",
+        "org_id": "test_org",
+        "report_type": "org_analysis",
+        "_snapshot_meta": {
+            "history_eligible": False,
+            "history_exclusion_reason": "skip_similarity",
+        },
+        "summary": {
+            "data_views_total": 2,
+            "data_views_analyzed": 2,
+            "total_unique_components": 0,
+            "similarity_analysis_complete": False,
+            "similarity_analysis_mode": "skip_similarity",
+        },
+        "distribution": {"core": {"total": 0}, "isolated": {"total": 0}},
+        "data_views": [
+            {"id": "dv1", "error": None},
+            {"id": "dv2", "error": None},
+        ],
+        "similarity_pairs": [],
+    }
+
+    assessment = org_report_snapshot_comparison_assessment(payload)
+    assert assessment.eligible is True
+    assert assessment.exclusion_reason is None
+    assert assessment.complete_high_similarity_pairs is False
+
+    result = org_report_snapshot_comparison_input(
+        payload,
+        require_history_eligible=False,
+        require_comparison_eligible=True,
+    )
+    assert result.data_view_ids == {"dv1", "dv2"}
+    assert result.complete_high_similarity_pairs is False
+
+
+def test_org_report_snapshot_history_excludes_explicit_incomplete_data_views():
+    payload = {
+        "summary": {
+            "data_views_total": 3,
+            "data_views_analyzed": 2,
+            "similarity_analysis_complete": True,
+        },
+        "data_views": [
+            {"id": "dv1", "error": None},
+            {"id": "dv2", "error": None},
+            {"id": "dv3", "error": "timeout"},
+        ],
+    }
+
+    assert org_report_snapshot_history_eligible(payload) is False
+    assert org_report_snapshot_history_exclusion_reason(payload) == "incomplete_data_views"
+
+
+def test_org_report_snapshot_history_excludes_missing_analyzed_count_when_totals_disagree():
+    payload = {
+        "summary": {
+            "data_views_total": 3,
+            "similarity_analysis_complete": True,
+        },
+        "data_views": [
+            {"id": "dv1", "error": None},
+            {"id": "dv2", "error": None},
+        ],
+    }
+
+    assert org_report_snapshot_history_eligible(payload) is False
+    assert org_report_snapshot_history_exclusion_reason(payload) == "incomplete_data_views"
+
+
+def test_org_report_snapshot_history_excludes_analyzed_counts_that_exceed_rows():
+    payload = {
+        "summary": {
+            "data_views_total": 3,
+            "data_views_analyzed": 3,
+            "similarity_analysis_complete": True,
+        },
+        "data_views": [
+            {"id": "dv1", "error": None},
+            {"id": "dv2", "error": None},
+        ],
+    }
+
+    assert org_report_snapshot_has_complete_data_view_coverage(payload) is False
+    assert org_report_snapshot_history_eligible(payload) is False
+    assert org_report_snapshot_history_exclusion_reason(payload) == "incomplete_data_views"
+
+
+def test_org_report_snapshot_history_excludes_rows_that_exceed_reported_total():
+    payload = {
+        "summary": {
+            "data_views_total": 2,
+            "data_views_analyzed": 2,
+            "similarity_analysis_complete": True,
+        },
+        "data_views": [
+            {"id": "dv1", "error": None},
+            {"id": "dv2", "error": None},
+            {"id": "dv3", "error": None},
+        ],
+    }
+
+    assert org_report_snapshot_has_complete_data_view_coverage(payload) is False
+    assert org_report_snapshot_history_eligible(payload) is False
+    assert org_report_snapshot_history_exclusion_reason(payload) == "incomplete_data_views"
+
+
+def test_org_report_snapshot_history_excludes_missing_data_view_ids_when_counts_match():
+    payload = {
+        "summary": {
+            "data_views_total": 2,
+            "data_views_analyzed": 2,
+            "similarity_analysis_complete": True,
+        },
+        "data_views": [
+            {"id": "dv1", "error": None},
+            {"data_view_name": "Missing ID", "error": None},
+        ],
+    }
+
+    assert org_report_snapshot_has_complete_data_view_coverage(payload) is True
+    assert org_report_snapshot_has_complete_data_view_ids(payload) is False
+    assert org_report_snapshot_history_eligible(payload) is False
+    assert org_report_snapshot_history_exclusion_reason(payload) == "incomplete_data_views"
+
+
+def test_org_report_snapshot_history_excludes_duplicate_data_view_ids_when_counts_match():
+    payload = {
+        "summary": {
+            "data_views_total": 2,
+            "data_views_analyzed": 2,
+            "similarity_analysis_complete": True,
+        },
+        "data_views": [
+            {"id": "dv1", "error": None},
+            {"data_view_id": " dv1 ", "error": None},
+        ],
+    }
+
+    assert org_report_snapshot_has_complete_data_view_coverage(payload) is True
+    assert org_report_snapshot_has_complete_data_view_ids(payload) is False
+    assert org_report_snapshot_history_eligible(payload) is False
+    assert org_report_snapshot_history_exclusion_reason(payload) == "incomplete_data_views"
 
 
 def test_org_report_snapshot_history_legacy_payload_without_fidelity_fields_is_ineligible():
@@ -721,6 +907,41 @@ def test_org_report_snapshot_comparison_input_skips_dv_rows_with_no_id():
     result = org_report_snapshot_comparison_input(payload, require_history_eligible=False)
     assert "dv_ok" in result.data_view_ids
     assert len(result.data_view_ids) == 1
+    assert result.complete_data_view_ids is False
+
+
+def test_org_report_snapshot_comparison_input_allows_skip_similarity_payloads():
+    payload = {
+        "generated_at": "2026-03-01T00:00:00Z",
+        "org_id": "test_org",
+        "report_type": "org_analysis",
+        "summary": {
+            "data_views_total": 2,
+            "data_views_analyzed": 2,
+            "total_unique_components": 4,
+            "similarity_analysis_complete": False,
+            "similarity_analysis_mode": "skip_similarity",
+        },
+        "distribution": {
+            "core": {"total": 1},
+            "isolated": {"total": 0},
+        },
+        "data_views": [
+            {"id": "dv_1", "data_view_name": "DV 1", "error": None},
+            {"id": "dv_2", "data_view_name": "DV 2", "error": None},
+        ],
+        "similarity_pairs": [],
+    }
+
+    result = org_report_snapshot_comparison_input(
+        payload,
+        require_history_eligible=False,
+        require_comparison_eligible=True,
+    )
+
+    assert result.data_view_ids == {"dv_1", "dv_2"}
+    assert result.complete_data_view_ids is True
+    assert result.complete_high_similarity_pairs is False
 
 
 # ---------------------------------------------------------------------------
@@ -1058,6 +1279,78 @@ def test_org_report_snapshot_comparison_input_extracts_component_ids():
     }
     result = org_report_snapshot_comparison_input(payload, require_history_eligible=False)
     assert result.component_ids == {"comp_a", "comp_b"}
+
+
+def test_org_report_snapshot_comparison_input_uses_all_known_data_view_ids():
+    payload = {
+        "generated_at": "2026-03-01T00:00:00Z",
+        "org_id": "test_org",
+        "report_type": "org_analysis",
+        "summary": {
+            "data_views_total": 2,
+            "data_views_analyzed": 1,
+            "total_unique_components": 0,
+            "similarity_analysis_complete": True,
+        },
+        "distribution": {"core": {"total": 0}, "isolated": {"total": 0}},
+        "data_views": [
+            {"id": "dv_ok", "data_view_name": "Healthy", "error": None},
+            {"id": "dv_err", "data_view_name": "Errored", "error": "timeout"},
+        ],
+        "similarity_pairs": [],
+    }
+
+    result = org_report_snapshot_comparison_input(payload, require_history_eligible=False)
+    assert result.data_view_ids == {"dv_ok", "dv_err"}
+    assert result.complete_data_view_ids is True
+
+
+def test_org_report_snapshot_comparison_input_normalizes_whitespace_data_view_ids():
+    payload = {
+        "generated_at": "2026-03-01T00:00:00Z",
+        "org_id": "test_org",
+        "report_type": "org_analysis",
+        "summary": {
+            "data_views_total": 1,
+            "data_views_analyzed": 1,
+            "total_unique_components": 0,
+            "similarity_analysis_complete": True,
+        },
+        "distribution": {"core": {"total": 0}, "isolated": {"total": 0}},
+        "data_views": [{"id": " dv_ok ", "data_view_name": "Healthy", "error": None}],
+        "similarity_pairs": [],
+    }
+
+    result = org_report_snapshot_comparison_input(payload, require_history_eligible=False)
+    assert result.data_view_ids == {"dv_ok"}
+    assert result.data_view_names == {"dv_ok": "Healthy"}
+
+
+def test_org_report_snapshot_has_complete_data_view_ids_rejects_missing_ids():
+    payload = {
+        "summary": {"data_views_total": 2},
+        "data_views": [{"id": "dv1"}, {"data_view_name": "Missing ID"}],
+    }
+
+    assert org_report_snapshot_has_complete_data_view_ids(payload) is False
+
+
+def test_org_report_snapshot_has_complete_data_view_ids_rejects_count_contradictions():
+    payload = {
+        "summary": {"data_views_total": 3, "data_views_analyzed": 3},
+        "data_views": [{"id": "dv1"}, {"id": "dv2"}],
+    }
+
+    assert org_report_snapshot_has_complete_data_view_ids(payload) is False
+
+
+def test_org_report_snapshot_has_complete_data_view_ids_rejects_normalized_duplicates():
+    payload = {
+        "summary": {"data_views_total": 2, "data_views_analyzed": 2},
+        "data_views": [{"id": "dv1"}, {"data_view_id": " dv1 "}],
+    }
+
+    assert org_report_snapshot_has_complete_data_view_ids(payload) is False
 
 
 # L752-760: org_report_snapshot_metadata with include_data_views=True
