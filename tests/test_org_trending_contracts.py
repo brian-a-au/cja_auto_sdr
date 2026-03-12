@@ -122,6 +122,7 @@ class TestTrendingSnapshotContract:
         assert snap.content_hash is None
         assert snap.source_path is None
         assert snap.component_ids is None
+        assert snap.complete_high_similarity_pairs is False
 
     def test_collection_fields_default_to_empty(self):
         snap = TrendingSnapshot(timestamp="2026-01-01T00:00:00Z")
@@ -153,6 +154,7 @@ class TestTrendingSnapshotContract:
             dv_ids={"dv1", "dv2"},
             dv_names={"dv1": "Data View One", "dv2": "Data View Two"},
             has_data_view_ids=True,
+            complete_high_similarity_pairs=True,
         )
         assert snap.org_id == "my_org"
         assert snap.data_view_count == 20
@@ -164,6 +166,7 @@ class TestTrendingSnapshotContract:
         assert snap.snapshot_id == "snap-abc-123"
         assert snap.dv_ids == {"dv1", "dv2"}
         assert snap.dv_names == {"dv1": "Data View One", "dv2": "Data View Two"}
+        assert snap.complete_high_similarity_pairs is True
 
     def test_has_data_view_ids_inferred_from_dv_ids(self):
         """__post_init__ sets has_data_view_ids=True when dv_ids is non-empty."""
@@ -773,6 +776,10 @@ class TestOrgReportSnapshotMetadataContract:
     def test_returns_none_for_non_snapshot_payload(self):
         result = org_report_snapshot_metadata({"foo": "bar"})
         assert result is None
+
+    @pytest.mark.parametrize("value", [([],), ("not-a-snapshot",), (42,), (None,)])
+    def test_returns_none_for_non_mapping_json_root(self, value):
+        assert org_report_snapshot_metadata(value) is None
 
     def test_returns_dict_for_valid_snapshot(self):
         data = _make_org_report_json()

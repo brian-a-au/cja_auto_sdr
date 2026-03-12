@@ -22,6 +22,7 @@ class TestTrendingSnapshot:
         assert snap.dv_core_ratios == {}
         assert snap.dv_max_similarity == {}
         assert snap.dv_ids == set()
+        assert snap.complete_high_similarity_pairs is False
 
     def test_full_construction(self):
         snap = TrendingSnapshot(
@@ -50,6 +51,15 @@ class TestTrendingSnapshot:
 
         assert snap.has_data_view_ids is True
         assert snap.complete_data_view_ids is False
+
+    def test_complete_high_similarity_pairs_defaults_false_for_manual_snapshots(self):
+        snap = TrendingSnapshot(
+            timestamp="2026-03-08T12:00:00Z",
+            high_sim_pair_count=1,
+            high_similarity_pairs={("a", "b")},
+        )
+
+        assert snap.complete_high_similarity_pairs is False
 
 
 class TestTrendingDelta:
@@ -91,6 +101,7 @@ class TestOrgReportTrending:
         dv_ids=None,
         has_data_view_ids=None,
         complete_data_view_ids=None,
+        complete_high_similarity_pairs=None,
         component_ids=None,
         high_similarity_pairs=None,
     ):
@@ -105,6 +116,7 @@ class TestOrgReportTrending:
             dv_ids=set() if dv_ids is None else dv_ids,
             has_data_view_ids=(dv_ids is not None) if has_data_view_ids is None else has_data_view_ids,
             complete_data_view_ids=complete_data_view_ids,
+            complete_high_similarity_pairs=complete_high_similarity_pairs,
             component_ids=component_ids,
             high_similarity_pairs=high_similarity_pairs or set(),
         )
@@ -316,10 +328,12 @@ class TestOrgReportTrending:
             self._make_snapshot(
                 "2026-01-01",
                 high_similarity_pairs={("dv1", "dv2")},
+                complete_high_similarity_pairs=True,
             ),
             self._make_snapshot(
                 "2026-02-01",
                 high_similarity_pairs={("dv1", "dv3")},
+                complete_high_similarity_pairs=True,
             ),
         ]
 
@@ -330,6 +344,26 @@ class TestOrgReportTrending:
         assert comparison.resolved_pairs == [{"dv1_id": "dv1", "dv2_id": "dv2"}]
         assert comparison.summary["new_duplicates"] == 1
         assert comparison.summary["resolved_duplicates"] == 1
+
+    def test_to_comparison_suppresses_manual_pair_deltas_without_completeness_flag(self):
+        snaps = [
+            self._make_snapshot(
+                "2026-01-01",
+                high_similarity_pairs={("dv1", "dv2")},
+            ),
+            self._make_snapshot(
+                "2026-02-01",
+                high_similarity_pairs={("dv1", "dv3")},
+            ),
+        ]
+
+        comparison = OrgReportTrending(snapshots=snaps, window_size=2).to_comparison()
+
+        assert comparison is not None
+        assert comparison.new_high_similarity_pairs == []
+        assert comparison.resolved_pairs == []
+        assert comparison.summary["new_duplicates"] == 0
+        assert comparison.summary["resolved_duplicates"] == 0
 
 
 class TestSafeNonNegativeInt:

@@ -112,6 +112,32 @@ class TestExtractSnapshotFromJson:
         assert snap.data_view_count == 12
         assert snap.component_count == 200
 
+    def test_metadata_rendering_reuses_precomputed_snapshot_state(self, monkeypatch):
+        import cja_auto_sdr.org.snapshot_utils as snapshot_utils
+        import cja_auto_sdr.org.trending as trending_module
+
+        data = _make_org_report_json(dv_count=2, comp_count=5)
+        original_builder = snapshot_utils._org_report_snapshot_state
+        build_calls = {"count": 0}
+        builder_kwargs: list[dict[str, object]] = []
+
+        def build_state_once(payload, **kwargs):
+            build_calls["count"] += 1
+            builder_kwargs.append(kwargs)
+            return original_builder(payload, **kwargs)
+
+        def fail_if_metadata_rebuilds(_payload, **_kwargs):
+            raise AssertionError("_extract_snapshot_from_json rebuilt snapshot state for metadata")
+
+        monkeypatch.setattr(trending_module, "_org_report_snapshot_state", build_state_once)
+        monkeypatch.setattr(snapshot_utils, "_org_report_snapshot_state", fail_if_metadata_rebuilds)
+
+        snap = trending_module._extract_snapshot_from_json(data)
+
+        assert snap is not None
+        assert build_calls["count"] == 1
+        assert builder_kwargs == [{"include_component_ids": True, "include_high_similarity_pairs": True}]
+
     def test_missing_timestamp_returns_none(self):
         data = {"summary": {"data_views_total": 5}}
         assert _extract_snapshot_from_json(data) is None
@@ -189,6 +215,7 @@ class TestExtractSnapshotFromJson:
         assert snap is not None
         assert snap.component_ids == {"m1", "d1"}
         assert snap.high_similarity_pairs == {("a", "b"), ("c", "d")}
+        assert snap.complete_high_similarity_pairs is True
 
     def test_failed_data_views_are_excluded_from_history(self):
         data = _make_org_report_json(

@@ -8197,14 +8197,15 @@ def _build_org_report_trending_window(
     status_print: Callable[..., None],
 ):
     """Build a trending window while treating current-run eligibility and persistence separately."""
-    from cja_auto_sdr.org.snapshot_utils import org_report_snapshot_history_exclusion_reason
+    from cja_auto_sdr.org.snapshot_utils import org_report_snapshot_history_assessment
     from cja_auto_sdr.org.trending import _extract_snapshot_from_json, build_trending
     from cja_auto_sdr.org.writers import build_org_report_json_data as _build_json_for_snapshot
 
     snapshot_cache = cache if cache is not None else OrgReportCache(logger=logger)
     snapshot_cache_dir = snapshot_cache.get_org_report_snapshot_root_dir()
     current_json = _build_json_for_snapshot(result)
-    history_exclusion_reason = org_report_snapshot_history_exclusion_reason(current_json)
+    history_assessment = org_report_snapshot_history_assessment(current_json)
+    history_exclusion_reason = history_assessment.exclusion_reason
 
     current_snapshot = None
     saved_snapshot_path: str | Path | None = None

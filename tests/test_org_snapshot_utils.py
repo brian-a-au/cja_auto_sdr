@@ -16,10 +16,14 @@ from cja_auto_sdr.org.snapshot_utils import (
     is_org_report_snapshot_payload,
     newest_first_snapshot_sort_fields,
     normalized_similarity_pair_ids,
+    org_report_component_count,
+    org_report_core_count,
     org_report_high_similarity_pairs,
+    org_report_isolated_count,
     org_report_snapshot_comparison_assessment,
     org_report_snapshot_comparison_input,
     org_report_snapshot_content_hash,
+    org_report_snapshot_data_view_assessment,
     org_report_snapshot_data_view_stats,
     org_report_snapshot_dedupe_key,
     org_report_snapshot_dir_candidates,
@@ -27,6 +31,7 @@ from cja_auto_sdr.org.snapshot_utils import (
     org_report_snapshot_dir_paths,
     org_report_snapshot_has_complete_data_view_coverage,
     org_report_snapshot_has_complete_data_view_ids,
+    org_report_snapshot_history_assessment,
     org_report_snapshot_history_eligible,
     org_report_snapshot_history_exclusion_reason,
     org_report_snapshot_source_rank,
@@ -36,6 +41,7 @@ from cja_auto_sdr.org.snapshot_utils import (
     snapshot_identity_tokens,
     snapshot_path_text,
     snapshot_slug,
+    successful_org_report_data_view_rows,
 )
 
 
@@ -84,6 +90,48 @@ def test_snapshot_identity_tokens_fall_back_when_no_primary_identity():
 def test_org_report_snapshot_history_eligible_accepts_non_mapping_summary():
     assert org_report_snapshot_history_eligible({"summary": []}) is True
     assert org_report_snapshot_history_eligible({"summary": {"is_sampled": True}}) is False
+
+
+@pytest.mark.parametrize("payload", [([],), ("not-a-snapshot",), (0,), (None,)])
+def test_org_report_snapshot_assessments_fail_closed_for_non_mapping_root(payload):
+    history = org_report_snapshot_history_assessment(payload)
+    comparison = org_report_snapshot_comparison_assessment(payload)
+
+    assert history.eligible is False
+    assert history.exclusion_reason == "invalid_snapshot_payload"
+    assert history.fidelity_known is False
+    assert org_report_snapshot_history_eligible(payload) is False
+    assert org_report_snapshot_history_exclusion_reason(payload) == "invalid_snapshot_payload"
+
+    assert comparison.eligible is False
+    assert comparison.exclusion_reason == "invalid_snapshot_payload"
+    assert comparison.complete_high_similarity_pairs is False
+
+
+@pytest.mark.parametrize("payload", [([],), ("not-a-snapshot",), (0,), (None,)])
+def test_org_report_snapshot_extractors_return_safe_defaults_for_non_mapping_root(payload):
+    assessment = org_report_snapshot_data_view_assessment(payload)
+    stats = org_report_snapshot_data_view_stats(payload)
+
+    assert successful_org_report_data_view_rows(payload) == []
+    assert assessment.rows_match_reported_total is False
+    assert assessment.successful_rows_match_analyzed_total is False
+    assert assessment.ids_complete is False
+    assert assessment.coverage_complete is False
+    assert assessment.history_complete is False
+    assert stats.reported_total == 0
+    assert stats.analyzed_total == 0
+    assert stats.failed_total == 0
+    assert stats.raw_total == 0
+    assert stats.successful_row_total == 0
+    assert effective_org_report_data_view_count(payload) == 0
+    assert reported_org_report_data_view_count(payload) is None
+    assert org_report_component_count(payload) == 0
+    assert org_report_core_count(payload) == 0
+    assert org_report_isolated_count(payload) == 0
+    assert org_report_high_similarity_pairs(payload) == set()
+    assert org_report_snapshot_has_complete_data_view_coverage(payload) is False
+    assert org_report_snapshot_has_complete_data_view_ids(payload) is False
 
 
 def test_org_report_snapshot_history_eligible_rejects_similarity_incomplete_payloads():
@@ -877,6 +925,12 @@ def test_org_report_snapshot_comparison_input_raises_for_non_snapshot():
         org_report_snapshot_comparison_input({})
 
 
+@pytest.mark.parametrize("payload", [([1, 2, 3],), ("snapshot",), (7,), (None,)])
+def test_org_report_snapshot_comparison_input_raises_for_non_mapping_root(payload):
+    with pytest.raises(ValueError, match="expected org-report snapshot payload"):
+        org_report_snapshot_comparison_input(payload)
+
+
 # ---------------------------------------------------------------------------
 # L687: org_report_snapshot_comparison_input — data view missing id fields skipped
 # ---------------------------------------------------------------------------
@@ -1384,6 +1438,111 @@ def test_org_report_snapshot_metadata_include_data_views():
     assert "data_view_names_truncated" in metadata
     assert metadata["data_view_names_total"] == 2
     assert metadata["data_view_names_truncated"] is False
+
+
+def test_org_report_snapshot_metadata_reuses_provided_state(monkeypatch):
+    import cja_auto_sdr.org.snapshot_utils as snapshot_utils
+
+    payload = {
+        "generated_at": "2026-03-01T00:00:00Z",
+        "org_id": "test_org",
+        "report_type": "org_analysis",
+        "summary": {
+            "data_views_total": 2,
+            "total_unique_components": 3,
+            "similarity_analysis_complete": True,
+        },
+        "distribution": {"core": {"total": 2}, "isolated": {"total": 1}},
+        "data_views": [
+            {"id": "dv1", "name": "DV One"},
+            {"id": "dv2", "data_view_name": "DV Two"},
+        ],
+        "similarity_pairs": [],
+    }
+    state = snapshot_utils._org_report_snapshot_state(payload)
+
+    def fail_if_rebuilt(_data, **_kwargs):
+        raise AssertionError("org_report_snapshot_metadata rebuilt snapshot state")
+
+    monkeypatch.setattr(snapshot_utils, "_org_report_snapshot_state", fail_if_rebuilt)
+
+    metadata = snapshot_utils.org_report_snapshot_metadata(payload, state=state, include_data_views=True)
+
+    assert metadata is not None
+    assert metadata["generated_at"] == "2026-03-01T00:00:00Z"
+    assert metadata["data_view_names_preview"] == ["DV One", "DV Two"]
+
+
+def test_org_report_snapshot_history_assessment_skips_heavy_extractors(monkeypatch):
+    import cja_auto_sdr.org.snapshot_utils as snapshot_utils
+
+    payload = {
+        "generated_at": "2026-03-01T00:00:00Z",
+        "org_id": "test_org",
+        "report_type": "org_analysis",
+        "summary": {
+            "data_views_total": 2,
+            "total_unique_components": 3,
+            "similarity_analysis_complete": False,
+            "similarity_analysis_mode": "org_stats_only",
+        },
+        "distribution": {"core": {"total": 2}, "isolated": {"total": 1}},
+        "component_index": {
+            "comp_1": {"data_views": ["dv1"]},
+            "comp_2": {"data_views": ["dv2"]},
+        },
+        "similarity_pairs": [
+            {"dv1_id": "dv1", "dv2_id": "dv2", "jaccard_similarity": 0.99},
+        ],
+    }
+
+    def fail_component_ids(_raw_component_index):
+        raise AssertionError("history assessment extracted component ids")
+
+    def fail_similarity_pairs(_rows, *, threshold=0.9):
+        raise AssertionError(f"history assessment extracted similarity pairs at threshold {threshold}")
+
+    monkeypatch.setattr(snapshot_utils, "_snapshot_component_ids", fail_component_ids)
+    monkeypatch.setattr(snapshot_utils, "_org_report_high_similarity_pairs_from_rows", fail_similarity_pairs)
+
+    history = snapshot_utils.org_report_snapshot_history_assessment(payload)
+
+    assert history.eligible is False
+    assert history.exclusion_reason == "org_stats_only"
+
+
+def test_org_report_snapshot_metadata_uses_precomputed_similarity_pairs_from_state(monkeypatch):
+    import cja_auto_sdr.org.snapshot_utils as snapshot_utils
+
+    payload = {
+        "generated_at": "2026-03-01T00:00:00Z",
+        "org_id": "test_org",
+        "report_type": "org_analysis",
+        "summary": {
+            "data_views_total": 2,
+            "total_unique_components": 3,
+            "similarity_analysis_complete": True,
+        },
+        "distribution": {"core": {"total": 2}, "isolated": {"total": 1}},
+        "data_views": [
+            {"id": "dv1", "name": "DV One"},
+            {"id": "dv2", "data_view_name": "DV Two"},
+        ],
+        "similarity_pairs": [
+            {"dv1_id": "dv1", "dv2_id": "dv2", "jaccard_similarity": 0.99},
+        ],
+    }
+    state = snapshot_utils._org_report_snapshot_state(payload, include_high_similarity_pairs=True)
+
+    def fail_if_rescanned(_rows, *, threshold=0.9):
+        raise AssertionError(f"metadata rescanned similarity pairs at threshold {threshold}")
+
+    monkeypatch.setattr(snapshot_utils, "_org_report_high_similarity_pairs_from_rows", fail_if_rescanned)
+
+    metadata = snapshot_utils.org_report_snapshot_metadata(payload, state=state)
+
+    assert metadata is not None
+    assert metadata["high_similarity_pairs"] == 1
 
 
 def test_org_report_snapshot_metadata_include_data_views_truncates_long_list():

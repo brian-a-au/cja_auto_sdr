@@ -327,6 +327,44 @@ def test_save_org_report_snapshot_persists_history_eligibility_metadata(tmp_path
     assert inspected["history_exclusion_reason"] == "org_stats_only"
 
 
+def test_save_org_report_snapshot_skips_heavy_history_extractors(tmp_path: Path, monkeypatch):
+    import cja_auto_sdr.org.snapshot_utils as snapshot_utils
+
+    cache = OrgReportCache(cache_dir=tmp_path)
+    report = {
+        "generated_at": "2026-03-01T00:00:00Z",
+        "org_id": "org@test.example",
+        "report_type": "org_analysis",
+        "summary": {
+            "data_views_total": 2,
+            "total_unique_components": 5,
+            "similarity_analysis_complete": False,
+            "similarity_analysis_mode": "org_stats_only",
+        },
+        "distribution": {"core": {"total": 2}, "isolated": {"total": 3}},
+        "component_index": {
+            "comp_a": {"data_views": ["dv1"]},
+            "comp_b": {"data_views": ["dv2"]},
+        },
+        "similarity_pairs": [
+            {"dv1_id": "dv1", "dv2_id": "dv2", "jaccard_similarity": 0.99},
+        ],
+    }
+
+    def fail_component_ids(_raw_component_index):
+        raise AssertionError("save_org_report_snapshot extracted component ids")
+
+    def fail_similarity_pairs(_rows, *, threshold=0.9):
+        raise AssertionError(f"save_org_report_snapshot extracted similarity pairs at threshold {threshold}")
+
+    monkeypatch.setattr(snapshot_utils, "_snapshot_component_ids", fail_component_ids)
+    monkeypatch.setattr(snapshot_utils, "_org_report_high_similarity_pairs_from_rows", fail_similarity_pairs)
+
+    path = cache.save_org_report_snapshot(report)
+
+    assert path.exists()
+
+
 def test_save_org_report_snapshot_rejects_non_snapshot_payload(tmp_path: Path):
     cache = OrgReportCache(cache_dir=tmp_path)
 

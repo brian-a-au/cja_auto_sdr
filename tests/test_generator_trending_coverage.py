@@ -11,7 +11,7 @@ Covers:
 Note: _build_org_report_trending_window uses local (deferred) imports, so the
 correct patch targets are the sub-module paths, e.g.
   'cja_auto_sdr.org.writers.build_org_report_json_data'
-  'cja_auto_sdr.org.snapshot_utils.org_report_snapshot_history_exclusion_reason'
+  'cja_auto_sdr.org.snapshot_utils.org_report_snapshot_history_assessment'
   'cja_auto_sdr.org.trending._extract_snapshot_from_json'
   'cja_auto_sdr.org.trending.build_trending'
 """
@@ -33,13 +33,14 @@ from cja_auto_sdr.org.models import (
     OrgReportTrending,
     TrendingSnapshot,
 )
+from cja_auto_sdr.org.snapshot_utils import OrgReportSnapshotHistoryAssessment
 
 # ---------------------------------------------------------------------------
 # Patch target constants
 # ---------------------------------------------------------------------------
 
 _PATCH_BUILD_JSON = "cja_auto_sdr.org.writers.build_org_report_json_data"
-_PATCH_EXCL_REASON = "cja_auto_sdr.org.snapshot_utils.org_report_snapshot_history_exclusion_reason"
+_PATCH_HISTORY_ASSESSMENT = "cja_auto_sdr.org.snapshot_utils.org_report_snapshot_history_assessment"
 _PATCH_EXTRACT = "cja_auto_sdr.org.trending._extract_snapshot_from_json"
 _PATCH_BUILD_TRENDING = "cja_auto_sdr.org.trending.build_trending"
 _PATCH_DISCOVER_SNAPSHOTS = "cja_auto_sdr.org.trending.discover_snapshots"
@@ -70,6 +71,14 @@ def _make_result(org_id: str = "test_org") -> OrgReportResult:
         similarity_pairs=[],
         recommendations=[],
         duration=0.5,
+    )
+
+
+def _history_assessment(reason: str | None) -> OrgReportSnapshotHistoryAssessment:
+    return OrgReportSnapshotHistoryAssessment(
+        eligible=reason is None,
+        exclusion_reason=reason,
+        fidelity_known=True,
     )
 
 
@@ -135,7 +144,7 @@ class TestSnapshotPersistenceFailure:
 
         with (
             patch(_PATCH_BUILD_JSON, return_value={"report_type": "org"}),
-            patch(_PATCH_EXCL_REASON, return_value=None),
+            patch(_PATCH_HISTORY_ASSESSMENT, return_value=_history_assessment(None)),
             patch(_PATCH_EXTRACT, return_value=MagicMock()),
             patch(_PATCH_BUILD_TRENDING, return_value=MagicMock()),
         ):
@@ -152,7 +161,7 @@ class TestSnapshotPersistenceFailure:
 
         with (
             patch(_PATCH_BUILD_JSON, return_value={}),
-            patch(_PATCH_EXCL_REASON, return_value=None),
+            patch(_PATCH_HISTORY_ASSESSMENT, return_value=_history_assessment(None)),
             patch(_PATCH_EXTRACT, return_value=MagicMock()),
             patch(_PATCH_BUILD_TRENDING, return_value=None),
         ):
@@ -167,7 +176,7 @@ class TestSnapshotPersistenceFailure:
 
         with (
             patch(_PATCH_BUILD_JSON, return_value={}),
-            patch(_PATCH_EXCL_REASON, return_value=None),
+            patch(_PATCH_HISTORY_ASSESSMENT, return_value=_history_assessment(None)),
             patch(_PATCH_EXTRACT, return_value=MagicMock()),
             patch(_PATCH_BUILD_TRENDING, return_value=MagicMock()),
         ):
@@ -191,7 +200,7 @@ class TestExtractionFailure:
 
         with (
             patch(_PATCH_BUILD_JSON, return_value={}),
-            patch(_PATCH_EXCL_REASON, return_value=None),  # no exclusion -> tries extraction
+            patch(_PATCH_HISTORY_ASSESSMENT, return_value=_history_assessment(None)),
             patch(_PATCH_EXTRACT, return_value=None),  # normalisation fails
             patch(_PATCH_BUILD_TRENDING, return_value=MagicMock()),
         ):
@@ -208,7 +217,7 @@ class TestExtractionFailure:
 
         with (
             patch(_PATCH_BUILD_JSON, return_value={}),
-            patch(_PATCH_EXCL_REASON, return_value=None),
+            patch(_PATCH_HISTORY_ASSESSMENT, return_value=_history_assessment(None)),
             patch(_PATCH_EXTRACT, return_value=None),
             patch(_PATCH_BUILD_TRENDING, return_value=MagicMock()),
         ):
@@ -218,7 +227,7 @@ class TestExtractionFailure:
 
 
 # ---------------------------------------------------------------------------
-# 3. History exclusion: org_report_snapshot_history_exclusion_reason returns a reason
+# 3. History exclusion: org_report_snapshot_history_assessment returns a reason
 # ---------------------------------------------------------------------------
 
 
@@ -233,7 +242,7 @@ class TestHistoryExclusion:
 
         with (
             patch(_PATCH_BUILD_JSON, return_value={}),
-            patch(_PATCH_EXCL_REASON, return_value="sampled"),  # exclusion reason set
+            patch(_PATCH_HISTORY_ASSESSMENT, return_value=_history_assessment("sampled")),
             patch(_PATCH_EXTRACT, return_value=MagicMock()),
             patch(_PATCH_BUILD_TRENDING, return_value=MagicMock()),  # trending available
         ):
@@ -250,7 +259,7 @@ class TestHistoryExclusion:
 
         with (
             patch(_PATCH_BUILD_JSON, return_value={}),
-            patch(_PATCH_EXCL_REASON, return_value="sampled"),
+            patch(_PATCH_HISTORY_ASSESSMENT, return_value=_history_assessment("sampled")),
             patch(_PATCH_EXTRACT, return_value=MagicMock()),
             patch(_PATCH_BUILD_TRENDING, return_value=None),  # no trending available
         ):
@@ -270,7 +279,7 @@ class TestHistoryExclusion:
 
         with (
             patch(_PATCH_BUILD_JSON, return_value={}),
-            patch(_PATCH_EXCL_REASON, return_value="no_similarity"),  # non-sampled exclusion
+            patch(_PATCH_HISTORY_ASSESSMENT, return_value=_history_assessment("no_similarity")),
             patch(_PATCH_EXTRACT, return_value=MagicMock()),
             patch(_PATCH_BUILD_TRENDING, return_value=MagicMock()),
         ):
@@ -285,7 +294,7 @@ class TestHistoryExclusion:
 
         with (
             patch(_PATCH_BUILD_JSON, return_value={}),
-            patch(_PATCH_EXCL_REASON, return_value="sampled"),
+            patch(_PATCH_HISTORY_ASSESSMENT, return_value=_history_assessment("sampled")),
             patch(_PATCH_EXTRACT, return_value=MagicMock()),
             patch(_PATCH_BUILD_TRENDING, return_value=None),
         ):
@@ -310,7 +319,7 @@ class TestInsufficientSnapshots:
 
         with (
             patch(_PATCH_BUILD_JSON, return_value={}),
-            patch(_PATCH_EXCL_REASON, return_value=None),  # no exclusion reason
+            patch(_PATCH_HISTORY_ASSESSMENT, return_value=_history_assessment(None)),
             patch(_PATCH_EXTRACT, return_value=MagicMock()),
             patch(_PATCH_BUILD_TRENDING, return_value=None),  # no trending available
         ):
@@ -327,7 +336,7 @@ class TestInsufficientSnapshots:
 
         with (
             patch(_PATCH_BUILD_JSON, return_value={}),
-            patch(_PATCH_EXCL_REASON, return_value=None),
+            patch(_PATCH_HISTORY_ASSESSMENT, return_value=_history_assessment(None)),
             patch(_PATCH_EXTRACT, return_value=MagicMock()),
             patch(_PATCH_BUILD_TRENDING, return_value=None),
         ):
@@ -351,7 +360,7 @@ class TestPruneFailure:
 
         with (
             patch(_PATCH_BUILD_JSON, return_value={}),
-            patch(_PATCH_EXCL_REASON, return_value=None),
+            patch(_PATCH_HISTORY_ASSESSMENT, return_value=_history_assessment(None)),
             patch(_PATCH_EXTRACT, return_value=MagicMock()),
             patch(_PATCH_BUILD_TRENDING, return_value=MagicMock()),
         ):
@@ -368,7 +377,7 @@ class TestPruneFailure:
 
         with (
             patch(_PATCH_BUILD_JSON, return_value={}),
-            patch(_PATCH_EXCL_REASON, return_value=None),
+            patch(_PATCH_HISTORY_ASSESSMENT, return_value=_history_assessment(None)),
             patch(_PATCH_EXTRACT, return_value=MagicMock()),
             patch(_PATCH_BUILD_TRENDING, return_value=MagicMock()),
         ):
@@ -384,7 +393,7 @@ class TestPruneFailure:
 
         with (
             patch(_PATCH_BUILD_JSON, return_value={}),
-            patch(_PATCH_EXCL_REASON, return_value=None),
+            patch(_PATCH_HISTORY_ASSESSMENT, return_value=_history_assessment(None)),
             patch(_PATCH_EXTRACT, return_value=MagicMock()),
             patch(_PATCH_BUILD_TRENDING, return_value=MagicMock()),
         ):
@@ -407,7 +416,7 @@ class TestExplicitHistoryFile:
 
         with (
             patch(_PATCH_BUILD_JSON, return_value={}),
-            patch(_PATCH_EXCL_REASON, return_value=None),
+            patch(_PATCH_HISTORY_ASSESSMENT, return_value=_history_assessment(None)),
             patch(_PATCH_EXTRACT, return_value=MagicMock()),
             patch(_PATCH_BUILD_TRENDING, return_value=MagicMock()),
         ):
@@ -435,7 +444,7 @@ class TestPrunePreservesEligibleHistoryWindow:
 
         with (
             patch(_PATCH_BUILD_JSON, return_value={}),
-            patch(_PATCH_EXCL_REASON, return_value=None),
+            patch(_PATCH_HISTORY_ASSESSMENT, return_value=_history_assessment(None)),
             patch(_PATCH_EXTRACT, return_value=MagicMock()),
             patch(_PATCH_BUILD_TRENDING, return_value=trending),
         ):
@@ -454,7 +463,7 @@ class TestPrunePreservesEligibleHistoryWindow:
 
         with (
             patch(_PATCH_BUILD_JSON, return_value={}),
-            patch(_PATCH_EXCL_REASON, return_value="sampled"),
+            patch(_PATCH_HISTORY_ASSESSMENT, return_value=_history_assessment("sampled")),
             patch(_PATCH_EXTRACT, return_value=MagicMock()),
             patch(_PATCH_BUILD_TRENDING, return_value=None),
             patch(_PATCH_DISCOVER_SNAPSHOTS, return_value=discovered) as mock_discover,
@@ -488,7 +497,7 @@ class TestHappyPath:
 
         with (
             patch(_PATCH_BUILD_JSON, return_value={}),
-            patch(_PATCH_EXCL_REASON, return_value=None),
+            patch(_PATCH_HISTORY_ASSESSMENT, return_value=_history_assessment(None)),
             patch(_PATCH_EXTRACT, return_value=MagicMock()),
             patch(_PATCH_BUILD_TRENDING, return_value=mock_trending),
         ):
@@ -505,7 +514,7 @@ class TestHappyPath:
         with (
             patch("cja_auto_sdr.generator.OrgReportCache", return_value=mock_cache_instance) as mock_cache_cls,
             patch(_PATCH_BUILD_JSON, return_value={}),
-            patch(_PATCH_EXCL_REASON, return_value=None),
+            patch(_PATCH_HISTORY_ASSESSMENT, return_value=_history_assessment(None)),
             patch(_PATCH_EXTRACT, return_value=MagicMock()),
             patch(_PATCH_BUILD_TRENDING, return_value=mock_trending),
         ):

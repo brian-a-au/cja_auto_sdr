@@ -562,6 +562,16 @@ class TestCompareOrgReports:
         with pytest.raises(ValueError, match="manual_override"):
             compare_org_reports(current, str(prev_path))
 
+    @pytest.mark.parametrize("payload", [([1, 2, 3],), ("scalar-root",), (7,)])
+    def test_compare_rejects_previous_reports_with_non_object_json_root(self, tmp_path, payload):
+        prev_path = tmp_path / "prev_non_object.json"
+        prev_path.write_text(json.dumps(payload), encoding="utf-8")
+
+        current = _make_org_result(include_similarity=True)
+
+        with pytest.raises(ValueError, match=r"Previous report .*expected org-report snapshot payload"):
+            compare_org_reports(current, str(prev_path))
+
     def test_compare_rejects_current_reports_with_failed_data_views(self, tmp_path):
         """Current partial results should fail closed instead of emitting drift deltas."""
         prev_report = _mark_full_fidelity_baseline(

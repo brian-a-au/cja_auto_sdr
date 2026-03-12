@@ -10,6 +10,8 @@ from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any
 
+from cja_auto_sdr.org.identifiers import normalize_org_report_data_view_id
+
 
 @dataclass
 class OrgReportConfig:
@@ -443,15 +445,15 @@ class OrgReportComparisonInput:
     complete_high_similarity_pairs: bool | None = None
 
 
-def _normalize_snapshot_identifier(value: Any) -> str:
-    """Return a stripped identifier string for manual snapshot inputs."""
-    if value is None:
-        return ""
-    return str(value).strip()
-
-
 def _resolve_data_view_total(source: OrgReportComparisonInput) -> int:
-    """Resolve the authoritative data-view total for summary deltas."""
+    """Resolve the headline data-view total for summary deltas.
+
+    Exact ID sets win when they are known complete. Otherwise we preserve the
+    reported snapshot headline count because summary deltas describe total
+    population change, not just the successfully compared subset. The analyzed
+    count is only a legacy fallback for manual snapshots without a reported
+    total.
+    """
     if _has_complete_data_view_ids(source):
         return len(source.data_view_ids)
     reported_total = _safe_non_negative_int(source.data_view_count)
@@ -471,7 +473,9 @@ def _has_complete_high_similarity_pairs(source: OrgReportComparisonInput) -> boo
     """Return True when high_similarity_pairs reflect full similarity output."""
     if source.complete_high_similarity_pairs is not None:
         return source.complete_high_similarity_pairs
-    return True
+    # Manual snapshots must opt in explicitly; an empty pair set is ambiguous
+    # between "no high-similarity pairs" and "similarity analysis was partial".
+    return False
 
 
 def _resolve_component_total(source: OrgReportComparisonInput) -> int:
@@ -530,8 +534,8 @@ def _normalized_similarity_pairs(pairs: set[tuple[str, str]]) -> set[tuple[str, 
     for pair in pairs:
         if not isinstance(pair, tuple) or len(pair) != 2:
             continue
-        dv1_id = _normalize_snapshot_identifier(pair[0])
-        dv2_id = _normalize_snapshot_identifier(pair[1])
+        dv1_id = normalize_org_report_data_view_id(pair[0])
+        dv2_id = normalize_org_report_data_view_id(pair[1])
         if not dv1_id or not dv2_id:
             continue
         normalized_pairs.add(tuple(sorted((dv1_id, dv2_id))))
@@ -642,6 +646,7 @@ class TrendingSnapshot:
     dv_names: dict[str, str] = field(default_factory=dict)
     has_data_view_ids: bool = False
     complete_data_view_ids: bool | None = None
+    complete_high_similarity_pairs: bool | None = None
 
     def __post_init__(self) -> None:
         """Infer DV ID availability for manually constructed snapshots when possible."""
@@ -650,12 +655,14 @@ class TrendingSnapshot:
             self.has_data_view_ids = True
         if self.complete_data_view_ids is None:
             self.complete_data_view_ids = _snapshot_data_view_ids_cover_snapshot(self, normalized_dv_ids)
+        if self.complete_high_similarity_pairs is None:
+            self.complete_high_similarity_pairs = False
 
 
 def _snapshot_data_view_ids(snapshot: TrendingSnapshot) -> set[str]:
     """Return normalized DV IDs from both explicit IDs and name-map keys."""
-    normalized_ids = {_normalize_snapshot_identifier(dv_id) for dv_id in snapshot.dv_ids}
-    normalized_ids.update(_normalize_snapshot_identifier(dv_id) for dv_id in snapshot.dv_names)
+    normalized_ids = {normalize_org_report_data_view_id(dv_id) for dv_id in snapshot.dv_ids}
+    normalized_ids.update(normalize_org_report_data_view_id(dv_id) for dv_id in snapshot.dv_names)
     normalized_ids.discard("")
     return normalized_ids
 
@@ -664,7 +671,7 @@ def _snapshot_data_view_names(snapshot: TrendingSnapshot) -> dict[str, str]:
     """Return a normalized DV name map for comparison output."""
     normalized_names: dict[str, str] = {}
     for raw_dv_id, dv_name in snapshot.dv_names.items():
-        normalized_dv_id = _normalize_snapshot_identifier(raw_dv_id)
+        normalized_dv_id = normalize_org_report_data_view_id(raw_dv_id)
         if not normalized_dv_id:
             continue
         normalized_names[normalized_dv_id] = str(dv_name)
@@ -741,6 +748,7 @@ class OrgReportTrending:
                 core_count=prev.core_count,
                 isolated_count=prev.isolated_count,
                 high_similarity_pairs=_normalized_similarity_pairs(set(prev.high_similarity_pairs)),
+                complete_high_similarity_pairs=prev.complete_high_similarity_pairs,
             ),
             current=OrgReportComparisonInput(
                 timestamp=curr.timestamp,
@@ -755,5 +763,6 @@ class OrgReportTrending:
                 core_count=curr.core_count,
                 isolated_count=curr.isolated_count,
                 high_similarity_pairs=_normalized_similarity_pairs(set(curr.high_similarity_pairs)),
+                complete_high_similarity_pairs=curr.complete_high_similarity_pairs,
             ),
         )

@@ -28,8 +28,7 @@ from cja_auto_sdr.org.snapshot_utils import (
     org_report_snapshot_dedupe_key,
     org_report_snapshot_dir_key,
     org_report_snapshot_dir_paths,
-    org_report_snapshot_history_eligible,
-    org_report_snapshot_history_exclusion_reason,
+    org_report_snapshot_history_assessment,
     org_report_snapshot_metadata,
     org_report_snapshot_preference_key,
     snapshot_path_text,
@@ -215,13 +214,13 @@ class OrgReportCache:
         timestamp = str(report_data.get("generated_at") or datetime.now(UTC).isoformat())
         timestamp_slug = snapshot_slug(timestamp, fallback="snapshot")
         snapshot_id = uuid.uuid4().hex
-        history_exclusion_reason = org_report_snapshot_history_exclusion_reason(report_data)
+        history_assessment = org_report_snapshot_history_assessment(report_data)
         payload = dict(report_data)
         payload["_snapshot_meta"] = {
             "snapshot_id": snapshot_id,
             "content_hash": org_report_snapshot_content_hash(report_data),
-            "history_eligible": org_report_snapshot_history_eligible(report_data),
-            "history_exclusion_reason": history_exclusion_reason,
+            "history_eligible": history_assessment.eligible,
+            "history_exclusion_reason": history_assessment.exclusion_reason,
         }
         file_path = snapshot_dir / (
             f"org_report_{self._sanitize_org_id(resolved_org_id)}_{timestamp_slug}_{snapshot_id[:8]}.json"
