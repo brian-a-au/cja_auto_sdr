@@ -78,7 +78,7 @@ def _make_trending():
         snapshots=[
             TrendingSnapshot(
                 timestamp="2026-01-01T00:00:00Z",
-                data_view_count=10,
+                data_view_count=2,
                 component_count=100,
                 core_count=80,
                 isolated_count=20,
@@ -87,7 +87,7 @@ def _make_trending():
             ),
             TrendingSnapshot(
                 timestamp="2026-02-01T00:00:00Z",
-                data_view_count=12,
+                data_view_count=3,
                 component_count=120,
                 core_count=95,
                 isolated_count=25,
