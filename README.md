@@ -73,6 +73,11 @@ A **Solution Design Reference** is the essential documentation that bridges your
 | | Color-Coded Output | Global color controls via `--no-color`, `NO_COLOR`, and `FORCE_COLOR` |
 | | Enhanced Error Messages | Contextual error messages with actionable fix suggestions |
 | | Comprehensive Logging | Timestamped logs with rotation for audit trails |
+| **Agent & Automation** | AGENTS.md Contract | Machine-parseable tool contract for AI agents (Claude Code, LangChain, etc.) |
+| | Python Orchestrator | Subprocess wrapper for programmatic automation (`scripts/orchestrator.py`) |
+| | Shell Script Templates | Cron-ready weekly, daily, and quarterly automation examples |
+| | GitHub Actions Template | Copy-paste workflow for scheduled SDR auditing |
+| | Exit Code Conventions | Structured exit codes (0/1/2/3) for agent decision-making |
 
 ### Who It's For
 
