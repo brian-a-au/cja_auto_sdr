@@ -122,17 +122,16 @@ if [[ -n "${SLACK_WEBHOOK:-}" ]]; then
     COLOR="good"
     [[ $OVERALL_EXIT -ne 0 ]] && COLOR="warning"
 
+    PAYLOAD=$(jq -n \
+        --arg color "$COLOR" \
+        --arg title "$QUARTER Quarterly Maintenance Complete" \
+        --arg text "Exit code: $OVERALL_EXIT\nReports: $QUARTER_DIR" \
+        --arg footer "cja_auto_sdr quarterly maintenance" \
+        --argjson ts "$(date +%s)" \
+        '{attachments: [{color: $color, title: $title, text: $text, footer: $footer, ts: $ts}]}')
     curl -s -X POST "$SLACK_WEBHOOK" \
         -H 'Content-Type: application/json' \
-        -d "{
-            \"attachments\": [{
-                \"color\": \"$COLOR\",
-                \"title\": \"$QUARTER Quarterly Maintenance Complete\",
-                \"text\": \"Exit code: $OVERALL_EXIT\nReports: $QUARTER_DIR\",
-                \"footer\": \"cja_auto_sdr quarterly maintenance\",
-                \"ts\": $(date +%s)
-            }]
-        }" > /dev/null
+        -d "$PAYLOAD" > /dev/null
     echo "$LOG_PREFIX Slack notification sent"
 fi
 

@@ -66,23 +66,22 @@ except Exception:
         SEVERITY="warning"
         [[ $DIFF_EXIT -eq 2 ]] && SEVERITY="danger"
 
+        PAYLOAD=$(jq -n \
+            --arg color "$SEVERITY" \
+            --arg title "CJA Data View Drift Detected" \
+            --arg text "Data view: $DATA_VIEW_ID\n$SUMMARY" \
+            --arg footer "cja_auto_sdr drift check" \
+            --argjson ts "$(date +%s)" \
+            '{attachments: [{color: $color, title: $title, text: $text, footer: $footer, ts: $ts}]}')
         curl -s -X POST "$SLACK_WEBHOOK" \
             -H 'Content-Type: application/json' \
-            -d "{
-                \"attachments\": [{
-                    \"color\": \"$SEVERITY\",
-                    \"title\": \"CJA Data View Drift Detected\",
-                    \"text\": \"Data view: $DATA_VIEW_ID\n$SUMMARY\",
-                    \"footer\": \"cja_auto_sdr drift check\",
-                    \"ts\": $(date +%s)
-                }]
-            }" > /dev/null
+            -d "$PAYLOAD" > /dev/null
         echo "$LOG_PREFIX Slack notification sent"
     fi
+else
+    # Only update baseline when no drift detected
+    uv run cja_auto_sdr "$DATA_VIEW_ID" --snapshot "$BASELINE"
+    echo "$LOG_PREFIX Baseline updated (no drift)"
 fi
-
-# Update baseline after check
-uv run cja_auto_sdr "$DATA_VIEW_ID" --snapshot "$BASELINE"
-echo "$LOG_PREFIX Baseline updated"
 
 exit 0

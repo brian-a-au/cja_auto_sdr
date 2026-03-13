@@ -44,11 +44,13 @@ jobs:
         run: uv run cja_auto_sdr --validate-config
 
       - name: Generate SDR reports
+        env:
+          INPUT_DATA_VIEW: ${{ inputs.data_view }}
         run: |
           mkdir -p reports snapshots
 
-          if [[ -n "${{ inputs.data_view }}" ]]; then
-            DATA_VIEWS="${{ inputs.data_view }}"
+          if [[ -n "${INPUT_DATA_VIEW:-}" ]]; then
+            DATA_VIEWS="$INPUT_DATA_VIEW"
           elif [[ -n "${DATA_VIEW_IDS:-}" ]]; then
             DATA_VIEWS="$DATA_VIEW_IDS"
           else

@@ -11,6 +11,7 @@ Usage:
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -103,7 +104,7 @@ def run_diff(data_view: str, snapshot_path: str) -> dict:
         parse_json=True,
     )
     result["data_view"] = data_view
-    result["has_changes"] = result["exit_code"] == 2
+    result["has_changes"] = result["exit_code"] in (2, 3)
     result["threshold_exceeded"] = result["exit_code"] in (2, 3)
     return result
 
@@ -126,9 +127,7 @@ def run_snapshot(data_view: str, snapshot_path: str | None = None) -> dict:
 def main() -> int:
     """Standalone entry point: validate config, process data views, output JSON results."""
     # Get data views from args or environment
-    data_views = sys.argv[1:] or [
-        dv.strip() for dv in (__import__("os").environ.get("DATA_VIEWS", "")).split(",") if dv.strip()
-    ]
+    data_views = sys.argv[1:] or [dv.strip() for dv in os.environ.get("DATA_VIEWS", "").split(",") if dv.strip()]
 
     if not data_views:
         print(json.dumps({"error": "No data views specified. Pass as args or set DATA_VIEWS env var."}))
