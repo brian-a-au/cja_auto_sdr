@@ -217,6 +217,31 @@ class TestExtractSnapshotFromJson:
         assert snap.high_similarity_pairs == {("a", "b"), ("c", "d")}
         assert snap.complete_high_similarity_pairs is True
 
+    def test_recovered_self_pairs_are_ignored(self):
+        data = _make_org_report_json(
+            dv_count=2,
+            data_views=[
+                {"id": "dv1", "name": "DV 1", "metrics_count": 2, "dimensions_count": 1},
+                {"id": "dv2", "name": "DV 2", "metrics_count": 3, "dimensions_count": 1},
+            ],
+            similarity_pairs=[
+                {
+                    "dv1_id": "",
+                    "dv2_id": "   ",
+                    "data_view_1": {"id": "dv1"},
+                    "data_view_2": {"id": " dv1 "},
+                    "jaccard_similarity": 0.95,
+                }
+            ],
+        )
+
+        snap = _extract_snapshot_from_json(data)
+
+        assert snap is not None
+        assert snap.high_sim_pair_count == 0
+        assert snap.high_similarity_pairs == set()
+        assert snap.dv_max_similarity == {"dv1": 0.0, "dv2": 0.0}
+
     def test_failed_data_views_are_excluded_from_history(self):
         data = _make_org_report_json(
             dv_count=2,
@@ -335,6 +360,33 @@ class TestExtractSnapshotFromJson:
         assert snap.dv_names == {"dv1": "DV 1", "dv2": "DV 2"}
         assert snap.dv_component_counts == {"dv1": 8, "dv2": 6}
         assert snap.dv_core_ratios == {"dv1": pytest.approx(0.125, abs=0.0001), "dv2": pytest.approx(1 / 6, abs=0.0001)}
+        assert snap.dv_max_similarity == {"dv1": 0.91, "dv2": 0.91}
+
+    def test_extraction_falls_back_from_blank_legacy_aliases_for_ids_and_similarity_pairs(self):
+        data = _make_org_report_json(
+            dv_count=2,
+            core_metrics=["m1"],
+            data_views=[
+                {"data_view_id": "", "id": " dv1 ", "name": "DV 1", "metrics_count": 5, "dimensions_count": 3},
+                {"data_view_id": "   ", "id": "dv2", "name": "DV 2", "metrics_count": 4, "dimensions_count": 2},
+            ],
+            component_index={"m1": {"type": "metric", "data_views": ["dv1", "dv2"]}},
+            similarity_pairs=[
+                {
+                    "dv1_id": "",
+                    "dv2_id": "   ",
+                    "data_view_1": {"id": " dv1 "},
+                    "data_view_2": {"id": "dv2"},
+                    "jaccard_similarity": 0.91,
+                }
+            ],
+        )
+
+        snap = _extract_snapshot_from_json(data)
+
+        assert snap is not None
+        assert snap.dv_ids == {"dv1", "dv2"}
+        assert snap.high_similarity_pairs == {("dv1", "dv2")}
         assert snap.dv_max_similarity == {"dv1": 0.91, "dv2": 0.91}
 
     def test_core_ratios_are_derived_from_component_index(self):

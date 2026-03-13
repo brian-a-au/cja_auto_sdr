@@ -47,8 +47,10 @@ class OrgReportSnapshotDataViewAssessment:
     unique_id_total: int
     missing_id_rows: int
     duplicate_id_rows: int
+    duplicate_successful_raw_id_rows: int
     ids_complete: bool
     coverage_complete: bool
+    comparison_complete: bool
     history_complete: bool
 
 
@@ -510,7 +512,13 @@ def _derived_org_report_snapshot_comparison_assessment(
     data_view_assessment: OrgReportSnapshotDataViewAssessment | None = None,
     derived_history: OrgReportSnapshotHistoryAssessment | None = None,
 ) -> OrgReportSnapshotComparisonAssessment:
-    """Derive point-in-time comparison fidelity from the snapshot payload itself."""
+    """Derive point-in-time comparison fidelity from the snapshot payload itself.
+
+    Direct comparison requires complete row coverage plus analyzer-safe raw DV
+    identities. Exact DV identity deltas and high-similarity pair deltas are
+    gated separately by the completeness flags carried into
+    OrgReportComparisonInput.
+    """
     summary = snapshot_mapping_dict(summary if summary is not None else data.get("summary", {}))
     if coerce_snapshot_bool(summary.get("is_sampled")) is True:
         return OrgReportSnapshotComparisonAssessment(
@@ -522,7 +530,7 @@ def _derived_org_report_snapshot_comparison_assessment(
     data_view_assessment = (
         data_view_assessment if data_view_assessment is not None else org_report_snapshot_data_view_assessment(data)
     )
-    if not data_view_assessment.history_complete:
+    if not data_view_assessment.comparison_complete:
         return OrgReportSnapshotComparisonAssessment(
             eligible=False,
             exclusion_reason="incomplete_data_views",
@@ -739,9 +747,56 @@ def org_report_snapshot_content_hash(report_data: Mapping[str, Any]) -> str:
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
+@dataclass(frozen=True)
+class _SnapshotIdAliasResolution:
+    """Resolved serialized snapshot ID alias after defensive validation."""
+
+    raw: str | None
+    normalized: str
+
+
+def _resolve_snapshot_id_alias(*candidates: tuple[bool, Any]) -> _SnapshotIdAliasResolution:
+    """Resolve one snapshot ID across a prioritized alias list.
+
+    Only string aliases are considered valid snapshot identifiers. Blank-string
+    aliases fall through to later populated aliases so mixed legacy/current
+    payloads can still recover a stable ID, but if every present string alias is
+    blank-like we preserve one explicit blank marker so raw-ID collision checks
+    still fail closed on repeated blank identifiers.
+    """
+    blank_alias_seen = False
+    for present, value in candidates:
+        if not present or not isinstance(value, str):
+            continue
+        normalized = normalize_org_report_data_view_id(value)
+        if normalized:
+            return _SnapshotIdAliasResolution(raw=value, normalized=normalized)
+        blank_alias_seen = True
+    if blank_alias_seen:
+        return _SnapshotIdAliasResolution(raw="", normalized="")
+    return _SnapshotIdAliasResolution(raw=None, normalized="")
+
+
 def org_report_data_view_row_id(data_view: Mapping[str, Any]) -> str:
     """Extract one normalized data-view identifier from a serialized row."""
-    return normalize_org_report_data_view_id(data_view.get("data_view_id") or data_view.get("id"))
+    return _resolve_snapshot_id_alias(
+        ("data_view_id" in data_view, data_view.get("data_view_id")),
+        ("id" in data_view, data_view.get("id")),
+    ).normalized
+
+
+def org_report_data_view_row_raw_id(data_view: Mapping[str, Any]) -> str | None:
+    """Extract the analyzer-facing raw DV ID token from a serialized row.
+
+    Returns None only when the row has no DV ID field at all. Blank aliases
+    fall through to later populated aliases, but if every explicit alias is
+    blank-like we preserve an empty-string token so collision checks can still
+    fail closed on repeated blank IDs.
+    """
+    return _resolve_snapshot_id_alias(
+        ("data_view_id" in data_view, data_view.get("data_view_id")),
+        ("id" in data_view, data_view.get("id")),
+    ).raw
 
 
 def org_report_data_view_row_has_error(data_view: Any) -> bool:
@@ -845,6 +900,12 @@ def _build_org_report_snapshot_data_view_assessment(
     identified_row_total = len(data_view_inventory.normalized_ids)
     unique_id_total = len(data_view_inventory.ids)
     duplicate_id_rows = identified_row_total - unique_id_total
+    successful_raw_id_tokens = [
+        raw_id
+        for data_view in successful_data_views
+        if (raw_id := org_report_data_view_row_raw_id(data_view)) is not None
+    ]
+    duplicate_successful_raw_id_rows = len(successful_raw_id_tokens) - len(set(successful_raw_id_tokens))
     ids_complete = payload_is_mapping and (
         data_view_inventory.missing_id_rows == 0 and duplicate_id_rows == 0 and unique_id_total == stats.reported_total
     )
@@ -855,7 +916,11 @@ def _build_org_report_snapshot_data_view_assessment(
         and rows_match_reported_total
         and successful_rows_match_analyzed_total
     )
-    history_complete = coverage_complete and ids_complete
+    # Direct comparison can tolerate incomplete stable IDs, but not evidence that
+    # analyzer-facing raw IDs collided across successful rows because that can
+    # already skew component and distribution counts in serialized org reports.
+    comparison_complete = coverage_complete and duplicate_successful_raw_id_rows == 0
+    history_complete = comparison_complete and ids_complete
 
     return OrgReportSnapshotDataViewAssessment(
         stats=stats,
@@ -869,8 +934,10 @@ def _build_org_report_snapshot_data_view_assessment(
         unique_id_total=unique_id_total,
         missing_id_rows=data_view_inventory.missing_id_rows,
         duplicate_id_rows=duplicate_id_rows,
+        duplicate_successful_raw_id_rows=duplicate_successful_raw_id_rows,
         ids_complete=ids_complete,
         coverage_complete=coverage_complete,
+        comparison_complete=comparison_complete,
         history_complete=history_complete,
     )
 
@@ -910,13 +977,17 @@ def org_report_snapshot_has_complete_data_view_ids(data: Mapping[str, Any]) -> b
 
 def normalized_similarity_pair_ids(pair: Mapping[str, Any]) -> tuple[str, str] | None:
     """Extract a stable high-similarity pair identity from serialized report data."""
-    dv1 = normalize_org_report_data_view_id(
-        pair.get("dv1_id") or snapshot_mapping_dict(pair.get("data_view_1", {})).get("id")
-    )
-    dv2 = normalize_org_report_data_view_id(
-        pair.get("dv2_id") or snapshot_mapping_dict(pair.get("data_view_2", {})).get("id")
-    )
-    if not dv1 or not dv2:
+    data_view_1 = snapshot_mapping_dict(pair.get("data_view_1", {}))
+    data_view_2 = snapshot_mapping_dict(pair.get("data_view_2", {}))
+    dv1 = _resolve_snapshot_id_alias(
+        ("dv1_id" in pair, pair.get("dv1_id")),
+        ("id" in data_view_1, data_view_1.get("id")),
+    ).normalized
+    dv2 = _resolve_snapshot_id_alias(
+        ("dv2_id" in pair, pair.get("dv2_id")),
+        ("id" in data_view_2, data_view_2.get("id")),
+    ).normalized
+    if not dv1 or not dv2 or dv1 == dv2:
         return None
     return tuple(sorted((dv1, dv2)))
 
@@ -1146,7 +1217,11 @@ def org_report_snapshot_comparison_input(
 
     Data-view identities include failed rows when those rows still expose a
     stable ID. This preserves the full known snapshot population for identity
-    deltas even when point-in-time analysis coverage was partial.
+    deltas even when point-in-time analysis coverage was partial. Direct
+    comparison requires full row coverage and no raw-ID collisions that could
+    skew serialized component/distribution totals, but exact DV add/remove
+    lists still degrade gracefully via complete_data_view_ids=False when some
+    rows lack a stable unique ID.
     """
     state = _org_report_snapshot_state(
         data,

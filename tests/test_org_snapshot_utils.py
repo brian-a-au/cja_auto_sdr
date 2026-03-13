@@ -18,9 +18,12 @@ from cja_auto_sdr.org.snapshot_utils import (
     normalized_similarity_pair_ids,
     org_report_component_count,
     org_report_core_count,
+    org_report_data_view_row_id,
+    org_report_data_view_row_raw_id,
     org_report_high_similarity_pairs,
     org_report_isolated_count,
     org_report_snapshot_comparison_assessment,
+    org_report_snapshot_comparison_eligible,
     org_report_snapshot_comparison_input,
     org_report_snapshot_content_hash,
     org_report_snapshot_data_view_assessment,
@@ -118,6 +121,8 @@ def test_org_report_snapshot_extractors_return_safe_defaults_for_non_mapping_roo
     assert assessment.successful_rows_match_analyzed_total is False
     assert assessment.ids_complete is False
     assert assessment.coverage_complete is False
+    assert assessment.duplicate_successful_raw_id_rows == 0
+    assert assessment.comparison_complete is False
     assert assessment.history_complete is False
     assert stats.reported_total == 0
     assert stats.analyzed_total == 0
@@ -132,6 +137,34 @@ def test_org_report_snapshot_extractors_return_safe_defaults_for_non_mapping_roo
     assert org_report_high_similarity_pairs(payload) == set()
     assert org_report_snapshot_has_complete_data_view_coverage(payload) is False
     assert org_report_snapshot_has_complete_data_view_ids(payload) is False
+
+
+@pytest.mark.parametrize("blank_value", ["", "   ", None])
+def test_org_report_data_view_row_extractors_fall_back_from_blank_legacy_aliases(blank_value):
+    row = {"data_view_id": blank_value, "id": " dv1 "}
+
+    assert org_report_data_view_row_id(row) == "dv1"
+    assert org_report_data_view_row_raw_id(row) == " dv1 "
+
+
+@pytest.mark.parametrize("row", [{"data_view_id": ""}, {"data_view_id": "   "}])
+def test_org_report_data_view_row_raw_id_preserves_explicit_blank_ids_without_fallback(row):
+    assert org_report_data_view_row_id(row) == ""
+    assert org_report_data_view_row_raw_id(row) == ""
+
+
+@pytest.mark.parametrize("row", [{"data_view_id": 0, "id": "dv1"}, {"data_view_id": False, "id": " dv2 "}])
+def test_org_report_data_view_row_extractors_fall_back_from_invalid_scalar_aliases(row):
+    expected_normalized = "dv1" if row["id"] == "dv1" else "dv2"
+
+    assert org_report_data_view_row_id(row) == expected_normalized
+    assert org_report_data_view_row_raw_id(row) == row["id"]
+
+
+@pytest.mark.parametrize("row", [{"id": 0}, {"id": False}, {"data_view_id": 1}, {"data_view_id": True}])
+def test_org_report_data_view_row_extractors_treat_non_string_scalars_as_missing(row):
+    assert org_report_data_view_row_id(row) == ""
+    assert org_report_data_view_row_raw_id(row) is None
 
 
 def test_org_report_snapshot_history_eligible_rejects_similarity_incomplete_payloads():
@@ -278,6 +311,148 @@ def test_org_report_snapshot_comparison_ignores_persisted_skip_similarity_restat
     )
     assert result.data_view_ids == {"dv1", "dv2"}
     assert result.complete_high_similarity_pairs is False
+
+
+@pytest.mark.parametrize("blank_value", ["", "   "])
+def test_org_report_snapshot_comparison_allows_blank_legacy_aliases_when_id_fallbacks_are_unique(blank_value):
+    payload = {
+        "generated_at": "2026-03-01T00:00:00Z",
+        "org_id": "test_org",
+        "report_type": "org_analysis",
+        "summary": {
+            "data_views_total": 2,
+            "data_views_analyzed": 2,
+            "total_unique_components": 4,
+            "similarity_analysis_complete": True,
+        },
+        "distribution": {"core": {"total": 1}, "isolated": {"total": 0}},
+        "data_views": [
+            {"data_view_id": blank_value, "id": "dv1", "data_view_name": "Data View 1", "error": None},
+            {"data_view_id": blank_value, "id": "dv2", "data_view_name": "Data View 2", "error": None},
+        ],
+        "similarity_pairs": [],
+    }
+
+    assessment = org_report_snapshot_data_view_assessment(payload)
+    assert assessment.ids_complete is True
+    assert assessment.duplicate_successful_raw_id_rows == 0
+    assert assessment.comparison_complete is True
+    assert assessment.history_complete is True
+    assert org_report_snapshot_history_eligible(payload) is True
+    assert org_report_snapshot_comparison_eligible(payload) is True
+
+    result = org_report_snapshot_comparison_input(payload, require_comparison_eligible=True)
+    assert result.data_view_ids == {"dv1", "dv2"}
+    assert result.complete_data_view_ids is True
+    assert result.complete_high_similarity_pairs is True
+
+
+@pytest.mark.parametrize(
+    ("data_views", "expected_ids"),
+    [
+        (
+            [
+                {"id": "dv1", "data_view_name": "Healthy", "error": None},
+                {"data_view_name": "Missing ID", "error": None},
+            ],
+            {"dv1"},
+        ),
+        (
+            [
+                {"id": "dv1", "data_view_name": "Healthy", "error": None},
+                {"data_view_id": " dv1 ", "data_view_name": "Duplicate", "error": None},
+            ],
+            {"dv1"},
+        ),
+        (
+            [
+                {"id": "dv1", "data_view_name": "Healthy", "error": None},
+                {"id": 0, "data_view_name": "Scalar ID", "error": None},
+            ],
+            {"dv1"},
+        ),
+    ],
+)
+def test_org_report_snapshot_comparison_allows_complete_rows_with_incomplete_dv_ids(
+    data_views,
+    expected_ids,
+):
+    payload = {
+        "generated_at": "2026-03-01T00:00:00Z",
+        "org_id": "test_org",
+        "report_type": "org_analysis",
+        "summary": {
+            "data_views_total": 2,
+            "data_views_analyzed": 2,
+            "total_unique_components": 4,
+            "similarity_analysis_complete": True,
+        },
+        "distribution": {"core": {"total": 1}, "isolated": {"total": 0}},
+        "data_views": data_views,
+        "similarity_pairs": [{"dv1_id": "dv1", "dv2_id": "dv2", "jaccard_similarity": 0.95}],
+    }
+
+    assert org_report_snapshot_history_eligible(payload) is False
+    assert org_report_snapshot_comparison_eligible(payload) is True
+
+    assessment = org_report_snapshot_comparison_assessment(payload)
+    assert assessment.eligible is True
+    assert assessment.exclusion_reason is None
+    assert assessment.complete_high_similarity_pairs is False
+
+    result = org_report_snapshot_comparison_input(
+        payload,
+        require_history_eligible=False,
+        require_comparison_eligible=True,
+    )
+    assert result.data_view_ids == expected_ids
+    assert result.complete_data_view_ids is False
+    assert result.data_view_count == 2
+    assert result.comparison_data_view_count == 2
+    assert result.complete_high_similarity_pairs is False
+
+
+@pytest.mark.parametrize(
+    "data_views",
+    [
+        [
+            {"id": "", "data_view_name": "Blank 1", "error": None},
+            {"id": "", "data_view_name": "Blank 2", "error": None},
+        ],
+        [
+            {"id": "dv1", "data_view_name": "First", "error": None},
+            {"data_view_id": "dv1", "data_view_name": "Second", "error": None},
+        ],
+    ],
+)
+def test_org_report_snapshot_comparison_rejects_complete_rows_with_raw_id_collisions(data_views):
+    payload = {
+        "generated_at": "2026-03-01T00:00:00Z",
+        "org_id": "test_org",
+        "report_type": "org_analysis",
+        "summary": {
+            "data_views_total": 2,
+            "data_views_analyzed": 2,
+            "total_unique_components": 4,
+            "similarity_analysis_complete": True,
+        },
+        "distribution": {"core": {"total": 1}, "isolated": {"total": 0}},
+        "data_views": data_views,
+        "similarity_pairs": [],
+    }
+
+    assessment = org_report_snapshot_data_view_assessment(payload)
+    assert assessment.coverage_complete is True
+    assert assessment.duplicate_successful_raw_id_rows == 1
+    assert assessment.comparison_complete is False
+    assert org_report_snapshot_comparison_eligible(payload) is False
+
+    with pytest.raises(ValueError, match="incomplete_data_views"):
+        org_report_snapshot_comparison_input(
+            payload,
+            require_history_eligible=False,
+            require_comparison_eligible=True,
+        )
 
 
 def test_org_report_snapshot_history_excludes_explicit_incomplete_data_views():
@@ -866,6 +1041,50 @@ def test_normalized_similarity_pair_ids_returns_none_when_ids_missing():
     assert normalized_similarity_pair_ids({}) is None
     assert normalized_similarity_pair_ids({"dv1_id": "", "dv2_id": ""}) is None
     assert normalized_similarity_pair_ids({"dv1_id": "a"}) is None  # dv2 missing
+
+
+@pytest.mark.parametrize("blank_value", ["", "   ", None])
+def test_normalized_similarity_pair_ids_fall_back_from_blank_flat_ids_to_nested_ids(blank_value):
+    assert normalized_similarity_pair_ids(
+        {
+            "dv1_id": blank_value,
+            "dv2_id": blank_value,
+            "data_view_1": {"id": " dv1 "},
+            "data_view_2": {"id": "dv2"},
+        }
+    ) == ("dv1", "dv2")
+
+
+@pytest.mark.parametrize(
+    "pair",
+    [
+        {"dv1_id": "dv1", "dv2_id": " dv1 "},
+        {
+            "dv1_id": "",
+            "dv2_id": "   ",
+            "data_view_1": {"id": "dv1"},
+            "data_view_2": {"id": " dv1 "},
+        },
+    ],
+)
+def test_normalized_similarity_pair_ids_rejects_collapsed_self_pairs(pair):
+    assert normalized_similarity_pair_ids(pair) is None
+
+
+def test_org_report_high_similarity_pairs_ignores_collapsed_self_pairs():
+    payload = {
+        "similarity_pairs": [
+            {
+                "dv1_id": "",
+                "dv2_id": "   ",
+                "data_view_1": {"id": "dv1"},
+                "data_view_2": {"id": " dv1 "},
+                "jaccard_similarity": 0.97,
+            }
+        ]
+    }
+
+    assert org_report_high_similarity_pairs(payload) == set()
 
 
 # ---------------------------------------------------------------------------

@@ -602,7 +602,44 @@ class TestCompareOrgReports:
         ):
             compare_org_reports(current, str(prev_path))
 
-    def test_compare_rejects_current_reports_with_duplicate_normalized_data_view_ids(self, tmp_path):
+    def test_compare_allows_current_reports_with_missing_data_view_ids_but_suppresses_exact_dv_lists(
+        self,
+        tmp_path,
+    ):
+        prev_report = _mark_full_fidelity_baseline(
+            {
+                "generated_at": "2024-08-01T10:00:00Z",
+                "data_views": [
+                    {"data_view_id": "dv_001", "data_view_name": "Data View 1"},
+                    {"data_view_id": "dv_002", "data_view_name": "Data View 2"},
+                    {"data_view_id": "dv_003", "data_view_name": "Data View 3"},
+                ],
+                "summary": {"total_unique_components": 20},
+                "distribution": {
+                    "core": {"total": 5},
+                    "isolated": {"total": 2},
+                },
+                "similarity_pairs": [],
+            }
+        )
+        prev_path = tmp_path / "prev_missing_current_id.json"
+        prev_path.write_text(json.dumps(prev_report), encoding="utf-8")
+
+        current = _make_org_result(include_similarity=True)
+        current.data_view_summaries[1] = _make_data_view_summary("", "Missing Data View 2")
+
+        comparison = compare_org_reports(current, str(prev_path))
+
+        assert comparison.data_views_added == []
+        assert comparison.data_views_removed == []
+        assert comparison.summary["data_views_delta"] == 0
+        assert comparison.new_high_similarity_pairs == []
+        assert comparison.resolved_pairs == []
+
+    def test_compare_allows_current_reports_with_duplicate_normalized_data_view_ids_but_suppresses_exact_dv_lists(
+        self,
+        tmp_path,
+    ):
         prev_report = _mark_full_fidelity_baseline(
             {
                 "generated_at": "2024-08-01T10:00:00Z",
@@ -624,6 +661,37 @@ class TestCompareOrgReports:
 
         current = _make_org_result(include_similarity=True)
         current.data_view_summaries[1] = _make_data_view_summary(" dv_001 ", "Duplicate Data View 1")
+
+        comparison = compare_org_reports(current, str(prev_path))
+
+        assert comparison.data_views_added == []
+        assert comparison.data_views_removed == []
+        assert comparison.summary["data_views_delta"] == 0
+        assert comparison.new_high_similarity_pairs == []
+        assert comparison.resolved_pairs == []
+
+    def test_compare_rejects_current_reports_with_duplicate_exact_raw_data_view_ids(self, tmp_path):
+        prev_report = _mark_full_fidelity_baseline(
+            {
+                "generated_at": "2024-08-01T10:00:00Z",
+                "data_views": [
+                    {"data_view_id": "dv_001", "data_view_name": "Data View 1"},
+                    {"data_view_id": "dv_002", "data_view_name": "Data View 2"},
+                    {"data_view_id": "dv_003", "data_view_name": "Data View 3"},
+                ],
+                "summary": {"total_unique_components": 20},
+                "distribution": {
+                    "core": {"total": 5},
+                    "isolated": {"total": 2},
+                },
+                "similarity_pairs": [],
+            }
+        )
+        prev_path = tmp_path / "prev_duplicate_current_raw_id.json"
+        prev_path.write_text(json.dumps(prev_report), encoding="utf-8")
+
+        current = _make_org_result(include_similarity=True)
+        current.data_view_summaries[1] = _make_data_view_summary("dv_001", "Duplicate Data View 1")
 
         with pytest.raises(
             ValueError,
@@ -692,7 +760,10 @@ class TestCompareOrgReports:
         with pytest.raises(ValueError, match="incomplete_data_views"):
             compare_org_reports(current, str(prev_path))
 
-    def test_compare_rejects_previous_reports_with_missing_data_view_ids(self, tmp_path):
+    def test_compare_allows_previous_reports_with_missing_data_view_ids_but_suppresses_exact_dv_lists(
+        self,
+        tmp_path,
+    ):
         prev_report = _mark_full_fidelity_baseline(
             {
                 "generated_at": "2024-08-01T10:00:00Z",
@@ -717,10 +788,91 @@ class TestCompareOrgReports:
 
         current = _make_org_result(include_similarity=True)
 
+        comparison = compare_org_reports(current, str(prev_path))
+
+        assert comparison.data_views_added == []
+        assert comparison.data_views_removed == []
+        assert comparison.summary["data_views_delta"] == 1
+        assert comparison.new_high_similarity_pairs == []
+        assert comparison.resolved_pairs == []
+
+    def test_compare_allows_previous_reports_with_blank_legacy_aliases_when_id_fallbacks_are_unique(
+        self,
+        tmp_path,
+    ):
+        prev_report = _mark_full_fidelity_baseline(
+            {
+                "generated_at": "2024-08-01T10:00:00Z",
+                "data_views": [
+                    {"data_view_id": "", "id": "dv_001", "data_view_name": "Data View 1", "error": None},
+                    {"data_view_id": "   ", "id": "dv_002", "data_view_name": "Data View 2", "error": None},
+                    {"data_view_id": None, "id": "dv_003", "data_view_name": "Data View 3", "error": None},
+                ],
+                "summary": {
+                    "data_views_total": 3,
+                    "data_views_analyzed": 3,
+                    "total_unique_components": 20,
+                },
+                "distribution": {
+                    "core": {"total": 5},
+                    "isolated": {"total": 2},
+                },
+                "similarity_pairs": [
+                    {
+                        "dv1_id": "",
+                        "dv2_id": "   ",
+                        "data_view_1": {"id": "dv_001"},
+                        "data_view_2": {"id": "dv_002"},
+                        "jaccard_similarity": 0.95,
+                    }
+                ],
+            }
+        )
+        prev_path = tmp_path / "prev_blank_legacy_alias_id.json"
+        prev_path.write_text(json.dumps(prev_report), encoding="utf-8")
+
+        current = _make_org_result(include_similarity=True)
+
+        comparison = compare_org_reports(current, str(prev_path))
+
+        assert comparison.data_views_added == []
+        assert comparison.data_views_removed == []
+        assert comparison.summary["data_views_delta"] == 0
+        assert comparison.new_high_similarity_pairs == []
+        assert comparison.resolved_pairs == []
+
+    def test_compare_rejects_previous_reports_with_duplicate_exact_raw_data_view_ids(self, tmp_path):
+        prev_report = _mark_full_fidelity_baseline(
+            {
+                "generated_at": "2024-08-01T10:00:00Z",
+                "data_views": [
+                    {"data_view_id": "dv_001", "data_view_name": "Data View 1", "error": None},
+                    {"id": "dv_001", "name": "Duplicate Data View 1", "error": None},
+                ],
+                "summary": {
+                    "data_views_total": 2,
+                    "data_views_analyzed": 2,
+                    "total_unique_components": 20,
+                },
+                "distribution": {
+                    "core": {"total": 5},
+                    "isolated": {"total": 2},
+                },
+                "similarity_pairs": [],
+            }
+        )
+        prev_path = tmp_path / "prev_duplicate_exact_raw_id.json"
+        prev_path.write_text(json.dumps(prev_report), encoding="utf-8")
+
+        current = _make_org_result(include_similarity=True)
+
         with pytest.raises(ValueError, match="incomplete_data_views"):
             compare_org_reports(current, str(prev_path))
 
-    def test_compare_rejects_previous_reports_with_duplicate_normalized_data_view_ids(self, tmp_path):
+    def test_compare_allows_previous_reports_with_duplicate_normalized_data_view_ids_but_suppresses_exact_dv_lists(
+        self,
+        tmp_path,
+    ):
         prev_report = _mark_full_fidelity_baseline(
             {
                 "generated_at": "2024-08-01T10:00:00Z",
@@ -745,8 +897,13 @@ class TestCompareOrgReports:
 
         current = _make_org_result(include_similarity=True)
 
-        with pytest.raises(ValueError, match="incomplete_data_views"):
-            compare_org_reports(current, str(prev_path))
+        comparison = compare_org_reports(current, str(prev_path))
+
+        assert comparison.data_views_added == []
+        assert comparison.data_views_removed == []
+        assert comparison.summary["data_views_delta"] == 1
+        assert comparison.new_high_similarity_pairs == []
+        assert comparison.resolved_pairs == []
 
     def test_compare_uses_exact_component_ids_when_available(self, tmp_path):
         prev_report = _mark_full_fidelity_baseline(

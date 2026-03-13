@@ -21,6 +21,7 @@ from cja_auto_sdr.org.snapshot_utils import (
     is_org_report_snapshot_root_dir,
     iter_org_report_snapshot_files,
     normalize_org_report_data_view_id,
+    normalized_similarity_pair_ids,
     org_report_data_view_row_has_error,
     org_report_data_view_row_id,
     org_report_snapshot_content_hash,
@@ -254,12 +255,10 @@ def _extract_snapshot_from_json(
     for pair in sim_pairs:
         if not isinstance(pair, dict):
             continue
-        dv1 = normalize_org_report_data_view_id(
-            pair.get("dv1_id") or _mapping_dict(pair.get("data_view_1", {})).get("id")
-        )
-        dv2 = normalize_org_report_data_view_id(
-            pair.get("dv2_id") or _mapping_dict(pair.get("data_view_2", {})).get("id")
-        )
+        normalized_pair = normalized_similarity_pair_ids(pair)
+        if normalized_pair is None:
+            continue
+        dv1, dv2 = normalized_pair
         sim = coerce_snapshot_float(pair.get("jaccard_similarity")) or 0.0
         if dv1 in dv_ids and dv2 in dv_ids:
             dv_max_similarity[dv1] = max(dv_max_similarity.get(dv1, 0.0), sim)
