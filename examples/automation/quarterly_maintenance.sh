@@ -27,6 +27,16 @@ QUARTER="Q$(( ($(date +%-m) - 1) / 3 + 1 ))-$(date +%Y)"
 QUARTER_DIR="$REPORT_DIR/$QUARTER"
 LOG_PREFIX="[$(date '+%Y-%m-%d %H:%M:%S')]"
 
+update_overall_exit() {
+    local code="${1:-0}"
+
+    case "$code" in
+        1) OVERALL_EXIT=1 ;;
+        2) [[ $OVERALL_EXIT -ne 1 ]] && OVERALL_EXIT=2 ;;
+        3) [[ $OVERALL_EXIT -eq 0 ]] && OVERALL_EXIT=3 ;;
+    esac
+}
+
 # Load credentials
 if [[ -f "$PROJECT_ROOT/.env" ]]; then
     set -a
@@ -47,7 +57,7 @@ fi
 
 # Get data view list
 DATA_VIEWS=$(uv run cja_auto_sdr --list-dataviews --format json --output - | \
-    python3 -c "import sys,json; [print(dv['id']) for dv in json.load(sys.stdin)]" 2>/dev/null) || {
+    python3 -c "import sys,json; data=json.load(sys.stdin); views=data if isinstance(data, list) else data.get('dataViews', []); [print(dv['id']) for dv in views if isinstance(dv, dict) and dv.get('id')]" 2>/dev/null) || {
     echo "$LOG_PREFIX ERROR: Failed to list data views" >&2
     exit 1
 }
@@ -66,8 +76,8 @@ for DV_ID in $DATA_VIEWS; do
 
     case $SDR_EXIT in
         0) echo "$LOG_PREFIX  OK" ;;
-        2) echo "$LOG_PREFIX  WARNING: Quality threshold exceeded for $DV_ID"; OVERALL_EXIT=2 ;;
-        *) echo "$LOG_PREFIX  ERROR: SDR generation failed for $DV_ID (exit $SDR_EXIT)" >&2; OVERALL_EXIT=1 ;;
+        2) echo "$LOG_PREFIX  WARNING: Quality threshold exceeded for $DV_ID"; update_overall_exit 2 ;;
+        *) echo "$LOG_PREFIX  ERROR: SDR generation failed for $DV_ID (exit $SDR_EXIT)" >&2; update_overall_exit 1 ;;
     esac
 
     # Update baseline snapshot
@@ -83,13 +93,18 @@ uv run cja_auto_sdr --org-report --cluster --force-similarity \
 
 case $GOV_EXIT in
     0) echo "$LOG_PREFIX  Governance review: PASS" ;;
-    2) echo "$LOG_PREFIX  Governance review: THRESHOLDS EXCEEDED — see org_governance.json" ;;
-    *) echo "$LOG_PREFIX  ERROR: Governance review failed (exit $GOV_EXIT)" >&2; OVERALL_EXIT=1 ;;
+    2) echo "$LOG_PREFIX  Governance review: THRESHOLDS EXCEEDED — see org_governance.json"; update_overall_exit 2 ;;
+    *) echo "$LOG_PREFIX  ERROR: Governance review failed (exit $GOV_EXIT)" >&2; update_overall_exit 1 ;;
 esac
 
 # Also generate human-readable governance report
+GOV_MD_EXIT=0
 uv run cja_auto_sdr --org-report --cluster --force-similarity \
-    --format markdown --output - > "$QUARTER_DIR/org_governance.md" 2>/dev/null || true
+    --format markdown --output "$QUARTER_DIR/org_governance.md" || GOV_MD_EXIT=$?
+if [[ $GOV_MD_EXIT -ne 0 ]]; then
+    echo "$LOG_PREFIX  ERROR: Governance markdown export failed (exit $GOV_MD_EXIT)" >&2
+    update_overall_exit 1
+fi
 
 # --- Phase 3: Snapshot pruning ---
 echo "$LOG_PREFIX Phase 3: Snapshot pruning (keeping last $KEEP_LAST)"

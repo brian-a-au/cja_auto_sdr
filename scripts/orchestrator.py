@@ -66,12 +66,23 @@ def validate_config() -> bool:
     return result["success"]
 
 
+def _unwrap_collection(data: object, key: str) -> list[dict]:
+    """Normalize list-style CLI JSON payloads with optional metadata envelopes."""
+    if isinstance(data, list):
+        return [item for item in data if isinstance(item, dict)]
+    if isinstance(data, dict):
+        items = data.get(key)
+        if isinstance(items, list):
+            return [item for item in items if isinstance(item, dict)]
+    return []
+
+
 def list_dataviews() -> list[dict]:
     """Discover available data views as structured data."""
     result = _run(["--list-dataviews", "--format", "json", "--output", "-"], parse_json=True)
-    if result["success"] and result.get("data"):
-        return result["data"] if isinstance(result["data"], list) else [result["data"]]
-    return []
+    if not result["success"]:
+        return []
+    return _unwrap_collection(result.get("data"), "dataViews")
 
 
 def list_snapshots(snapshot_dir: str = "./snapshots") -> list[dict]:
@@ -80,9 +91,9 @@ def list_snapshots(snapshot_dir: str = "./snapshots") -> list[dict]:
         ["--list-snapshots", "--snapshot-dir", snapshot_dir, "--format", "json", "--output", "-"],
         parse_json=True,
     )
-    if result["success"] and result.get("data"):
-        return result["data"] if isinstance(result["data"], list) else [result["data"]]
-    return []
+    if not result["success"]:
+        return []
+    return _unwrap_collection(result.get("data"), "snapshots")
 
 
 def run_sdr(

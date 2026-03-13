@@ -81,12 +81,14 @@ except Exception:
             -d "$PAYLOAD" > /dev/null
         echo "$LOG_PREFIX Slack notification sent"
     fi
-else
+elif [[ $DIFF_EXIT -eq 0 ]]; then
     # Only update baseline when no drift detected
     uv run cja_auto_sdr "$DATA_VIEW_ID" --snapshot "$BASELINE"
     echo "$LOG_PREFIX Baseline updated (no drift)"
+else
+    echo "$LOG_PREFIX ERROR: Diff comparison failed; baseline preserved" >&2
 fi
 
 # Propagate the drift exit code so cron/monitoring can detect policy violations.
-# 0 = no drift, 2 = policy threshold exceeded, 3 = warning threshold exceeded.
+# 0 = no drift, 1 = diff failed, 2 = policy threshold exceeded, 3 = warning threshold exceeded.
 exit $DIFF_EXIT

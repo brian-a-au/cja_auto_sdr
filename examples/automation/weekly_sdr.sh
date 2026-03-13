@@ -19,6 +19,16 @@ REPORT_DIR="${REPORT_DIR:-$PROJECT_ROOT/reports}"
 SNAPSHOT_DIR="${SNAPSHOT_DIR:-$PROJECT_ROOT/snapshots}"
 LOG_PREFIX="[$(date '+%Y-%m-%d %H:%M:%S')]"
 
+update_overall_exit() {
+    local code="${1:-0}"
+
+    case "$code" in
+        1) OVERALL_EXIT=1 ;;
+        2) [[ $OVERALL_EXIT -ne 1 ]] && OVERALL_EXIT=2 ;;
+        3) [[ $OVERALL_EXIT -eq 0 ]] && OVERALL_EXIT=3 ;;
+    esac
+}
+
 # Load credentials
 if [[ -f "$PROJECT_ROOT/.env" ]]; then
     set -a
@@ -41,7 +51,7 @@ echo "$LOG_PREFIX Configuration validated"
 
 # Get data view list
 DATA_VIEWS=$(uv run cja_auto_sdr --list-dataviews --format json --output - | \
-    python3 -c "import sys,json; [print(dv['id']) for dv in json.load(sys.stdin)]" 2>/dev/null) || {
+    python3 -c "import sys,json; data=json.load(sys.stdin); views=data if isinstance(data, list) else data.get('dataViews', []); [print(dv['id']) for dv in views if isinstance(dv, dict) and dv.get('id')]" 2>/dev/null) || {
     echo "$LOG_PREFIX ERROR: Failed to list data views" >&2
     exit 1
 }
@@ -59,9 +69,9 @@ for DV_ID in $DATA_VIEWS; do
 
     case $SDR_EXIT in
         0) echo "$LOG_PREFIX  SDR generated successfully" ;;
-        1) echo "$LOG_PREFIX  ERROR: SDR generation failed" >&2; OVERALL_EXIT=1; continue ;;
-        2) echo "$LOG_PREFIX  WARNING: Quality threshold exceeded"; OVERALL_EXIT=2 ;;
-        *) echo "$LOG_PREFIX  Unexpected exit code: $SDR_EXIT" >&2; OVERALL_EXIT=1; continue ;;
+        1) echo "$LOG_PREFIX  ERROR: SDR generation failed" >&2; update_overall_exit 1; continue ;;
+        2) echo "$LOG_PREFIX  WARNING: Quality threshold exceeded"; update_overall_exit 2 ;;
+        *) echo "$LOG_PREFIX  Unexpected exit code: $SDR_EXIT" >&2; update_overall_exit 1; continue ;;
     esac
 
     # Drift detection against baseline (if snapshot exists)
@@ -73,9 +83,9 @@ for DV_ID in $DATA_VIEWS; do
 
         case $DIFF_EXIT in
             0) echo "$LOG_PREFIX  No drift detected" ;;
-            2) echo "$LOG_PREFIX  DRIFT DETECTED — see ${DV_ID}_drift.json" ;;
-            3) echo "$LOG_PREFIX  Warning threshold exceeded" ;;
-            *) echo "$LOG_PREFIX  Diff failed (exit $DIFF_EXIT)" >&2 ;;
+            2) echo "$LOG_PREFIX  DRIFT DETECTED — see ${DV_ID}_drift.json"; update_overall_exit 2 ;;
+            3) echo "$LOG_PREFIX  Warning threshold exceeded"; update_overall_exit 3 ;;
+            *) echo "$LOG_PREFIX  Diff failed (exit $DIFF_EXIT)" >&2; update_overall_exit 1 ;;
         esac
     fi
 

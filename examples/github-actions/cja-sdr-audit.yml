@@ -55,7 +55,7 @@ jobs:
             DATA_VIEWS="$DATA_VIEW_IDS"
           else
             DATA_VIEWS=$(uv run cja_auto_sdr --list-dataviews --format json --output - | \
-              python3 -c "import sys,json; print(','.join(dv['id'] for dv in json.load(sys.stdin)))")
+              python3 -c "import sys,json; data=json.load(sys.stdin); views=data if isinstance(data, list) else data.get('dataViews', []); print(','.join(dv['id'] for dv in views if isinstance(dv, dict) and dv.get('id')))")
           fi
 
           IFS=',' read -ra VIEWS <<< "$DATA_VIEWS"
