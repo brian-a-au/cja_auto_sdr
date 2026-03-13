@@ -94,7 +94,7 @@ uv run cja_auto_sdr <dv_id> --format json --run-summary-json -
 # Live diff of two data views
 uv run cja_auto_sdr --diff <dv1_id> <dv2_id> [--format json] [--output -]
 
-# Save snapshot to file (dv_id is positional BEFORE the flag)
+# Save snapshot to file (convention: place dv_id before flags)
 uv run cja_auto_sdr <dv_id> --snapshot <output_file.json>
 
 # Compare data view against snapshot file

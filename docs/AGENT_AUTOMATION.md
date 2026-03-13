@@ -215,9 +215,10 @@ uv run cja_auto_sdr --org-report --fail-on-threshold --duplicate-threshold 5 \
 EXIT=$?
 
 if [ $EXIT -eq 2 ]; then
-  curl -X POST "$SLACK_WEBHOOK" \
+  PAYLOAD=$(jq -n --arg text "CJA governance threshold exceeded. See report.json." '{text: $text}')
+  curl -s -X POST "$SLACK_WEBHOOK" \
     -H 'Content-Type: application/json' \
-    -d "{\"text\":\"CJA governance threshold exceeded. See report.json.\"}"
+    -d "$PAYLOAD"
 fi
 ```
 

@@ -25,6 +25,7 @@ DEFAULT_TIMEOUT = 300  # 5 minutes; override per-call for long-running commands
 def _run(args: list[str], *, parse_json: bool = False, timeout: int = DEFAULT_TIMEOUT) -> dict:
     """Run a cja_auto_sdr command and return structured result."""
     try:
+        # check is intentionally omitted; exit codes are inspected by callers
         result = subprocess.run(
             [*BASE_CMD, *args],
             capture_output=True,
@@ -139,8 +140,9 @@ def run_snapshot(data_view: str, snapshot_path: str | None = None) -> dict:
 
 def main() -> int:
     """Standalone entry point: validate config, process data views, output JSON results."""
-    # Get data views from args or environment
-    data_views = sys.argv[1:] or [dv.strip() for dv in os.environ.get("DATA_VIEWS", "").split(",") if dv.strip()]
+    # Get data views from args or environment (positional only, no flags)
+    args = [a for a in sys.argv[1:] if not a.startswith("-")]
+    data_views = args or [dv.strip() for dv in os.environ.get("DATA_VIEWS", "").split(",") if dv.strip()]
 
     if not data_views:
         print(json.dumps({"error": "No data views specified. Pass as args or set DATA_VIEWS env var."}))
