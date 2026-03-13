@@ -28,6 +28,7 @@ from cja_auto_sdr.org.models import (
     OrgReportTrending,
     TrendingDelta,
     TrendingSnapshot,
+    _snapshot_effective_data_view_count,
 )
 from cja_auto_sdr.org.snapshot_utils import sorted_snapshot_strings
 
@@ -75,14 +76,16 @@ def _build_trending_metric_rows(
     delta: bool,
 ) -> list[tuple[str, list[int]]]:
     """Return standard trending metric rows for snapshots or period deltas."""
-    attr_selector = 2 if delta else 1
-    return [
-        (
-            label,
-            [getattr(record, delta_attr if attr_selector == 2 else snapshot_attr) for record in records],
-        )
-        for label, snapshot_attr, delta_attr in _TRENDING_METRIC_SPECS
-    ]
+    metric_rows: list[tuple[str, list[int]]] = []
+    for label, snapshot_attr, delta_attr in _TRENDING_METRIC_SPECS:
+        if delta:
+            values = [getattr(record, delta_attr) for record in records]
+        elif snapshot_attr == "data_view_count":
+            values = [_snapshot_effective_data_view_count(record) for record in records]
+        else:
+            values = [getattr(record, snapshot_attr) for record in records]
+        metric_rows.append((label, values))
+    return metric_rows
 
 
 def _trending_snapshot_metric_rows(
@@ -385,7 +388,7 @@ def _trending_snapshots_to_dicts(trending: OrgReportTrending) -> dict[str, Any]:
         "snapshots": [
             {
                 "timestamp": s.timestamp,
-                "data_view_count": s.data_view_count,
+                "data_view_count": _snapshot_effective_data_view_count(s),
                 "component_count": s.component_count,
                 "core_count": s.core_count,
                 "isolated_count": s.isolated_count,

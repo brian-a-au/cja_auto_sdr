@@ -6,6 +6,7 @@ from cja_auto_sdr.org.models import (
     TrendingDelta,
     TrendingSnapshot,
     _safe_non_negative_int,
+    _snapshot_comparison_input,
 )
 
 
@@ -22,6 +23,7 @@ class TestTrendingSnapshot:
         assert snap.dv_core_ratios == {}
         assert snap.dv_max_similarity == {}
         assert snap.dv_ids == set()
+        assert snap.complete_data_view_ids is False
         assert snap.complete_high_similarity_pairs is False
 
     def test_full_construction(self):
@@ -51,6 +53,105 @@ class TestTrendingSnapshot:
 
         assert snap.has_data_view_ids is True
         assert snap.complete_data_view_ids is False
+
+    def test_complete_data_view_ids_defaults_false_when_only_analyzed_count_matches(self):
+        snap = TrendingSnapshot(
+            timestamp="2026-03-08T12:00:00Z",
+            data_view_count=0,
+            analyzed_data_view_count=4,
+            dv_ids={"a", "b", "c", "d"},
+        )
+
+        assert snap.has_data_view_ids is True
+        assert snap.complete_data_view_ids is False
+
+    def test_complete_data_view_ids_defaults_true_for_exact_id_only_manual_snapshots_without_totals(self):
+        snap = TrendingSnapshot(
+            timestamp="2026-03-08T12:00:00Z",
+            dv_ids={"a", "b"},
+        )
+
+        assert snap.data_view_count == 2
+        assert snap.has_data_view_ids is True
+        assert snap.complete_data_view_ids is True
+
+    def test_data_view_count_falls_back_to_analyzed_total_when_snapshot_total_is_absent_and_ids_are_incomplete(self):
+        snap = TrendingSnapshot(
+            timestamp="2026-03-08T12:00:00Z",
+            analyzed_data_view_count=4,
+            dv_ids={"a", "b", "c"},
+        )
+
+        assert snap.data_view_count == 4
+        assert snap.complete_data_view_ids is False
+
+    def test_complete_data_view_ids_defaults_false_when_zero_total_is_omitted(self):
+        snap = TrendingSnapshot(
+            timestamp="2026-03-08T12:00:00Z",
+            analyzed_data_view_count=0,
+        )
+
+        assert snap.data_view_count == 0
+        assert snap.has_data_view_ids is False
+        assert snap.complete_data_view_ids is False
+
+    def test_complete_data_view_ids_defaults_true_for_explicit_empty_zero_count_snapshots(self):
+        snap = TrendingSnapshot(
+            timestamp="2026-03-08T12:00:00Z",
+            data_view_count=0,
+        )
+
+        assert snap.has_data_view_ids is False
+        assert snap.complete_data_view_ids is True
+
+    def test_complete_data_view_ids_defaults_false_for_ambiguous_normalized_ids(self):
+        snap = TrendingSnapshot(
+            timestamp="2026-03-08T12:00:00Z",
+            data_view_count=1,
+            dv_ids={"dv1", " dv1 "},
+        )
+
+        assert snap.has_data_view_ids is True
+        assert snap.complete_data_view_ids is False
+
+    def test_snapshot_comparison_input_filters_auxiliary_name_only_ids_when_explicit_dv_ids_exist(self):
+        snap = TrendingSnapshot(
+            timestamp="2026-03-08T12:00:00Z",
+            dv_ids={"dv1"},
+            dv_names={"dv1": "Primary", "dv_extra": "Stale metadata"},
+        )
+
+        result = _snapshot_comparison_input(snap)
+
+        assert result.data_view_ids == {"dv1"}
+        assert result.data_view_names == {"dv1": "Primary"}
+        assert result.data_view_count == 1
+        assert result.complete_data_view_ids is True
+
+    def test_snapshot_comparison_input_ignores_dirty_name_keys_when_explicit_dv_ids_are_complete(self):
+        snap = TrendingSnapshot(
+            timestamp="2026-03-08T12:00:00Z",
+            dv_ids={"dv1"},
+            dv_names={"dv1": "Primary", " dv1 ": "Duplicate metadata"},
+        )
+
+        result = _snapshot_comparison_input(snap)
+
+        assert result.data_view_ids == {"dv1"}
+        assert result.complete_data_view_ids is True
+
+    def test_snapshot_comparison_input_uses_analyzed_total_when_snapshot_total_is_absent(self):
+        snap = TrendingSnapshot(
+            timestamp="2026-03-08T12:00:00Z",
+            analyzed_data_view_count=4,
+            dv_ids={"a", "b", "c"},
+        )
+
+        result = _snapshot_comparison_input(snap)
+
+        assert result.data_view_ids == {"a", "b", "c"}
+        assert result.data_view_count == 4
+        assert result.complete_data_view_ids is False
 
     def test_complete_high_similarity_pairs_defaults_false_for_manual_snapshots(self):
         snap = TrendingSnapshot(
@@ -287,6 +388,178 @@ class TestOrgReportTrending:
         assert comparison is not None
         assert comparison.data_views_removed == []
         assert comparison.summary["data_views_delta"] == 0
+
+    def test_to_comparison_suppresses_exact_dv_lists_when_only_analyzed_count_matches(self):
+        snaps = [
+            self._make_snapshot(
+                "2026-01-01",
+                dv_count=5,
+                analyzed_dv_count=5,
+                dv_ids={"a", "b", "c", "d", "e"},
+            ),
+            self._make_snapshot(
+                "2026-02-01",
+                dv_count=0,
+                analyzed_dv_count=4,
+                dv_ids={"a", "c", "d", "e"},
+            ),
+        ]
+
+        comparison = OrgReportTrending(snapshots=snaps, window_size=2).to_comparison()
+
+        assert comparison is not None
+        assert comparison.data_views_added == []
+        assert comparison.data_views_removed == []
+        assert comparison.summary["data_views_delta"] == -1
+
+    def test_to_comparison_preserves_exact_dv_diffs_for_id_only_manual_snapshots_without_totals(self):
+        previous = TrendingSnapshot(
+            timestamp="2026-01-01",
+            dv_ids={"a", "b"},
+            dv_names={"a": "Alpha", "b": "Beta"},
+        )
+        current = TrendingSnapshot(
+            timestamp="2026-02-01",
+            dv_ids={"a", "c"},
+            dv_names={"a": "Alpha", "c": "Gamma"},
+        )
+
+        comparison = OrgReportTrending(snapshots=[previous, current], window_size=2).to_comparison()
+
+        assert comparison is not None
+        assert comparison.data_views_added == ["c"]
+        assert comparison.data_views_removed == ["b"]
+        assert comparison.data_views_added_names == ["Gamma"]
+        assert comparison.data_views_removed_names == ["Beta"]
+        assert comparison.summary["data_views_delta"] == 0
+
+    def test_to_comparison_ignores_dirty_auxiliary_name_keys_when_explicit_dv_ids_are_complete(self):
+        previous = TrendingSnapshot(
+            timestamp="2026-01-01",
+            dv_ids={"dv1"},
+            dv_names={"dv1": "Data View 1", " dv1 ": "Duplicate metadata"},
+        )
+        current = TrendingSnapshot(
+            timestamp="2026-02-01",
+            dv_ids={"dv1", "dv2"},
+            dv_names={"dv1": "Data View 1", "dv2": "Data View 2", " dv1 ": "Duplicate metadata"},
+        )
+
+        comparison = OrgReportTrending(snapshots=[previous, current], window_size=2).to_comparison()
+
+        assert comparison is not None
+        assert comparison.data_views_added == ["dv2"]
+        assert comparison.data_views_removed == []
+        assert comparison.summary["data_views_delta"] == 1
+
+    def test_to_comparison_suppresses_exact_dv_lists_when_zero_total_is_omitted(self):
+        previous = self._make_snapshot(
+            "2026-01-01",
+            dv_count=1,
+            analyzed_dv_count=1,
+            dv_ids={"a"},
+        )
+        current = TrendingSnapshot(
+            timestamp="2026-02-01",
+            analyzed_data_view_count=0,
+        )
+
+        comparison = OrgReportTrending(snapshots=[previous, current], window_size=2).to_comparison()
+
+        assert comparison is not None
+        assert comparison.data_views_added == []
+        assert comparison.data_views_removed == []
+        assert comparison.summary["data_views_delta"] == -1
+
+    def test_to_comparison_tracks_exact_dv_removals_for_explicit_empty_zero_count_snapshots(self):
+        snaps = [
+            self._make_snapshot(
+                "2026-01-01",
+                dv_count=1,
+                analyzed_dv_count=1,
+                dv_ids={"a"},
+            ),
+            self._make_snapshot(
+                "2026-02-01",
+                dv_count=0,
+                analyzed_dv_count=0,
+                dv_ids=set(),
+            ),
+        ]
+
+        comparison = OrgReportTrending(snapshots=snaps, window_size=2).to_comparison()
+
+        assert comparison is not None
+        assert comparison.data_views_added == []
+        assert comparison.data_views_removed == ["a"]
+        assert comparison.summary["data_views_delta"] == -1
+
+    def test_to_comparison_recomputes_zero_total_inference_after_manual_mutation(self):
+        previous = self._make_snapshot(
+            "2026-01-01",
+            dv_count=1,
+            analyzed_dv_count=1,
+            dv_ids={"a"},
+        )
+        current = TrendingSnapshot(
+            timestamp="2026-02-01",
+            analyzed_data_view_count=0,
+        )
+
+        current.data_view_count = 0
+
+        comparison = OrgReportTrending(snapshots=[previous, current], window_size=2).to_comparison()
+
+        assert comparison is not None
+        assert comparison.data_views_added == []
+        assert comparison.data_views_removed == ["a"]
+        assert comparison.summary["data_views_delta"] == -1
+
+    def test_to_comparison_recomputes_inferred_snapshot_fidelity_after_manual_mutation(self):
+        previous = self._make_snapshot(
+            "2026-01-01",
+            dv_count=1,
+            analyzed_dv_count=1,
+            dv_ids={"a"},
+        )
+        current = self._make_snapshot(
+            "2026-02-01",
+            dv_count=1,
+            analyzed_dv_count=1,
+            dv_ids={"a"},
+        )
+
+        current.dv_ids.clear()
+
+        comparison = OrgReportTrending(snapshots=[previous, current], window_size=2).to_comparison()
+
+        assert comparison is not None
+        assert comparison.data_views_added == []
+        assert comparison.data_views_removed == []
+        assert comparison.summary["data_views_delta"] == 0
+
+    def test_to_comparison_honors_post_init_manual_completeness_override(self):
+        previous = self._make_snapshot(
+            "2026-01-01",
+            dv_count=1,
+            analyzed_dv_count=1,
+            dv_ids={"a"},
+        )
+        current = self._make_snapshot(
+            "2026-02-01",
+            dv_count=1,
+            analyzed_dv_count=1,
+            dv_ids=set(),
+        )
+
+        current.complete_data_view_ids = True
+
+        comparison = OrgReportTrending(snapshots=[previous, current], window_size=2).to_comparison()
+
+        assert comparison is not None
+        assert comparison.data_views_added == []
+        assert comparison.data_views_removed == ["a"]
+        assert comparison.summary["data_views_delta"] == -1
 
     def test_identical_snapshots_produce_zero_deltas(self):
         snap = self._make_snapshot("2026-01-01", dv_count=10, comp_count=100, core=80, iso=20, dv_ids={"a"})

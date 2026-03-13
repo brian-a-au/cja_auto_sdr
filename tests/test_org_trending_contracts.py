@@ -178,6 +178,15 @@ class TestTrendingSnapshotContract:
         snap = TrendingSnapshot(timestamp="2026-01-01T00:00:00Z", dv_names={"dv1": "Name"})
         assert snap.has_data_view_ids is True
 
+    def test_id_only_manual_snapshots_normalize_effective_data_view_count(self):
+        snap = TrendingSnapshot(
+            timestamp="2026-01-01T00:00:00Z",
+            dv_ids={"dv1", "dv2"},
+            dv_names={"dv1": "DV One", "dv2": "DV Two"},
+        )
+        assert snap.data_view_count == 2
+        assert snap.complete_data_view_ids is True
+
     def test_has_data_view_ids_false_when_no_dv_data(self):
         snap = TrendingSnapshot(timestamp="2026-01-01T00:00:00Z")
         assert snap.has_data_view_ids is False
@@ -347,6 +356,54 @@ class TestOrgReportTrendingContract:
         assert result is not None
         assert result.summary["components_delta"] == 50
 
+    def test_to_comparison_supports_manual_id_only_snapshots_without_reported_totals(self):
+        trending = OrgReportTrending(
+            snapshots=[
+                TrendingSnapshot(
+                    timestamp="2026-01-01T00:00:00Z",
+                    dv_ids={"dv1"},
+                    dv_names={"dv1": "Legacy DV"},
+                ),
+                TrendingSnapshot(
+                    timestamp="2026-02-01T00:00:00Z",
+                    dv_ids={"dv1", "dv2"},
+                    dv_names={"dv1": "Legacy DV", "dv2": "New DV"},
+                ),
+            ],
+            window_size=2,
+        )
+
+        result = trending.to_comparison()
+
+        assert result is not None
+        assert result.data_views_added == ["dv2"]
+        assert result.data_views_added_names == ["New DV"]
+        assert result.summary["data_views_delta"] == 1
+
+    def test_to_comparison_treats_explicit_dv_ids_as_authoritative_over_auxiliary_name_keys(self):
+        trending = OrgReportTrending(
+            snapshots=[
+                TrendingSnapshot(
+                    timestamp="2026-01-01T00:00:00Z",
+                    dv_ids={"dv1"},
+                    dv_names={"dv1": "Legacy DV", " dv1 ": "Duplicate metadata"},
+                ),
+                TrendingSnapshot(
+                    timestamp="2026-02-01T00:00:00Z",
+                    dv_ids={"dv1", "dv2"},
+                    dv_names={"dv1": "Legacy DV", "dv2": "New DV", " dv1 ": "Duplicate metadata"},
+                ),
+            ],
+            window_size=2,
+        )
+
+        result = trending.to_comparison()
+
+        assert result is not None
+        assert result.data_views_added == ["dv2"]
+        assert result.data_views_removed == []
+        assert result.summary["data_views_delta"] == 1
+
 
 # ---------------------------------------------------------------------------
 # Function Contracts: discover_snapshots()
@@ -501,6 +558,17 @@ class TestComputeDeltasContract:
         assert deltas[0].to_timestamp == "2026-02-01T00:00:00Z"
         assert deltas[1].from_timestamp == "2026-02-01T00:00:00Z"
         assert deltas[1].to_timestamp == "2026-03-01T00:00:00Z"
+
+    def test_id_only_manual_snapshots_use_effective_totals_for_deltas(self):
+        snaps = [
+            TrendingSnapshot(timestamp="2026-01-01T00:00:00Z", dv_ids={"dv1"}),
+            TrendingSnapshot(timestamp="2026-02-01T00:00:00Z", dv_ids={"dv1", "dv2"}),
+        ]
+
+        deltas = compute_deltas(snaps)
+
+        assert len(deltas) == 1
+        assert deltas[0].data_view_delta == 1
 
 
 # ---------------------------------------------------------------------------

@@ -108,7 +108,7 @@ tests/
 └── README.md                        # This file
 ```
 
-**Total: 6,215 comprehensive tests**
+**Total: 6,237 comprehensive tests**
 
 ### Test Count Breakdown
 
@@ -201,13 +201,13 @@ tests/
 | `test_completion.py` | 43 | Shell completion flag (--completion bash/zsh/fish) |
 | `test_exception_narrowing.py` | 50 | Exception narrowing boundary tests |
 | `test_coverage_hardening.py` | 108 | Coverage hardening tests |
-| `test_trending_models.py` | 35 | Trending dataclass construction and bridge tests |
+| `test_trending_models.py` | 52 | Trending dataclass construction and bridge tests |
 | `test_trending_discovery.py` | 88 | Snapshot cache discovery, deltas, drift scoring |
 | `test_trending_cli.py` | 9 | --trending-window CLI flag parsing |
-| `test_trending_output.py` | 22 | Trending output across all 6 formats |
+| `test_trending_output.py` | 23 | Trending output across all 6 formats |
 | `test_trending_integration.py` | 15 | Trending backwards compatibility and integration |
 | `test_org_snapshot_utils.py` | 124 | Org snapshot helper utilities edge cases |
-| `test_org_trending_contracts.py` | 103 | Org/trending public API contract tests |
+| `test_org_trending_contracts.py` | 107 | Org/trending public API contract tests |
 | `test_org_trending_adversarial.py` | 51 | Adversarial and stress tests for trending |
 | `test_cli_diff_contracts.py` | 69 | CLI/diff public API contract tests |
 | `test_list_command_edge_cases.py` | 45 | List command edge cases and coverage |
@@ -215,7 +215,7 @@ tests/
 | `test_cli_execution.py` | 18 | CLI execution edge cases and coverage |
 | `test_diff_git_coverage.py` | 27 | Diff/git subprocess error path coverage |
 | `test_generator_trending_coverage.py` | 19 | Generator trending integration coverage |
-| **Total** | **6,215** | **Collected via pytest --collect-only** |
+| **Total** | **6,237** | **Collected via pytest --collect-only** |
 
 ## Running Tests
 
@@ -619,7 +619,7 @@ Check for drift (CI-friendly):
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (6,215 tests total)
+- [x] Comprehensive test coverage (6,237 tests total)
 - [x] Org-wide analysis tests (test_org_report.py) - 175 tests (including large org scaling, output path aliases, memory warnings, smart cache invalidation)
 - [x] Org-wide analysis integration tests (test_org_report_integration.py) - 17 tests (end-to-end flows, caching, filtering, governance thresholds)
 - [x] Profile management tests (test_profiles.py) - 77 tests

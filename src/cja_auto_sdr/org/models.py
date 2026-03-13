@@ -451,8 +451,9 @@ def _resolve_data_view_total(source: OrgReportComparisonInput) -> int:
     Exact ID sets win when they are known complete. Otherwise we preserve the
     reported snapshot headline count because summary deltas describe total
     population change, not just the successfully compared subset. The analyzed
-    count is only a legacy fallback for manual snapshots without a reported
-    total.
+    count is only a legacy fallback for summary totals when a manual snapshot
+    never supplied a headline total; it must not be used to infer exact ID
+    completeness.
     """
     if _has_complete_data_view_ids(source):
         return len(source.data_view_ids)
@@ -626,7 +627,7 @@ class TrendingSnapshot:
 
     timestamp: str
     org_id: str | None = None
-    data_view_count: int = 0
+    data_view_count: int | None = None
     analyzed_data_view_count: int | None = None
     component_count: int = 0
     core_count: int = 0
@@ -647,52 +648,306 @@ class TrendingSnapshot:
     has_data_view_ids: bool = False
     complete_data_view_ids: bool | None = None
     complete_high_similarity_pairs: bool | None = None
+    _complete_data_view_ids_explicit: bool = field(default=False, init=False, repr=False, compare=False)
+    _data_view_count_explicit: bool = field(default=False, init=False, repr=False, compare=False)
+    _reported_data_view_count: int = field(default=0, init=False, repr=False, compare=False)
+    _data_view_count_declares_zero: bool = field(default=False, init=False, repr=False, compare=False)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        """Normalize manual DV state while preserving count-provenance flags."""
+        if name == "data_view_count":
+            declared_total = _snapshot_count_declares_total(value)
+            object.__setattr__(self, "_data_view_count_declares_zero", _snapshot_count_declares_zero(value))
+            object.__setattr__(self, "_data_view_count_explicit", declared_total)
+            object.__setattr__(
+                self, "_reported_data_view_count", _safe_non_negative_int(value) if declared_total else 0
+            )
+            value = 0 if value is None else _safe_non_negative_int(value)
+        elif name == "analyzed_data_view_count":
+            value = None if value is None else _safe_non_negative_int(value)
+        object.__setattr__(self, name, value)
+        if name == "complete_data_view_ids":
+            object.__setattr__(self, "_complete_data_view_ids_explicit", value is not None)
 
     def __post_init__(self) -> None:
-        """Infer DV ID availability for manually constructed snapshots when possible."""
-        normalized_dv_ids = _snapshot_data_view_ids(self)
-        if not self.has_data_view_ids and (normalized_dv_ids or self.complete_data_view_ids):
+        """Normalize manual DV fidelity flags without overstating snapshot coverage."""
+        data_view_assessment = _snapshot_data_view_assessment(self)
+        if self.data_view_count != data_view_assessment.effective_total:
+            object.__setattr__(self, "data_view_count", data_view_assessment.effective_total)
+        if not self.has_data_view_ids and data_view_assessment.ids:
             self.has_data_view_ids = True
         if self.complete_data_view_ids is None:
-            self.complete_data_view_ids = _snapshot_data_view_ids_cover_snapshot(self, normalized_dv_ids)
+            object.__setattr__(self, "complete_data_view_ids", data_view_assessment.complete_data_view_ids)
         if self.complete_high_similarity_pairs is None:
             self.complete_high_similarity_pairs = False
 
 
+@dataclass(frozen=True)
+class _TrendingSnapshotIdentifierAssessment:
+    """Normalized manual DV identity state for one authoritative source."""
+
+    ids: set[str]
+    source: str
+    ambiguous: bool
+
+
+@dataclass(frozen=True)
+class _TrendingSnapshotDataViewAssessment:
+    """Centralized manual DV identity and fidelity state for one snapshot."""
+
+    ids: set[str]
+    names: dict[str, str]
+    has_data_view_ids: bool
+    ambiguous_identifiers: bool
+    reported_total: int
+    reported_total_declares_zero: bool
+    effective_total: int
+    complete_data_view_ids: bool
+
+
 def _snapshot_data_view_ids(snapshot: TrendingSnapshot) -> set[str]:
-    """Return normalized DV IDs from both explicit IDs and name-map keys."""
-    normalized_ids = {normalize_org_report_data_view_id(dv_id) for dv_id in snapshot.dv_ids}
-    normalized_ids.update(normalize_org_report_data_view_id(dv_id) for dv_id in snapshot.dv_names)
-    normalized_ids.discard("")
-    return normalized_ids
+    """Return normalized authoritative DV IDs for one manual snapshot."""
+    return set(_snapshot_identifier_assessment(snapshot).ids)
 
 
-def _snapshot_data_view_names(snapshot: TrendingSnapshot) -> dict[str, str]:
-    """Return a normalized DV name map for comparison output."""
+def _snapshot_data_view_names(
+    snapshot: TrendingSnapshot,
+    *,
+    authoritative_ids: set[str] | None = None,
+    restrict_to_authoritative_ids: bool = False,
+) -> dict[str, str]:
+    """Return normalized DV names, filtered to authoritative IDs when needed."""
     normalized_names: dict[str, str] = {}
     for raw_dv_id, dv_name in snapshot.dv_names.items():
         normalized_dv_id = normalize_org_report_data_view_id(raw_dv_id)
         if not normalized_dv_id:
             continue
+        if (
+            restrict_to_authoritative_ids
+            and authoritative_ids is not None
+            and normalized_dv_id not in authoritative_ids
+        ):
+            continue
         normalized_names[normalized_dv_id] = str(dv_name)
     return normalized_names
+
+
+def _normalized_snapshot_identifier_values(values: Any) -> tuple[str, ...]:
+    """Return non-empty normalized identifiers from one manual snapshot source."""
+    normalized_values: list[str] = []
+    for value in values:
+        normalized_value = normalize_org_report_data_view_id(value)
+        if normalized_value:
+            normalized_values.append(normalized_value)
+    return tuple(normalized_values)
+
+
+def _snapshot_identifier_source_has_invalid_values(values: Any) -> bool:
+    """Return True when a manual ID source contains values that normalize to empty."""
+    return any(not normalize_org_report_data_view_id(value) for value in values)
+
+
+def _snapshot_identifier_source_has_normalized_duplicates(values: Any) -> bool:
+    """Return True when one manual ID source collapses to duplicate normalized IDs."""
+    normalized_values = _normalized_snapshot_identifier_values(values)
+    return len(normalized_values) != len(set(normalized_values))
+
+
+def _snapshot_identifier_assessment(snapshot: TrendingSnapshot) -> _TrendingSnapshotIdentifierAssessment:
+    """Return normalized DV identities from the authoritative manual source."""
+    if snapshot.dv_ids:
+        normalized_values = _normalized_snapshot_identifier_values(snapshot.dv_ids)
+        return _TrendingSnapshotIdentifierAssessment(
+            ids=set(normalized_values),
+            source="dv_ids",
+            ambiguous=(
+                _snapshot_identifier_source_has_invalid_values(snapshot.dv_ids)
+                or _snapshot_identifier_source_has_normalized_duplicates(snapshot.dv_ids)
+            ),
+        )
+    if snapshot.dv_names:
+        normalized_values = _normalized_snapshot_identifier_values(snapshot.dv_names)
+        return _TrendingSnapshotIdentifierAssessment(
+            ids=set(normalized_values),
+            source="dv_names",
+            ambiguous=(
+                _snapshot_identifier_source_has_invalid_values(snapshot.dv_names)
+                or _snapshot_identifier_source_has_normalized_duplicates(snapshot.dv_names)
+            ),
+        )
+    return _TrendingSnapshotIdentifierAssessment(ids=set(), source="none", ambiguous=False)
+
+
+def _snapshot_has_ambiguous_data_view_identifiers(snapshot: TrendingSnapshot) -> bool:
+    """Return True when the authoritative manual DV identity source is ambiguous."""
+    return _snapshot_identifier_assessment(snapshot).ambiguous
+
+
+def _snapshot_declares_data_view_total(snapshot: TrendingSnapshot) -> bool:
+    """Return True when a manual snapshot explicitly supplied a DV headline total."""
+    if "_data_view_count_explicit" in snapshot.__dict__:
+        return bool(snapshot._data_view_count_explicit)
+    return _snapshot_declares_zero_data_views(snapshot) or _safe_non_negative_int(snapshot.data_view_count) > 0
+
+
+def _snapshot_has_analyzed_data_view_total(snapshot: TrendingSnapshot) -> bool:
+    """Return True when a manual snapshot explicitly supplied an analyzed DV total."""
+    return snapshot.analyzed_data_view_count is not None
+
+
+def _snapshot_count_declares_zero(raw_value: Any) -> bool:
+    """Return True when a raw manual count value explicitly signals zero."""
+    if isinstance(raw_value, bool):
+        return False
+    if isinstance(raw_value, int | float):
+        return raw_value == 0
+    if isinstance(raw_value, str):
+        return raw_value.strip() == "0"
+    return False
+
+
+def _snapshot_count_declares_total(raw_value: Any) -> bool:
+    """Return True when a raw manual count value explicitly supplies a usable total."""
+    return _snapshot_count_declares_zero(raw_value) or _safe_non_negative_int(raw_value) > 0
+
+
+def _snapshot_declares_zero_data_views(snapshot: TrendingSnapshot) -> bool:
+    """Return True when a manual snapshot explicitly reports a zero-DV population."""
+    if "_data_view_count_declares_zero" in snapshot.__dict__:
+        return bool(snapshot._data_view_count_declares_zero)
+    raw_total = snapshot.data_view_count
+    return _snapshot_count_declares_zero(raw_total)
+
+
+def _snapshot_reported_data_view_total(snapshot: TrendingSnapshot) -> int:
+    """Return the explicit manual headline total, if one was actually supplied."""
+    if "_reported_data_view_count" in snapshot.__dict__:
+        return _safe_non_negative_int(snapshot._reported_data_view_count)
+    if _snapshot_declares_data_view_total(snapshot):
+        return _safe_non_negative_int(snapshot.data_view_count)
+    return 0
+
+
+def _snapshot_inferred_complete_data_view_ids(
+    snapshot: TrendingSnapshot,
+    normalized_dv_ids: set[str] | None = None,
+    *,
+    ambiguous_identifiers: bool | None = None,
+) -> bool:
+    """Infer manual DV completeness from normalized IDs and explicit totals."""
+    observed_ids = normalized_dv_ids if normalized_dv_ids is not None else _snapshot_data_view_ids(snapshot)
+    if ambiguous_identifiers is None:
+        ambiguous_identifiers = _snapshot_has_ambiguous_data_view_identifiers(snapshot)
+    if ambiguous_identifiers:
+        return False
+
+    if observed_ids:
+        if _snapshot_declares_data_view_total(snapshot):
+            return len(observed_ids) == _snapshot_reported_data_view_total(snapshot)
+        # Preserve legacy/manual exact-ID comparisons when callers supplied
+        # only an authoritative ID set. An analyzed-only count cannot prove
+        # completeness because failed rows may still have stable IDs.
+        return not _snapshot_has_analyzed_data_view_total(snapshot)
+    return _snapshot_declares_zero_data_views(snapshot)
 
 
 def _snapshot_data_view_ids_cover_snapshot(
     snapshot: TrendingSnapshot,
     normalized_dv_ids: set[str] | None = None,
 ) -> bool:
-    """Infer whether manual snapshot IDs cover the reported snapshot population."""
-    observed_ids = normalized_dv_ids if normalized_dv_ids is not None else _snapshot_data_view_ids(snapshot)
-    if not observed_ids:
-        return False
+    """Infer whether manual snapshot IDs cover the full reported snapshot population."""
+    return _snapshot_inferred_complete_data_view_ids(snapshot, normalized_dv_ids)
 
-    expected_total = _safe_non_negative_int(snapshot.data_view_count)
-    if expected_total <= 0:
-        expected_total = _safe_non_negative_int(snapshot.analyzed_data_view_count)
-    if expected_total <= 0:
-        expected_total = len(observed_ids)
-    return len(observed_ids) == expected_total
+
+def _snapshot_uses_explicit_complete_data_view_ids(snapshot: TrendingSnapshot) -> bool:
+    """Return True when complete_data_view_ids came from the caller, not inference."""
+    return getattr(snapshot, "_complete_data_view_ids_explicit", snapshot.complete_data_view_ids is not None)
+
+
+def _snapshot_effective_data_view_total(
+    snapshot: TrendingSnapshot,
+    normalized_dv_ids: set[str] | None = None,
+    *,
+    ambiguous_identifiers: bool | None = None,
+    complete_data_view_ids: bool | None = None,
+) -> int:
+    """Return the effective DV total used by comparisons, deltas, and rendering."""
+    observed_ids = normalized_dv_ids if normalized_dv_ids is not None else _snapshot_data_view_ids(snapshot)
+    if complete_data_view_ids is None:
+        complete_data_view_ids = _snapshot_inferred_complete_data_view_ids(
+            snapshot,
+            observed_ids,
+            ambiguous_identifiers=ambiguous_identifiers,
+        )
+    if complete_data_view_ids:
+        return len(observed_ids)
+
+    reported_total = _snapshot_reported_data_view_total(snapshot)
+    if _snapshot_declares_data_view_total(snapshot):
+        return reported_total
+    if snapshot.analyzed_data_view_count is None:
+        return 0
+    return _safe_non_negative_int(snapshot.analyzed_data_view_count)
+
+
+def _snapshot_data_view_assessment(snapshot: TrendingSnapshot) -> _TrendingSnapshotDataViewAssessment:
+    """Return centralized manual DV fidelity state for comparison and rendering."""
+    identifier_state = _snapshot_identifier_assessment(snapshot)
+    normalized_ids = set(identifier_state.ids)
+    normalized_names = _snapshot_data_view_names(
+        snapshot,
+        authoritative_ids=normalized_ids if identifier_state.source == "dv_ids" else None,
+        restrict_to_authoritative_ids=identifier_state.source == "dv_ids",
+    )
+    ambiguous_identifiers = identifier_state.ambiguous
+    complete_data_view_ids = _snapshot_inferred_complete_data_view_ids(
+        snapshot,
+        normalized_ids,
+        ambiguous_identifiers=ambiguous_identifiers,
+    )
+    if _snapshot_uses_explicit_complete_data_view_ids(snapshot):
+        complete_data_view_ids = bool(snapshot.complete_data_view_ids)
+    effective_total = _snapshot_effective_data_view_total(
+        snapshot,
+        normalized_ids,
+        ambiguous_identifiers=ambiguous_identifiers,
+        complete_data_view_ids=complete_data_view_ids,
+    )
+    return _TrendingSnapshotDataViewAssessment(
+        ids=normalized_ids,
+        names=normalized_names,
+        has_data_view_ids=bool(normalized_ids) or snapshot.has_data_view_ids,
+        ambiguous_identifiers=ambiguous_identifiers,
+        reported_total=_snapshot_reported_data_view_total(snapshot),
+        reported_total_declares_zero=_snapshot_declares_zero_data_views(snapshot),
+        effective_total=effective_total,
+        complete_data_view_ids=bool(complete_data_view_ids),
+    )
+
+
+def _snapshot_effective_data_view_count(snapshot: TrendingSnapshot) -> int:
+    """Return the centralized effective DV total for one snapshot."""
+    return _snapshot_data_view_assessment(snapshot).effective_total
+
+
+def _snapshot_comparison_input(snapshot: TrendingSnapshot) -> OrgReportComparisonInput:
+    """Normalize one TrendingSnapshot into comparison input fields."""
+    data_view_state = _snapshot_data_view_assessment(snapshot)
+    return OrgReportComparisonInput(
+        timestamp=snapshot.timestamp,
+        data_view_ids=data_view_state.ids,
+        has_data_view_ids=data_view_state.has_data_view_ids,
+        complete_data_view_ids=data_view_state.complete_data_view_ids,
+        data_view_names=data_view_state.names,
+        data_view_count=data_view_state.effective_total,
+        comparison_data_view_count=snapshot.analyzed_data_view_count,
+        component_count=snapshot.component_count,
+        component_ids=None if snapshot.component_ids is None else set(snapshot.component_ids),
+        core_count=snapshot.core_count,
+        isolated_count=snapshot.isolated_count,
+        high_similarity_pairs=_normalized_similarity_pairs(set(snapshot.high_similarity_pairs)),
+        complete_high_similarity_pairs=snapshot.complete_high_similarity_pairs,
+    )
 
 
 @dataclass
@@ -735,34 +990,6 @@ class OrgReportTrending:
         prev = self.snapshots[-2]
         curr = self.snapshots[-1]
         return build_org_report_comparison(
-            previous=OrgReportComparisonInput(
-                timestamp=prev.timestamp,
-                data_view_ids=_snapshot_data_view_ids(prev),
-                has_data_view_ids=prev.has_data_view_ids,
-                complete_data_view_ids=prev.complete_data_view_ids,
-                data_view_names=_snapshot_data_view_names(prev),
-                data_view_count=prev.data_view_count,
-                comparison_data_view_count=prev.analyzed_data_view_count,
-                component_count=prev.component_count,
-                component_ids=None if prev.component_ids is None else set(prev.component_ids),
-                core_count=prev.core_count,
-                isolated_count=prev.isolated_count,
-                high_similarity_pairs=_normalized_similarity_pairs(set(prev.high_similarity_pairs)),
-                complete_high_similarity_pairs=prev.complete_high_similarity_pairs,
-            ),
-            current=OrgReportComparisonInput(
-                timestamp=curr.timestamp,
-                data_view_ids=_snapshot_data_view_ids(curr),
-                has_data_view_ids=curr.has_data_view_ids,
-                complete_data_view_ids=curr.complete_data_view_ids,
-                data_view_names=_snapshot_data_view_names(curr),
-                data_view_count=curr.data_view_count,
-                comparison_data_view_count=curr.analyzed_data_view_count,
-                component_count=curr.component_count,
-                component_ids=None if curr.component_ids is None else set(curr.component_ids),
-                core_count=curr.core_count,
-                isolated_count=curr.isolated_count,
-                high_similarity_pairs=_normalized_similarity_pairs(set(curr.high_similarity_pairs)),
-                complete_high_similarity_pairs=curr.complete_high_similarity_pairs,
-            ),
+            previous=_snapshot_comparison_input(prev),
+            current=_snapshot_comparison_input(curr),
         )

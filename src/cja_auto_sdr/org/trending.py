@@ -12,6 +12,7 @@ from cja_auto_sdr.org.models import (
     OrgReportTrending,
     TrendingDelta,
     TrendingSnapshot,
+    _snapshot_effective_data_view_count,
 )
 from cja_auto_sdr.org.snapshot_utils import (
     _org_report_snapshot_state,
@@ -388,7 +389,7 @@ def compute_deltas(snapshots: list[TrendingSnapshot]) -> list[TrendingDelta]:
             TrendingDelta(
                 from_timestamp=prev.timestamp,
                 to_timestamp=curr.timestamp,
-                data_view_delta=curr.data_view_count - prev.data_view_count,
+                data_view_delta=_snapshot_effective_data_view_count(curr) - _snapshot_effective_data_view_count(prev),
                 component_delta=curr.component_count - prev.component_count,
                 core_delta=curr.core_count - prev.core_count,
                 isolated_delta=curr.isolated_count - prev.isolated_count,

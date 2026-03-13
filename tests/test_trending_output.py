@@ -16,6 +16,7 @@ from cja_auto_sdr.org.models import (
     TrendingDelta,
     TrendingSnapshot,
 )
+from cja_auto_sdr.org.trending import compute_deltas
 from cja_auto_sdr.org.writers import (
     _ranked_drift_entries,
     build_org_report_json_data,
@@ -179,6 +180,31 @@ class TestJsonWithTrending:
         delta = data["trending"]["deltas"][0]
         assert delta["data_view_delta"] == 2
         assert delta["component_delta"] == 20
+
+    def test_json_uses_effective_totals_for_manual_id_only_snapshots(self):
+        result = _make_result()
+        snapshots = [
+            TrendingSnapshot(
+                timestamp="2026-01-01T00:00:00Z",
+                dv_ids={"dv1"},
+                dv_names={"dv1": "Legacy DV 1"},
+            ),
+            TrendingSnapshot(
+                timestamp="2026-02-01T00:00:00Z",
+                dv_ids={"dv1", "dv2"},
+                dv_names={"dv1": "Legacy DV 1", "dv2": "New DV 2"},
+            ),
+        ]
+        trending = OrgReportTrending(
+            snapshots=snapshots,
+            deltas=compute_deltas(snapshots),
+            window_size=2,
+        )
+
+        data = build_org_report_json_data(result, trending=trending)
+
+        assert [snapshot["data_view_count"] for snapshot in data["trending"]["snapshots"]] == [1, 2]
+        assert data["trending"]["deltas"][0]["data_view_delta"] == 1
 
     def test_json_roundtrip(self):
         """Trending JSON is serializable and roundtrippable."""
