@@ -85,6 +85,12 @@ jobs:
           path: reports/
           retention-days: 90
 
+      # NOTE: This step pushes directly to the checked-out branch.
+      # If branch protection rules are enabled (required reviews, status checks),
+      # the push will fail.  In that case, either:
+      #   1. Run this workflow on an unprotected branch, or
+      #   2. Use a GitHub App token with bypass permissions, or
+      #   3. Replace this step with a PR-based snapshot update.
       - name: Commit updated snapshots
         run: |
           git config user.name "github-actions[bot]"

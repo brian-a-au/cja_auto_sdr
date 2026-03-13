@@ -19,13 +19,26 @@ from pathlib import Path
 BASE_CMD = ["uv", "run", "cja_auto_sdr"]
 
 
-def _run(args: list[str], *, parse_json: bool = False) -> dict:
+DEFAULT_TIMEOUT = 300  # 5 minutes; override per-call for long-running commands
+
+
+def _run(args: list[str], *, parse_json: bool = False, timeout: int = DEFAULT_TIMEOUT) -> dict:
     """Run a cja_auto_sdr command and return structured result."""
-    result = subprocess.run(
-        [*BASE_CMD, *args],
-        capture_output=True,
-        text=True,
-    )
+    try:
+        result = subprocess.run(
+            [*BASE_CMD, *args],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        return {
+            "exit_code": 1,
+            "success": False,
+            "stdout": "",
+            "stderr": f"Command timed out after {timeout}s",
+            "timed_out": True,
+        }
     output: dict = {
         "exit_code": result.returncode,
         "success": result.returncode == 0,
@@ -105,7 +118,7 @@ def run_diff(data_view: str, snapshot_path: str) -> dict:
     )
     result["data_view"] = data_view
     result["has_changes"] = result["exit_code"] in (2, 3)
-    result["threshold_exceeded"] = result["exit_code"] in (2, 3)
+    result["threshold_exceeded"] = result["exit_code"] == 2
     return result
 
 

@@ -47,7 +47,10 @@ DIFF_OUTPUT=$(uv run cja_auto_sdr "$DATA_VIEW_ID" --diff-snapshot "$BASELINE" \
 
 echo "$LOG_PREFIX Drift check exit code: $DIFF_EXIT"
 
-# Notify on drift (exit code 2) or warning (exit code 3)
+# Notify on drift (exit code 2) or warning (exit code 3).
+# Baseline is NOT updated when drift is detected — this is intentional so that
+# alerts keep firing until the drift is acknowledged.  To reset the baseline
+# after reviewing changes, re-run: uv run cja_auto_sdr "$DATA_VIEW_ID" --snapshot "$BASELINE"
 if [[ $DIFF_EXIT -eq 2 || $DIFF_EXIT -eq 3 ]]; then
     SUMMARY=$(echo "$DIFF_OUTPUT" | python3 -c "
 import sys, json
@@ -84,4 +87,6 @@ else
     echo "$LOG_PREFIX Baseline updated (no drift)"
 fi
 
-exit 0
+# Propagate the drift exit code so cron/monitoring can detect policy violations.
+# 0 = no drift, 2 = policy threshold exceeded, 3 = warning threshold exceeded.
+exit $DIFF_EXIT
