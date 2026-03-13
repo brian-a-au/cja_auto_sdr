@@ -135,15 +135,15 @@ See `examples/github-actions/cja-sdr-audit.yml` for a reference workflow coverin
 - Scheduled weekly trigger
 - Credential injection from repository secrets
 - Artifact upload of generated SDR files
-- PR comment posting for diff results (`--format-pr-comment`)
+- Snapshot commits when the job has `contents: write`
 
 ### Multi-org orchestration
 
 See `scripts/orchestrator.py` for a Python orchestration script that:
-- Iterates over multiple org profiles
-- Runs org-wide governance checks per org
-- Aggregates exit codes and failure summaries
-- Emits a consolidated JSON report
+- Forwards `--profile` / `--config-file` into wrapped CLI calls
+- Uses explicit IDs, `DATA_VIEWS`, or `--discover` for data view selection
+- Anchors `uv` project resolution to this repository without changing caller-relative file semantics
+- Emits a consolidated JSON report with aggregated exit codes
 
 ---
 
@@ -193,7 +193,7 @@ If your agent framework requires a tool schema, use this minimal definition:
 
 ### Orchestrator
 
-`scripts/orchestrator.py` implements the multi-org loop pattern and is the recommended starting point for agent-driven batch workflows.
+`scripts/orchestrator.py` is the recommended starting point for agent-driven batch workflows when you want a thin JSON-emitting wrapper around repeated CLI runs.
 
 ---
 
