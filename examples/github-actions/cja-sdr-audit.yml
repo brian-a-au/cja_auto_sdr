@@ -46,41 +46,18 @@ jobs:
         run: uv run cja_auto_sdr --validate-config
 
       - name: Generate SDR reports
+        id: audit
         env:
           INPUT_DATA_VIEW: ${{ inputs.data_view }}
         run: |
-          mkdir -p reports snapshots
-
-          if [[ -n "${INPUT_DATA_VIEW:-}" ]]; then
-            DATA_VIEWS="$INPUT_DATA_VIEW"
-          elif [[ -n "${DATA_VIEW_IDS:-}" ]]; then
-            DATA_VIEWS="$DATA_VIEW_IDS"
-          else
-            DATA_VIEWS=$(uv run cja_auto_sdr --list-dataviews --format json --output - | \
-              python3 -c "import sys,json; data=json.load(sys.stdin); views=data if isinstance(data, list) else data.get('dataViews', []); print(','.join(dv['id'] for dv in views if isinstance(dv, dict) and dv.get('id')))")
-          fi
-
-          IFS=',' read -ra VIEWS <<< "$DATA_VIEWS"
-          for DV_ID in "${VIEWS[@]}"; do
-            echo "::group::Processing $DV_ID"
-
-            # Generate SDR
-            uv run cja_auto_sdr "$DV_ID" --format reports --output-dir ./reports/ || true
-
-            # Drift detection (if baseline exists)
-            BASELINE="snapshots/${DV_ID}_baseline.json"
-            if [[ -f "$BASELINE" ]]; then
-              uv run cja_auto_sdr "$DV_ID" --diff-snapshot "$BASELINE" \
-                --format json --output - > "reports/${DV_ID}_drift.json" 2>/dev/null || true
-            fi
-
-            # Update snapshot (data view is positional, --snapshot takes FILE)
-            uv run cja_auto_sdr "$DV_ID" --snapshot "snapshots/${DV_ID}_baseline.json"
-
-            echo "::endgroup::"
-          done
+          uv run python scripts/github_actions_audit.py audit \
+            --input-data-view "${INPUT_DATA_VIEW:-}" \
+            --data-view-ids "${DATA_VIEW_IDS:-}" \
+            --reports-dir reports \
+            --snapshot-dir snapshots
 
       - name: Upload reports
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: sdr-reports-${{ github.run_number }}
@@ -93,10 +70,28 @@ jobs:
       #   1. Run this workflow on an unprotected branch, or
       #   2. Use a GitHub App token with bypass permissions, or
       #   3. Replace this step with a PR-based snapshot update.
+      # Publication is decoupled from the aggregate audit exit: successful
+      # baselines can still be published when later views fail, but only after
+      # manifest validation and only if earlier steps in the job all succeeded.
       - name: Commit updated snapshots
+        if: >-
+          success() &&
+          !cancelled() &&
+          steps.audit.outputs.publish_ready == 'true' &&
+          steps.audit.outputs.successful_snapshot_manifest != ''
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add snapshots/
-          git diff --cached --quiet || git commit -m "Update SDR snapshots [skip ci]"
+          uv run python scripts/github_actions_audit.py stage-manifest \
+            --manifest "${{ steps.audit.outputs.successful_snapshot_manifest }}"
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "Update SDR snapshots [skip ci]"
           git push
+
+      - name: Exit with audit status
+        if: always()
+        env:
+          AUDIT_EXIT_CODE: ${{ steps.audit.outputs.audit_exit_code }}
+        run: exit "${AUDIT_EXIT_CODE:-1}"

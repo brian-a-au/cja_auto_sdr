@@ -76,22 +76,33 @@ for DV_ID in $DATA_VIEWS; do
 
     # Drift detection against baseline (if snapshot exists)
     BASELINE="$SNAPSHOT_DIR/${DV_ID}_baseline.json"
+    DRIFT_REPORT="$REPORT_DIR/${DV_ID}_drift.json"
+    SHOULD_UPDATE_BASELINE=1
     if [[ -f "$BASELINE" ]]; then
         DIFF_EXIT=0
         uv run cja_auto_sdr "$DV_ID" --diff-snapshot "$BASELINE" --format json --output - \
-            > "$REPORT_DIR/${DV_ID}_drift.json" 2>/dev/null || DIFF_EXIT=$?
+            > "$DRIFT_REPORT" 2>/dev/null || DIFF_EXIT=$?
 
         case $DIFF_EXIT in
             0) echo "$LOG_PREFIX  No drift detected" ;;
             2) echo "$LOG_PREFIX  DRIFT DETECTED — see ${DV_ID}_drift.json"; update_overall_exit 2 ;;
             3) echo "$LOG_PREFIX  Warning threshold exceeded"; update_overall_exit 3 ;;
-            *) echo "$LOG_PREFIX  Diff failed (exit $DIFF_EXIT)" >&2; update_overall_exit 1 ;;
+            *)
+                echo "$LOG_PREFIX  Diff failed (exit $DIFF_EXIT)" >&2
+                update_overall_exit 1
+                SHOULD_UPDATE_BASELINE=0
+                rm -f "$DRIFT_REPORT"
+                ;;
         esac
     fi
 
-    # Update baseline snapshot (data view is positional, --snapshot takes FILE)
-    uv run cja_auto_sdr "$DV_ID" --snapshot "$SNAPSHOT_DIR/${DV_ID}_baseline.json"
-    echo "$LOG_PREFIX  Baseline snapshot updated"
+    if [[ $SHOULD_UPDATE_BASELINE -eq 1 ]]; then
+        # Update baseline snapshot (data view is positional, --snapshot takes FILE)
+        uv run cja_auto_sdr "$DV_ID" --snapshot "$SNAPSHOT_DIR/${DV_ID}_baseline.json"
+        echo "$LOG_PREFIX  Baseline snapshot updated"
+    else
+        echo "$LOG_PREFIX  Baseline preserved due to diff failure"
+    fi
 done
 
 echo "$LOG_PREFIX Weekly SDR generation complete (exit: $OVERALL_EXIT)"

@@ -17,6 +17,7 @@ from cja_auto_sdr.core.colors import ConsoleColors
 from cja_auto_sdr.core.constants import BANNER_WIDTH, CREDENTIAL_FIELDS, ENV_VAR_MAPPING
 from cja_auto_sdr.core.credentials import filter_credentials
 from cja_auto_sdr.core.exceptions import ProfileConfigError, ProfileNotFoundError
+from cja_auto_sdr.core.json_io import write_json_atomic
 
 __all__ = [
     "_normalize_import_credentials",
@@ -385,9 +386,7 @@ def add_profile_interactive(profile_name: str) -> bool:
 
     config_file = profile_path / "config.json"
     try:
-        fd = os.open(str(config_file), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with open(fd, "w", encoding="utf-8") as f:
-            json.dump(config, f, indent=2)
+        write_json_atomic(config_file, config, indent=2, file_mode=0o600)
     except OSError as e:
         print(ConsoleColors.error(f"Error writing config file: {e}"), file=sys.stderr)
         return False
@@ -543,10 +542,7 @@ def import_profile_non_interactive(profile_name: str, source_file: str | Path, o
     try:
         profile_path.mkdir(parents=True, exist_ok=True)
         config_path = profile_path / "config.json"
-        fd = os.open(str(config_path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with open(fd, "w", encoding="utf-8") as f:
-            json.dump(config_payload, f, indent=2)
-            f.write("\n")
+        write_json_atomic(config_path, config_payload, indent=2, file_mode=0o600, trailing_newline=True)
     except OSError as e:
         print(ConsoleColors.error(f"Error writing profile config: {e}"), file=sys.stderr)
         return False

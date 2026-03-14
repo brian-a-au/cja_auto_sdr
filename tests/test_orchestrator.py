@@ -32,6 +32,34 @@ def test_run_targets_repo_project_without_overriding_caller_cwd(monkeypatch):
     ]
 
 
+def test_run_normalizes_signal_exit_codes(monkeypatch):
+    def _fake_run(*args, **kwargs):
+        return SimpleNamespace(returncode=-2, stdout="", stderr="")
+
+    monkeypatch.setattr(orchestrator.subprocess, "run", _fake_run)
+
+    result = orchestrator._run(["dv_123", "--format", "json", "--output", "-"])
+
+    assert result["success"] is False
+    assert result["raw_exit_code"] == -2
+    assert result["exit_code"] == 130
+
+
+def test_run_returns_structured_interrupt_result_when_wrapper_is_interrupted(monkeypatch):
+    def _fake_run(*args, **kwargs):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(orchestrator.subprocess, "run", _fake_run)
+
+    result = orchestrator._run(["dv_123", "--format", "json", "--output", "-"])
+
+    assert result["success"] is False
+    assert result["exit_code"] == 130
+    assert result["error_type"] == "interrupted"
+    assert result["interrupted"] is True
+    assert "interrupted" in result["stderr"].lower()
+
+
 def test_path_args_remain_caller_relative_when_subprocesses_run_from_project_root(monkeypatch, tmp_path):
     commands = []
 
@@ -283,6 +311,38 @@ def test_main_discovers_data_views_and_preserves_policy_exit_code(monkeypatch, c
     assert payload["data_views_processed"] == 2
 
 
+def test_main_stops_batch_and_preserves_interrupt_exit_code(monkeypatch, capsys):
+    monkeypatch.setattr(
+        orchestrator,
+        "_validate_config_result",
+        lambda *, shared_args=None, timeout=orchestrator.DEFAULT_TIMEOUT: {
+            "success": True,
+            "exit_code": 0,
+            "stderr": "",
+            "stdout": "",
+        },
+    )
+    run_calls = []
+    run_results = {
+        "dv_1": {"data_view": "dv_1", "exit_code": 0, "success": True},
+        "dv_2": {"data_view": "dv_2", "exit_code": 130, "success": False},
+    }
+
+    def _fake_run_sdr(data_view, fmt="json", output_dir=None, extra_args=None, *, shared_args=None, timeout=0):
+        run_calls.append(data_view)
+        return run_results[data_view]
+
+    monkeypatch.setattr(orchestrator, "run_sdr", _fake_run_sdr)
+
+    exit_code = orchestrator.main(["dv_1", "dv_2", "dv_3"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 130
+    assert payload["overall_exit_code"] == 130
+    assert payload["data_views_processed"] == 2
+    assert run_calls == ["dv_1", "dv_2"]
+
+
 def test_main_discover_overrides_data_views_environment(monkeypatch, capsys):
     monkeypatch.setenv("DATA_VIEWS", "stale_dv")
     monkeypatch.setattr(
@@ -317,6 +377,44 @@ def test_main_discover_overrides_data_views_environment(monkeypatch, capsys):
     assert run_calls == ["fresh_dv"]
 
 
+def test_main_validation_failure_preserves_interrupt_exit_code(monkeypatch, capsys):
+    monkeypatch.setattr(
+        orchestrator,
+        "_validate_config_result",
+        lambda *, shared_args=None, timeout=orchestrator.DEFAULT_TIMEOUT: {
+            "success": False,
+            "exit_code": 130,
+            "stderr": "Interrupted",
+            "stdout": "",
+        },
+    )
+
+    exit_code = orchestrator.main(["dv_123"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 130
+    assert payload["stage"] == "validation"
+    assert payload["exit_code"] == 130
+    assert payload["error_type"] == "interrupted"
+    assert payload["interrupted"] is True
+
+
+def test_main_emits_json_interrupt_when_keyboard_interrupt_escapes_run_path(monkeypatch, capsys):
+    def _raise_keyboard_interrupt(args):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(orchestrator, "_build_shared_args", _raise_keyboard_interrupt)
+
+    exit_code = orchestrator.main(["dv_123"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 130
+    assert payload["stage"] == "interrupted"
+    assert payload["exit_code"] == 130
+    assert payload["error_type"] == "interrupted"
+    assert payload["interrupted"] is True
+
+
 def test_main_discover_reports_empty_org_without_error(monkeypatch, capsys):
     monkeypatch.setattr(
         orchestrator,
@@ -340,6 +438,7 @@ def test_main_discover_emits_json_error_on_discovery_failure(monkeypatch, capsys
         lambda *, shared_args=None, timeout=orchestrator.DEFAULT_TIMEOUT: (_ for _ in ()).throw(
             orchestrator.OrchestratorError(
                 "Data view discovery failed with exit code 1: bad credentials",
+                stage="data_view_resolution",
                 result={"exit_code": 1},
             )
         ),
@@ -351,3 +450,24 @@ def test_main_discover_emits_json_error_on_discovery_failure(monkeypatch, capsys
     assert exit_code == 1
     assert payload["stage"] == "data_view_resolution"
     assert "bad credentials" in payload["error"]
+
+
+def test_main_preserves_orchestrator_error_stage(monkeypatch, capsys):
+    monkeypatch.setattr(
+        orchestrator,
+        "_build_shared_args",
+        lambda args: (_ for _ in ()).throw(
+            orchestrator.OrchestratorError(
+                "Synthetic staged failure",
+                stage="custom_stage",
+                result={"exit_code": 1},
+            )
+        ),
+    )
+
+    exit_code = orchestrator.main(["dv_123"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 1
+    assert payload["stage"] == "custom_stage"
+    assert payload["error"] == "Synthetic staged failure"

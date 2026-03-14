@@ -57,7 +57,12 @@ import sys, json
 try:
     data = json.load(sys.stdin)
     summary = data.get('summary', {})
-    print(f\"Metrics: {summary.get('metrics_changed', '?')} changed, Dimensions: {summary.get('dimensions_changed', '?')} changed\")
+    def changed_total(prefix):
+        explicit_total = summary.get(f'{prefix}_changed')
+        if explicit_total is not None:
+            return explicit_total
+        return sum(int(summary.get(f'{prefix}_{suffix}', 0) or 0) for suffix in ('added', 'removed', 'modified'))
+    print(f\"Metrics: {changed_total('metrics')} changed, Dimensions: {changed_total('dimensions')} changed\")
 except Exception:
     print('Unable to parse diff summary')
 " 2>/dev/null)

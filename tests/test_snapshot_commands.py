@@ -15,6 +15,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+import cja_auto_sdr.core.json_io as json_io
 from cja_auto_sdr.diff.models import (
     DataViewSnapshot,
     DiffResult,
@@ -253,6 +254,49 @@ class TestHandleSnapshotCommand:
         mock_configure.assert_called_once_with(
             profile="staging", config_file="config.json", logger=mock_configure.call_args[1]["logger"]
         )
+
+    @patch("cja_auto_sdr.generator.cjapy")
+    @patch("cja_auto_sdr.generator.configure_cjapy")
+    def test_snapshot_write_failure_preserves_existing_file(self, mock_configure, mock_cjapy, tmp_path, monkeypatch):
+        """Atomic snapshot writes keep the prior baseline intact on write failure."""
+        mock_configure.return_value = (True, "config", None)
+        mock_cja = MagicMock()
+        mock_cjapy.CJA.return_value = mock_cja
+        mock_cja.getDataView.return_value = {"name": "DV", "owner": "o", "description": ""}
+        mock_cja.getMetrics.return_value = MagicMock(empty=False, to_dict=MagicMock(return_value=[]))
+        mock_cja.getDimensions.return_value = MagicMock(empty=False, to_dict=MagicMock(return_value=[]))
+
+        out_file = tmp_path / "snap.json"
+        out_file.write_text(
+            json.dumps(
+                {
+                    "snapshot_version": "1.0",
+                    "data_view_id": "dv_existing",
+                    "data_view_name": "Existing",
+                    "created_at": "2024-01-01T00:00:00+00:00",
+                    "metrics": [],
+                    "dimensions": [],
+                },
+            ),
+            encoding="utf-8",
+        )
+        original_contents = out_file.read_text(encoding="utf-8")
+
+        def _failing_dump(payload, file_obj, *args, **kwargs):
+            file_obj.write('{"partial": ')
+            raise OSError("disk full")
+
+        monkeypatch.setattr(json_io.json, "dump", _failing_dump)
+
+        result = handle_snapshot_command(
+            data_view_id="dv_123",
+            snapshot_file=str(out_file),
+            quiet=True,
+        )
+
+        assert result is False
+        assert out_file.read_text(encoding="utf-8") == original_contents
+        assert list(tmp_path.glob(f".{out_file.name}.*.tmp")) == []
 
 
 # ==================== handle_compare_snapshots_command ====================
