@@ -49,6 +49,7 @@ class OrchestratorArgumentError(ValueError):
 
 class _ArgumentParser(argparse.ArgumentParser):
     """ArgumentParser variant that raises instead of exiting on invalid input."""
+
     # Raising keeps orchestration code in control of the JSON error envelope
     # instead of letting argparse print directly to stderr and terminate.
 
@@ -345,8 +346,7 @@ def _emit_error(message: str, *, stage: str, result: dict | None = None) -> None
     interrupted = (
         stage == "interrupted"
         or bool(result is not None and result.get("interrupted"))
-        or (isinstance(exit_code, int)
-        and _is_signal_exit_code(exit_code))
+        or (isinstance(exit_code, int) and _is_signal_exit_code(exit_code))
     )
     payload: dict[str, object] = {
         "error": message,

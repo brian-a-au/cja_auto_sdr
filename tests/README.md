@@ -111,12 +111,14 @@ tests/
 ├── test_discovery_exceptions.py     # Discovery exception classification contracts
 ├── test_lock_backend_edge_cases.py  # Lock backend metadata I/O, stale detection, legacy parsing
 ├── test_org_analyzer_coverage.py    # Org analyzer governance, naming audit, sampling, memory, drift, clustering
+├── test_orchestrator.py             # Automation orchestrator wrapper tests
 ├── test_pipeline_single.py          # Modular single-dataview pipeline wrapper tests
 ├── test_processing_execution_policy.py # Processing execution-policy derivation tests
+├── test_github_actions_audit.py     # GitHub Actions audit workflow helper tests
 └── README.md                        # This file
 ```
 
-**Total: 6,250 comprehensive tests**
+**Total: 6,266 comprehensive tests**
 
 ### Test Count Breakdown
 
@@ -168,7 +170,7 @@ tests/
 | `test_config_validation.py` | 55 | Configuration validation logic |
 | `test_credentials.py` | 70 | Credential resolution and source selection |
 | `test_perf.py` | 7 | Performance utilities (cache eviction, statistics) |
-| `test_snapshot.py` | 74 | Diff snapshot creation and comparison |
+| `test_snapshot.py` | 78 | Diff snapshot creation and comparison |
 | `test_colors.py` | 122 | Console color formatting, themes, TTY detection |
 | `test_exceptions.py` | 64 | Custom exception classes construction and formatting |
 | `test_logging_redaction.py` | 158 | Logging, sensitive data redaction, JSON formatter |
@@ -185,8 +187,8 @@ tests/
 | `test_small_module_coverage.py` | 113 | Logging, utils, calculated metrics, constants, lazy, tuning, locks, org cache |
 | `test_diff_inventory_output.py` | 88 | Inventory diff output across all formats (console, JSON, HTML, Excel, MD, CSV) |
 | `test_cli_command_handlers.py` | 146 | CLI dispatch for --stats, --org-report, --list-snapshots, discovery inspection, diff config unpacking |
-| `test_profile_management.py` | 46 | Interactive profile creation, import, test, show |
-| `test_snapshot_commands.py` | 58 | Snapshot creation, comparison, name resolution |
+| `test_profile_management.py` | 47 | Interactive profile creation, import, test, show |
+| `test_snapshot_commands.py` | 59 | Snapshot creation, comparison, name resolution |
 | `test_config_and_resolution.py` | 108 | Config status, validation, stats, name resolution |
 | `test_derived_fields_edge_cases.py` | 34 | Derived fields edge cases and coverage |
 | `test_diff_command_coverage.py` | 45 | Diff command edge cases and coverage |
@@ -225,9 +227,11 @@ tests/
 | `test_check_version_sync.py` | 18 | Version string sync validation across files |
 | `test_cli_color_policy_e2e.py` | 7 | End-to-end CLI color policy behavior tests |
 | `test_discovery_exceptions.py` | 6 | Discovery exception classification contracts |
+| `test_orchestrator.py` | 19 | Automation orchestrator wrapper CLI and exit-code handling |
 | `test_pipeline_single.py` | 1 | Modular single-dataview pipeline wrapper tests |
 | `test_processing_execution_policy.py` | 10 | Processing execution-policy derivation tests |
-| **Total** | **6,250** | **Collected via pytest --collect-only** |
+| `test_github_actions_audit.py` | 4 | GitHub Actions audit workflow helper and manifest staging tests |
+| **Total** | **6,266** | **Collected via pytest --collect-only** |
 
 ## Running Tests
 
@@ -631,7 +635,7 @@ Check for drift (CI-friendly):
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (6,250 tests total)
+- [x] Comprehensive test coverage (6,266 tests total)
 - [x] Org-wide analysis tests (test_org_report.py) - 175 tests (including large org scaling, output path aliases, memory warnings, smart cache invalidation)
 - [x] Org-wide analysis integration tests (test_org_report_integration.py) - 17 tests (end-to-end flows, caching, filtering, governance thresholds)
 - [x] Profile management tests (test_profiles.py) - 77 tests

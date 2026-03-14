@@ -19,7 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **GitHub Actions Template** (`examples/github-actions/cja-sdr-audit.yml`): Workflow template for automated SDR auditing
 
 ### Changed
-- **CI Lint** (`.github/workflows/lint.yml`): Expanded lint targets to cover `scripts/orchestrator.py` and `examples/`
+- **CI Lint** (`.github/workflows/lint.yml`): Expanded lint targets to cover `scripts/orchestrator.py`, `scripts/github_actions_audit.py`, and `examples/`
 - **Ruff Config** (`pyproject.toml`): Added per-file-ignores for `scripts/orchestrator.py` and `examples/` (INP001, T201)
 - **README.md**: Added Agent & Automation feature category
 - **USE_CASES.md**: Added cross-reference to Agent Automation Guide
