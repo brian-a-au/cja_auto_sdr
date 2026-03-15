@@ -2129,7 +2129,7 @@ class TestOrgReportCache:
         with tempfile.TemporaryDirectory() as tmpdir:
             cache = OrgReportCache(cache_dir=Path(tmpdir), logger=logger)
 
-            with patch("builtins.open", side_effect=OSError("disk full")):
+            with patch("cja_auto_sdr.org.cache.write_json_atomic", side_effect=OSError("disk full")):
                 cache.put(DataViewSummary("dv_test", "Test DV"))
 
             logger.warning.assert_called()

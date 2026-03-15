@@ -17,6 +17,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from cja_auto_sdr.core.json_io import write_json_atomic
 from cja_auto_sdr.core.locks.manager import LockManager
 from cja_auto_sdr.org.models import DataViewSummary
 from cja_auto_sdr.org.snapshot_utils import (
@@ -175,15 +176,10 @@ class OrgReportCache:
     def _save_cache(self) -> None:
         """Save cache to disk via atomic write-then-rename."""
         self.cache_dir.mkdir(parents=True, exist_ok=True)
-        tmp_path = self.cache_file.with_name(f".{self.cache_file.name}.{uuid.uuid4().hex}.tmp")
         try:
-            with open(tmp_path, "w", encoding="utf-8") as f:
-                json.dump(self._cache, f, indent=2, default=str)
-            os.replace(tmp_path, self.cache_file)
+            write_json_atomic(self.cache_file, self._cache, indent=2, default=str)
         except OSError as e:
             self.logger.warning(f"Failed to save org report cache to {self.cache_file}: {e}")
-            with contextlib.suppress(OSError):
-                tmp_path.unlink()
 
     @staticmethod
     def _sanitize_org_id(org_id: str | None) -> str:
@@ -225,14 +221,9 @@ class OrgReportCache:
         file_path = snapshot_dir / (
             f"org_report_{self._sanitize_org_id(resolved_org_id)}_{timestamp_slug}_{snapshot_id[:8]}.json"
         )
-        tmp_path = file_path.with_name(f".{file_path.name}.{uuid.uuid4().hex}.tmp")
         try:
-            with open(tmp_path, "w", encoding="utf-8") as f:
-                json.dump(payload, f, indent=2, ensure_ascii=False)
-            os.replace(tmp_path, file_path)
+            write_json_atomic(file_path, payload, indent=2, ensure_ascii=False)
         except OSError, TypeError, ValueError:
-            with contextlib.suppress(OSError):
-                tmp_path.unlink()
             raise
 
         return file_path

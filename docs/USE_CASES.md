@@ -1056,3 +1056,4 @@ cja_auto_sdr dv_12345 \
 - [Performance Guide](PERFORMANCE.md) - Optimization tips
 - [Batch Processing Guide](BATCH_PROCESSING_GUIDE.md) - Multi-view processing
 - [Data Quality](DATA_QUALITY.md) - Understanding validation
+- [Agent Automation Guide](AGENT_AUTOMATION.md) - Scheduling, CI/CD, and AI agent integration

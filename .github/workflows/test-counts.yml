@@ -3,13 +3,23 @@ name: Test Count Sync
 on:
   pull_request:
     paths:
+      - 'README.md'
       - 'tests/**'
+      - 'tests/README.md'
       - 'scripts/update_test_counts.py'
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   test-counts:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5

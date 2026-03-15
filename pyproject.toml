@@ -160,6 +160,8 @@ ignore = [
 "src/cja_auto_sdr/output/sdr/__init__.py" = ["F822", "ERA001", "RUF001", "RUF003"]  # F822: lazy forwarding; ERA001: section header comments; RUF001/3: intentional Unicode symbols
 "src/cja_auto_sdr/pipeline/*.py" = ["F822"]  # lazy forwarding modules
 "tests/**" = ["B", "SIM", "RUF012", "PERF", "DTZ", "S105", "S108", "S110", "S314", "PT017", "PT018", "PT019", "ARG", "T201", "ERA001", "PD011", "FLY002"]
+"scripts/orchestrator.py" = ["T201"]  # intentional CLI output in standalone script
+"examples/**" = ["INP001", "T201"]  # INP001: not a package; T201: example scripts use print
 
 [tool.ruff.lint.isort]
 known-first-party = ["cja_auto_sdr"]

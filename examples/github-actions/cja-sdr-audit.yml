@@ -1,0 +1,97 @@
+# cja-sdr-audit.yml — GitHub Actions workflow for automated SDR auditing
+#
+# TEMPLATE: Copy this file to .github/workflows/ in your own repository.
+# This file lives in examples/ and does NOT execute on this repo's CI.
+#
+# Required secrets:
+#   ORG_ID, CLIENT_ID, SECRET, SCOPES
+#
+# Optional variables:
+#   DATA_VIEW_IDS — comma-separated list of data view IDs to process
+
+name: CJA SDR Audit
+
+on:
+  schedule:
+    - cron: '0 2 * * 1'  # Weekly Monday 2am UTC
+  workflow_dispatch:
+    inputs:
+      data_view:
+        description: 'Specific data view ID (leave empty for all)'
+        required: false
+        type: string
+
+env:
+  ORG_ID: ${{ secrets.ORG_ID }}
+  CLIENT_ID: ${{ secrets.CLIENT_ID }}
+  SECRET: ${{ secrets.SECRET }}
+  SCOPES: ${{ secrets.SCOPES }}
+
+jobs:
+  sdr-audit:
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Validate configuration
+        run: uv run cja_auto_sdr --validate-config
+
+      - name: Generate SDR reports
+        id: audit
+        env:
+          INPUT_DATA_VIEW: ${{ inputs.data_view }}
+        run: |
+          uv run python scripts/github_actions_audit.py audit \
+            --input-data-view "${INPUT_DATA_VIEW:-}" \
+            --data-view-ids "${DATA_VIEW_IDS:-}" \
+            --reports-dir reports \
+            --snapshot-dir snapshots
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdr-reports-${{ github.run_number }}
+          path: reports/
+          retention-days: 90
+
+      # NOTE: This step pushes directly to the checked-out branch.
+      # If branch protection rules are enabled (required reviews, status checks),
+      # the push will fail.  In that case, either:
+      #   1. Run this workflow on an unprotected branch, or
+      #   2. Use a GitHub App token with bypass permissions, or
+      #   3. Replace this step with a PR-based snapshot update.
+      # Publication is decoupled from the aggregate audit exit: successful
+      # baselines can still be published when later views fail, but only after
+      # manifest validation and only if earlier steps in the job all succeeded.
+      - name: Commit updated snapshots
+        if: >-
+          success() &&
+          !cancelled() &&
+          steps.audit.outputs.publish_ready == 'true' &&
+          steps.audit.outputs.successful_snapshot_manifest != ''
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          uv run python scripts/github_actions_audit.py stage-manifest \
+            --manifest "${{ steps.audit.outputs.successful_snapshot_manifest }}"
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "Update SDR snapshots [skip ci]"
+          git push
+
+      - name: Exit with audit status
+        if: always()
+        env:
+          AUDIT_EXIT_CODE: ${{ steps.audit.outputs.audit_exit_code }}
+        run: exit "${AUDIT_EXIT_CODE:-1}"

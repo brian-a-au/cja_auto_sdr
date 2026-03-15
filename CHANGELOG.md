@@ -7,6 +7,25 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.4.2] - Unreleased
+
+### Added
+- **AGENTS.md** (repo root): Agent-facing tool contract with command reference, exit codes, and output conventions
+- **Agent Automation Guide** (`docs/AGENT_AUTOMATION.md`): Human-readable guide for scheduling, CI/CD, and AI agent integration
+- **Python Orchestrator** (`scripts/orchestrator.py`): Subprocess wrapper for programmatic automation
+- **Weekly SDR Script** (`examples/automation/weekly_sdr.sh`): Cron-ready weekly SDR generation with drift detection
+- **Daily Drift Check** (`examples/automation/daily_drift_check.sh`): Daily drift detection with Slack notification
+- **Quarterly Maintenance** (`examples/automation/quarterly_maintenance.sh`): Quarterly baseline refresh, governance review, snapshot pruning, and compliance export
+- **GitHub Actions Template** (`examples/github-actions/cja-sdr-audit.yml`): Workflow template for automated SDR auditing
+
+### Changed
+- **CI Lint** (`.github/workflows/lint.yml`): Expanded lint targets to cover `scripts/orchestrator.py`, `scripts/github_actions_audit.py`, and `examples/`
+- **Ruff Config** (`pyproject.toml`): Added per-file-ignores for `scripts/orchestrator.py` and `examples/` (INP001, T201)
+- **README.md**: Added Agent & Automation feature category
+- **USE_CASES.md**: Added cross-reference to Agent Automation Guide
+- **Atomic JSON writes** (`core/json_io.py`, snapshot/profile writers): now reject existing symlink destinations before replacement and fsync parent directories after rename for stronger local durability guarantees.
+- **Automation examples** (`scripts/github_actions_audit.py`, `examples/automation/*.sh`, `examples/github-actions/cja-sdr-audit.yml`): standalone audit runs now return the aggregate audit exit code outside GitHub Actions, shell examples preserve baselines on snapshot refresh failures instead of aborting mid-run, and the example workflow now matches CI's `setup-uv@v5` usage.
+
 ## [3.4.1] - 2026-03-13
 
 ### Changed

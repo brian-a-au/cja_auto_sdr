@@ -73,6 +73,11 @@ A **Solution Design Reference** is the essential documentation that bridges your
 | | Color-Coded Output | Global color controls via `--no-color`, `NO_COLOR`, and `FORCE_COLOR` |
 | | Enhanced Error Messages | Contextual error messages with actionable fix suggestions |
 | | Comprehensive Logging | Timestamped logs with rotation for audit trails |
+| **Agent & Automation** | AGENTS.md Contract | Machine-parseable tool contract for AI agents (Claude Code, LangChain, etc.) |
+| | Python Orchestrator | Subprocess wrapper for programmatic automation (`scripts/orchestrator.py`) |
+| | Shell Script Templates | Cron-ready weekly, daily, and quarterly automation examples |
+| | GitHub Actions Template | Copy-paste workflow for scheduled SDR auditing |
+| | Exit Code Conventions | Structured exit codes (0/1/2/3) for agent decision-making |
 
 ### Who It's For
 
@@ -331,6 +336,7 @@ cja_auto_sdr "Production Analytics"
 | [Data View Comparison](docs/DIFF_COMPARISON.md) | Compare Data Views, snapshots, CI/CD integration |
 | [Git Integration](docs/GIT_INTEGRATION.md) | Version-controlled snapshots, audit trails, team collaboration |
 | [Org-Wide Analysis](docs/ORG_WIDE_ANALYSIS.md) | Cross-data view component analysis, similarity detection, governance |
+| [Agent Automation](docs/AGENT_AUTOMATION.md) | CI/CD pipelines, AI agent integration, scheduling patterns |
 | [Testing](tests/README.md) | Running and writing tests |
 
 ## Requirements
@@ -413,7 +419,7 @@ cja_auto_sdr/
 │   ├── GIT_INTEGRATION.md     # Git integration guide
 │   ├── ORG_WIDE_ANALYSIS.md   # Org-wide report guide
 │   └── ...                    # Additional guides
-├── tests/                     # Test suite (6,237+ tests)
+├── tests/                     # Test suite (6,286+ tests)
 ├── sample_outputs/            # Example output files
 │   ├── excel/                 # Sample Excel SDR
 │   ├── csv/                   # Sample CSV output

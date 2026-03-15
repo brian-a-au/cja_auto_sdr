@@ -6,9 +6,17 @@ on:
     branches: [main]
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 jobs:
   ruff:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -17,6 +25,36 @@ jobs:
       - name: Sync dependencies
         run: uv sync --dev
       - name: Ruff check
-        run: uv run ruff check src/ tests/ scripts/check_version_sync.py scripts/update_test_counts.py
+        run: uv run ruff check src/ tests/ scripts/check_version_sync.py scripts/update_test_counts.py scripts/orchestrator.py scripts/github_actions_audit.py examples/
       - name: Ruff format check
-        run: uv run ruff format --check src/ tests/ scripts/check_version_sync.py scripts/update_test_counts.py
+        run: uv run ruff format --check src/ tests/ scripts/check_version_sync.py scripts/update_test_counts.py scripts/orchestrator.py scripts/github_actions_audit.py examples/
+
+  actionlint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: rhysd/actionlint@v1.7.8
+
+  shellcheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install shellcheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+      - name: Lint shell scripts
+        run: shellcheck examples/automation/*.sh
+
+  lockfile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.14"
+      - name: Verify lockfile is in sync
+        run: uv lock --check

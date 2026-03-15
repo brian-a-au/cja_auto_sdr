@@ -101,6 +101,7 @@ class TestAddProfileInteractive:
         assert config["client_id"] == "new_client_id"
         assert config["secret"] == "new_secret_value"
         assert config["scopes"] == "openid,AdobeID"
+        assert (profile_dir / "config.json").stat().st_mode & 0o777 == 0o600
 
     def test_successful_creation_new_profile(self, tmp_path, capsys):
         """Full happy-path creation of a brand new profile."""
@@ -123,6 +124,7 @@ class TestAddProfileInteractive:
 
         config = json.loads((profile_dir / "config.json").read_text())
         assert config["org_id"] == "MyOrg@AdobeOrg"
+        assert (profile_dir / "config.json").stat().st_mode & 0o777 == 0o600
 
     def test_empty_org_id_aborts(self, tmp_path, capsys):
         """Empty organization ID causes early exit."""
@@ -258,7 +260,7 @@ class TestAddProfileInteractive:
             patch("cja_auto_sdr.generator.get_profile_path", return_value=profile_dir),
             patch("builtins.input", side_effect=inputs),
             patch("getpass.getpass", return_value="my_secret"),
-            patch("os.open", side_effect=OSError("Disk full")),
+            patch("cja_auto_sdr.core.profiles.write_json_atomic", side_effect=OSError("Disk full")),
         ):
             result = add_profile_interactive("write-fail")
 
@@ -405,6 +407,7 @@ class TestImportProfileNonInteractiveExtended:
         assert result is True
         config = json.loads((profile_dir / "config.json").read_text())
         assert config["org_id"] == VALID_CREDENTIALS["org_id"]
+        assert (profile_dir / "config.json").stat().st_mode & 0o777 == 0o600
 
     def test_overwrite_warns_about_existing_dotenv(self, tmp_path, capsys):
         """Overwrite with existing .env should warn about potential conflicts."""
@@ -432,13 +435,33 @@ class TestImportProfileNonInteractiveExtended:
 
         with (
             patch("cja_auto_sdr.generator.get_profile_path", return_value=profile_dir),
-            patch("os.open", side_effect=OSError("Permission denied")),
+            patch("cja_auto_sdr.core.profiles.write_json_atomic", side_effect=OSError("Permission denied")),
         ):
             result = import_profile_non_interactive("bad-write", source)
 
         assert result is False
         captured = capsys.readouterr()
         assert "Error writing profile config" in captured.err
+
+    def test_overwrite_rejects_symlink_destination(self, tmp_path, capsys):
+        """Existing config.json symlinks are rejected instead of being replaced."""
+        source = tmp_path / "credentials.json"
+        source.write_text(json.dumps(VALID_CREDENTIALS))
+
+        profile_dir = tmp_path / "orgs" / "linked-profile"
+        profile_dir.mkdir(parents=True)
+        target_file = tmp_path / "real-config.json"
+        target_file.write_text(json.dumps({"org_id": "ORIGINAL@AdobeOrg"}))
+        (profile_dir / "config.json").symlink_to(target_file)
+
+        with patch("cja_auto_sdr.generator.get_profile_path", return_value=profile_dir):
+            result = import_profile_non_interactive("linked-profile", source, overwrite=True)
+
+        assert result is False
+        captured = capsys.readouterr()
+        assert "symlink" in captured.err.lower()
+        assert json.loads(target_file.read_text())["org_id"] == "ORIGINAL@AdobeOrg"
+        assert (profile_dir / "config.json").is_symlink()
 
     def test_validation_failure(self, tmp_path, capsys):
         """Credentials that fail strict validation should be rejected."""

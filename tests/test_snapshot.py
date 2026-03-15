@@ -9,10 +9,13 @@ import logging
 import os
 import sys
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 from zoneinfo import ZoneInfo
 
 import pytest
+
+import cja_auto_sdr.core.json_io as json_io
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -394,6 +397,81 @@ class TestCreateSnapshot:
             manager.create_snapshot(cja, "dv_test", quiet=True, include_segments=True)
             captured = capsys.readouterr()
             assert "quiet seg" not in captured.out
+
+
+# ==================== save_snapshot Tests ====================
+
+
+class TestSaveSnapshot:
+    """Tests for SnapshotManager.save_snapshot."""
+
+    def test_save_snapshot_writes_json(self, manager, sample_snapshot, tmp_path):
+        filepath = tmp_path / "snapshot.json"
+
+        saved = manager.save_snapshot(sample_snapshot, str(filepath))
+
+        assert saved == str(filepath.resolve())
+        with open(filepath, encoding="utf-8") as f:
+            data = json.load(f)
+        assert data["data_view_id"] == sample_snapshot.data_view_id
+        assert data["snapshot_version"] == sample_snapshot.snapshot_version
+
+    def test_save_snapshot_fsyncs_parent_directory(self, manager, sample_snapshot, tmp_path, monkeypatch):
+        filepath = tmp_path / "snapshot.json"
+        fsync_calls: list[Path] = []
+
+        monkeypatch.setattr(json_io, "_fsync_directory", lambda directory: fsync_calls.append(Path(directory)))
+
+        manager.save_snapshot(sample_snapshot, str(filepath))
+
+        assert fsync_calls == [tmp_path.resolve()]
+
+    def test_save_snapshot_rejects_symlink_destination(self, manager, sample_snapshot, tmp_path):
+        target_file = tmp_path / "real-snapshot.json"
+        target_file.write_text('{"snapshot_version": "1.0", "data_view_id": "dv_original"}', encoding="utf-8")
+        link_path = tmp_path / "snapshot.json"
+        link_path.symlink_to(target_file)
+
+        with pytest.raises(OSError, match="symlink"):
+            manager.save_snapshot(sample_snapshot, str(link_path))
+
+        assert link_path.is_symlink()
+        assert json.loads(target_file.read_text(encoding="utf-8"))["data_view_id"] == "dv_original"
+
+    def test_save_snapshot_failure_preserves_existing_file_and_cleans_temp(
+        self,
+        manager,
+        sample_snapshot,
+        tmp_path,
+        monkeypatch,
+    ):
+        filepath = tmp_path / "snapshot.json"
+        filepath.write_text(
+            json.dumps(
+                {
+                    "snapshot_version": "1.0",
+                    "data_view_id": "dv_original",
+                    "data_view_name": "Original",
+                    "created_at": "2024-01-01T00:00:00+00:00",
+                    "metrics": [],
+                    "dimensions": [],
+                },
+            ),
+            encoding="utf-8",
+        )
+        original_contents = filepath.read_text(encoding="utf-8")
+
+        def _failing_dump(payload, file_obj, *args, **kwargs):
+            file_obj.write('{"partial": ')
+            raise OSError("disk full")
+
+        monkeypatch.setattr(json_io.json, "dump", _failing_dump)
+
+        with pytest.raises(OSError, match="disk full"):
+            manager.save_snapshot(sample_snapshot, str(filepath))
+
+        assert filepath.read_text(encoding="utf-8") == original_contents
+        assert list(tmp_path.glob(f".{filepath.name}.*.tmp")) == []
 
 
 # ==================== list_snapshots edge cases ====================

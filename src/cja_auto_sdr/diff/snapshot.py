@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from cja_auto_sdr.core.colors import ConsoleColors
 from cja_auto_sdr.core.error_policies import RECOVERABLE_OPTIONAL_ENRICHMENT_EXCEPTIONS
+from cja_auto_sdr.core.json_io import write_json_atomic
 from cja_auto_sdr.diff.models import DataViewSnapshot
 
 
@@ -181,10 +182,7 @@ class SnapshotManager:
     def save_snapshot(self, snapshot: DataViewSnapshot, filepath: str) -> str:
         """Save a snapshot to a JSON file."""
         filepath = os.path.abspath(filepath)
-        os.makedirs(os.path.dirname(filepath) or ".", exist_ok=True)
-
-        with open(filepath, "w", encoding="utf-8") as f:
-            json.dump(snapshot.to_dict(), f, indent=2, ensure_ascii=False)
+        write_json_atomic(filepath, snapshot.to_dict(), indent=2, ensure_ascii=False)
 
         self.logger.info(f"Snapshot saved to: {filepath}")
         return filepath
