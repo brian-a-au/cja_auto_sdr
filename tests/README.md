@@ -115,6 +115,9 @@ tests/
 ├── test_pipeline_single.py          # Modular single-dataview pipeline wrapper tests
 ├── test_processing_execution_policy.py # Processing execution-policy derivation tests
 ├── test_github_actions_audit.py     # GitHub Actions audit workflow helper tests
+├── test_example_automation_scripts.py # Automation shell script validation tests
+├── test_exit_codes.py               # Exit code helpers and signal detection tests
+├── test_json_io.py                  # JSON I/O atomic write and read tests
 └── README.md                        # This file
 ```
 
@@ -231,6 +234,9 @@ tests/
 | `test_pipeline_single.py` | 1 | Modular single-dataview pipeline wrapper tests |
 | `test_processing_execution_policy.py` | 10 | Processing execution-policy derivation tests |
 | `test_github_actions_audit.py` | 7 | GitHub Actions audit workflow helper and manifest staging tests |
+| `test_example_automation_scripts.py` | 4 | Automation shell script validation tests |
+| `test_exit_codes.py` | 11 | Exit code helpers and signal detection tests |
+| `test_json_io.py` | 2 | JSON I/O atomic write and read tests |
 | **Total** | **6,286** | **Collected via pytest --collect-only** |
 
 ## Running Tests

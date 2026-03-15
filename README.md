@@ -336,6 +336,7 @@ cja_auto_sdr "Production Analytics"
 | [Data View Comparison](docs/DIFF_COMPARISON.md) | Compare Data Views, snapshots, CI/CD integration |
 | [Git Integration](docs/GIT_INTEGRATION.md) | Version-controlled snapshots, audit trails, team collaboration |
 | [Org-Wide Analysis](docs/ORG_WIDE_ANALYSIS.md) | Cross-data view component analysis, similarity detection, governance |
+| [Agent Automation](docs/AGENT_AUTOMATION.md) | CI/CD pipelines, AI agent integration, scheduling patterns |
 | [Testing](tests/README.md) | Running and writing tests |
 
 ## Requirements
