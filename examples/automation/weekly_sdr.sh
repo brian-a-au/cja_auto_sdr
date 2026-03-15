@@ -45,23 +45,6 @@ else
         printf -v "$exit_var_name" '%s' "$exit_code"
     }
 
-    capture_command_output() {
-        local exit_var_name="$1"
-        local output_var_name="$2"
-        shift 2
-
-        local exit_code=0
-        local output=""
-        if output="$("$@")"; then
-            exit_code=0
-        else
-            exit_code=$?
-        fi
-
-        printf -v "$exit_var_name" '%s' "$exit_code"
-        printf -v "$output_var_name" '%s' "$output"
-    }
-
     exit_on_signal_exit() {
         local code="${1:-0}"
         shift
@@ -188,4 +171,4 @@ for DV_ID in $DATA_VIEWS; do
 done
 
 echo "$LOG_PREFIX Weekly SDR generation complete (exit: $OVERALL_EXIT)"
-exit $OVERALL_EXIT
+exit "$OVERALL_EXIT"

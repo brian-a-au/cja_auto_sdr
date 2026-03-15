@@ -103,7 +103,7 @@ if [[ ! -f "$BASELINE" ]]; then
             echo "$LOG_PREFIX ERROR: Initial baseline creation failed (exit $SNAPSHOT_EXIT)" >&2
             ;;
     esac
-    exit $SNAPSHOT_EXIT
+    exit "$SNAPSHOT_EXIT"
 fi
 
 # Run drift detection while preserving non-zero exits for policy handling.
@@ -169,11 +169,11 @@ elif [[ $DIFF_EXIT -eq 0 ]]; then
             echo "$LOG_PREFIX ERROR: Baseline refresh failed (exit $SNAPSHOT_EXIT)" >&2
             ;;
     esac
-    exit $SNAPSHOT_EXIT
+    exit "$SNAPSHOT_EXIT"
 else
     echo "$LOG_PREFIX ERROR: Diff comparison failed; baseline preserved" >&2
 fi
 
 # Propagate the drift exit code so cron/monitoring can detect policy violations.
 # 0 = no drift, 1 = diff failed, 2 = policy threshold exceeded, 3 = warning threshold exceeded.
-exit $DIFF_EXIT
+exit "$DIFF_EXIT"
