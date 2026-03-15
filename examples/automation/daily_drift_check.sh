@@ -21,12 +21,15 @@ if [[ -z "${DATA_VIEW_ID:-}" ]]; then
     exit 1
 fi
 
-# Load credentials
-if [[ -f "$PROJECT_ROOT/.env" ]]; then
-    set -a
-    # shellcheck source=/dev/null
-    source "$PROJECT_ROOT/.env"
-    set +a
+# Prefer credentials injected by the caller/CI. Fall back to a repo-local
+# .env only for workstation-style usage of this example script.
+if [[ -z "${ORG_ID:-}" || -z "${CLIENT_ID:-}" || -z "${SECRET:-}" || -z "${SCOPES:-}" ]]; then
+    if [[ -f "$PROJECT_ROOT/.env" ]]; then
+        set -a
+        # shellcheck source=/dev/null
+        source "$PROJECT_ROOT/.env"
+        set +a
+    fi
 fi
 
 cd "$PROJECT_ROOT"

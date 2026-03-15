@@ -5,7 +5,8 @@
 #   0 2 * * 0 /path/to/weekly_sdr.sh >> /var/log/cja_sdr/weekly.log 2>&1
 #
 # Prerequisites:
-#   - .env file with ORG_ID, CLIENT_ID, SECRET, SCOPES
+#   - Credentials injected via environment variables or secret manager
+#   - Optional local-only fallback: .env with ORG_ID, CLIENT_ID, SECRET, SCOPES
 #   - uv installed and cja_auto_sdr synced
 #
 # Exit codes follow cja_auto_sdr conventions:
@@ -29,12 +30,15 @@ update_overall_exit() {
     esac
 }
 
-# Load credentials
-if [[ -f "$PROJECT_ROOT/.env" ]]; then
-    set -a
-    # shellcheck source=/dev/null
-    source "$PROJECT_ROOT/.env"
-    set +a
+# Prefer credentials injected by the caller/CI. Fall back to a repo-local
+# .env only for workstation-style usage of this example script.
+if [[ -z "${ORG_ID:-}" || -z "${CLIENT_ID:-}" || -z "${SECRET:-}" || -z "${SCOPES:-}" ]]; then
+    if [[ -f "$PROJECT_ROOT/.env" ]]; then
+        set -a
+        # shellcheck source=/dev/null
+        source "$PROJECT_ROOT/.env"
+        set +a
+    fi
 fi
 
 cd "$PROJECT_ROOT"

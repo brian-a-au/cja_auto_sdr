@@ -18,6 +18,19 @@ import subprocess
 import sys
 from pathlib import Path
 
+from cja_auto_sdr.core.exit_codes import (
+    INTERRUPT_EXIT_CODE as _INTERRUPT_EXIT_CODE,
+)
+from cja_auto_sdr.core.exit_codes import (
+    combine_wrapper_exit_codes as _combine_exit_codes,
+)
+from cja_auto_sdr.core.exit_codes import (
+    is_signal_exit_code as _is_signal_exit_code,
+)
+from cja_auto_sdr.core.exit_codes import (
+    normalize_subprocess_exit_code as _normalize_exit_code,
+)
+
 # Resolve the repository root once so every subprocess invocation can point uv
 # at the checked-out project, even when callers run this wrapper from elsewhere.
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -29,9 +42,6 @@ BASE_CMD = ["uv", "run", "--project", str(PROJECT_ROOT), "cja_auto_sdr"]
 # Keep the default timeout conservative for CI and agent use, but allow callers
 # to override it for especially large organizations or slow API responses.
 DEFAULT_TIMEOUT = 300  # 5 minutes; override per-call for long-running commands
-_SIGNAL_EXIT_BASE = 128
-_MAX_SIGNAL_NUMBER = 64
-_INTERRUPT_EXIT_CODE = _SIGNAL_EXIT_BASE + 2
 
 
 class OrchestratorError(RuntimeError):
@@ -55,20 +65,6 @@ class _ArgumentParser(argparse.ArgumentParser):
 
     def error(self, message: str) -> None:
         raise OrchestratorArgumentError(message)
-
-
-def _normalize_exit_code(code: int) -> int:
-    """Translate subprocess signal return codes into shell-style exit codes."""
-    # subprocess reports signal exits as negative numbers. Converting to
-    # 128+signal keeps the wrapper aligned with the documented CLI contract.
-    if code < 0:
-        return _SIGNAL_EXIT_BASE + abs(code)
-    return code
-
-
-def _is_signal_exit_code(code: int) -> bool:
-    """Return True when an exit code represents signal termination."""
-    return _SIGNAL_EXIT_BASE < code <= (_SIGNAL_EXIT_BASE + _MAX_SIGNAL_NUMBER)
 
 
 def _interrupted_result(command: list[str], *, message: str) -> dict:
@@ -310,32 +306,6 @@ def _resolve_data_views(
         return env_data_views, "env"
 
     return [], "none"
-
-
-def _combine_exit_codes(current: int, new_code: int) -> int:
-    """Preserve policy/warn exit codes while failing closed on hard errors."""
-    current = _normalize_exit_code(current)
-    new_code = _normalize_exit_code(new_code)
-
-    # Signal-style exits should dominate the aggregate so cancellations are not
-    # rewritten into generic failures during batch runs.
-    if _is_signal_exit_code(current):
-        return current
-    if _is_signal_exit_code(new_code):
-        return new_code
-
-    # After cancellation handling, fail closed on anything outside the wrapper's
-    # documented contract and then preserve the highest-severity non-zero state.
-    if new_code not in (0, 1, 2, 3):
-        new_code = 1
-
-    if current == 1 or new_code == 1:
-        return 1
-    if current == 2 or new_code == 2:
-        return 2
-    if current == 3 or new_code == 3:
-        return 3
-    return 0
 
 
 def _emit_error(message: str, *, stage: str, result: dict | None = None) -> None:

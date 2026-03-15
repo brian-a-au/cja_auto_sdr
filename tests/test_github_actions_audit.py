@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from types import SimpleNamespace
 
 import pytest
@@ -127,3 +128,21 @@ def test_stage_manifest_stages_only_manifest_entries(tmp_path):
 
     assert exit_code == 0
     assert git_calls == [["git", "add", "--", str(snapshot_a), str(snapshot_b)]]
+
+
+def test_run_cja_command_returns_bounded_timeout_error(monkeypatch):
+    calls = []
+
+    def _fake_run(command, **kwargs):
+        calls.append((command, kwargs["timeout"]))
+        raise subprocess.TimeoutExpired(command, kwargs["timeout"])
+
+    monkeypatch.setattr(github_actions_audit.subprocess, "run", _fake_run)
+
+    result = github_actions_audit.run_cja_command(["--validate-config"], timeout=12)
+
+    assert result.exit_code == 1
+    assert result.stderr == "Command timed out after 12s"
+    assert result.command == ("uv", "run", "cja_auto_sdr", "--validate-config")
+    assert result.interrupted is False
+    assert calls == [(["uv", "run", "cja_auto_sdr", "--validate-config"], 12)]

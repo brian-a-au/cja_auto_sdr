@@ -14,12 +14,22 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from cja_auto_sdr.core.exit_codes import (
+    INTERRUPT_EXIT_CODE as _INTERRUPT_EXIT_CODE,
+)
+from cja_auto_sdr.core.exit_codes import (
+    combine_wrapper_exit_codes as _combine_exit_codes,
+)
+from cja_auto_sdr.core.exit_codes import (
+    is_signal_exit_code as _is_signal_exit_code,
+)
+from cja_auto_sdr.core.exit_codes import (
+    normalize_subprocess_exit_code as _normalize_exit_code,
+)
 from cja_auto_sdr.core.json_io import write_json_atomic
 
 _BASE_CMD = ["uv", "run", "cja_auto_sdr"]
-_SIGNAL_EXIT_BASE = 128
-_MAX_SIGNAL_NUMBER = 64
-_INTERRUPT_EXIT_CODE = _SIGNAL_EXIT_BASE + 2
+DEFAULT_TIMEOUT = 300
 _MANIFEST_KEY = "successful_snapshots"
 
 
@@ -41,37 +51,6 @@ class AuditOutcome:
     successful_snapshots: list[str]
 
 
-def _normalize_exit_code(code: int) -> int:
-    if code < 0:
-        return _SIGNAL_EXIT_BASE + abs(code)
-    return code
-
-
-def _is_signal_exit_code(code: int) -> bool:
-    return _SIGNAL_EXIT_BASE < code <= (_SIGNAL_EXIT_BASE + _MAX_SIGNAL_NUMBER)
-
-
-def _combine_exit_codes(current: int, new_code: int) -> int:
-    current = _normalize_exit_code(current)
-    new_code = _normalize_exit_code(new_code)
-
-    if _is_signal_exit_code(current):
-        return current
-    if _is_signal_exit_code(new_code):
-        return new_code
-
-    if new_code not in (0, 1, 2, 3):
-        new_code = 1
-
-    if current == 1 or new_code == 1:
-        return 1
-    if current == 2 or new_code == 2:
-        return 2
-    if current == 3 or new_code == 3:
-        return 3
-    return 0
-
-
 def _emit_annotation(level: str, title: str, message: str) -> None:
     print(f"::{level} title={title}::{message}")
 
@@ -89,10 +68,17 @@ def run_cja_command(
     *,
     forward_stdout: bool = True,
     forward_stderr: bool = True,
+    timeout: int = DEFAULT_TIMEOUT,
 ) -> CommandResult:
     command = [*_BASE_CMD, *args]
     try:
-        result = subprocess.run(command, capture_output=True, text=True, check=False)
+        result = subprocess.run(command, capture_output=True, text=True, check=False, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return CommandResult(
+            exit_code=1,
+            stderr=f"Command timed out after {timeout}s",
+            command=tuple(command),
+        )
     except KeyboardInterrupt:
         return CommandResult(
             exit_code=_INTERRUPT_EXIT_CODE,
