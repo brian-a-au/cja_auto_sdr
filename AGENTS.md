@@ -179,6 +179,7 @@ Exit code 1 takes precedence over 2 if both conditions apply.
   {"error": "Configuration error: Missing credentials", "error_type": "configuration_error"}
   ```
 - `--run-summary-json -` writes a structured run summary to stdout regardless of output format.
+- Wrapper note: `scripts/orchestrator.py` is a higher-level JSON wrapper and always emits its own success/error envelope to stdout so callers can parse one stream. The stderr contract above applies to direct `cja_auto_sdr` CLI invocations.
 
 ---
 

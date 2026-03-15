@@ -144,6 +144,7 @@ See `scripts/orchestrator.py` for a Python orchestration script that:
 - Uses explicit IDs, `DATA_VIEWS`, or `--discover` for data view selection
 - Anchors `uv` project resolution to this repository without changing caller-relative file semantics
 - Emits a consolidated JSON report with aggregated exit codes
+- Uses a per-command timeout of 300 seconds by default; pass `--timeout SECONDS` for larger orgs or slower environments
 
 ---
 
@@ -194,6 +195,13 @@ If your agent framework requires a tool schema, use this minimal definition:
 ### Orchestrator
 
 `scripts/orchestrator.py` is the recommended starting point for agent-driven batch workflows when you want a thin JSON-emitting wrapper around repeated CLI runs.
+
+```bash
+# Discover data views, allow 15 minutes per wrapped CLI command
+uv run python scripts/orchestrator.py --discover --timeout 900
+```
+
+Unlike the direct CLI, the orchestrator writes both success payloads and its own machine-readable error envelopes to stdout so callers can consume a single JSON stream per invocation. Wrapped child-command stdout/stderr are preserved inside the JSON result objects.
 
 ---
 
