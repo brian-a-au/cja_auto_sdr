@@ -74,20 +74,24 @@ except Exception:
 
     # Post to Slack if webhook is configured
     if [[ -n "${SLACK_WEBHOOK:-}" ]]; then
-        SEVERITY="warning"
-        [[ $DIFF_EXIT -eq 2 ]] && SEVERITY="danger"
+        if ! command -v jq >/dev/null 2>&1; then
+            echo "$LOG_PREFIX WARNING: jq not installed; skipping Slack notification" >&2
+        else
+            SEVERITY="warning"
+            [[ $DIFF_EXIT -eq 2 ]] && SEVERITY="danger"
 
-        PAYLOAD=$(jq -n \
-            --arg color "$SEVERITY" \
-            --arg title "CJA Data View Drift Detected" \
-            --arg text "Data view: $DATA_VIEW_ID\n$SUMMARY" \
-            --arg footer "cja_auto_sdr drift check" \
-            --argjson ts "$(date +%s)" \
-            '{attachments: [{color: $color, title: $title, text: $text, footer: $footer, ts: $ts}]}')
-        curl -s -X POST "$SLACK_WEBHOOK" \
-            -H 'Content-Type: application/json' \
-            -d "$PAYLOAD" > /dev/null
-        echo "$LOG_PREFIX Slack notification sent"
+            PAYLOAD=$(jq -n \
+                --arg color "$SEVERITY" \
+                --arg title "CJA Data View Drift Detected" \
+                --arg text "Data view: $DATA_VIEW_ID\n$SUMMARY" \
+                --arg footer "cja_auto_sdr drift check" \
+                --argjson ts "$(date +%s)" \
+                '{attachments: [{color: $color, title: $title, text: $text, footer: $footer, ts: $ts}]}')
+            curl -s -X POST "$SLACK_WEBHOOK" \
+                -H 'Content-Type: application/json' \
+                -d "$PAYLOAD" > /dev/null
+            echo "$LOG_PREFIX Slack notification sent"
+        fi
     fi
 elif [[ $DIFF_EXIT -eq 0 ]]; then
     # Only update baseline when no drift detected

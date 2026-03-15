@@ -37,12 +37,15 @@ update_overall_exit() {
     esac
 }
 
-# Load credentials
-if [[ -f "$PROJECT_ROOT/.env" ]]; then
-    set -a
-    # shellcheck source=/dev/null
-    source "$PROJECT_ROOT/.env"
-    set +a
+# Prefer credentials injected by the caller/CI. Fall back to a repo-local
+# .env only for workstation-style usage of this example script.
+if [[ -z "${ORG_ID:-}" || -z "${CLIENT_ID:-}" || -z "${SECRET:-}" || -z "${SCOPES:-}" ]]; then
+    if [[ -f "$PROJECT_ROOT/.env" ]]; then
+        set -a
+        # shellcheck source=/dev/null
+        source "$PROJECT_ROOT/.env"
+        set +a
+    fi
 fi
 
 cd "$PROJECT_ROOT"
@@ -134,20 +137,24 @@ echo "$LOG_PREFIX === Quarterly maintenance complete (exit: $OVERALL_EXIT) ==="
 
 # Notify on completion
 if [[ -n "${SLACK_WEBHOOK:-}" ]]; then
-    COLOR="good"
-    [[ $OVERALL_EXIT -ne 0 ]] && COLOR="warning"
+    if ! command -v jq >/dev/null 2>&1; then
+        echo "$LOG_PREFIX WARNING: jq not installed; skipping Slack notification" >&2
+    else
+        COLOR="good"
+        [[ $OVERALL_EXIT -ne 0 ]] && COLOR="warning"
 
-    PAYLOAD=$(jq -n \
-        --arg color "$COLOR" \
-        --arg title "$QUARTER Quarterly Maintenance Complete" \
-        --arg text "Exit code: $OVERALL_EXIT\nReports: $QUARTER_DIR" \
-        --arg footer "cja_auto_sdr quarterly maintenance" \
-        --argjson ts "$(date +%s)" \
-        '{attachments: [{color: $color, title: $title, text: $text, footer: $footer, ts: $ts}]}')
-    curl -s -X POST "$SLACK_WEBHOOK" \
-        -H 'Content-Type: application/json' \
-        -d "$PAYLOAD" > /dev/null
-    echo "$LOG_PREFIX Slack notification sent"
+        PAYLOAD=$(jq -n \
+            --arg color "$COLOR" \
+            --arg title "$QUARTER Quarterly Maintenance Complete" \
+            --arg text "Exit code: $OVERALL_EXIT\nReports: $QUARTER_DIR" \
+            --arg footer "cja_auto_sdr quarterly maintenance" \
+            --argjson ts "$(date +%s)" \
+            '{attachments: [{color: $color, title: $title, text: $text, footer: $footer, ts: $ts}]}')
+        curl -s -X POST "$SLACK_WEBHOOK" \
+            -H 'Content-Type: application/json' \
+            -d "$PAYLOAD" > /dev/null
+        echo "$LOG_PREFIX Slack notification sent"
+    fi
 fi
 
 exit $OVERALL_EXIT

@@ -28,7 +28,10 @@ from cja_auto_sdr.core.exit_codes import (
 )
 from cja_auto_sdr.core.json_io import write_json_atomic
 
-_BASE_CMD = ["uv", "run", "cja_auto_sdr"]
+# Match the orchestrator's explicit project anchoring so this helper resolves
+# the checked-out package predictably even when invoked from another cwd.
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+_BASE_CMD = ["uv", "run", "--project", str(PROJECT_ROOT), "cja_auto_sdr"]
 DEFAULT_TIMEOUT = 300
 _MANIFEST_KEY = "successful_snapshots"
 

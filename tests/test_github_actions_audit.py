@@ -13,7 +13,7 @@ def _command_result(exit_code: int, *, stdout: str = "", stderr: str = "") -> gi
         exit_code=exit_code,
         stdout=stdout,
         stderr=stderr,
-        command=("uv", "run", "cja_auto_sdr"),
+        command=("uv", "run", "--project", str(github_actions_audit.PROJECT_ROOT), "cja_auto_sdr"),
         interrupted=github_actions_audit._is_signal_exit_code(exit_code),
     )
 
@@ -143,6 +143,25 @@ def test_run_cja_command_returns_bounded_timeout_error(monkeypatch):
 
     assert result.exit_code == 1
     assert result.stderr == "Command timed out after 12s"
-    assert result.command == ("uv", "run", "cja_auto_sdr", "--validate-config")
+    assert result.command == (
+        "uv",
+        "run",
+        "--project",
+        str(github_actions_audit.PROJECT_ROOT),
+        "cja_auto_sdr",
+        "--validate-config",
+    )
     assert result.interrupted is False
-    assert calls == [(["uv", "run", "cja_auto_sdr", "--validate-config"], 12)]
+    assert calls == [
+        (
+            [
+                "uv",
+                "run",
+                "--project",
+                str(github_actions_audit.PROJECT_ROOT),
+                "cja_auto_sdr",
+                "--validate-config",
+            ],
+            12,
+        )
+    ]
