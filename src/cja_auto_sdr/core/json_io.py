@@ -5,6 +5,7 @@ import errno
 import json
 import os
 import uuid
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -48,7 +49,7 @@ def write_json_atomic(
     indent: int | None = 2,
     ensure_ascii: bool = True,
     sort_keys: bool = False,
-    default: Any = None,
+    default: Callable[[Any], Any] | None = None,
     file_mode: int | None = None,
     trailing_newline: bool = False,
 ) -> Path:

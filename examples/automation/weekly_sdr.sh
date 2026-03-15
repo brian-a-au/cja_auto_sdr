@@ -19,14 +19,80 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 REPORT_DIR="${REPORT_DIR:-$PROJECT_ROOT/reports}"
 SNAPSHOT_DIR="${SNAPSHOT_DIR:-$PROJECT_ROOT/snapshots}"
 LOG_PREFIX="[$(date '+%Y-%m-%d %H:%M:%S')]"
+# Keep the example self-contained when copied as a single cron script.
+if [[ -f "$SCRIPT_DIR/_common.sh" ]]; then
+    # shellcheck source=/dev/null
+    source "$SCRIPT_DIR/_common.sh"
+else
+    is_signal_exit_code() {
+        local code="${1:-0}"
+
+        [[ "$code" =~ ^[0-9]+$ ]] || return 1
+        (( code > 128 && code <= 192 ))
+    }
+
+    capture_command_exit() {
+        local exit_var_name="$1"
+        shift
+
+        local exit_code=0
+        if "$@"; then
+            exit_code=0
+        else
+            exit_code=$?
+        fi
+
+        printf -v "$exit_var_name" '%s' "$exit_code"
+    }
+
+    capture_command_output() {
+        local exit_var_name="$1"
+        local output_var_name="$2"
+        shift 2
+
+        local exit_code=0
+        local output=""
+        if output="$("$@")"; then
+            exit_code=0
+        else
+            exit_code=$?
+        fi
+
+        printf -v "$exit_var_name" '%s' "$exit_code"
+        printf -v "$output_var_name" '%s' "$output"
+    }
+
+    exit_on_signal_exit() {
+        local code="${1:-0}"
+        shift
+
+        if is_signal_exit_code "$code"; then
+            if [[ $# -gt 0 ]]; then
+                echo "$* (exit $code)" >&2
+            fi
+            exit "$code"
+        fi
+    }
+fi
 
 update_overall_exit() {
     local code="${1:-0}"
 
+    if is_signal_exit_code "$OVERALL_EXIT"; then
+        return
+    fi
+
+    if is_signal_exit_code "$code"; then
+        OVERALL_EXIT="$code"
+        return
+    fi
+
     case "$code" in
+        0) ;;
         1) OVERALL_EXIT=1 ;;
         2) [[ $OVERALL_EXIT -ne 1 ]] && OVERALL_EXIT=2 ;;
         3) [[ $OVERALL_EXIT -eq 0 ]] && OVERALL_EXIT=3 ;;
+        *) OVERALL_EXIT=1 ;;
     esac
 }
 
@@ -67,9 +133,9 @@ OVERALL_EXIT=0
 for DV_ID in $DATA_VIEWS; do
     echo "$LOG_PREFIX Processing data view: $DV_ID"
 
-    # Generate SDR (capture exit code — set -e would abort on non-zero)
-    SDR_EXIT=0
-    uv run cja_auto_sdr "$DV_ID" --format excel --output-dir "$REPORT_DIR" || SDR_EXIT=$?
+    # Capture non-zero exits without suppressing shell-style signal termination.
+    capture_command_exit SDR_EXIT uv run cja_auto_sdr "$DV_ID" --format excel --output-dir "$REPORT_DIR"
+    exit_on_signal_exit "$SDR_EXIT" "$LOG_PREFIX  ERROR: SDR generation interrupted"
 
     case $SDR_EXIT in
         0) echo "$LOG_PREFIX  SDR generated successfully" ;;
@@ -83,9 +149,14 @@ for DV_ID in $DATA_VIEWS; do
     DRIFT_REPORT="$REPORT_DIR/${DV_ID}_drift.json"
     SHOULD_UPDATE_BASELINE=1
     if [[ -f "$BASELINE" ]]; then
-        DIFF_EXIT=0
-        uv run cja_auto_sdr "$DV_ID" --diff-snapshot "$BASELINE" --format json --output - \
-            > "$DRIFT_REPORT" 2>/dev/null || DIFF_EXIT=$?
+        capture_command_exit DIFF_EXIT uv run cja_auto_sdr "$DV_ID" --diff-snapshot "$BASELINE" --format json --output - \
+            > "$DRIFT_REPORT" 2>/dev/null
+
+        if is_signal_exit_code "$DIFF_EXIT"; then
+            echo "$LOG_PREFIX  Diff interrupted (exit $DIFF_EXIT)" >&2
+            rm -f "$DRIFT_REPORT"
+            exit "$DIFF_EXIT"
+        fi
 
         case $DIFF_EXIT in
             0) echo "$LOG_PREFIX  No drift detected" ;;
@@ -102,8 +173,15 @@ for DV_ID in $DATA_VIEWS; do
 
     if [[ $SHOULD_UPDATE_BASELINE -eq 1 ]]; then
         # Update baseline snapshot (data view is positional, --snapshot takes FILE)
-        uv run cja_auto_sdr "$DV_ID" --snapshot "$SNAPSHOT_DIR/${DV_ID}_baseline.json"
-        echo "$LOG_PREFIX  Baseline snapshot updated"
+        capture_command_exit SNAPSHOT_EXIT uv run cja_auto_sdr "$DV_ID" --snapshot "$SNAPSHOT_DIR/${DV_ID}_baseline.json"
+        exit_on_signal_exit "$SNAPSHOT_EXIT" "$LOG_PREFIX  Baseline snapshot interrupted"
+        case $SNAPSHOT_EXIT in
+            0) echo "$LOG_PREFIX  Baseline snapshot updated" ;;
+            *)
+                echo "$LOG_PREFIX  Baseline snapshot failed (exit $SNAPSHOT_EXIT); baseline preserved" >&2
+                update_overall_exit 1
+                ;;
+        esac
     else
         echo "$LOG_PREFIX  Baseline preserved due to diff failure"
     fi

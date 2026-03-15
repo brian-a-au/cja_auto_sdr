@@ -66,6 +66,11 @@ def _write_github_output(name: str, value: str) -> None:
         f.write(f"{name}={value}\n")
 
 
+def _should_defer_audit_exit_to_github_outputs() -> bool:
+    """Keep the audit step green only when GitHub output plumbing is active."""
+    return bool(os.environ.get("GITHUB_OUTPUT", "").strip())
+
+
 def run_cja_command(
     args: Sequence[str],
     *,
@@ -397,7 +402,9 @@ def main(argv: list[str] | None = None) -> int:
                 indent=2,
             )
         )
-        return 0
+        if _should_defer_audit_exit_to_github_outputs():
+            return 0
+        return outcome.audit_exit_code
 
     try:
         return stage_manifest_snapshots(args.manifest)

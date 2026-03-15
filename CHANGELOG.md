@@ -23,6 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Ruff Config** (`pyproject.toml`): Added per-file-ignores for `scripts/orchestrator.py` and `examples/` (INP001, T201)
 - **README.md**: Added Agent & Automation feature category
 - **USE_CASES.md**: Added cross-reference to Agent Automation Guide
+- **Atomic JSON writes** (`core/json_io.py`, snapshot/profile writers): now reject existing symlink destinations before replacement and fsync parent directories after rename for stronger local durability guarantees.
+- **Automation examples** (`scripts/github_actions_audit.py`, `examples/automation/*.sh`, `examples/github-actions/cja-sdr-audit.yml`): standalone audit runs now return the aggregate audit exit code outside GitHub Actions, shell examples preserve baselines on snapshot refresh failures instead of aborting mid-run, and the example workflow now matches CI's `setup-uv@v5` usage.
 
 ## [3.4.1] - 2026-03-13
 

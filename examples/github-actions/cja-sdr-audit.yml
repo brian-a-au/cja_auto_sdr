@@ -35,9 +35,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: astral-sh/setup-uv@v4
+      - uses: astral-sh/setup-uv@v5
         with:
-          version: 'latest'
+          python-version: "3.14"
 
       - name: Install dependencies
         run: uv sync

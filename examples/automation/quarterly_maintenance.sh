@@ -26,14 +26,80 @@ KEEP_LAST="${KEEP_LAST:-4}"
 QUARTER="Q$(( ($(date +%-m) - 1) / 3 + 1 ))-$(date +%Y)"
 QUARTER_DIR="$REPORT_DIR/$QUARTER"
 LOG_PREFIX="[$(date '+%Y-%m-%d %H:%M:%S')]"
+# Keep the example self-contained when copied as a single cron script.
+if [[ -f "$SCRIPT_DIR/_common.sh" ]]; then
+    # shellcheck source=/dev/null
+    source "$SCRIPT_DIR/_common.sh"
+else
+    is_signal_exit_code() {
+        local code="${1:-0}"
+
+        [[ "$code" =~ ^[0-9]+$ ]] || return 1
+        (( code > 128 && code <= 192 ))
+    }
+
+    capture_command_exit() {
+        local exit_var_name="$1"
+        shift
+
+        local exit_code=0
+        if "$@"; then
+            exit_code=0
+        else
+            exit_code=$?
+        fi
+
+        printf -v "$exit_var_name" '%s' "$exit_code"
+    }
+
+    capture_command_output() {
+        local exit_var_name="$1"
+        local output_var_name="$2"
+        shift 2
+
+        local exit_code=0
+        local output=""
+        if output="$("$@")"; then
+            exit_code=0
+        else
+            exit_code=$?
+        fi
+
+        printf -v "$exit_var_name" '%s' "$exit_code"
+        printf -v "$output_var_name" '%s' "$output"
+    }
+
+    exit_on_signal_exit() {
+        local code="${1:-0}"
+        shift
+
+        if is_signal_exit_code "$code"; then
+            if [[ $# -gt 0 ]]; then
+                echo "$* (exit $code)" >&2
+            fi
+            exit "$code"
+        fi
+    }
+fi
 
 update_overall_exit() {
     local code="${1:-0}"
 
+    if is_signal_exit_code "$OVERALL_EXIT"; then
+        return
+    fi
+
+    if is_signal_exit_code "$code"; then
+        OVERALL_EXIT="$code"
+        return
+    fi
+
     case "$code" in
+        0) ;;
         1) OVERALL_EXIT=1 ;;
         2) [[ $OVERALL_EXIT -ne 1 ]] && OVERALL_EXIT=2 ;;
         3) [[ $OVERALL_EXIT -eq 0 ]] && OVERALL_EXIT=3 ;;
+        *) OVERALL_EXIT=1 ;;
     esac
 }
 
@@ -74,25 +140,44 @@ echo "$LOG_PREFIX Phase 1: Full SDR regeneration"
 
 for DV_ID in $DATA_VIEWS; do
     echo "$LOG_PREFIX  Generating all formats for $DV_ID"
-    SDR_EXIT=0
-    uv run cja_auto_sdr "$DV_ID" --format all --output-dir "$QUARTER_DIR" || SDR_EXIT=$?
+    capture_command_exit SDR_EXIT uv run cja_auto_sdr "$DV_ID" --format all --output-dir "$QUARTER_DIR"
+    exit_on_signal_exit "$SDR_EXIT" "$LOG_PREFIX  ERROR: SDR generation interrupted for $DV_ID"
+    SHOULD_UPDATE_BASELINE=1
 
     case $SDR_EXIT in
         0) echo "$LOG_PREFIX  OK" ;;
         2) echo "$LOG_PREFIX  WARNING: Quality threshold exceeded for $DV_ID"; update_overall_exit 2 ;;
-        *) echo "$LOG_PREFIX  ERROR: SDR generation failed for $DV_ID (exit $SDR_EXIT)" >&2; update_overall_exit 1 ;;
+        *)
+            echo "$LOG_PREFIX  ERROR: SDR generation failed for $DV_ID (exit $SDR_EXIT)" >&2
+            update_overall_exit 1
+            SHOULD_UPDATE_BASELINE=0
+            ;;
     esac
 
-    # Update baseline snapshot
-    uv run cja_auto_sdr "$DV_ID" --snapshot "$SNAPSHOT_DIR/${DV_ID}_baseline.json"
+    if [[ $SHOULD_UPDATE_BASELINE -eq 1 ]]; then
+        capture_command_exit SNAPSHOT_EXIT uv run cja_auto_sdr "$DV_ID" --snapshot "$SNAPSHOT_DIR/${DV_ID}_baseline.json"
+        exit_on_signal_exit "$SNAPSHOT_EXIT" "$LOG_PREFIX  Baseline snapshot interrupted for $DV_ID"
+        case $SNAPSHOT_EXIT in
+            0) echo "$LOG_PREFIX  Baseline snapshot updated" ;;
+            *)
+                echo "$LOG_PREFIX  ERROR: Baseline snapshot failed for $DV_ID (exit $SNAPSHOT_EXIT)" >&2
+                update_overall_exit 1
+                ;;
+        esac
+    else
+        echo "$LOG_PREFIX  Baseline preserved due to SDR generation failure"
+    fi
 done
 
 # --- Phase 2: Cross-org governance review ---
 echo "$LOG_PREFIX Phase 2: Cross-org governance review"
 
-GOV_EXIT=0
-uv run cja_auto_sdr --org-report --cluster --force-similarity \
-    --format json --output - > "$QUARTER_DIR/org_governance.json" 2>/dev/null || GOV_EXIT=$?
+capture_command_exit GOV_EXIT uv run cja_auto_sdr --org-report --cluster --force-similarity \
+    --format json --output - > "$QUARTER_DIR/org_governance.json" 2>/dev/null
+if is_signal_exit_code "$GOV_EXIT"; then
+    echo "$LOG_PREFIX  ERROR: Governance review interrupted (exit $GOV_EXIT)" >&2
+    exit "$GOV_EXIT"
+fi
 
 case $GOV_EXIT in
     0) echo "$LOG_PREFIX  Governance review: PASS" ;;
@@ -101,10 +186,10 @@ case $GOV_EXIT in
 esac
 
 # Also generate human-readable governance report
-GOV_MD_EXIT=0
-uv run cja_auto_sdr --org-report --cluster --force-similarity \
-    --format markdown --output "$QUARTER_DIR/org_governance.md" || GOV_MD_EXIT=$?
+capture_command_exit GOV_MD_EXIT uv run cja_auto_sdr --org-report --cluster --force-similarity \
+    --format markdown --output "$QUARTER_DIR/org_governance.md"
 if [[ $GOV_MD_EXIT -ne 0 ]]; then
+    exit_on_signal_exit "$GOV_MD_EXIT" "$LOG_PREFIX  ERROR: Governance markdown export interrupted"
     echo "$LOG_PREFIX  ERROR: Governance markdown export failed (exit $GOV_MD_EXIT)" >&2
     update_overall_exit 1
 fi
@@ -112,8 +197,25 @@ fi
 # --- Phase 3: Snapshot pruning ---
 echo "$LOG_PREFIX Phase 3: Snapshot pruning (keeping last $KEEP_LAST)"
 
-uv run cja_auto_sdr --prune-snapshots --keep-last "$KEEP_LAST" --snapshot-dir "$SNAPSHOT_DIR" || true
-uv run cja_auto_sdr --prune-org-report-snapshots --org-report-keep-last "$KEEP_LAST" || true
+capture_command_exit PRUNE_EXIT uv run cja_auto_sdr --prune-snapshots --keep-last "$KEEP_LAST" --snapshot-dir "$SNAPSHOT_DIR"
+case $PRUNE_EXIT in
+    0) ;;
+    *)
+        exit_on_signal_exit "$PRUNE_EXIT" "$LOG_PREFIX  ERROR: Snapshot pruning interrupted"
+        echo "$LOG_PREFIX  ERROR: Snapshot pruning failed (exit $PRUNE_EXIT)" >&2
+        update_overall_exit 1
+        ;;
+esac
+
+capture_command_exit ORG_PRUNE_EXIT uv run cja_auto_sdr --prune-org-report-snapshots --org-report-keep-last "$KEEP_LAST"
+case $ORG_PRUNE_EXIT in
+    0) ;;
+    *)
+        exit_on_signal_exit "$ORG_PRUNE_EXIT" "$LOG_PREFIX  ERROR: Org-report snapshot pruning interrupted"
+        echo "$LOG_PREFIX  ERROR: Org-report snapshot pruning failed (exit $ORG_PRUNE_EXIT)" >&2
+        update_overall_exit 1
+        ;;
+esac
 
 echo "$LOG_PREFIX  Snapshots pruned"
 
@@ -125,9 +227,19 @@ mkdir -p "$COMPLIANCE_DIR"
 
 for DV_ID in $DATA_VIEWS; do
     # Excel + markdown for compliance binders
-    COMP_EXIT=0
-    uv run cja_auto_sdr "$DV_ID" --format reports --output-dir "$COMPLIANCE_DIR" || COMP_EXIT=$?
-    [[ $COMP_EXIT -ne 0 ]] && echo "$LOG_PREFIX  WARNING: Compliance export failed for $DV_ID" >&2
+    capture_command_exit COMP_EXIT uv run cja_auto_sdr "$DV_ID" --format reports --output-dir "$COMPLIANCE_DIR"
+    case $COMP_EXIT in
+        0) ;;
+        2)
+            echo "$LOG_PREFIX  WARNING: Compliance export exceeded quality threshold for $DV_ID" >&2
+            update_overall_exit 2
+            ;;
+        *)
+            exit_on_signal_exit "$COMP_EXIT" "$LOG_PREFIX  ERROR: Compliance export interrupted for $DV_ID"
+            echo "$LOG_PREFIX  WARNING: Compliance export failed for $DV_ID (exit $COMP_EXIT)" >&2
+            update_overall_exit 1
+            ;;
+    esac
 done
 
 echo "$LOG_PREFIX  Compliance docs exported to $COMPLIANCE_DIR"
@@ -150,10 +262,13 @@ if [[ -n "${SLACK_WEBHOOK:-}" ]]; then
             --arg footer "cja_auto_sdr quarterly maintenance" \
             --argjson ts "$(date +%s)" \
             '{attachments: [{color: $color, title: $title, text: $text, footer: $footer, ts: $ts}]}')
-        curl -s -X POST "$SLACK_WEBHOOK" \
+        if curl -fsS -X POST "$SLACK_WEBHOOK" \
             -H 'Content-Type: application/json' \
-            -d "$PAYLOAD" > /dev/null
-        echo "$LOG_PREFIX Slack notification sent"
+            -d "$PAYLOAD" > /dev/null; then
+            echo "$LOG_PREFIX Slack notification sent"
+        else
+            echo "$LOG_PREFIX WARNING: Slack notification failed" >&2
+        fi
     fi
 fi
 

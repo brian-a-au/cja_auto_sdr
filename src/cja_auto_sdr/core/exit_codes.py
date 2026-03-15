@@ -20,6 +20,7 @@ def normalize_subprocess_exit_code(code: int) -> int:
 
 def is_signal_exit_code(code: int) -> bool:
     """Return True when a code represents shell-style signal termination."""
+    # 128 is the shell's signal-exit base marker; actual signal exits start at 129.
     return SIGNAL_EXIT_BASE < code <= (SIGNAL_EXIT_BASE + MAX_SIGNAL_NUMBER)
 
 
@@ -33,6 +34,8 @@ def combine_wrapper_exit_codes(current: int, new_code: int) -> int:
     if is_signal_exit_code(new_code):
         return new_code
 
+    if current not in (0, 1, 2, 3):
+        current = 1
     if new_code not in (0, 1, 2, 3):
         new_code = 1
 

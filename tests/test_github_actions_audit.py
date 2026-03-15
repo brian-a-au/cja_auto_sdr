@@ -165,3 +165,50 @@ def test_run_cja_command_returns_bounded_timeout_error(monkeypatch):
             12,
         )
     ]
+
+
+def test_main_returns_audit_exit_code_outside_github_actions(monkeypatch, capsys):
+    monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
+    monkeypatch.setattr(
+        github_actions_audit,
+        "run_audit",
+        lambda **kwargs: github_actions_audit.AuditOutcome(
+            audit_exit_code=2,
+            publish_ready=False,
+            successful_snapshot_manifest="reports/manifest.json",
+            interrupted=False,
+            successful_snapshots=[],
+        ),
+    )
+
+    exit_code = github_actions_audit.main(["audit"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 2
+    assert payload["audit_exit_code"] == 2
+    assert payload["publish_ready"] is False
+
+
+def test_main_defers_audit_exit_code_when_github_output_is_present(monkeypatch, tmp_path, capsys):
+    github_output = tmp_path / "github_output.txt"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(github_output))
+    monkeypatch.setattr(
+        github_actions_audit,
+        "run_audit",
+        lambda **kwargs: github_actions_audit.AuditOutcome(
+            audit_exit_code=3,
+            publish_ready=True,
+            successful_snapshot_manifest="reports/manifest.json",
+            interrupted=False,
+            successful_snapshots=["snapshots/dv_1_baseline.json"],
+        ),
+    )
+
+    exit_code = github_actions_audit.main(["audit"])
+    payload = json.loads(capsys.readouterr().out)
+    github_output_text = github_output.read_text(encoding="utf-8")
+
+    assert exit_code == 0
+    assert payload["audit_exit_code"] == 3
+    assert "audit_exit_code=3\n" in github_output_text
+    assert "publish_ready=true\n" in github_output_text

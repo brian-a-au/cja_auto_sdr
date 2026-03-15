@@ -173,6 +173,7 @@ Exit code 1 takes precedence over 2 if both conditions apply.
 - Use `--format json --output -` for machine-parseable stdout.
 - Only `json` and `csv` formats are valid with `--output -` (stdout).
 - `--output -` implies `--quiet` (suppresses banner/progress to stderr).
+- For scheduled/agent runs, prefer retry settings such as `--max-retries 5 --retry-max-delay 60` to absorb transient Adobe API rate limits.
 - On failure, stderr receives a JSON error envelope:
   ```json
   {"error": "Configuration error: Missing credentials", "error_type": "configuration_error"}
