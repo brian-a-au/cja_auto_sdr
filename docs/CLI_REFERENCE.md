@@ -91,6 +91,7 @@ cja-auto-sdr [OPTIONS] DATA_VIEW_ID_OR_NAME [...]
 | `-h, --help` | Show help message and exit | - |
 | `-V, --version` | Show program version and exit | - |
 | `--exit-codes` | Display exit code reference and exit | - |
+| `--explain-exit-code CODE` | Print human-readable explanation for an integer exit code (meaning, common causes, automation guidance) and exit 0. When combined with `--run-summary-json -`, explanation goes to stderr so stdout stays machine-parseable | - |
 | `-q, --quiet` | Suppress output except errors | False |
 | `--open` | Open generated file(s) in default application after creation | False |
 | `--show-timings` | Display performance timing breakdown after processing | False |
@@ -143,6 +144,15 @@ cja-auto-sdr [OPTIONS] DATA_VIEW_ID_OR_NAME [...]
 > **Artifact compatibility:** When `output_files` is present, `output_file` remains the primary artifact for backward compatibility and is listed first in the emitted artifact order.
 >
 > **Run summary contract (v1.1):** `summary_version` is currently `1.1`. Consumers should treat unknown keys as additive/forward-compatible and only rely on documented stable fields.
+>
+> **Run summary `details` enrichment (additive):**
+>
+> The `details` object may contain the following additional blocks:
+>
+> - **`execution_settings`**: `batch_workers_requested`, `batch_workers_effective`, `api_auto_tune_requested`, `circuit_breaker_enabled`, `shared_cache_active`, `org_lock_stale_threshold_seconds`. Provides a snapshot of the effective runtime configuration.
+> - **`lock`** (org-report only): `backend`, `acquired`, `stale_threshold_seconds`, `contention_observed`, `lost_during_run`, `loss_reason`. Captures concurrency-lock lifecycle for observability.
+>
+> These keys are additive and do not change `summary_version`.
 >
 > **Failure code registry:** Stable `failure_code` values are documented in [FAILURE_CODES.md](FAILURE_CODES.md).
 
@@ -379,6 +389,7 @@ Cache is stored in `~/.cja_auto_sdr/cache/org_report_cache.json`.
 | Option | Description | Default |
 |--------|-------------|---------|
 | `--org-shared-client` | Use a single shared cjapy client across threads (faster, but may be unsafe if cjapy is not thread-safe) | False |
+| `--lock-stale-threshold SECONDS` | Stale-lease recovery threshold for the org-report concurrency lock. Controls how long a lease must be idle before it is reclaimed. Not a blocking wait timeout. Values must be > 0. Only valid with `--org-report` | 3600 |
 
 #### Clustering Options
 
@@ -803,6 +814,15 @@ cja_auto_sdr dv_12345 \
 
 # Read data views from file
 cja_auto_sdr --batch $(cat dataviews.txt)
+
+# --- Exit Code Troubleshooting ---
+
+# Look up what an exit code means
+cja_auto_sdr --explain-exit-code 2
+
+# In a CI script, explain a failed exit code while keeping stdout for JSON
+cja_auto_sdr dv_12345 --run-summary-json - || \
+  cja_auto_sdr --explain-exit-code $?
 ```
 
 ### Data View Comparison (Diff)
@@ -978,6 +998,11 @@ cja_auto_sdr --org-report --format json --output current.json
 cja_auto_sdr --org-report --compare-org-report ./baseline.json
 
 # Baseline must be a full-fidelity report; legacy markerless JSON baselines are rejected.
+
+# --- Concurrency Lock ---
+
+# Use a shorter stale-lease threshold (e.g., 15 minutes)
+cja_auto_sdr --org-report --lock-stale-threshold 900
 
 # --- CI/CD Governance Checks ---
 
