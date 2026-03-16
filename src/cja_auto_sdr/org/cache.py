@@ -104,6 +104,10 @@ class OrgReportLock:
     def lock_lost(self) -> bool:
         return self._manager.lock_lost
 
+    @property
+    def backend_name(self) -> str:
+        return self._manager.backend_name
+
     def ensure_healthy(self) -> None:
         """Raise if lock ownership has been lost during execution."""
         self._manager.ensure_held()

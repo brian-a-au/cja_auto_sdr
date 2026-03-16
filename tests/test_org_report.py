@@ -31,6 +31,7 @@ from cja_auto_sdr.generator import (
     OrgReportConfig,
     OrgReportResult,
     SimilarityPair,
+    _merge_org_report_run_summary_details,
     _render_distribution_bar,
     compare_org_reports,
     run_org_report,
@@ -4305,6 +4306,7 @@ class TestRunOrgReportRuntimeDetails:
         mock_result.duration = 1.0
         mock_result.governance_violations = None
         mock_analyzer_cls.return_value.run_analysis.return_value = mock_result
+        mock_analyzer_cls.return_value.last_lock_backend = "lease"
         mock_write_json.return_value = str(tmp_path / "report.json")
 
         org_config = OrgReportConfig(lock_stale_threshold_seconds=600)
@@ -4320,7 +4322,52 @@ class TestRunOrgReportRuntimeDetails:
         assert success is True
         assert details["lock_acquired"] is True
         assert details["lock_contention"] is False
+        assert details["lock_backend"] == "lease"
         assert details["lock_stale_threshold_seconds"] == 600
+
+    @patch("cja_auto_sdr.generator.append_github_step_summary")
+    @patch("cja_auto_sdr.generator.build_org_step_summary", return_value="")
+    @patch("cja_auto_sdr.generator.write_org_report_stats_only")
+    @patch("cja_auto_sdr.generator.OrgComponentAnalyzer")
+    @patch("cja_auto_sdr.generator.cjapy")
+    @patch("cja_auto_sdr.generator.configure_cjapy")
+    def test_runtime_details_populated_on_org_stats_only_success(
+        self,
+        mock_configure,
+        mock_cjapy,
+        mock_analyzer_cls,
+        mock_write_stats_only,
+        mock_build_summary,
+        mock_append,
+        tmp_path,
+    ):
+        mock_configure.return_value = (True, "config.json", {"org_id": "org123"})
+        mock_result = Mock()
+        mock_result.total_data_views = 1
+        mock_result.thresholds_exceeded = False
+        mock_result.duration = 1.0
+        mock_result.governance_violations = None
+        mock_analyzer_cls.return_value.run_analysis.return_value = mock_result
+        mock_analyzer_cls.return_value.last_lock_backend = "fcntl"
+
+        org_config = OrgReportConfig(org_stats_only=True, lock_stale_threshold_seconds=900)
+        details: dict = {}
+        success, _ = run_org_report(
+            config_file="config.json",
+            output_format="console",
+            output_path=None,
+            output_dir=str(tmp_path),
+            org_config=org_config,
+            quiet=True,
+            runtime_details=details,
+        )
+
+        assert success is True
+        assert details["lock_acquired"] is True
+        assert details["lock_contention"] is False
+        assert details["lock_backend"] == "fcntl"
+        assert details["lock_stale_threshold_seconds"] == 900
+        mock_write_stats_only.assert_called_once()
 
     @patch("cja_auto_sdr.generator.OrgComponentAnalyzer")
     @patch("cja_auto_sdr.generator.cjapy")
@@ -4393,3 +4440,100 @@ class TestRunOrgReportRuntimeDetails:
                 runtime_details=None,
             )
             assert success is False
+
+
+class TestOrgReportRunSummaryDetails:
+    def _merge_details(
+        self,
+        lock_details,
+        *,
+        success=True,
+        thresholds_exceeded=False,
+        lock_stale_threshold_seconds=3600,
+    ):
+        run_state = {"details": {}}
+        _merge_org_report_run_summary_details(
+            run_state,
+            success=success,
+            thresholds_exceeded=thresholds_exceeded,
+            fail_on_threshold=False,
+            lock_details=lock_details,
+            org_config=OrgReportConfig(lock_stale_threshold_seconds=lock_stale_threshold_seconds),
+        )
+        return run_state["details"]
+
+    def test_lock_block_for_successful_org_report(self):
+        details = self._merge_details(
+            {
+                "lock_acquired": True,
+                "lock_contention": False,
+                "lock_stale_threshold_seconds": 3600,
+            }
+        )
+
+        assert details["lock"]["acquired"] is True
+        assert details["lock"]["contention_observed"] is False
+        assert details["lock"]["stale_threshold_seconds"] == 3600
+        assert details["lock"]["lost_during_run"] is False
+        assert "loss_reason" not in details["lock"]
+
+    def test_lock_block_for_contention(self):
+        details = self._merge_details(
+            {
+                "lock_acquired": False,
+                "lock_contention": True,
+                "lock_stale_threshold_seconds": 3600,
+                "lock_holder_pid": 12345,
+                "lock_holder_owner": "user@host",
+                "lock_backend": "filesystem",
+                "lock_started_at": "2026-03-15T10:00:00",
+            },
+            success=False,
+        )
+
+        assert details["lock"]["acquired"] is False
+        assert details["lock"]["contention_observed"] is True
+        assert details["lock"]["backend"] == "filesystem"
+        assert details["lock"]["lost_during_run"] is False
+
+    def test_lock_block_for_ownership_loss(self):
+        details = self._merge_details(
+            {
+                "lock_acquired": True,
+                "lock_contention": False,
+                "lock_ownership_lost": True,
+                "lock_stale_threshold_seconds": 3600,
+            },
+            success=False,
+        )
+
+        assert details["lock"]["acquired"] is True
+        assert details["lock"]["lost_during_run"] is True
+        assert details["lock"]["loss_reason"] == "ownership_lost_during_execution"
+
+    def test_execution_settings_include_org_lock_stale_threshold(self):
+        details = self._merge_details(
+            {
+                "lock_acquired": True,
+                "lock_contention": False,
+                "lock_stale_threshold_seconds": 7200,
+            },
+            lock_stale_threshold_seconds=7200,
+        )
+
+        assert details["execution_settings"]["org_lock_stale_threshold_seconds"] == 7200
+
+    def test_operation_success_and_threshold_flags_are_preserved(self):
+        details = self._merge_details(
+            {"lock_acquired": True, "lock_contention": False, "lock_stale_threshold_seconds": 3600},
+            success=True,
+            thresholds_exceeded=True,
+        )
+
+        assert details["operation_success"] is True
+        assert details["thresholds_exceeded"] is True
+
+    def test_empty_lock_details_skip_lock_block(self):
+        details = self._merge_details({})
+        assert "lock" not in details
+        assert "execution_settings" in details

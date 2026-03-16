@@ -521,7 +521,10 @@ class TestBatchProcessorProcessBatch:
         mock_executor_instance.submit.return_value = mock_future
         mock_executor.return_value = mock_executor_instance
 
-        with patch("cja_auto_sdr.generator.as_completed", return_value=[mock_future]):
+        with (
+            patch("cja_auto_sdr.generator.as_completed", return_value=[mock_future]),
+            patch("cja_auto_sdr.pipeline.batch.emit_diagnostic") as mock_emit_diagnostic,
+        ):
             processor = BatchProcessor(
                 config_file=mock_config_file,
                 output_dir=temp_output_dir,
@@ -537,6 +540,16 @@ class TestBatchProcessorProcessBatch:
                 processor.process_batch(["dv_test_12345"])
 
             mock_shared_cache.shutdown.assert_called_once()
+            mock_emit_diagnostic.assert_called_once()
+
+        args, kwargs = mock_emit_diagnostic.call_args
+        assert args[1] == "shared_cache_summary"
+        assert args[2] == "resource"
+        assert kwargs["hits"] == 0
+        assert kwargs["misses"] == 0
+        assert kwargs["hit_rate"] == 0.0
+        assert kwargs["size"] == 0
+        assert kwargs["evictions"] == 0
 
     @patch("cja_auto_sdr.generator.setup_logging")
     @patch("cja_auto_sdr.generator.ProcessPoolExecutor")

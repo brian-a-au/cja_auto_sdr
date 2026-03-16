@@ -40,6 +40,7 @@ class _ConsoleColors:
 def _make_args(**overrides) -> argparse.Namespace:
     defaults = {
         "assume_yes": True,
+        "batch": False,
         "quiet": False,
         "dry_run": False,
         "production": False,
@@ -57,6 +58,9 @@ def _make_args(**overrides) -> argparse.Namespace:
         "circuit_breaker": False,
         "circuit_failure_threshold": 5,
         "circuit_timeout": 30.0,
+        "shared_cache": False,
+        "enable_cache": True,
+        "skip_validation": False,
         "inventory_summary": False,
         "include_derived_inventory": False,
         "include_calculated_metrics": False,
@@ -109,6 +113,55 @@ class TestPrepareSdrExecutionContext:
         assert context["api_tuning_config"].max_workers == 8
         assert context["circuit_breaker_config"].failure_threshold == 4
         assert context["circuit_breaker_config"].timeout_seconds == 12.5
+        assert context["api_auto_tune_requested"] is True
+        assert context["circuit_breaker_enabled"] is True
+        assert context["shared_cache_active"] is False
+
+    def test_returns_run_summary_metadata_flags_with_defaults(self):
+        generator = _make_generator()
+
+        with patch("cja_auto_sdr.cli.execution._generator_module", return_value=generator):
+            context = prepare_sdr_execution_context(_make_args(), data_views=["dv_123"], run_state={})
+
+        assert context["api_auto_tune_requested"] is False
+        assert context["circuit_breaker_enabled"] is False
+        assert context["shared_cache_active"] is False
+
+    def test_shared_cache_active_for_batch_with_validation_and_cache_enabled(self):
+        args = _make_args(batch=True, shared_cache=True, enable_cache=True, skip_validation=False)
+        generator = _make_generator()
+
+        with patch("cja_auto_sdr.cli.execution._generator_module", return_value=generator):
+            context = prepare_sdr_execution_context(args, data_views=["dv_123", "dv_456"], run_state={})
+
+        assert context["shared_cache_active"] is True
+
+    def test_shared_cache_inactive_for_single_view_even_when_flag_enabled(self):
+        args = _make_args(shared_cache=True)
+        generator = _make_generator()
+
+        with patch("cja_auto_sdr.cli.execution._generator_module", return_value=generator):
+            context = prepare_sdr_execution_context(args, data_views=["dv_123"], run_state={})
+
+        assert context["shared_cache_active"] is False
+
+    def test_shared_cache_inactive_when_validation_skipped(self):
+        args = _make_args(batch=True, shared_cache=True, enable_cache=True, skip_validation=True)
+        generator = _make_generator()
+
+        with patch("cja_auto_sdr.cli.execution._generator_module", return_value=generator):
+            context = prepare_sdr_execution_context(args, data_views=["dv_123", "dv_456"], run_state={})
+
+        assert context["shared_cache_active"] is False
+
+    def test_shared_cache_inactive_when_cache_disabled(self):
+        args = _make_args(batch=True, shared_cache=True, enable_cache=False, skip_validation=False)
+        generator = _make_generator()
+
+        with patch("cja_auto_sdr.cli.execution._generator_module", return_value=generator):
+            context = prepare_sdr_execution_context(args, data_views=["dv_123", "dv_456"], run_state={})
+
+        assert context["shared_cache_active"] is False
 
     def test_dry_run_exits_after_running_validation(self):
         args = _make_args(dry_run=True, output_dir="/tmp/not-used")

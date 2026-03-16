@@ -16,6 +16,7 @@ import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from unittest.mock import patch
 
 import pytest
 
@@ -351,3 +352,45 @@ class TestCircuitBreakerException:
 
         assert "open" in str(exc).lower()
         assert exc.time_until_retry == 0
+
+
+class TestCircuitBreakerDiagnostics:
+    def test_closed_to_open_transition_emits_diagnostic(self):
+        config = CircuitBreakerConfig(failure_threshold=2, success_threshold=1, timeout_seconds=10.0)
+
+        with patch("cja_auto_sdr.api.resilience.emit_diagnostic") as mock_diag:
+            breaker = CircuitBreaker(config=config)
+            breaker.record_failure(Exception("Failure 1"))
+            breaker.record_failure(Exception("Failure 2"))
+
+        mock_diag.assert_called_once()
+        args, kwargs = mock_diag.call_args
+        assert args[1] == "circuit_breaker_transition"
+        assert args[2] == "resilience"
+        assert kwargs["from_state"] == "closed"
+        assert kwargs["to_state"] == "open"
+        assert kwargs["failure_count"] == 2
+
+    def test_half_open_to_closed_transition_emits_diagnostic(self):
+        config = CircuitBreakerConfig(failure_threshold=1, success_threshold=1, timeout_seconds=0.0)
+        breaker = CircuitBreaker(config=config)
+        breaker.record_failure(Exception("Failure"))
+        breaker._last_failure_time = 0
+        assert breaker.allow_request() is True
+
+        with patch("cja_auto_sdr.api.resilience.emit_diagnostic") as mock_diag:
+            breaker.record_success()
+
+        mock_diag.assert_called_once()
+        kwargs = mock_diag.call_args[1]
+        assert kwargs["from_state"] == "half_open"
+        assert kwargs["to_state"] == "closed"
+
+    def test_same_state_update_does_not_emit_diagnostic(self):
+        config = CircuitBreakerConfig(failure_threshold=5)
+
+        with patch("cja_auto_sdr.api.resilience.emit_diagnostic") as mock_diag:
+            breaker = CircuitBreaker(config=config)
+            breaker.record_failure(Exception("Failure"))
+
+        mock_diag.assert_not_called()

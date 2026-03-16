@@ -4982,6 +4982,17 @@ class TestOrgReportArgumentValidation:
         assert "--lock-stale-threshold is only valid with --org-report" in capsys.readouterr().err
         mock_list_dataviews.assert_not_called()
 
+    def test_lock_stale_threshold_explicit_default_requires_org_report_mode(self, capsys):
+        """An explicit default threshold must still be rejected outside org-report mode."""
+        from cja_auto_sdr.generator import main
+
+        with patch.object(sys, "argv", ["cja_auto_sdr", "--explain-exit-code", "2", "--lock-stale-threshold", "3600"]):
+            with pytest.raises(SystemExit) as exc_info:
+                main()
+
+        assert exc_info.value.code == 1
+        assert "--lock-stale-threshold is only valid with --org-report" in capsys.readouterr().err
+
     @patch("cja_auto_sdr.generator.list_dataviews")
     def test_lock_stale_threshold_rejects_zero(self, mock_list_dataviews, capsys):
         """--lock-stale-threshold must be > 0."""

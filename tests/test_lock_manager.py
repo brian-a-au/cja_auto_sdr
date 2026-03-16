@@ -4,6 +4,7 @@ Covers backend selection, lock acquisition/release, heartbeat lifecycle,
 ensure_held, and _acquire_with_result.
 """
 
+import logging
 import os
 import sys
 from pathlib import Path
@@ -574,3 +575,261 @@ class TestProperties:
     def test_lock_lost_false_when_event_clear(self, tmp_path):
         mgr = self._make_manager(tmp_path)
         assert mgr.lock_lost is False
+
+
+# ---------------------------------------------------------------------------
+# Diagnostic event coverage
+# ---------------------------------------------------------------------------
+class TestCreateLockBackendDiagnostics:
+    @patch.object(FcntlFileLockBackend, "is_supported", return_value=False)
+    def test_auto_fallback_emits_diagnostic(self, _mock_supported):
+        with patch("cja_auto_sdr.core.locks.manager.emit_diagnostic") as mock_diag:
+            backend = create_lock_backend("auto")
+
+        assert isinstance(backend, LeaseFileLockBackend)
+        mock_diag.assert_called_once()
+        args, kwargs = mock_diag.call_args
+        assert args[1] == "lock_backend_fallback"
+        assert args[2] == "lifecycle"
+        assert kwargs["level"] == logging.WARNING
+        assert kwargs["from_backend"] == "fcntl"
+        assert kwargs["to_backend"] == "lease"
+        assert kwargs["reason"] == "fcntl_unavailable"
+
+    @patch.object(FcntlFileLockBackend, "is_supported", return_value=False)
+    def test_requested_fcntl_fallback_emits_diagnostic(self, _mock_supported):
+        with patch("cja_auto_sdr.core.locks.manager.emit_diagnostic") as mock_diag:
+            backend = create_lock_backend("fcntl")
+
+        assert isinstance(backend, LeaseFileLockBackend)
+        mock_diag.assert_called_once()
+        kwargs = mock_diag.call_args[1]
+        assert kwargs["level"] == logging.WARNING
+        assert kwargs["reason"] == "fcntl_requested_unavailable"
+
+    @patch.object(FcntlFileLockBackend, "is_supported", return_value=True)
+    def test_supported_auto_backend_does_not_emit_diagnostic(self, _mock_supported):
+        with patch("cja_auto_sdr.core.locks.manager.emit_diagnostic") as mock_diag:
+            backend = create_lock_backend("auto")
+
+        assert isinstance(backend, FcntlFileLockBackend)
+        mock_diag.assert_not_called()
+
+    def test_explicit_lease_backend_does_not_emit_diagnostic(self):
+        with patch("cja_auto_sdr.core.locks.manager.emit_diagnostic") as mock_diag:
+            backend = create_lock_backend("lease")
+
+        assert isinstance(backend, LeaseFileLockBackend)
+        mock_diag.assert_not_called()
+
+
+class TestLockManagerDiagnostics:
+    def _make_manager(self, tmp_path, backend=None):
+        mock_backend = backend if backend is not None else MagicMock()
+        if backend is None:
+            mock_backend.name = "mock"
+            mock_backend.requires_heartbeat = False
+        with patch("cja_auto_sdr.core.locks.manager.create_lock_backend", return_value=mock_backend):
+            return LockManager(lock_path=tmp_path / "test.lock", owner="test-owner", stale_threshold_seconds=3600)
+
+    def test_successful_acquire_emits_lock_acquired_diagnostic(self, tmp_path):
+        handle = _mock_handle("acq-id")
+        mock_backend = MagicMock()
+        mock_backend.name = "lease"
+        mock_backend.requires_heartbeat = False
+        mgr = self._make_manager(tmp_path, mock_backend)
+
+        with (
+            patch.object(
+                LockManager,
+                "_acquire_with_result",
+                return_value=AcquireResult(status=AcquireStatus.ACQUIRED, handle=handle),
+            ),
+            patch("cja_auto_sdr.core.locks.manager.emit_diagnostic") as mock_diag,
+        ):
+            assert mgr.acquire() is True
+
+        acquired_calls = [call for call in mock_diag.call_args_list if call[0][1] == "lock_acquired"]
+        assert len(acquired_calls) == 1
+        call_kwargs = acquired_calls[0][1]
+        assert call_kwargs["lock_path"] == str(tmp_path / "test.lock")
+        assert call_kwargs["backend"] == "lease"
+        assert "lock_id" in call_kwargs
+
+    def test_contention_does_not_emit_lock_acquired_diagnostic(self, tmp_path):
+        mgr = self._make_manager(tmp_path)
+
+        with (
+            patch.object(
+                LockManager,
+                "_acquire_with_result",
+                return_value=AcquireResult(status=AcquireStatus.CONTENDED),
+            ),
+            patch.object(mgr, "read_info", return_value=None),
+            patch("cja_auto_sdr.core.locks.manager.emit_diagnostic") as mock_diag,
+        ):
+            mgr.acquire()
+
+        acquired_calls = [call for call in mock_diag.call_args_list if call[0][1] == "lock_acquired"]
+        assert acquired_calls == []
+
+    def test_release_emits_lock_released_diagnostic(self, tmp_path):
+        mock_backend = MagicMock()
+        mock_backend.name = "fcntl"
+        mock_backend.requires_heartbeat = False
+        mgr = self._make_manager(tmp_path, mock_backend)
+        mgr._handle = _mock_handle("rel-id")
+        mgr._lock_info = _mock_lock_info()
+
+        with patch("cja_auto_sdr.core.locks.manager.emit_diagnostic") as mock_diag:
+            mgr.release()
+
+        released_calls = [call for call in mock_diag.call_args_list if call[0][1] == "lock_released"]
+        assert len(released_calls) == 1
+        call_kwargs = released_calls[0][1]
+        assert call_kwargs["lock_path"] == str(tmp_path / "test.lock")
+        assert call_kwargs["backend"] == "fcntl"
+
+    def test_release_without_lock_does_not_emit_lock_released_diagnostic(self, tmp_path):
+        mgr = self._make_manager(tmp_path)
+
+        with patch("cja_auto_sdr.core.locks.manager.emit_diagnostic") as mock_diag:
+            mgr.release()
+
+        released_calls = [call for call in mock_diag.call_args_list if call[0][1] == "lock_released"]
+        assert released_calls == []
+
+    def test_handle_heartbeat_failure_emits_lock_heartbeat_lost_diagnostic(self, tmp_path):
+        mock_backend = MagicMock()
+        mock_backend.name = "lease"
+        mock_backend.requires_heartbeat = False
+        mgr = self._make_manager(tmp_path, mock_backend)
+        mgr._handle = _mock_handle("hb-id")
+        info = _mock_lock_info()
+        mgr._lock_info = info
+
+        with patch("cja_auto_sdr.core.locks.manager.emit_diagnostic") as mock_diag:
+            mgr._handle_heartbeat_failure(OSError("disk full"))
+
+        hb_calls = [call for call in mock_diag.call_args_list if call[0][1] == "lock_heartbeat_lost"]
+        assert len(hb_calls) == 1
+        call_kwargs = hb_calls[0][1]
+        assert call_kwargs["lock_path"] == str(tmp_path / "test.lock")
+        assert call_kwargs["lock_id"] == info.lock_id
+        assert "disk full" in call_kwargs["error"]
+
+    def test_acquire_time_fallback_emits_diagnostic(self, tmp_path):
+        handle = _mock_handle("fallback-id")
+        call_count = {"count": 0}
+
+        def _side_effect(_backend, _lock_path, _stale):
+            call_count["count"] += 1
+            if call_count["count"] == 1:
+                return AcquireResult(status=AcquireStatus.BACKEND_UNAVAILABLE)
+            return AcquireResult(status=AcquireStatus.ACQUIRED, handle=handle)
+
+        real_fcntl = FcntlFileLockBackend()
+        with patch("cja_auto_sdr.core.locks.manager.create_lock_backend", return_value=real_fcntl):
+            mgr = LockManager(lock_path=tmp_path / "test.lock", owner="test-owner")
+
+        with (
+            patch.object(LockManager, "_acquire_with_result", side_effect=_side_effect),
+            patch.object(LeaseFileLockBackend, "write_info"),
+            patch("cja_auto_sdr.core.locks.manager.emit_diagnostic") as mock_diag,
+        ):
+            assert mgr.acquire() is True
+
+        fallback_calls = [call for call in mock_diag.call_args_list if call[0][1] == "lock_backend_fallback"]
+        assert len(fallback_calls) == 1
+        kwargs = fallback_calls[0][1]
+        assert kwargs["level"] == logging.WARNING
+        assert kwargs["from_backend"] == "fcntl"
+        assert kwargs["to_backend"] == "lease"
+        assert kwargs["reason"] == "acquire_backend_unavailable"
+
+    def test_acquire_then_release_emits_lifecycle_sequence(self, tmp_path):
+        handle = _mock_handle("lifecycle-id")
+        mock_backend = MagicMock()
+        mock_backend.name = "lease"
+        mock_backend.requires_heartbeat = False
+        mgr = self._make_manager(tmp_path, mock_backend)
+
+        with (
+            patch.object(
+                LockManager,
+                "_acquire_with_result",
+                return_value=AcquireResult(status=AcquireStatus.ACQUIRED, handle=handle),
+            ),
+            patch("cja_auto_sdr.core.locks.manager.emit_diagnostic") as mock_diag,
+        ):
+            mgr.acquire()
+            mgr.release()
+
+        event_names = [call[0][1] for call in mock_diag.call_args_list]
+        assert "lock_acquired" in event_names
+        assert "lock_released" in event_names
+        assert event_names.index("lock_acquired") < event_names.index("lock_released")
+
+    def test_heartbeat_loop_emits_loss_diagnostic_on_write_failure(self, tmp_path):
+        mock_backend = MagicMock()
+        mock_backend.name = "lease"
+        mock_backend.requires_heartbeat = True
+        mock_backend.write_info.side_effect = OSError("NFS stale")
+        mgr = self._make_manager(tmp_path, mock_backend)
+        mgr._handle = _mock_handle("hb-loop-id")
+        mgr._lock_info = _mock_lock_info()
+
+        with patch("cja_auto_sdr.core.locks.manager.emit_diagnostic") as mock_diag:
+            mgr._heartbeat_loop(0.01)
+
+        hb_calls = [call for call in mock_diag.call_args_list if call[0][1] == "lock_heartbeat_lost"]
+        assert len(hb_calls) == 1
+        assert mgr.lock_lost is True
+
+    def test_heartbeat_loop_stops_cleanly_after_intentional_release(self, tmp_path):
+        mock_backend = MagicMock()
+        mock_backend.name = "lease"
+        mock_backend.requires_heartbeat = True
+        mock_backend.write_info.side_effect = OSError("write after release")
+        mgr = self._make_manager(tmp_path, mock_backend)
+        mgr._handle = _mock_handle()
+        mgr._lock_info = _mock_lock_info()
+        mgr._heartbeat_stop.set()
+
+        with patch("cja_auto_sdr.core.locks.manager.emit_diagnostic") as mock_diag:
+            mgr._heartbeat_loop(0.01)
+
+        hb_calls = [call for call in mock_diag.call_args_list if call[0][1] == "lock_heartbeat_lost"]
+        assert hb_calls == []
+        assert mgr.lock_lost is False
+
+    def test_ensure_held_raises_lock_ownership_lost_after_heartbeat_failure(self, tmp_path):
+        mgr = self._make_manager(tmp_path)
+        mgr._handle = _mock_handle()
+        mgr._lock_info = _mock_lock_info()
+
+        with patch("cja_auto_sdr.core.locks.manager.emit_diagnostic"):
+            mgr._handle_heartbeat_failure(OSError("disk error"))
+
+        with pytest.raises(LockOwnershipLostError) as exc_info:
+            mgr.ensure_held()
+
+        assert "heartbeat metadata write failed" in (exc_info.value.reason or "")
+
+    def test_lock_acquire_failed_diagnostic_uses_status_value_as_reason(self, tmp_path):
+        mgr = self._make_manager(tmp_path)
+
+        with (
+            patch.object(
+                LockManager,
+                "_acquire_with_result",
+                return_value=AcquireResult(status=AcquireStatus.CONTENDED),
+            ),
+            patch.object(mgr, "read_info", return_value=None),
+            patch("cja_auto_sdr.core.locks.manager.emit_diagnostic") as mock_diag,
+        ):
+            mgr.acquire()
+
+        failed_calls = [call for call in mock_diag.call_args_list if call[0][1] == "lock_acquire_failed"]
+        assert len(failed_calls) == 1
+        assert failed_calls[0][1]["reason"] == "contended"

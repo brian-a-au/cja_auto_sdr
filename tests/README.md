@@ -121,7 +121,7 @@ tests/
 └── README.md                        # This file
 ```
 
-**Total: 6,411 comprehensive tests**
+**Total: 6,406 comprehensive tests**
 
 ### Test Count Breakdown
 
@@ -129,9 +129,9 @@ tests/
 |-----------|-------|---------------|
 | `test_diff_comparison.py` | 169 | Data view diff comparison feature with inventory support |
 | `test_ux_features.py` | 123 | UX features: --open, --stats, --output, --list-dataviews formats, inventory validation, inventory summary, include-all-inventory |
-| `test_org_report.py` | 184 | Org-wide component analysis: config, distribution, similarity, output formats, large org scaling, output path aliases |
+| `test_org_report.py` | 191 | Org-wide component analysis: config, distribution, similarity, output formats, large org scaling, output path aliases |
 | `test_org_report_integration.py` | 17 | Org-wide analysis integration tests: end-to-end flows, caching, filtering, governance |
-| `test_cli.py` | 436 | Command-line interface and argument parsing |
+| `test_cli.py` | 437 | Command-line interface and argument parsing |
 | `test_profiles.py` | 77 | Multi-organization profile support |
 | `test_derived_inventory.py` | 62 | Derived fields inventory feature |
 | `test_inventory_utils.py` | 47 | Inventory utilities and helpers |
@@ -146,7 +146,7 @@ tests/
 | `test_parallel_api_fetcher.py` | 35 | Parallel API data fetching |
 | `test_api_tuning.py` | 23 | API worker auto-tuning |
 | `test_error_messages.py` | 23 | Enhanced error messages and guidance |
-| `test_circuit_breaker.py` | 22 | Circuit breaker pattern |
+| `test_circuit_breaker.py` | 25 | Circuit breaker pattern |
 | `test_retry.py` | 25 | Retry with exponential backoff |
 | `test_batch_processor.py` | 26 | Batch processing of multiple data views |
 | `test_validation_cache.py` | 24 | Validation result caching |
@@ -167,7 +167,7 @@ tests/
 | `test_output_content_validation.py` | 29 | Output format content validation (CSV, JSON, HTML, Excel, Markdown roundtrip) |
 | `test_malformed_api_responses.py` | 20 | Negative tests for malformed/unexpected API responses |
 | `test_main_entry_points.py` | 21 | main() and _main_impl() entry points, dispatch, run_state, run summary |
-| `test_quality_policy_and_run_summary.py` | 87 | Quality policy functions and run summary/status inference |
+| `test_quality_policy_and_run_summary.py` | 97 | Quality policy functions and run summary/status inference |
 | `test_e2e_integration.py` | 16 | End-to-end integration tests with real pipeline, mocked API boundary |
 | `test_api_client.py` | 29 | API client exception paths and error handling |
 | `test_config_validation.py` | 55 | Configuration validation logic |
@@ -178,7 +178,7 @@ tests/
 | `test_exceptions.py` | 68 | Custom exception classes construction and formatting |
 | `test_logging_redaction.py` | 158 | Logging, sensitive data redaction, JSON formatter |
 | `test_config_dataclasses.py` | 88 | Config dataclasses and constants functions |
-| `test_lock_manager.py` | 50 | Lock manager acquire/release/heartbeat lifecycle |
+| `test_lock_manager.py` | 65 | Lock manager acquire/release/heartbeat lifecycle |
 | `test_lazy_forwarding.py` | 71 | Lazy-forwarding infrastructure and make_getattr() |
 | `test_lock_backend_edge_cases.py` | 165 | Lock backend metadata I/O, stale detection, legacy parsing |
 | `test_derived_fields_coverage.py` | 161 | Derived field complexity scoring, logic summary, predicates |
@@ -224,7 +224,7 @@ tests/
 | `test_cli_diff_contracts.py` | 69 | CLI/diff public API contract tests |
 | `test_list_command_edge_cases.py` | 45 | List command edge cases and coverage |
 | `test_cli_commands_config_coverage.py` | 20 | Config command edge cases and coverage |
-| `test_cli_execution.py` | 18 | CLI execution edge cases and coverage |
+| `test_cli_execution.py` | 23 | CLI execution edge cases and coverage |
 | `test_diff_git_coverage.py` | 27 | Diff/git subprocess error path coverage |
 | `test_generator_trending_coverage.py` | 19 | Generator trending integration coverage |
 | `test_check_version_sync.py` | 18 | Version string sync validation across files |
@@ -237,7 +237,7 @@ tests/
 | `test_example_automation_scripts.py` | 4 | Automation shell script validation tests |
 | `test_exit_codes.py` | 11 | Exit code helpers and signal detection tests |
 | `test_json_io.py` | 2 | JSON I/O atomic write and read tests |
-| **Total** | **6,411** | **Collected via pytest --collect-only** |
+| **Total** | **6,406** | **Collected via pytest --collect-only** |
 
 ## Running Tests
 
@@ -641,12 +641,12 @@ Check for drift (CI-friendly):
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (6,411 tests total)
-- [x] Org-wide analysis tests (test_org_report.py) - 184 tests (including large org scaling, output path aliases, memory warnings, smart cache invalidation)
+- [x] Comprehensive test coverage (6,406 tests total)
+- [x] Org-wide analysis tests (test_org_report.py) - 191 tests (including large org scaling, output path aliases, memory warnings, smart cache invalidation)
 - [x] Org-wide analysis integration tests (test_org_report_integration.py) - 17 tests (end-to-end flows, caching, filtering, governance thresholds)
 - [x] Profile management tests (test_profiles.py) - 77 tests
 - [x] API worker auto-tuning tests (test_api_tuning.py) - 23 tests
-- [x] Circuit breaker pattern tests (test_circuit_breaker.py) - 22 tests
+- [x] Circuit breaker pattern tests (test_circuit_breaker.py) - 25 tests
 - [x] Shared validation cache tests (test_shared_cache.py) - 22 tests
 - [x] Calculated metrics inventory tests (test_calculated_metrics_inventory.py) - 285 tests
 - [x] Segments inventory tests (test_segments_inventory.py) - 48 tests

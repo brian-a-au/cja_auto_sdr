@@ -32,6 +32,25 @@ def _utcnow_iso() -> str:
     return datetime.now(UTC).isoformat()
 
 
+def _emit_lock_backend_fallback(
+    logger: logging.Logger | None,
+    *,
+    from_backend: str,
+    to_backend: str,
+    reason: str,
+) -> None:
+    """Emit fallback diagnostics at warning level so default CLI runs still surface them."""
+    emit_diagnostic(
+        logger or logging.getLogger(__name__),
+        "lock_backend_fallback",
+        "lifecycle",
+        level=logging.WARNING,
+        from_backend=from_backend,
+        to_backend=to_backend,
+        reason=reason,
+    )
+
+
 def create_lock_backend(
     backend_name: str | None = None,
     *,
@@ -44,10 +63,8 @@ def create_lock_backend(
     if requested == "auto":
         if FcntlFileLockBackend.is_supported():
             return FcntlFileLockBackend()
-        emit_diagnostic(
+        _emit_lock_backend_fallback(
             log,
-            "lock_backend_fallback",
-            "lifecycle",
             from_backend="fcntl",
             to_backend="lease",
             reason="fcntl_unavailable",
@@ -57,10 +74,8 @@ def create_lock_backend(
     if requested == "fcntl":
         if FcntlFileLockBackend.is_supported():
             return FcntlFileLockBackend()
-        emit_diagnostic(
+        _emit_lock_backend_fallback(
             log,
-            "lock_backend_fallback",
-            "lifecycle",
             from_backend="fcntl",
             to_backend="lease",
             reason="fcntl_requested_unavailable",
@@ -110,6 +125,10 @@ class LockManager:
     def lock_lost(self) -> bool:
         return self._lock_lost.is_set()
 
+    @property
+    def backend_name(self) -> str:
+        return getattr(self.backend, "name", "unknown")
+
     def acquire(self) -> bool:
         """Attempt lock acquisition without blocking."""
         with self._state_lock:
@@ -119,10 +138,8 @@ class LockManager:
         result = self._acquire_with_result(self.backend, self.lock_path, self.stale_threshold_seconds)
         if result.status == AcquireStatus.BACKEND_UNAVAILABLE and isinstance(self.backend, FcntlFileLockBackend):
             fallback = LeaseFileLockBackend()
-            emit_diagnostic(
+            _emit_lock_backend_fallback(
                 self.logger,
-                "lock_backend_fallback",
-                "lifecycle",
                 from_backend="fcntl",
                 to_backend="lease",
                 reason="acquire_backend_unavailable",

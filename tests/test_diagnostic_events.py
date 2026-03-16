@@ -212,6 +212,14 @@ class TestDiagnosticLogLevel:
         emit_diagnostic(logger, "should_appear", "cat")
         assert "[DIAG] should_appear" in buf.getvalue()
 
+    def test_warning_level_emits_when_info_disabled(self):
+        buf = io.StringIO()
+        handler = _text_handler(buf)
+        handler.setLevel(logging.WARNING)
+        logger = _make_logger(handler, level=logging.WARNING)
+        emit_diagnostic(logger, "fallback_visible", "cat", level=logging.WARNING)
+        assert "[DIAG] fallback_visible" in buf.getvalue()
+
 
 # ---------------------------------------------------------------------------
 # Works with plain Logger (not just Adapter)

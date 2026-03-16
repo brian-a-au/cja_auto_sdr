@@ -1406,6 +1406,28 @@ def _active_run_modes(args: argparse.Namespace) -> list[RunMode]:
     return [mode for mode, is_active in _run_mode_checks(args) if is_active]
 
 
+def _validate_mode_scoped_option(
+    *,
+    option_name: str,
+    inferred_mode: RunMode,
+    required_mode: RunMode,
+    is_configured: bool,
+    mode_error: str | None = None,
+    value_errors: Iterable[str | None] = (),
+) -> None:
+    """Fail closed when an explicitly configured option is used outside its command mode."""
+    if not is_configured:
+        return
+
+    if inferred_mode != required_mode:
+        required_label = f"--{required_mode.value.replace('_', '-')}"
+        _exit_error(mode_error or f"{option_name} is only valid with {required_label}")
+
+    for error in value_errors:
+        if error:
+            _exit_error(error)
+
+
 def _org_report_snapshot_retention_flags_specified(argv: list[str] | None = None) -> tuple[bool, bool]:
     """Return whether org-report snapshot retention flags were explicitly provided."""
     return (
@@ -1761,6 +1783,106 @@ def _merge_run_details(run_state: dict[str, Any] | None, /, **kwargs: Any) -> No
     for key, value in kwargs.items():
         if key not in details:
             details[key] = value
+
+
+def _normalize_optional_detail_text(value: Any) -> str | None:
+    """Normalize optional diagnostic text fields to non-empty strings."""
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    return normalized or None
+
+
+def _record_org_report_lock_runtime_details(
+    runtime_details: dict[str, Any] | None,
+    *,
+    acquired: bool,
+    contention: bool,
+    stale_threshold_seconds: int,
+    backend: Any = None,
+    ownership_lost: bool = False,
+    holder_pid: int | None = None,
+    holder_owner: Any = None,
+    started_at: Any = None,
+) -> None:
+    """Populate the flat org-report lock runtime sink in one place."""
+    if runtime_details is None:
+        return
+
+    runtime_details["lock_acquired"] = acquired
+    runtime_details["lock_contention"] = contention
+    runtime_details["lock_stale_threshold_seconds"] = stale_threshold_seconds
+
+    backend_name = _normalize_optional_detail_text(backend)
+    if backend_name is not None:
+        runtime_details["lock_backend"] = backend_name
+
+    if ownership_lost:
+        runtime_details["lock_ownership_lost"] = True
+    if holder_pid is not None:
+        runtime_details["lock_holder_pid"] = holder_pid
+
+    holder_owner_text = _normalize_optional_detail_text(holder_owner)
+    if holder_owner_text is not None:
+        runtime_details["lock_holder_owner"] = holder_owner_text
+
+    started_at_text = _normalize_optional_detail_text(started_at)
+    if started_at_text is not None:
+        runtime_details["lock_started_at"] = started_at_text
+
+
+def _build_org_report_lock_run_summary_block(lock_details: Mapping[str, Any]) -> dict[str, Any]:
+    """Reshape flat org-report lock runtime details into the public run-summary contract."""
+    lock_block: dict[str, Any] = {}
+
+    if "lock_acquired" in lock_details:
+        lock_block["acquired"] = lock_details["lock_acquired"]
+    if "lock_stale_threshold_seconds" in lock_details:
+        lock_block["stale_threshold_seconds"] = lock_details["lock_stale_threshold_seconds"]
+    if "lock_contention" in lock_details:
+        lock_block["contention_observed"] = lock_details["lock_contention"]
+    if "lock_ownership_lost" in lock_details:
+        lock_block["lost_during_run"] = lock_details["lock_ownership_lost"]
+    elif "lock_acquired" in lock_details:
+        lock_block["lost_during_run"] = False
+
+    backend_name = _normalize_optional_detail_text(lock_details.get("lock_backend"))
+    if backend_name is not None:
+        lock_block["backend"] = backend_name
+
+    if lock_details.get("lock_ownership_lost"):
+        lock_block["loss_reason"] = "ownership_lost_during_execution"
+
+    return lock_block
+
+
+def _merge_org_report_run_summary_details(
+    run_state: dict[str, Any] | None,
+    *,
+    success: bool,
+    thresholds_exceeded: bool,
+    fail_on_threshold: bool,
+    lock_details: Mapping[str, Any],
+    org_config: OrgReportConfig,
+) -> None:
+    """Merge org-report run-summary details with one shared formatter."""
+    if run_state is None:
+        return
+
+    run_state["details"] = {
+        "operation_success": success,
+        "thresholds_exceeded": thresholds_exceeded,
+        "fail_on_threshold": fail_on_threshold,
+    }
+
+    lock_block = _build_org_report_lock_run_summary_block(lock_details)
+    if lock_block:
+        _merge_run_details(run_state, lock=lock_block)
+
+    _merge_run_details(
+        run_state,
+        execution_settings={"org_lock_stale_threshold_seconds": org_config.lock_stale_threshold_seconds},
+    )
 
 
 def _build_run_summary_payload(
@@ -8399,6 +8521,7 @@ def run_org_report(
         org_id = credentials.get("org_id", "unknown") if credentials else "unknown"
 
         cja = cjapy.CJA()
+        analyzer: OrgComponentAnalyzer | None = None
 
         # Create cache if caching enabled
         cache = None
@@ -8412,6 +8535,13 @@ def run_org_report(
         # Run analysis
         analyzer = OrgComponentAnalyzer(cja, org_config, logger, org_id=org_id, cache=cache)
         result = analyzer.run_analysis()
+        _record_org_report_lock_runtime_details(
+            runtime_details,
+            acquired=True,
+            contention=False,
+            stale_threshold_seconds=org_config.lock_stale_threshold_seconds,
+            backend=getattr(analyzer, "last_lock_backend", None),
+        )
         requested_baseline_path = _requested_org_report_baseline_path(org_config)
 
         if result.total_data_views == 0:
@@ -8571,33 +8701,34 @@ def run_org_report(
             _status_print("=" * 110)
 
         append_github_step_summary(build_org_step_summary(result), logger)
-        if runtime_details is not None:
-            runtime_details["lock_acquired"] = True
-            runtime_details["lock_contention"] = False
-            runtime_details["lock_stale_threshold_seconds"] = org_config.lock_stale_threshold_seconds
         return True, result.thresholds_exceeded
 
     except ConcurrentOrgReportError as e:
         _status_print(ConsoleColors.error(f"ERROR: Org report failed: {e!s}"))
         logger.exception("Org report error")
-        if runtime_details is not None:
-            runtime_details["lock_acquired"] = False
-            runtime_details["lock_contention"] = True
-            runtime_details["lock_stale_threshold_seconds"] = org_config.lock_stale_threshold_seconds
-            runtime_details["lock_holder_pid"] = e.lock_holder_pid
-            runtime_details["lock_holder_owner"] = e.lock_holder_owner
-            runtime_details["lock_backend"] = e.lock_backend
-            runtime_details["lock_started_at"] = e.started_at
+        _record_org_report_lock_runtime_details(
+            runtime_details,
+            acquired=False,
+            contention=True,
+            stale_threshold_seconds=org_config.lock_stale_threshold_seconds,
+            backend=e.lock_backend,
+            holder_pid=e.lock_holder_pid,
+            holder_owner=e.lock_holder_owner,
+            started_at=e.started_at,
+        )
         return False, False
 
     except LockOwnershipLostError:
         _status_print(ConsoleColors.error("ERROR: Org report failed: lock ownership lost during execution"))
         logger.exception("Org report error: lock ownership lost")
-        if runtime_details is not None:
-            runtime_details["lock_acquired"] = True
-            runtime_details["lock_contention"] = False
-            runtime_details["lock_ownership_lost"] = True
-            runtime_details["lock_stale_threshold_seconds"] = org_config.lock_stale_threshold_seconds
+        _record_org_report_lock_runtime_details(
+            runtime_details,
+            acquired=True,
+            contention=False,
+            stale_threshold_seconds=org_config.lock_stale_threshold_seconds,
+            backend=getattr(analyzer, "last_lock_backend", None) if analyzer is not None else None,
+            ownership_lost=True,
+        )
         return False, False
 
     except FileNotFoundError:
@@ -9383,8 +9514,6 @@ def _dispatch_post_validation_report_modes(
 
         output_format = args.format or "console"
         trending_window = getattr(args, "trending_window", None)
-        if trending_window is not None and trending_window < 2:
-            _exit_error("--trending-window must be >= 2")
 
         lock_details: dict[str, Any] = {}
         success, thresholds_exceeded = run_org_report(
@@ -9400,42 +9529,14 @@ def _dispatch_post_validation_report_modes(
         )
         if run_state is not None:
             run_state["output_format"] = output_format
-            run_state["details"] = {
-                "operation_success": success,
-                "thresholds_exceeded": thresholds_exceeded,
-                "fail_on_threshold": org_config.fail_on_threshold,
-            }
-
-            # Reshape flat lock_details from run_org_report() into the
-            # spec's nested ``lock`` block.
-            lock_block: dict[str, Any] = {}
-            if "lock_acquired" in lock_details:
-                lock_block["acquired"] = lock_details["lock_acquired"]
-            if "lock_stale_threshold_seconds" in lock_details:
-                lock_block["stale_threshold_seconds"] = lock_details["lock_stale_threshold_seconds"]
-            if "lock_contention" in lock_details:
-                lock_block["contention_observed"] = lock_details["lock_contention"]
-            if "lock_ownership_lost" in lock_details:
-                lock_block["lost_during_run"] = lock_details["lock_ownership_lost"]
-            else:
-                # Successful or contention paths never set ownership_lost;
-                # report False to indicate the lock was not lost.
-                if "lock_acquired" in lock_details:
-                    lock_block["lost_during_run"] = False
-            if "lock_backend" in lock_details:
-                lock_block["backend"] = lock_details["lock_backend"]
-            # loss_reason is optional — only present when lock was lost
-            if lock_details.get("lock_ownership_lost"):
-                lock_block["loss_reason"] = "ownership_lost_during_execution"
-
-            if lock_block:
-                _merge_run_details(run_state, lock=lock_block)
-
-            # Org-report execution_settings include stale threshold
-            org_exec_settings: dict[str, Any] = {
-                "org_lock_stale_threshold_seconds": org_config.lock_stale_threshold_seconds,
-            }
-            _merge_run_details(run_state, execution_settings=org_exec_settings)
+            _merge_org_report_run_summary_details(
+                run_state,
+                success=success,
+                thresholds_exceeded=thresholds_exceeded,
+                fail_on_threshold=org_config.fail_on_threshold,
+                lock_details=lock_details,
+                org_config=org_config,
+            )
 
         if success:
             if thresholds_exceeded and org_config.fail_on_threshold:
@@ -9530,14 +9631,27 @@ def _main_impl(run_state: dict[str, Any] | None = None):
         _exit_error("--allow-partial is only supported in SDR generation mode")
     if getattr(args, "fail_on_quality", None) and non_sdr_mode:
         _exit_error("--fail-on-quality is only supported in SDR generation mode")
-    if getattr(args, "trending_window", None) is not None and inferred_mode != RunMode.ORG_REPORT:
-        _exit_error("--trending-window is only supported with --org-report")
+    trending_window = getattr(args, "trending_window", None)
+    _validate_mode_scoped_option(
+        option_name="--trending-window",
+        inferred_mode=inferred_mode,
+        required_mode=RunMode.ORG_REPORT,
+        is_configured=trending_window is not None,
+        mode_error="--trending-window is only supported with --org-report",
+        value_errors=(
+            "--trending-window must be >= 2" if trending_window is not None and trending_window < 2 else None,
+        ),
+    )
 
     org_lock_stale = getattr(args, "org_lock_stale_threshold", 3600)
-    if org_lock_stale != 3600 and inferred_mode != RunMode.ORG_REPORT:
-        _exit_error("--lock-stale-threshold is only valid with --org-report")
-    if org_lock_stale <= 0:
-        _exit_error("--lock-stale-threshold must be greater than 0")
+    _validate_mode_scoped_option(
+        option_name="--lock-stale-threshold",
+        inferred_mode=inferred_mode,
+        required_mode=RunMode.ORG_REPORT,
+        is_configured=_cli_option_specified("--lock-stale-threshold"),
+        mode_error="--lock-stale-threshold is only valid with --org-report",
+        value_errors=("--lock-stale-threshold must be greater than 0" if org_lock_stale <= 0 else None,),
+    )
 
     if (
         getattr(args, "auto_prune", False)

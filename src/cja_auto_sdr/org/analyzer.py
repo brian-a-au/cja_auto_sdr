@@ -86,11 +86,16 @@ class OrgComponentAnalyzer:
         self.cache = cache
         self._thread_local = threading.local()
         self._active_lock: OrgReportLock | None = None
+        self._last_lock_backend: str | None = None
 
         # Handle cache clear option
         if config.clear_cache and self.cache:
             self.cache.invalidate()
             self.logger.info("Cache cleared")
+
+    @property
+    def last_lock_backend(self) -> str | None:
+        return self._last_lock_backend
 
     def run_analysis(self) -> OrgReportResult:
         """Execute the full org-wide component analysis.
@@ -101,6 +106,8 @@ class OrgComponentAnalyzer:
         Raises:
             ConcurrentOrgReportError: If another org-report is already running for this org
         """
+        self._last_lock_backend = None
+
         # Check for concurrent runs (unless skip_lock is set)
         if not self.config.skip_lock:
             from cja_auto_sdr.core.exceptions import ConcurrentOrgReportError
@@ -122,6 +129,7 @@ class OrgComponentAnalyzer:
                         lock_backend=lock_info.get("backend") if lock_info else None,
                     )
                 self._active_lock = lock
+                self._last_lock_backend = lock.backend_name
                 try:
                     self._assert_lock_healthy()
                     quick_check_result = self._quick_check_empty_org()
