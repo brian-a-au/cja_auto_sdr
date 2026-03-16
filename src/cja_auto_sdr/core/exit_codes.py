@@ -54,7 +54,7 @@ def _signal_name(signal_number: int) -> str | None:
 
     try:
         return _signal_module.Signals(signal_number).name
-    except ValueError, AttributeError:
+    except (ValueError, AttributeError):
         return None
 
 
@@ -147,7 +147,7 @@ def explain_exit_code(code: int, file: object | None = None) -> None:
     if is_signal_exit_code(code):
         signal_number = code - SIGNAL_EXIT_BASE
         sig_name = _signal_name(signal_number)
-        label = f"SIG{sig_name}" if sig_name else f"signal {signal_number}"
+        label = sig_name if sig_name else f"signal {signal_number}"
         print(f"Exit code {code}: Killed by {label}", file=dest)
         print(file=dest)
         print("Meaning:", file=dest)
