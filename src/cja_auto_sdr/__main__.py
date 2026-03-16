@@ -308,6 +308,16 @@ def _is_fast_path_flag(argv: list[str]) -> str | None:
     if args == ["--exit-codes"]:
         return "--exit-codes"
 
+    # --explain-exit-code CODE (standalone: flag + its consumed value only)
+    if len(scan.options) == 1 and scan.options[0] == "--explain-exit-code":
+        # --explain-exit-code=2  -> 1 token
+        # --explain-exit-code 2  -> 2 tokens
+        # Any extra tokens mean it's not standalone.
+        has_inline_value = any("=" in a for a in args if a.startswith("--explain"))
+        expected_token_count = 1 if has_inline_value else 2
+        if len(args) == expected_token_count:
+            return "--explain-exit-code"
+
     return None
 
 
@@ -378,6 +388,12 @@ def _print_exit_codes() -> None:
     from cja_auto_sdr.core.exit_codes import print_exit_codes
 
     print_exit_codes(banner_width=BANNER_WIDTH)
+
+
+def _explain_exit_code(code: int) -> None:
+    from cja_auto_sdr.core.exit_codes import explain_exit_code
+
+    explain_exit_code(code)
 
 
 def _handle_completion(shell: str, argv0: str | None = None) -> None:
@@ -474,6 +490,17 @@ def main() -> None:
     if flag == "--exit-codes":
         _print_exit_codes()
         raise SystemExit(0)
+
+    if flag == "--explain-exit-code":
+        # Extract the integer code from argv. The probe parse gives us
+        # the canonical value without re-implementing argparse int coercion.
+        probe = _probe_argparse_parse(sys.argv[1:], sys.argv[0] if sys.argv else None)
+        if probe.namespace is not None:
+            code_value = getattr(probe.namespace, "explain_exit_code", None)
+            if code_value is not None:
+                _explain_exit_code(int(code_value))
+                raise SystemExit(0)
+        # If probe failed (shouldn't happen for a valid fast-path), fall through.
 
     # All other invocations need the full generator
     from cja_auto_sdr.generator import main as _generator_main

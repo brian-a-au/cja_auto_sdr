@@ -257,6 +257,14 @@ Requirements:
     parser.add_argument("--exit-codes", action="store_true", help="Display exit code reference and exit")
 
     parser.add_argument(
+        "--explain-exit-code",
+        type=int,
+        metavar="CODE",
+        dest="explain_exit_code",
+        help="Explain a single exit code and exit (e.g. --explain-exit-code 2)",
+    )
+
+    parser.add_argument(
         "--completion",
         choices=["bash", "zsh", "fish"],
         metavar="SHELL",

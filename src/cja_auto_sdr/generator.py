@@ -445,6 +445,7 @@ class RunMode(Enum):
     """CLI run modes used by dispatch and run summary classification."""
 
     EXIT_CODES = "exit_codes"
+    EXPLAIN_EXIT_CODE = "explain_exit_code"
     COMPLETION = "completion"
     SAMPLE_CONFIG = "sample_config"
     PROFILE_MANAGEMENT = "profile_management"
@@ -1335,6 +1336,7 @@ def _run_mode_checks(args: argparse.Namespace) -> tuple[tuple[RunMode, bool], ..
     """Build run-mode checks once so inference and validation share precedence."""
     completion_shell = _completion_shell_from_args(args)
     return (
+        (RunMode.EXPLAIN_EXIT_CODE, getattr(args, "explain_exit_code", None) is not None),
         (RunMode.EXIT_CODES, getattr(args, "exit_codes", False)),
         (RunMode.COMPLETION, completion_shell is not None),
         (RunMode.SAMPLE_CONFIG, getattr(args, "sample_config", False)),
@@ -1457,6 +1459,29 @@ def _validate_org_report_snapshot_cli_args(
     if not getattr(args, "prune_org_report_snapshots", False) and (keep_last_specified or keep_since_specified):
         _exit_error(
             "--org-report-keep-last and --org-report-keep-since are only supported with --prune-org-report-snapshots",
+        )
+
+
+def _validate_explain_exit_code_cli_args(
+    args: argparse.Namespace,
+    *,
+    active_modes: Collection[RunMode],
+) -> None:
+    """Fail closed for invalid --explain-exit-code combinations."""
+    if getattr(args, "explain_exit_code", None) is None:
+        return
+
+    if getattr(args, "data_views", []):
+        _exit_error("--explain-exit-code does not accept positional data view arguments")
+
+    conflicting_modes = sorted(
+        {mode for mode in active_modes if mode != RunMode.EXPLAIN_EXIT_CODE},
+        key=lambda m: m.value,
+    )
+    if conflicting_modes:
+        conflict_labels = ", ".join(mode.value for mode in conflicting_modes)
+        _exit_error(
+            f"--explain-exit-code cannot be combined with other command modes ({conflict_labels})",
         )
 
 
@@ -9348,6 +9373,7 @@ def _main_impl(run_state: dict[str, Any] | None = None):
     active_modes = _active_run_modes(args)
     _sync_run_summary_cli_metadata(run_state, args, inferred_mode=inferred_mode)
     _validate_org_report_snapshot_cli_args(args, active_modes=active_modes)
+    _validate_explain_exit_code_cli_args(args, active_modes=active_modes)
 
     # Dispatch early command modes before unrelated validation. Use inferred
     # mode so dispatch precedence cannot diverge from run-mode classification.
@@ -9475,6 +9501,16 @@ def _main_impl(run_state: dict[str, Any] | None = None):
     color_theme = getattr(args, "color_theme", "default")
     if color_theme and color_theme != "default":
         ConsoleColors.set_theme(color_theme)
+
+    # Handle --explain-exit-code mode (no data view required)
+    explain_code = getattr(args, "explain_exit_code", None)
+    if explain_code is not None:
+        from cja_auto_sdr.core.exit_codes import explain_exit_code
+
+        if run_state is not None:
+            run_state["details"] = {"explained_code": explain_code}
+        explain_exit_code(explain_code)
+        sys.exit(0)
 
     # Handle --exit-codes mode (no data view required)
     if getattr(args, "exit_codes", False):
