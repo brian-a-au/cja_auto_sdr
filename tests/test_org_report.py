@@ -342,6 +342,20 @@ class TestConcurrentOrgReportError:
         error = ConcurrentOrgReportError(org_id="test@AdobeOrg")
         assert "test@AdobeOrg" in str(error)
 
+    def test_error_with_owner_and_backend(self):
+        """Test error message includes lock_holder_owner and lock_backend"""
+        error = ConcurrentOrgReportError(
+            org_id="test@AdobeOrg",
+            lock_holder_pid=12345,
+            lock_holder_owner="ci-runner",
+            lock_backend="fcntl",
+            started_at="2024-01-15T10:00:00",
+        )
+        assert error.lock_holder_owner == "ci-runner"
+        assert error.lock_backend == "fcntl"
+        assert "owner ci-runner" in str(error)
+        assert "backend fcntl" in str(error)
+
 
 class TestAnalyzerLockIntegration:
     """Test OrgComponentAnalyzer lock integration"""
@@ -389,6 +403,60 @@ class TestAnalyzerLockIntegration:
 
                 assert "test_org@AdobeOrg" in str(exc_info.value)
                 mock_cja.getDataViews.assert_not_called()
+
+    def test_analyzer_passes_stale_threshold_to_lock(self):
+        """Test that analyzer passes lock_stale_threshold_seconds to OrgReportLock"""
+        import logging
+
+        mock_cja = Mock()
+        logger = logging.getLogger("test_stale_threshold")
+
+        config = OrgReportConfig(skip_lock=False, lock_stale_threshold_seconds=900)
+
+        with patch("cja_auto_sdr.org.analyzer.OrgReportLock") as MockLock:
+            mock_lock_instance = Mock()
+            mock_lock_instance.acquired = True
+            mock_lock_instance.lock_lost = False
+            mock_lock_instance.__enter__ = Mock(return_value=mock_lock_instance)
+            mock_lock_instance.__exit__ = Mock(return_value=None)
+            MockLock.return_value = mock_lock_instance
+
+            mock_cja.getDataViews.return_value = []
+            analyzer = OrgComponentAnalyzer(mock_cja, config, logger, org_id="test_org@AdobeOrg")
+            analyzer.run_analysis()
+
+            MockLock.assert_called_once_with("test_org@AdobeOrg", stale_threshold_seconds=900)
+
+    def test_analyzer_passes_lock_owner_and_backend_to_exception(self):
+        """Test that analyzer includes owner and backend in ConcurrentOrgReportError"""
+        import logging
+
+        mock_cja = Mock()
+        logger = logging.getLogger("test_lock_owner_backend")
+
+        config = OrgReportConfig(skip_lock=False)
+
+        with patch("cja_auto_sdr.org.analyzer.OrgReportLock") as MockLock:
+            mock_lock_instance = Mock()
+            mock_lock_instance.acquired = False
+            mock_lock_instance.get_lock_info.return_value = {
+                "pid": 12345,
+                "started_at": "2024-01-15T10:00:00",
+                "owner": "other-org",
+                "backend": "lease",
+            }
+            mock_lock_instance.__enter__ = Mock(return_value=mock_lock_instance)
+            mock_lock_instance.__exit__ = Mock(return_value=None)
+            MockLock.return_value = mock_lock_instance
+
+            analyzer = OrgComponentAnalyzer(mock_cja, config, logger, org_id="test_org@AdobeOrg")
+
+            with pytest.raises(ConcurrentOrgReportError) as exc_info:
+                analyzer.run_analysis()
+
+            assert exc_info.value.lock_holder_owner == "other-org"
+            assert exc_info.value.lock_backend == "lease"
+            assert exc_info.value.lock_holder_pid == 12345
 
     def test_analyzer_skip_lock_option(self):
         """Test that skip_lock=True bypasses the lock"""
@@ -4204,3 +4272,124 @@ class TestSmartCacheInvalidation:
             assert len(valid_summaries) == 0
             assert valid_count == 0
             assert stale_count == 1
+
+
+class TestOrgReportConfigLockThreshold:
+    """Tests for lock_stale_threshold_seconds on OrgReportConfig."""
+
+    def test_default_value(self):
+        config = OrgReportConfig()
+        assert config.lock_stale_threshold_seconds == 3600
+
+    def test_custom_value(self):
+        config = OrgReportConfig(lock_stale_threshold_seconds=900)
+        assert config.lock_stale_threshold_seconds == 900
+
+
+class TestRunOrgReportRuntimeDetails:
+    """Tests for runtime_details sink in run_org_report."""
+
+    @patch("cja_auto_sdr.generator.append_github_step_summary")
+    @patch("cja_auto_sdr.generator.build_org_step_summary", return_value="")
+    @patch("cja_auto_sdr.generator.write_org_report_json")
+    @patch("cja_auto_sdr.generator.OrgComponentAnalyzer")
+    @patch("cja_auto_sdr.generator.cjapy")
+    @patch("cja_auto_sdr.generator.configure_cjapy")
+    def test_runtime_details_populated_on_success(
+        self, mock_configure, mock_cjapy, mock_analyzer_cls, mock_write_json, mock_build_summary, mock_append, tmp_path
+    ):
+        mock_configure.return_value = (True, "config.json", {"org_id": "org123"})
+        mock_result = Mock()
+        mock_result.total_data_views = 1
+        mock_result.thresholds_exceeded = False
+        mock_result.duration = 1.0
+        mock_result.governance_violations = None
+        mock_analyzer_cls.return_value.run_analysis.return_value = mock_result
+        mock_write_json.return_value = str(tmp_path / "report.json")
+
+        org_config = OrgReportConfig(lock_stale_threshold_seconds=600)
+        details: dict = {}
+        success, _ = run_org_report(
+            config_file="config.json",
+            output_format="json",
+            output_path=str(tmp_path / "report.json"),
+            output_dir=str(tmp_path),
+            org_config=org_config,
+            runtime_details=details,
+        )
+        assert success is True
+        assert details["lock_acquired"] is True
+        assert details["lock_contention"] is False
+        assert details["lock_stale_threshold_seconds"] == 600
+
+    @patch("cja_auto_sdr.generator.OrgComponentAnalyzer")
+    @patch("cja_auto_sdr.generator.cjapy")
+    @patch("cja_auto_sdr.generator.configure_cjapy")
+    def test_runtime_details_populated_on_contention(self, mock_configure, mock_cjapy, mock_analyzer_cls, tmp_path):
+        mock_configure.return_value = (True, "config.json", {"org_id": "org123"})
+        mock_analyzer_cls.return_value.run_analysis.side_effect = ConcurrentOrgReportError(
+            org_id="org123",
+            lock_holder_pid=9999,
+            lock_holder_owner="other-user",
+            lock_backend="lease",
+            started_at="2026-03-15T10:00:00",
+        )
+
+        org_config = OrgReportConfig(lock_stale_threshold_seconds=1800)
+        details: dict = {}
+        success, _ = run_org_report(
+            config_file="config.json",
+            output_format="console",
+            output_path=None,
+            output_dir=str(tmp_path),
+            org_config=org_config,
+            runtime_details=details,
+        )
+        assert success is False
+        assert details["lock_acquired"] is False
+        assert details["lock_contention"] is True
+        assert details["lock_holder_pid"] == 9999
+        assert details["lock_holder_owner"] == "other-user"
+        assert details["lock_backend"] == "lease"
+        assert details["lock_started_at"] == "2026-03-15T10:00:00"
+        assert details["lock_stale_threshold_seconds"] == 1800
+
+    @patch("cja_auto_sdr.generator.OrgComponentAnalyzer")
+    @patch("cja_auto_sdr.generator.cjapy")
+    @patch("cja_auto_sdr.generator.configure_cjapy")
+    def test_runtime_details_populated_on_lock_ownership_lost(
+        self, mock_configure, mock_cjapy, mock_analyzer_cls, tmp_path
+    ):
+        mock_configure.return_value = (True, "config.json", {"org_id": "org123"})
+        mock_analyzer_cls.return_value.run_analysis.side_effect = LockOwnershipLostError(
+            "/tmp/lock", reason="heartbeat failed"
+        )
+
+        org_config = OrgReportConfig()
+        details: dict = {}
+        success, _ = run_org_report(
+            config_file="config.json",
+            output_format="console",
+            output_path=None,
+            output_dir=str(tmp_path),
+            org_config=org_config,
+            runtime_details=details,
+        )
+        assert success is False
+        assert details["lock_acquired"] is True
+        assert details["lock_ownership_lost"] is True
+        assert details["lock_contention"] is False
+
+    def test_runtime_details_none_is_safe(self, tmp_path):
+        """run_org_report should not crash when runtime_details is None (default)."""
+        with patch("cja_auto_sdr.generator.configure_cjapy") as mock_configure:
+            mock_configure.return_value = (False, "bad config", None)
+            success, _ = run_org_report(
+                config_file="config.json",
+                output_format="console",
+                output_path=None,
+                output_dir=str(tmp_path),
+                org_config=OrgReportConfig(),
+                runtime_details=None,
+            )
+            assert success is False

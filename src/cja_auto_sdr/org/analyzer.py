@@ -105,7 +105,10 @@ class OrgComponentAnalyzer:
         if not self.config.skip_lock:
             from cja_auto_sdr.core.exceptions import ConcurrentOrgReportError
 
-            lock = OrgReportLock(self.org_id)
+            lock = OrgReportLock(
+                self.org_id,
+                stale_threshold_seconds=self.config.lock_stale_threshold_seconds,
+            )
 
             # Try to acquire the lock before starting
             with lock:
@@ -115,6 +118,8 @@ class OrgComponentAnalyzer:
                         org_id=self.org_id,
                         lock_holder_pid=lock_info.get("pid") if lock_info else None,
                         started_at=lock_info.get("started_at") if lock_info else None,
+                        lock_holder_owner=lock_info.get("owner") if lock_info else None,
+                        lock_backend=lock_info.get("backend") if lock_info else None,
                     )
                 self._active_lock = lock
                 try:

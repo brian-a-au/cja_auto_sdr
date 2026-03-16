@@ -158,8 +158,10 @@ from cja_auto_sdr.core.exceptions import (
     APIError,
     CircuitBreakerOpen,
     CJASDRError,
+    ConcurrentOrgReportError,
     ConfigurationError,
     CredentialSourceError,
+    LockOwnershipLostError,
     OutputError,
     ProfileConfigError,
     ProfileError,
@@ -8326,6 +8328,7 @@ def run_org_report(
     profile: str | None = None,
     quiet: bool = False,
     trending_window: int | None = None,
+    runtime_details: dict[str, Any] | None = None,
 ) -> tuple[bool, bool]:
     """Run org-wide component analysis and generate report.
 
@@ -8338,6 +8341,7 @@ def run_org_report(
         profile: Optional profile name for credentials
         quiet: Suppress progress output
         trending_window: If set, compute trending across last N cached snapshots
+        runtime_details: Optional mutable dict to receive additive lock execution details
 
     Returns:
         Tuple of (success, thresholds_exceeded) - thresholds_exceeded triggers exit code 2
@@ -8550,7 +8554,34 @@ def run_org_report(
             _status_print("=" * 110)
 
         append_github_step_summary(build_org_step_summary(result), logger)
+        if runtime_details is not None:
+            runtime_details["lock_acquired"] = True
+            runtime_details["lock_contention"] = False
+            runtime_details["lock_stale_threshold_seconds"] = org_config.lock_stale_threshold_seconds
         return True, result.thresholds_exceeded
+
+    except ConcurrentOrgReportError as e:
+        _status_print(ConsoleColors.error(f"ERROR: Org report failed: {e!s}"))
+        logger.exception("Org report error")
+        if runtime_details is not None:
+            runtime_details["lock_acquired"] = False
+            runtime_details["lock_contention"] = True
+            runtime_details["lock_stale_threshold_seconds"] = org_config.lock_stale_threshold_seconds
+            runtime_details["lock_holder_pid"] = e.lock_holder_pid
+            runtime_details["lock_holder_owner"] = e.lock_holder_owner
+            runtime_details["lock_backend"] = e.lock_backend
+            runtime_details["lock_started_at"] = e.started_at
+        return False, False
+
+    except LockOwnershipLostError:
+        _status_print(ConsoleColors.error("ERROR: Org report failed: lock ownership lost during execution"))
+        logger.exception("Org report error: lock ownership lost")
+        if runtime_details is not None:
+            runtime_details["lock_acquired"] = True
+            runtime_details["lock_contention"] = False
+            runtime_details["lock_ownership_lost"] = True
+            runtime_details["lock_stale_threshold_seconds"] = org_config.lock_stale_threshold_seconds
+        return False, False
 
     except FileNotFoundError:
         _status_print(ConsoleColors.error(f"ERROR: Configuration file '{config_file}' not found"))
@@ -9330,6 +9361,7 @@ def _dispatch_post_validation_report_modes(
             compare_org_report=getattr(args, "org_compare_report", None),
             include_owner_summary=getattr(args, "org_owner_summary", False),
             flag_stale=getattr(args, "org_flag_stale", False),
+            lock_stale_threshold_seconds=getattr(args, "org_lock_stale_threshold", 3600),
         )
 
         output_format = args.format or "console"
@@ -9337,6 +9369,7 @@ def _dispatch_post_validation_report_modes(
         if trending_window is not None and trending_window < 2:
             _exit_error("--trending-window must be >= 2")
 
+        lock_details: dict[str, Any] = {}
         success, thresholds_exceeded = run_org_report(
             config_file=args.config_file,
             output_format=output_format,
@@ -9346,6 +9379,7 @@ def _dispatch_post_validation_report_modes(
             profile=getattr(args, "profile", None),
             quiet=args.quiet,
             trending_window=trending_window,
+            runtime_details=lock_details,
         )
         if run_state is not None:
             run_state["output_format"] = output_format
@@ -9353,6 +9387,7 @@ def _dispatch_post_validation_report_modes(
                 "operation_success": success,
                 "thresholds_exceeded": thresholds_exceeded,
                 "fail_on_threshold": org_config.fail_on_threshold,
+                **lock_details,
             }
 
         if success:
@@ -9447,6 +9482,12 @@ def _main_impl(run_state: dict[str, Any] | None = None):
         _exit_error("--fail-on-quality is only supported in SDR generation mode")
     if getattr(args, "trending_window", None) is not None and inferred_mode != RunMode.ORG_REPORT:
         _exit_error("--trending-window is only supported with --org-report")
+
+    org_lock_stale = getattr(args, "org_lock_stale_threshold", 3600)
+    if org_lock_stale != 3600 and inferred_mode != RunMode.ORG_REPORT:
+        _exit_error("--lock-stale-threshold is only valid with --org-report")
+    if org_lock_stale <= 0:
+        _exit_error("--lock-stale-threshold must be greater than 0")
 
     if (
         getattr(args, "auto_prune", False)

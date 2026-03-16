@@ -1386,6 +1386,16 @@ Requirements:
         help="Flag components with stale naming patterns (test, old, temp, deprecated, version suffixes, date patterns)",
     )
 
+    # Lock stale-threshold control
+    org_group.add_argument(
+        "--lock-stale-threshold",
+        type=int,
+        metavar="SECONDS",
+        default=3600,
+        dest="org_lock_stale_threshold",
+        help="Stale lease recovery threshold in seconds for the org-report concurrency lock (default: 3600)",
+    )
+
     # Enable shell tab-completion if argcomplete is installed
     if enable_autocomplete and _ARGCOMPLETE_AVAILABLE:
         argcomplete.autocomplete(parser)  # pragma: no cover

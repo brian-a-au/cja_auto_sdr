@@ -4969,6 +4969,57 @@ class TestOrgReportArgumentValidation:
         assert "--trending-window is only supported with --org-report" in capsys.readouterr().err
         mock_list_dataviews.assert_not_called()
 
+    @patch("cja_auto_sdr.generator.list_dataviews")
+    def test_lock_stale_threshold_requires_org_report_mode(self, mock_list_dataviews, capsys):
+        """--lock-stale-threshold should fail fast outside org-report mode."""
+        from cja_auto_sdr.generator import main
+
+        with patch.object(sys, "argv", ["cja_auto_sdr", "--list-dataviews", "--lock-stale-threshold", "600"]):
+            with pytest.raises(SystemExit) as exc_info:
+                main()
+
+        assert exc_info.value.code == 1
+        assert "--lock-stale-threshold is only valid with --org-report" in capsys.readouterr().err
+        mock_list_dataviews.assert_not_called()
+
+    @patch("cja_auto_sdr.generator.list_dataviews")
+    def test_lock_stale_threshold_rejects_zero(self, mock_list_dataviews, capsys):
+        """--lock-stale-threshold must be > 0."""
+        from cja_auto_sdr.generator import main
+
+        with patch.object(sys, "argv", ["cja_auto_sdr", "--org-report", "--lock-stale-threshold", "0"]):
+            with pytest.raises(SystemExit) as exc_info:
+                main()
+
+        assert exc_info.value.code == 1
+        assert "--lock-stale-threshold must be greater than 0" in capsys.readouterr().err
+
+    @patch("cja_auto_sdr.generator.list_dataviews")
+    def test_lock_stale_threshold_rejects_negative(self, mock_list_dataviews, capsys):
+        """--lock-stale-threshold must be > 0."""
+        from cja_auto_sdr.generator import main
+
+        with patch.object(sys, "argv", ["cja_auto_sdr", "--org-report", "--lock-stale-threshold", "-1"]):
+            with pytest.raises(SystemExit) as exc_info:
+                main()
+
+        assert exc_info.value.code == 1
+        assert "--lock-stale-threshold must be greater than 0" in capsys.readouterr().err
+
+    def test_lock_stale_threshold_parsed_into_org_config(self):
+        """--lock-stale-threshold value reaches OrgReportConfig."""
+        from cja_auto_sdr.cli.parser import parse_arguments
+
+        args = parse_arguments(["--org-report", "--lock-stale-threshold", "900"])
+        assert args.org_lock_stale_threshold == 900
+
+    def test_lock_stale_threshold_default_value(self):
+        """--lock-stale-threshold defaults to 3600."""
+        from cja_auto_sdr.cli.parser import parse_arguments
+
+        args = parse_arguments(["--org-report"])
+        assert args.org_lock_stale_threshold == 3600
+
 
 class TestProfileImportCLI:
     """Tests for non-interactive --profile-import CLI flow."""

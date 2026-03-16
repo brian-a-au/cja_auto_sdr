@@ -147,7 +147,7 @@ class LockManager:
             with suppress(Exception):  # best-effort metadata read
                 info = self.read_info()
                 if info is not None:
-                    current_owner = info.get("owner")
+                    current_owner = {k: info[k] for k in ("pid", "owner", "backend", "started_at") if k in info} or None
             emit_diagnostic(
                 self.logger,
                 "lock_acquire_failed",

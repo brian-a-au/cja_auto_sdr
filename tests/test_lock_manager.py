@@ -247,6 +247,57 @@ class TestLockManagerAcquire:
         assert mgr.acquired is False
         mock_backend.release.assert_called_once_with(handle)
 
+    def test_contended_emits_structured_current_owner(self, tmp_path):
+        """lock_acquire_failed diagnostic should include structured current_owner dict."""
+        mgr = self._make_manager(tmp_path)
+        info_dict = {
+            "pid": 12345,
+            "owner": "other-org",
+            "backend": "lease",
+            "started_at": "2026-03-15T10:00:00",
+            "host": "host1",
+            "updated_at": "2026-03-15T10:01:00",
+        }
+        with (
+            patch.object(
+                LockManager,
+                "_acquire_with_result",
+                return_value=AcquireResult(status=AcquireStatus.CONTENDED),
+            ),
+            patch.object(mgr, "read_info", return_value=info_dict),
+            patch("cja_auto_sdr.core.locks.manager.emit_diagnostic") as mock_diag,
+        ):
+            result = mgr.acquire()
+        assert result is False
+        mock_diag.assert_called_once()
+        call_kwargs = mock_diag.call_args[1]
+        current_owner = call_kwargs["current_owner"]
+        assert isinstance(current_owner, dict)
+        assert current_owner["pid"] == 12345
+        assert current_owner["owner"] == "other-org"
+        assert current_owner["backend"] == "lease"
+        assert current_owner["started_at"] == "2026-03-15T10:00:00"
+        # host and updated_at should NOT be in the structured owner dict
+        assert "host" not in current_owner
+        assert "updated_at" not in current_owner
+
+    def test_contended_emits_unknown_when_no_info(self, tmp_path):
+        """lock_acquire_failed diagnostic should emit 'unknown' when read_info returns None."""
+        mgr = self._make_manager(tmp_path)
+        with (
+            patch.object(
+                LockManager,
+                "_acquire_with_result",
+                return_value=AcquireResult(status=AcquireStatus.CONTENDED),
+            ),
+            patch.object(mgr, "read_info", return_value=None),
+            patch("cja_auto_sdr.core.locks.manager.emit_diagnostic") as mock_diag,
+        ):
+            result = mgr.acquire()
+        assert result is False
+        call_kwargs = mock_diag.call_args[1]
+        assert call_kwargs["current_owner"] == "unknown"
+
 
 # ---------------------------------------------------------------------------
 # LockManager.release

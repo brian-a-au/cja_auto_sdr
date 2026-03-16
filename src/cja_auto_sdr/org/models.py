@@ -101,6 +101,7 @@ class OrgReportConfig:
     validate_cache: bool = False  # Validate cache entries against data view modification timestamps
     # Concurrency lock
     skip_lock: bool = False  # Skip the file-based lock that prevents concurrent runs (for testing)
+    lock_stale_threshold_seconds: int = 3600  # Stale lease recovery threshold for org-report lock
 
 
 @dataclass
