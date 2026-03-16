@@ -121,7 +121,7 @@ tests/
 └── README.md                        # This file
 ```
 
-**Total: 6,286 comprehensive tests**
+**Total: 6,411 comprehensive tests**
 
 ### Test Count Breakdown
 
@@ -129,9 +129,9 @@ tests/
 |-----------|-------|---------------|
 | `test_diff_comparison.py` | 169 | Data view diff comparison feature with inventory support |
 | `test_ux_features.py` | 123 | UX features: --open, --stats, --output, --list-dataviews formats, inventory validation, inventory summary, include-all-inventory |
-| `test_org_report.py` | 175 | Org-wide component analysis: config, distribution, similarity, output formats, large org scaling, output path aliases |
+| `test_org_report.py` | 184 | Org-wide component analysis: config, distribution, similarity, output formats, large org scaling, output path aliases |
 | `test_org_report_integration.py` | 17 | Org-wide analysis integration tests: end-to-end flows, caching, filtering, governance |
-| `test_cli.py` | 431 | Command-line interface and argument parsing |
+| `test_cli.py` | 436 | Command-line interface and argument parsing |
 | `test_profiles.py` | 77 | Multi-organization profile support |
 | `test_derived_inventory.py` | 62 | Derived fields inventory feature |
 | `test_inventory_utils.py` | 47 | Inventory utilities and helpers |
@@ -175,10 +175,10 @@ tests/
 | `test_perf.py` | 7 | Performance utilities (cache eviction, statistics) |
 | `test_snapshot.py` | 78 | Diff snapshot creation and comparison |
 | `test_colors.py` | 122 | Console color formatting, themes, TTY detection |
-| `test_exceptions.py` | 64 | Custom exception classes construction and formatting |
+| `test_exceptions.py` | 68 | Custom exception classes construction and formatting |
 | `test_logging_redaction.py` | 158 | Logging, sensitive data redaction, JSON formatter |
 | `test_config_dataclasses.py` | 88 | Config dataclasses and constants functions |
-| `test_lock_manager.py` | 48 | Lock manager acquire/release/heartbeat lifecycle |
+| `test_lock_manager.py` | 50 | Lock manager acquire/release/heartbeat lifecycle |
 | `test_lazy_forwarding.py` | 71 | Lazy-forwarding infrastructure and make_getattr() |
 | `test_lock_backend_edge_cases.py` | 165 | Lock backend metadata I/O, stale detection, legacy parsing |
 | `test_derived_fields_coverage.py` | 161 | Derived field complexity scoring, logic summary, predicates |
@@ -237,7 +237,7 @@ tests/
 | `test_example_automation_scripts.py` | 4 | Automation shell script validation tests |
 | `test_exit_codes.py` | 11 | Exit code helpers and signal detection tests |
 | `test_json_io.py` | 2 | JSON I/O atomic write and read tests |
-| **Total** | **6,286** | **Collected via pytest --collect-only** |
+| **Total** | **6,411** | **Collected via pytest --collect-only** |
 
 ## Running Tests
 
@@ -641,8 +641,8 @@ Check for drift (CI-friendly):
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (6,286 tests total)
-- [x] Org-wide analysis tests (test_org_report.py) - 175 tests (including large org scaling, output path aliases, memory warnings, smart cache invalidation)
+- [x] Comprehensive test coverage (6,411 tests total)
+- [x] Org-wide analysis tests (test_org_report.py) - 184 tests (including large org scaling, output path aliases, memory warnings, smart cache invalidation)
 - [x] Org-wide analysis integration tests (test_org_report_integration.py) - 17 tests (end-to-end flows, caching, filtering, governance thresholds)
 - [x] Profile management tests (test_profiles.py) - 77 tests
 - [x] API worker auto-tuning tests (test_api_tuning.py) - 23 tests
