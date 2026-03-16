@@ -32,6 +32,7 @@ from cja_auto_sdr.generator import (
     OrgReportResult,
     SimilarityPair,
     _merge_org_report_run_summary_details,
+    _record_org_report_lock_runtime_details,
     _render_distribution_bar,
     compare_org_reports,
     run_org_report,
@@ -4289,6 +4290,38 @@ class TestOrgReportConfigLockThreshold:
 
 class TestRunOrgReportRuntimeDetails:
     """Tests for runtime_details sink in run_org_report."""
+
+    def test_lock_runtime_details_replace_stale_optional_fields(self):
+        details = {
+            "unrelated": "keep",
+            "lock_backend": "lease",
+            "lock_ownership_lost": True,
+            "lock_holder_pid": 9999,
+            "lock_holder_owner": "other-user",
+            "lock_started_at": "2026-03-15T10:00:00",
+        }
+
+        _record_org_report_lock_runtime_details(
+            details,
+            acquired=True,
+            contention=False,
+            stale_threshold_seconds=900,
+            backend=None,
+            ownership_lost=False,
+            holder_pid=None,
+            holder_owner=None,
+            started_at=None,
+        )
+
+        assert details["unrelated"] == "keep"
+        assert details["lock_acquired"] is True
+        assert details["lock_contention"] is False
+        assert details["lock_stale_threshold_seconds"] == 900
+        assert "lock_backend" not in details
+        assert "lock_ownership_lost" not in details
+        assert "lock_holder_pid" not in details
+        assert "lock_holder_owner" not in details
+        assert "lock_started_at" not in details
 
     @patch("cja_auto_sdr.generator.append_github_step_summary")
     @patch("cja_auto_sdr.generator.build_org_step_summary", return_value="")

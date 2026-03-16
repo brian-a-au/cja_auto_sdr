@@ -9,6 +9,7 @@ import logging
 import os
 import sys
 import time
+from collections.abc import Callable
 
 import pandas as pd
 
@@ -18,6 +19,53 @@ from cja_auto_sdr.generator import DataQualityChecker
 
 _PERF_REGRESSION_FACTOR = 1.5
 _PERF_ABSOLUTE_OVERHEAD_SECONDS = 0.001
+
+
+def _build_perf_logger() -> logging.Logger:
+    """Use an isolated warning-level logger so perf checks avoid debug noise."""
+    logger = logging.getLogger("test.optimized_validation.performance")
+    logger.setLevel(logging.WARNING)
+    logger.propagate = False
+    if not logger.handlers:
+        logger.addHandler(logging.NullHandler())
+    return logger
+
+
+def _run_original_validation(
+    df: pd.DataFrame,
+    logger: logging.Logger,
+    required_fields: list[str],
+    null_fields: list[str],
+) -> None:
+    validator = DataQualityChecker(logger)
+    validator.check_empty_dataframe(df, "Metrics")
+    validator.check_required_fields(df, "Metrics", required_fields)
+    validator.check_duplicates(df, "Metrics")
+    validator.check_null_values(df, "Metrics", null_fields)
+    validator.check_missing_descriptions(df, "Metrics")
+    validator.check_id_validity(df, "Metrics")
+
+
+def _run_optimized_validation(
+    df: pd.DataFrame,
+    logger: logging.Logger,
+    required_fields: list[str],
+    null_fields: list[str],
+) -> None:
+    validator = DataQualityChecker(logger)
+    validator.check_all_quality_issues_optimized(
+        df,
+        "Metrics",
+        required_fields,
+        null_fields,
+    )
+
+
+def _measure_runtime(func: Callable[[], None], repetitions: int = 1) -> float:
+    start = time.perf_counter()
+    for _ in range(repetitions):
+        func()
+    return time.perf_counter() - start
 
 
 class TestOptimizedValidation:
@@ -318,7 +366,9 @@ class TestOptimizedValidationPerformance:
 
     def test_optimized_is_faster_than_original(self):
         """Test that optimized validation is faster than original with realistic dataset"""
-        logger = logging.getLogger("test")
+        logger = _build_perf_logger()
+        required_fields = ["id", "name", "type"]
+        null_fields = ["id", "name", "description", "title"]
 
         # Create realistic dataset (similar to real CJA data views with 200+ components)
         size = 1000  # Larger dataset to show performance benefits
@@ -334,31 +384,23 @@ class TestOptimizedValidationPerformance:
 
         # Run multiple iterations to get stable timing
         iterations = 10
+        repetitions = 5
         original_times = []
         optimized_times = []
 
         for _ in range(iterations):
-            # Time original validation
-            start = time.time()
-            validator_original = DataQualityChecker(logger)
-            validator_original.check_empty_dataframe(df, "Metrics")
-            validator_original.check_required_fields(df, "Metrics", ["id", "name", "type"])
-            validator_original.check_duplicates(df, "Metrics")
-            validator_original.check_null_values(df, "Metrics", ["id", "name", "description", "title"])
-            validator_original.check_missing_descriptions(df, "Metrics")
-            validator_original.check_id_validity(df, "Metrics")
-            original_times.append(time.time() - start)
-
-            # Time optimized validation
-            start = time.time()
-            validator_optimized = DataQualityChecker(logger)
-            validator_optimized.check_all_quality_issues_optimized(
-                df,
-                "Metrics",
-                ["id", "name", "type"],
-                ["id", "name", "description", "title"],
+            original_times.append(
+                _measure_runtime(
+                    lambda: _run_original_validation(df, logger, required_fields, null_fields),
+                    repetitions=repetitions,
+                ),
             )
-            optimized_times.append(time.time() - start)
+            optimized_times.append(
+                _measure_runtime(
+                    lambda: _run_optimized_validation(df, logger, required_fields, null_fields),
+                    repetitions=repetitions,
+                ),
+            )
 
         # Use median times to reduce variance
         original_time = sorted(original_times)[len(original_times) // 2]
@@ -367,7 +409,9 @@ class TestOptimizedValidationPerformance:
         # Calculate performance improvement
         improvement = ((original_time - optimized_time) / original_time) * 100
 
-        print(f"\nPerformance Comparison ({iterations} iterations, dataset size={size}):")
+        print(
+            f"\nPerformance Comparison ({iterations} iterations x {repetitions} repetitions, dataset size={size}):",
+        )
         print(f"  Original validation (median): {original_time:.4f}s")
         print(f"  Optimized validation (median): {optimized_time:.4f}s")
         print(f"  Improvement: {improvement:.1f}% faster")
@@ -393,7 +437,9 @@ class TestOptimizedValidationPerformance:
 
     def test_optimized_scales_better(self):
         """Test that optimized validation scales better with larger datasets"""
-        logger = logging.getLogger("test")
+        logger = _build_perf_logger()
+        required_fields = ["id", "name", "type"]
+        null_fields = ["id", "name", "description"]
 
         times_original = []
         times_optimized = []
@@ -414,28 +460,20 @@ class TestOptimizedValidationPerformance:
             # Run 3 times and take median to reduce variance
             orig_times = []
             opt_times = []
+            repetitions = max(1, 10000 // size)
             for _ in range(3):
-                # Time original
-                start = time.time()
-                validator_original = DataQualityChecker(logger)
-                validator_original.check_empty_dataframe(df, "Metrics")
-                validator_original.check_required_fields(df, "Metrics", ["id", "name", "type"])
-                validator_original.check_duplicates(df, "Metrics")
-                validator_original.check_null_values(df, "Metrics", ["id", "name", "description"])
-                validator_original.check_missing_descriptions(df, "Metrics")
-                validator_original.check_id_validity(df, "Metrics")
-                orig_times.append(time.time() - start)
-
-                # Time optimized
-                start = time.time()
-                validator_optimized = DataQualityChecker(logger)
-                validator_optimized.check_all_quality_issues_optimized(
-                    df,
-                    "Metrics",
-                    ["id", "name", "type"],
-                    ["id", "name", "description"],
+                orig_times.append(
+                    _measure_runtime(
+                        lambda: _run_original_validation(df, logger, required_fields, null_fields),
+                        repetitions=repetitions,
+                    ),
                 )
-                opt_times.append(time.time() - start)
+                opt_times.append(
+                    _measure_runtime(
+                        lambda: _run_optimized_validation(df, logger, required_fields, null_fields),
+                        repetitions=repetitions,
+                    ),
+                )
 
             times_original.append(sorted(orig_times)[1])  # Median
             times_optimized.append(sorted(opt_times)[1])  # Median

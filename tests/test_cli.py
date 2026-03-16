@@ -1404,6 +1404,48 @@ class TestQualityGateAndReport:
 
     @patch("cja_auto_sdr.generator.process_single_dataview")
     @patch("cja_auto_sdr.generator.resolve_data_view_names")
+    def test_quality_policy_fail_on_quality_rejects_skip_validation(self, mock_resolve, mock_process, tmp_path):
+        """Policy-driven quality gates must still reject --skip-validation."""
+        from cja_auto_sdr.generator import main
+
+        policy_path = tmp_path / "quality_policy.json"
+        policy_path.write_text(json.dumps({"fail_on_quality": "HIGH"}), encoding="utf-8")
+
+        with patch.object(
+            sys,
+            "argv",
+            ["cja_auto_sdr", "dv_test", "--quality-policy", str(policy_path), "--skip-validation"],
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                main()
+
+        assert exc_info.value.code == 1
+        mock_resolve.assert_not_called()
+        mock_process.assert_not_called()
+
+    @patch("cja_auto_sdr.generator.process_single_dataview")
+    @patch("cja_auto_sdr.generator.resolve_data_view_names")
+    def test_quality_policy_quality_report_rejects_skip_validation(self, mock_resolve, mock_process, tmp_path):
+        """Policy-driven quality-report mode must still reject --skip-validation."""
+        from cja_auto_sdr.generator import main
+
+        policy_path = tmp_path / "quality_policy.json"
+        policy_path.write_text(json.dumps({"quality_report": "json"}), encoding="utf-8")
+
+        with patch.object(
+            sys,
+            "argv",
+            ["cja_auto_sdr", "dv_test", "--quality-policy", str(policy_path), "--skip-validation"],
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                main()
+
+        assert exc_info.value.code == 1
+        mock_resolve.assert_not_called()
+        mock_process.assert_not_called()
+
+    @patch("cja_auto_sdr.generator.process_single_dataview")
+    @patch("cja_auto_sdr.generator.resolve_data_view_names")
     def test_cli_fail_on_quality_overrides_quality_policy(self, mock_resolve, mock_process, tmp_path):
         """Explicit --fail-on-quality should override policy defaults."""
         from cja_auto_sdr.generator import ProcessingResult, main
@@ -4982,16 +5024,18 @@ class TestOrgReportArgumentValidation:
         assert "--lock-stale-threshold is only valid with --org-report" in capsys.readouterr().err
         mock_list_dataviews.assert_not_called()
 
-    def test_lock_stale_threshold_explicit_default_requires_org_report_mode(self, capsys):
-        """An explicit default threshold must still be rejected outside org-report mode."""
+    def test_lock_stale_threshold_is_ignored_for_standalone_explain_exit_code(self, capsys):
+        """Standalone explain mode should ignore unrelated org-report-only flags."""
         from cja_auto_sdr.generator import main
 
         with patch.object(sys, "argv", ["cja_auto_sdr", "--explain-exit-code", "2", "--lock-stale-threshold", "3600"]):
             with pytest.raises(SystemExit) as exc_info:
                 main()
 
-        assert exc_info.value.code == 1
-        assert "--lock-stale-threshold is only valid with --org-report" in capsys.readouterr().err
+        assert exc_info.value.code == 0
+        captured = capsys.readouterr()
+        assert "Exit code 2:" in captured.out
+        assert "--lock-stale-threshold is only valid with --org-report" not in captured.err
 
     @patch("cja_auto_sdr.generator.list_dataviews")
     def test_lock_stale_threshold_rejects_zero(self, mock_list_dataviews, capsys):

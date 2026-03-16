@@ -6,6 +6,7 @@ RunMode, parser validation for invalid combos, and run-summary interaction.
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from contextlib import redirect_stdout
@@ -310,6 +311,16 @@ class TestExplainExitCodeValidation:
 
         assert exc_info.value.code == 1
 
+    def test_rejects_sdr_only_fail_on_quality_flag(self, capsys):
+        from cja_auto_sdr.generator import main as generator_main
+
+        with patch.object(sys, "argv", ["cja_auto_sdr", "--explain-exit-code", "2", "--fail-on-quality", "HIGH"]):
+            with pytest.raises(SystemExit) as exc_info:
+                generator_main()
+
+        assert exc_info.value.code == 1
+        assert "--fail-on-quality is only supported in SDR generation mode" in capsys.readouterr().err
+
 
 # ---------------------------------------------------------------------------
 # Run-summary interaction tests
@@ -347,3 +358,33 @@ class TestExplainExitCodeRunSummary:
         # The explanation should have been redirected to stderr by the run_context
         stderr_output = stderr_buf.getvalue()
         assert "Exit code 2:" in stderr_output or "Exit code 2:" in stdout_buf.getvalue()
+
+    def test_explanation_bypasses_unrelated_validation_with_run_summary_stdout(self, capsys):
+        """Standalone explain mode must ignore generic validation-only flags."""
+        from cja_auto_sdr.generator import main as generator_main
+
+        with patch.object(
+            sys,
+            "argv",
+            [
+                "cja_auto_sdr",
+                "--explain-exit-code",
+                "2",
+                "--run-summary-json",
+                "-",
+                "--workers",
+                "0",
+                "--lock-stale-threshold",
+                "0",
+            ],
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                generator_main()
+
+        assert exc_info.value.code == 0
+        captured = capsys.readouterr()
+        payload = json.loads(captured.out)
+        assert payload["mode"] == "explain_exit_code"
+        assert payload["exit_code"] == 0
+        assert payload["status"] == "success"
+        assert "Exit code 2:" in captured.err

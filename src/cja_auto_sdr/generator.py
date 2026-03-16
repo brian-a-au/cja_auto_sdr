@@ -1533,23 +1533,103 @@ def _handle_completion_prevalidation(
         raise
 
 
+def _handle_explain_exit_code_prevalidation(
+    args: argparse.Namespace,
+    run_state: dict[str, Any] | None = None,
+) -> NoReturn:
+    """Handle exit-code explanation before unrelated shared validation runs."""
+    explain_code = getattr(args, "explain_exit_code", None)
+    if explain_code is None:
+        _exit_error("Internal error: explain-exit-code mode inferred without a code value")
+
+    from cja_auto_sdr.core.exit_codes import explain_exit_code
+
+    if run_state is not None:
+        run_state["details"] = {"explained_code": explain_code}
+    explain_exit_code(explain_code)
+    sys.exit(0)
+
+
+def _handle_exit_codes_prevalidation() -> NoReturn:
+    """Handle exit-code reference output before unrelated shared validation runs."""
+    from cja_auto_sdr.core.exit_codes import print_exit_codes
+
+    print_exit_codes(banner_width=BANNER_WIDTH)
+    sys.exit(0)
+
+
+def _handle_sample_config_prevalidation(
+    run_state: dict[str, Any] | None = None,
+) -> NoReturn:
+    """Handle sample-config generation before unrelated shared validation runs."""
+    success = generate_sample_config()
+    if run_state is not None:
+        run_state["details"] = {"operation_success": success}
+    sys.exit(0 if success else 1)
+
+
 def _dispatch_prevalidation_mode(
     args: argparse.Namespace,
     inferred_mode: RunMode,
     run_state: dict[str, Any] | None = None,
 ) -> None:
-    """Dispatch pre-validation command modes using inferred run-mode precedence.
+    """Dispatch standalone modes before shared validation and normalization.
 
-    Completion must short-circuit before unrelated global validation, but only
-    when completion is the selected mode for this argv.
+    These modes are intentionally isolated from unrelated generic flags so
+    wrappers can pass through shared argv without breaking standalone commands.
     """
-    if inferred_mode != RunMode.COMPLETION:
-        return
+    if inferred_mode == RunMode.COMPLETION:
+        completion_shell = _completion_shell_from_args(args)
+        if completion_shell is None:
+            _exit_error("Internal error: completion mode inferred without a completion shell value")
+        _handle_completion_prevalidation(completion_shell, run_state=run_state)
 
-    completion_shell = _completion_shell_from_args(args)
-    if completion_shell is None:
-        _exit_error("Internal error: completion mode inferred without a completion shell value")
-    _handle_completion_prevalidation(completion_shell, run_state=run_state)
+    if inferred_mode == RunMode.EXPLAIN_EXIT_CODE:
+        _handle_explain_exit_code_prevalidation(args, run_state=run_state)
+
+    if inferred_mode == RunMode.EXIT_CODES:
+        _handle_exit_codes_prevalidation()
+
+    if inferred_mode == RunMode.SAMPLE_CONFIG:
+        _handle_sample_config_prevalidation(run_state=run_state)
+
+
+def _validate_semantic_flag_relationships(
+    args: argparse.Namespace,
+    *,
+    inferred_mode: RunMode,
+) -> None:
+    """Validate semantic flag relationships on the current effective args.
+
+    This validator is intentionally pure and idempotent so it can run both on
+    the raw parsed CLI args before standalone dispatch and again after quality
+    policy defaults mutate SDR execution args.
+    """
+    non_sdr_mode = inferred_mode != RunMode.SDR
+    if getattr(args, "allow_partial", False) and non_sdr_mode:
+        _exit_error("--allow-partial is only supported in SDR generation mode")
+    if getattr(args, "fail_on_quality", None) and non_sdr_mode:
+        _exit_error("--fail-on-quality is only supported in SDR generation mode")
+    if (
+        getattr(args, "auto_prune", False)
+        and not getattr(args, "auto_snapshot", False)
+        and not getattr(args, "prune_snapshots", False)
+    ):
+        _exit_error("--auto-prune requires --auto-snapshot or --prune-snapshots")
+    if getattr(args, "fail_on_quality", None) and args.skip_validation:
+        _exit_error("--fail-on-quality cannot be used with --skip-validation")
+    if getattr(args, "quality_report", None) and args.skip_validation:
+        _exit_error("--quality-report cannot be used with --skip-validation")
+    if getattr(args, "quality_report", None) and non_sdr_mode:
+        _exit_error("--quality-report is only supported in SDR generation mode")
+    if getattr(args, "allow_partial", False) and getattr(args, "quality_report", None):
+        _exit_error("--allow-partial cannot be used with --quality-report")
+    if getattr(args, "allow_partial", False) and getattr(args, "fail_on_quality", None):
+        _exit_error("--allow-partial cannot be used with --fail-on-quality")
+    if getattr(args, "list_snapshots", False) and getattr(args, "prune_snapshots", False):
+        _exit_error("Use either --list-snapshots or --prune-snapshots, not both")
+    if getattr(args, "profile_overwrite", False) and not getattr(args, "profile_import", None):
+        _exit_error("--profile-overwrite requires --profile-import")
 
 
 def _sync_run_summary_cli_metadata(
@@ -1793,6 +1873,19 @@ def _normalize_optional_detail_text(value: Any) -> str | None:
     return normalized or None
 
 
+def _replace_runtime_detail_value(
+    runtime_details: dict[str, Any],
+    *,
+    key: str,
+    value: Any,
+) -> None:
+    """Set or clear a runtime detail key so reused sinks cannot retain stale state."""
+    if value is None:
+        runtime_details.pop(key, None)
+        return
+    runtime_details[key] = value
+
+
 def _record_org_report_lock_runtime_details(
     runtime_details: dict[str, Any] | None,
     *,
@@ -1814,21 +1907,19 @@ def _record_org_report_lock_runtime_details(
     runtime_details["lock_stale_threshold_seconds"] = stale_threshold_seconds
 
     backend_name = _normalize_optional_detail_text(backend)
-    if backend_name is not None:
-        runtime_details["lock_backend"] = backend_name
-
-    if ownership_lost:
-        runtime_details["lock_ownership_lost"] = True
-    if holder_pid is not None:
-        runtime_details["lock_holder_pid"] = holder_pid
+    _replace_runtime_detail_value(runtime_details, key="lock_backend", value=backend_name)
+    _replace_runtime_detail_value(
+        runtime_details,
+        key="lock_ownership_lost",
+        value=True if ownership_lost else None,
+    )
+    _replace_runtime_detail_value(runtime_details, key="lock_holder_pid", value=holder_pid)
 
     holder_owner_text = _normalize_optional_detail_text(holder_owner)
-    if holder_owner_text is not None:
-        runtime_details["lock_holder_owner"] = holder_owner_text
+    _replace_runtime_detail_value(runtime_details, key="lock_holder_owner", value=holder_owner_text)
 
     started_at_text = _normalize_optional_detail_text(started_at)
-    if started_at_text is not None:
-        runtime_details["lock_started_at"] = started_at_text
+    _replace_runtime_detail_value(runtime_details, key="lock_started_at", value=started_at_text)
 
 
 def _build_org_report_lock_run_summary_block(lock_details: Mapping[str, Any]) -> dict[str, Any]:
@@ -9557,6 +9648,7 @@ def _main_impl(run_state: dict[str, Any] | None = None):
     _sync_run_summary_cli_metadata(run_state, args, inferred_mode=inferred_mode)
     _validate_org_report_snapshot_cli_args(args, active_modes=active_modes)
     _validate_explain_exit_code_cli_args(args, active_modes=active_modes)
+    _validate_semantic_flag_relationships(args, inferred_mode=inferred_mode)
 
     # Dispatch early command modes before unrelated validation. Use inferred
     # mode so dispatch precedence cannot diverge from run-mode classification.
@@ -9582,6 +9674,9 @@ def _main_impl(run_state: dict[str, Any] | None = None):
             _sync_run_summary_cli_metadata(run_state, args, inferred_mode=inferred_mode)
         if run_state is not None and isinstance(run_state.get("quality_policy"), dict):
             run_state["quality_policy"]["applied"] = applied_quality_policy
+        # Policy defaults mutate args late, so semantic validation must run
+        # again against the effective execution args before deeper processing.
+        _validate_semantic_flag_relationships(args, inferred_mode=inferred_mode)
 
     # Configure global color policy for all ConsoleColors call sites.
     ConsoleColors.configure(no_color=getattr(args, "no_color", False))
@@ -9626,11 +9721,6 @@ def _main_impl(run_state: dict[str, Any] | None = None):
     keep_last_specified = _cli_option_specified("--keep-last")
     keep_since_specified = _cli_option_specified("--keep-since")
 
-    non_sdr_mode = inferred_mode != RunMode.SDR
-    if getattr(args, "allow_partial", False) and non_sdr_mode:
-        _exit_error("--allow-partial is only supported in SDR generation mode")
-    if getattr(args, "fail_on_quality", None) and non_sdr_mode:
-        _exit_error("--fail-on-quality is only supported in SDR generation mode")
     trending_window = getattr(args, "trending_window", None)
     _validate_mode_scoped_option(
         option_name="--trending-window",
@@ -9652,28 +9742,6 @@ def _main_impl(run_state: dict[str, Any] | None = None):
         mode_error="--lock-stale-threshold is only valid with --org-report",
         value_errors=("--lock-stale-threshold must be greater than 0" if org_lock_stale <= 0 else None,),
     )
-
-    if (
-        getattr(args, "auto_prune", False)
-        and not getattr(args, "auto_snapshot", False)
-        and not getattr(args, "prune_snapshots", False)
-    ):
-        _exit_error("--auto-prune requires --auto-snapshot or --prune-snapshots")
-    if getattr(args, "fail_on_quality", None) and args.skip_validation:
-        _exit_error("--fail-on-quality cannot be used with --skip-validation")
-    if getattr(args, "quality_report", None) and args.skip_validation:
-        _exit_error("--quality-report cannot be used with --skip-validation")
-    if getattr(args, "quality_report", None) and non_sdr_mode:
-        _exit_error("--quality-report is only supported in SDR generation mode")
-    if getattr(args, "allow_partial", False) and getattr(args, "quality_report", None):
-        _exit_error("--allow-partial cannot be used with --quality-report")
-    if getattr(args, "allow_partial", False) and getattr(args, "fail_on_quality", None):
-        _exit_error("--allow-partial cannot be used with --fail-on-quality")
-
-    if getattr(args, "list_snapshots", False) and getattr(args, "prune_snapshots", False):
-        _exit_error("Use either --list-snapshots or --prune-snapshots, not both")
-    if getattr(args, "profile_overwrite", False) and not getattr(args, "profile_import", None):
-        _exit_error("--profile-overwrite requires --profile-import")
 
     # Propagate retry config via env vars so both the current process
     # (read by _effective_retry_config in resilience.py) and child
@@ -9706,30 +9774,6 @@ def _main_impl(run_state: dict[str, Any] | None = None):
     color_theme = getattr(args, "color_theme", "default")
     if color_theme and color_theme != "default":
         ConsoleColors.set_theme(color_theme)
-
-    # Handle --explain-exit-code mode (no data view required)
-    explain_code = getattr(args, "explain_exit_code", None)
-    if explain_code is not None:
-        from cja_auto_sdr.core.exit_codes import explain_exit_code
-
-        if run_state is not None:
-            run_state["details"] = {"explained_code": explain_code}
-        explain_exit_code(explain_code)
-        sys.exit(0)
-
-    # Handle --exit-codes mode (no data view required)
-    if getattr(args, "exit_codes", False):
-        from cja_auto_sdr.core.exit_codes import print_exit_codes
-
-        print_exit_codes(banner_width=BANNER_WIDTH)
-        sys.exit(0)
-
-    # Handle --sample-config mode (no data view required)
-    if args.sample_config:
-        success = generate_sample_config()
-        if run_state is not None:
-            run_state["details"] = {"operation_success": success}
-        sys.exit(0 if success else 1)
 
     # ==================== PROFILE MANAGEMENT COMMANDS ====================
 
