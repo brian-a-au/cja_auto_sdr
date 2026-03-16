@@ -1746,6 +1746,23 @@ def _collect_environment_info() -> dict[str, Any]:
     }
 
 
+def _merge_run_details(run_state: dict[str, Any] | None, /, **kwargs: Any) -> None:
+    """Additively merge keys into ``run_state["details"]`` without overwriting existing entries.
+
+    This is used to enrich the run summary ``details`` payload with new optional
+    keys (e.g. ``execution_settings``, ``lock``) while preserving mode-specific
+    fields that were already set (``operation_success``, ``thresholds_exceeded``,
+    etc.).  Passing ``run_state=None`` is a safe no-op so callers don't need to
+    guard against the optional ``run_state``.
+    """
+    if run_state is None:
+        return
+    details = run_state.setdefault("details", {})
+    for key, value in kwargs.items():
+        if key not in details:
+            details[key] = value
+
+
 def _build_run_summary_payload(
     *,
     run_state: Mapping[str, Any],
@@ -9387,8 +9404,38 @@ def _dispatch_post_validation_report_modes(
                 "operation_success": success,
                 "thresholds_exceeded": thresholds_exceeded,
                 "fail_on_threshold": org_config.fail_on_threshold,
-                **lock_details,
             }
+
+            # Reshape flat lock_details from run_org_report() into the
+            # spec's nested ``lock`` block.
+            lock_block: dict[str, Any] = {}
+            if "lock_acquired" in lock_details:
+                lock_block["acquired"] = lock_details["lock_acquired"]
+            if "lock_stale_threshold_seconds" in lock_details:
+                lock_block["stale_threshold_seconds"] = lock_details["lock_stale_threshold_seconds"]
+            if "lock_contention" in lock_details:
+                lock_block["contention_observed"] = lock_details["lock_contention"]
+            if "lock_ownership_lost" in lock_details:
+                lock_block["lost_during_run"] = lock_details["lock_ownership_lost"]
+            else:
+                # Successful or contention paths never set ownership_lost;
+                # report False to indicate the lock was not lost.
+                if "lock_acquired" in lock_details:
+                    lock_block["lost_during_run"] = False
+            if "lock_backend" in lock_details:
+                lock_block["backend"] = lock_details["lock_backend"]
+            # loss_reason is optional — only present when lock was lost
+            if lock_details.get("lock_ownership_lost"):
+                lock_block["loss_reason"] = "ownership_lost_during_execution"
+
+            if lock_block:
+                _merge_run_details(run_state, lock=lock_block)
+
+            # Org-report execution_settings include stale threshold
+            org_exec_settings: dict[str, Any] = {
+                "org_lock_stale_threshold_seconds": org_config.lock_stale_threshold_seconds,
+            }
+            _merge_run_details(run_state, execution_settings=org_exec_settings)
 
         if success:
             if thresholds_exceeded and org_config.fail_on_threshold:
@@ -9439,14 +9486,17 @@ def _main_impl(run_state: dict[str, Any] | None = None):
     ConsoleColors.configure(no_color=getattr(args, "no_color", False))
 
     # Parse and validate --workers argument
+    workers_requested_token: str | int = args.workers  # preserve original CLI token
     workers_auto = False
     if args.workers.lower() == "auto":
         workers_auto = True
+        workers_requested_token = "auto"
         # Will be set later based on data view count
         args.workers = DEFAULT_BATCH_WORKERS  # Temporary default
     else:
         try:
             args.workers = int(args.workers)
+            workers_requested_token = args.workers
         except ValueError:
             _exit_error(f"--workers must be 'auto' or an integer, got '{args.workers}'")
 
@@ -9966,6 +10016,16 @@ def _main_impl(run_state: dict[str, Any] | None = None):
     circuit_breaker_config = execution_context["circuit_breaker_config"]
     inventory_order = execution_context["inventory_order"]
 
+    # Build execution_settings for run-summary details enrichment.
+    # batch_workers_effective is set *after* execution because auto-detection
+    # happens inside _run_batch_mode which mutates args.workers.
+    _execution_settings_base = {
+        "batch_workers_requested": workers_requested_token,
+        "api_auto_tune_requested": execution_context["api_auto_tune_requested"],
+        "circuit_breaker_enabled": execution_context["circuit_breaker_enabled"],
+        "shared_cache_active": execution_context["shared_cache_active"],
+    }
+
     successful_results: list[ProcessingResult] = []
     quality_report_results: list[ProcessingResult] = []
     processed_results: list[ProcessingResult] = []
@@ -9988,6 +10048,11 @@ def _main_impl(run_state: dict[str, Any] | None = None):
     processed_results = list(execution_result["processed_results"])
     overall_failure = bool(execution_result["overall_failure"])
     processing_failures_detected = bool(execution_result["processing_failures_detected"])
+
+    # Finalize execution_settings now that args.workers reflects the
+    # auto-detected effective value (mutated by _run_batch_mode).
+    _execution_settings_base["batch_workers_effective"] = int(args.workers)
+    _merge_run_details(run_state, execution_settings=_execution_settings_base)
 
     all_quality_issues = aggregate_quality_issues(successful_results)
     if run_state is not None:

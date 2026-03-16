@@ -296,6 +296,20 @@ def prepare_sdr_execution_context(
             run_state=run_state,
         )
 
+    # --- Execution metadata for run-summary enrichment ---
+    # ``args.workers`` has already been coerced from the CLI string to an int
+    # by ``_main_impl`` *before* this function is called, but the original
+    # token is lost.  We accept the pre-resolved int here; the caller passes
+    # the original requested token separately via ``workers_auto``.
+
+    # shared_cache is effectively active only when all four conditions hold:
+    # batch mode, --shared-cache flag, caching enabled, and validation not skipped.
+    is_batch = getattr(args, "batch", False) or len(data_views) > 1
+    shared_cache_flag = getattr(args, "shared_cache", False)
+    enable_cache = getattr(args, "enable_cache", True)
+    skip_validation = getattr(args, "skip_validation", False)
+    shared_cache_active = bool(is_batch and shared_cache_flag and enable_cache and not skip_validation)
+
     return {
         "effective_log_level": effective_log_level,
         "quality_report_format": quality_report_format,
@@ -305,6 +319,9 @@ def prepare_sdr_execution_context(
         "api_tuning_config": api_tuning_config,
         "circuit_breaker_config": circuit_breaker_config,
         "inventory_order": inventory_order,
+        "api_auto_tune_requested": api_tuning_config is not None,
+        "circuit_breaker_enabled": circuit_breaker_config is not None,
+        "shared_cache_active": shared_cache_active,
     }
 
 
