@@ -423,6 +423,45 @@ class ContextLoggerAdapter(logging.LoggerAdapter):
         kwargs["extra"] = merged_extra
         return msg, kwargs
 
+    def emit_diagnostic(self, event: str, category: str, **fields: object) -> None:
+        """Emit a structured diagnostic event through this adapter."""
+        emit_diagnostic(self, event, category, **fields)
+
+
+def _format_diagnostic_text_value(value: object) -> str:
+    """Format a single diagnostic field value for text mode output."""
+    if isinstance(value, (dict, list)):
+        try:
+            return json.dumps(value, separators=(",", ":"), default=_safe_str)
+        except RECOVERABLE_LOGGING_BOUNDARY_EXCEPTIONS:
+            return _safe_str(value)
+    return _safe_str(value)
+
+
+def emit_diagnostic(
+    logger: logging.Logger | logging.LoggerAdapter,
+    event: str,
+    category: str,
+    **fields: object,
+) -> None:
+    """Emit a structured diagnostic event at INFO level.
+
+    In text mode the message is formatted as ``[DIAG] {event}: key=value, ...``.
+    In JSON mode ``event``, ``event_category``, and *fields* are merged into
+    the JSON log record via the ``extra`` dict.
+
+    The call respects the effective log level and ``--quiet`` behaviour: if
+    ``INFO`` is suppressed, diagnostic events are also suppressed.
+    """
+    extra: dict[str, object] = {"event": event, "event_category": category, **fields}
+
+    # Build human-readable text representation.
+    kv_parts = [f"{k}={_format_diagnostic_text_value(v)}" for k, v in fields.items()]
+    text_suffix = f": {', '.join(kv_parts)}" if kv_parts else ""
+    message = f"[DIAG] {event}{text_suffix}"
+
+    logger.info(message, extra=extra)
+
 
 def _unwrap_logger(logger: logging.Logger | logging.LoggerAdapter | None) -> logging.Logger | None:
     current = logger

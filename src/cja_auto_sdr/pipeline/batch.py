@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from cja_auto_sdr.core.config import APITuningConfig, CircuitBreakerConfig
+from cja_auto_sdr.core.logging import emit_diagnostic
 from cja_auto_sdr.pipeline.models import BatchConfig
 
 __all__ = ["BatchProcessor"]
@@ -272,6 +273,16 @@ class BatchProcessor:
                 self.logger.info(
                     f"[{self.batch_id}] Shared cache stats: {cache_stats['hits']} hits, "
                     f"{cache_stats['misses']} misses ({cache_stats['hit_rate']:.1f}% hit rate)",
+                )
+                emit_diagnostic(
+                    self.logger,
+                    "shared_cache_summary",
+                    "resource",
+                    hits=cache_stats["hits"],
+                    misses=cache_stats["misses"],
+                    hit_rate=cache_stats["hit_rate"],
+                    size=cache_stats.get("size", 0),
+                    evictions=cache_stats.get("evictions", 0),
                 )
                 self._shared_cache.shutdown()
                 self._shared_cache = None
