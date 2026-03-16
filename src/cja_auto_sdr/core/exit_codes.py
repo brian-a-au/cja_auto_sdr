@@ -6,6 +6,11 @@ triggering heavyweight dependencies (pandas, cjapy, tqdm).
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from typing import TextIO
+
 SIGNAL_EXIT_BASE = 128
 MAX_SIGNAL_NUMBER = 64
 INTERRUPT_EXIT_CODE = SIGNAL_EXIT_BASE + 2
@@ -58,7 +63,66 @@ def _signal_name(signal_number: int) -> str | None:
         return None
 
 
-def explain_exit_code(code: int, file: object | None = None) -> None:
+_KNOWN_EXIT_CODES: dict[int, tuple[str, str, list[str], str]] = {
+    0: (
+        "Success",
+        "The CLI completed without errors or policy violations.",
+        [
+            "SDR generated successfully",
+            "Diff comparison found no changes",
+            "Validation or inspection command completed normally",
+        ],
+        "No action required.",
+    ),
+    1: (
+        "Error occurred",
+        "The CLI encountered a runtime or configuration error.",
+        [
+            "Configuration error (invalid credentials, missing file)",
+            "API error (network, authentication, rate limit)",
+            "Validation failed",
+            "File I/O error",
+        ],
+        "Check stderr output or --run-summary-json for diagnostics.",
+    ),
+    2: (
+        "Policy threshold exceeded",
+        "A policy or governance condition failed, but the CLI did not crash.",
+        [
+            "Diff mode found changes",
+            "--fail-on-quality threshold was reached",
+            "--fail-on-threshold was reached in org-report mode",
+        ],
+        (
+            "Treat as actionable, not as an infrastructure failure.\n"
+            "  Parse --run-summary-json for structured context when available."
+        ),
+    ),
+    3: (
+        "Warning threshold exceeded",
+        "A diff warning threshold was crossed, but the hard policy limit was not.",
+        [
+            "Triggered by --warn-threshold PERCENT in diff mode",
+            "Change percentage exceeded the warning boundary",
+        ],
+        (
+            "Decide whether this is acceptable for your workflow.\n"
+            "  Use --run-summary-json to inspect exact change metrics."
+        ),
+    ),
+    130: (
+        "Interrupted (SIGINT)",
+        "The process was interrupted by the user or a controlling script.",
+        [
+            "Ctrl+C pressed during execution",
+            "Process received SIGINT from a CI runner or wrapper",
+        ],
+        "Re-run the command if the interruption was unintentional.",
+    ),
+}
+
+
+def explain_exit_code(code: int, file: TextIO | None = None) -> None:
     """Print a human-readable explanation of *code* to *file* (default stdout).
 
     This is the shared explainer used by both the fast-path ``__main__.py``
@@ -68,65 +132,7 @@ def explain_exit_code(code: int, file: object | None = None) -> None:
 
     dest = file if file is not None else _sys.stdout
 
-    _KNOWN_CODES: dict[int, tuple[str, str, list[str], str]] = {
-        0: (
-            "Success",
-            "The CLI completed without errors or policy violations.",
-            [
-                "SDR generated successfully",
-                "Diff comparison found no changes",
-                "Validation or inspection command completed normally",
-            ],
-            "No action required.",
-        ),
-        1: (
-            "Error occurred",
-            "The CLI encountered a runtime or configuration error.",
-            [
-                "Configuration error (invalid credentials, missing file)",
-                "API error (network, authentication, rate limit)",
-                "Validation failed",
-                "File I/O error",
-            ],
-            "Check stderr output or --run-summary-json for diagnostics.",
-        ),
-        2: (
-            "Policy threshold exceeded",
-            "A policy or governance condition failed, but the CLI did not crash.",
-            [
-                "Diff mode found changes",
-                "--fail-on-quality threshold was reached",
-                "--fail-on-threshold was reached in org-report mode",
-            ],
-            (
-                "Treat as actionable, not as an infrastructure failure.\n"
-                "  Parse --run-summary-json for structured context when available."
-            ),
-        ),
-        3: (
-            "Warning threshold exceeded",
-            "A diff warning threshold was crossed, but the hard policy limit was not.",
-            [
-                "Triggered by --warn-threshold PERCENT in diff mode",
-                "Change percentage exceeded the warning boundary",
-            ],
-            (
-                "Decide whether this is acceptable for your workflow.\n"
-                "  Use --run-summary-json to inspect exact change metrics."
-            ),
-        ),
-        130: (
-            "Interrupted (SIGINT)",
-            "The process was interrupted by the user or a controlling script.",
-            [
-                "Ctrl+C pressed during execution",
-                "Process received SIGINT from a CI runner or wrapper",
-            ],
-            "Re-run the command if the interruption was unintentional.",
-        ),
-    }
-
-    entry = _KNOWN_CODES.get(code)
+    entry = _KNOWN_EXIT_CODES.get(code)
 
     if entry is not None:
         title, meaning, causes, guidance = entry
@@ -147,7 +153,7 @@ def explain_exit_code(code: int, file: object | None = None) -> None:
     if is_signal_exit_code(code):
         signal_number = code - SIGNAL_EXIT_BASE
         sig_name = _signal_name(signal_number)
-        label = sig_name if sig_name else f"signal {signal_number}"
+        label = sig_name or f"signal {signal_number}"
         print(f"Exit code {code}: Killed by {label}", file=dest)
         print(file=dest)
         print("Meaning:", file=dest)
