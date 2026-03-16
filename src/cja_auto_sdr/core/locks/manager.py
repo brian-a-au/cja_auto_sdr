@@ -44,7 +44,6 @@ def create_lock_backend(
     if requested == "auto":
         if FcntlFileLockBackend.is_supported():
             return FcntlFileLockBackend()
-        log.warning("fcntl locks unavailable; using lease lock backend")
         emit_diagnostic(
             log,
             "lock_backend_fallback",
@@ -58,7 +57,6 @@ def create_lock_backend(
     if requested == "fcntl":
         if FcntlFileLockBackend.is_supported():
             return FcntlFileLockBackend()
-        log.warning("Requested fcntl backend is unavailable; falling back to lease backend")
         emit_diagnostic(
             log,
             "lock_backend_fallback",
@@ -120,10 +118,6 @@ class LockManager:
 
         result = self._acquire_with_result(self.backend, self.lock_path, self.stale_threshold_seconds)
         if result.status == AcquireStatus.BACKEND_UNAVAILABLE and isinstance(self.backend, FcntlFileLockBackend):
-            self.logger.warning(
-                "fcntl backend unavailable for '%s'; falling back to lease backend",
-                self.lock_path,
-            )
             fallback = LeaseFileLockBackend()
             emit_diagnostic(
                 self.logger,
@@ -160,7 +154,7 @@ class LockManager:
                 "lifecycle",
                 lock_path=str(self.lock_path),
                 backend=self.backend.name,
-                reason="contended",
+                reason=result.status.value,
                 current_owner=current_owner or "unknown",
             )
             return False

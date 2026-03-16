@@ -4,12 +4,10 @@ Validates emit_diagnostic() in text and JSON modes, ContextLoggerAdapter
 integration, extra-field merging, and redaction of sensitive nested values.
 """
 
+import io
 import json
 import logging
-import os
-import sys
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from cja_auto_sdr.core.logging import (
     ContextLoggerAdapter,
     JSONFormatter,
@@ -76,9 +74,7 @@ class TestFormatDiagnosticTextValue:
 # emit_diagnostic — text mode
 # ---------------------------------------------------------------------------
 class TestEmitDiagnosticText:
-    def test_basic_event(self, capsys, tmp_path):
-        import io
-
+    def test_basic_event(self):
         buf = io.StringIO()
         logger = _make_logger(_text_handler(buf))
         emit_diagnostic(logger, "test_event", "test_cat", key1="val1", key2=42)
@@ -88,8 +84,6 @@ class TestEmitDiagnosticText:
         assert "key2=42" in output
 
     def test_no_fields(self):
-        import io
-
         buf = io.StringIO()
         logger = _make_logger(_text_handler(buf))
         emit_diagnostic(logger, "simple_event", "cat")
@@ -97,8 +91,6 @@ class TestEmitDiagnosticText:
         assert output == "[DIAG] simple_event"
 
     def test_nested_dict_field_is_compact_json(self):
-        import io
-
         buf = io.StringIO()
         logger = _make_logger(_text_handler(buf))
         emit_diagnostic(logger, "ev", "cat", data={"a": 1})
@@ -106,8 +98,6 @@ class TestEmitDiagnosticText:
         assert 'data={"a":1}' in output
 
     def test_nested_list_field_is_compact_json(self):
-        import io
-
         buf = io.StringIO()
         logger = _make_logger(_text_handler(buf))
         emit_diagnostic(logger, "ev", "cat", items=[1, 2])
@@ -120,8 +110,6 @@ class TestEmitDiagnosticText:
 # ---------------------------------------------------------------------------
 class TestEmitDiagnosticJSON:
     def test_json_fields_merged(self):
-        import io
-
         buf = io.StringIO()
         logger = _make_logger(_json_handler(buf))
         emit_diagnostic(logger, "test_event", "resilience", from_state="closed", to_state="open")
@@ -134,8 +122,6 @@ class TestEmitDiagnosticJSON:
         assert "[DIAG]" in record["message"]
 
     def test_json_no_extra_fields(self):
-        import io
-
         buf = io.StringIO()
         logger = _make_logger(_json_handler(buf))
         emit_diagnostic(logger, "ping", "health")
@@ -149,8 +135,6 @@ class TestEmitDiagnosticJSON:
 # ---------------------------------------------------------------------------
 class TestContextLoggerAdapterEmitDiagnostic:
     def test_adapter_emits_diagnostic(self):
-        import io
-
         buf = io.StringIO()
         base = _make_logger(_text_handler(buf))
         adapter = ContextLoggerAdapter(base, {"run_id": "abc123"})
@@ -160,8 +144,6 @@ class TestContextLoggerAdapterEmitDiagnostic:
         assert "lock_path=/tmp/x" in output
 
     def test_adapter_merges_context_in_json(self):
-        import io
-
         buf = io.StringIO()
         base = _make_logger(_json_handler(buf))
         adapter = ContextLoggerAdapter(base, {"run_id": "abc123"})
@@ -172,8 +154,6 @@ class TestContextLoggerAdapterEmitDiagnostic:
         assert record["key"] == "val"
 
     def test_with_log_context_adapter(self):
-        import io
-
         buf = io.StringIO()
         base = _make_logger(_json_handler(buf))
         ctx_logger = with_log_context(base, batch_id="b1")
@@ -189,8 +169,6 @@ class TestContextLoggerAdapterEmitDiagnostic:
 # ---------------------------------------------------------------------------
 class TestDiagnosticRedaction:
     def test_sensitive_field_redacted_in_text(self):
-        import io
-
         buf = io.StringIO()
         logger = _make_logger(_text_handler(buf))
         emit_diagnostic(logger, "ev", "cat", api_key="secret123")
@@ -199,8 +177,6 @@ class TestDiagnosticRedaction:
         assert "[REDACTED]" in output
 
     def test_sensitive_nested_dict_redacted_in_json(self):
-        import io
-
         buf = io.StringIO()
         logger = _make_logger(_json_handler(buf))
         emit_diagnostic(logger, "ev", "cat", config={"password": "hunter2", "host": "db.local"})
@@ -210,8 +186,6 @@ class TestDiagnosticRedaction:
         assert config["host"] == "db.local"
 
     def test_sensitive_top_level_field_redacted_in_json(self):
-        import io
-
         buf = io.StringIO()
         logger = _make_logger(_json_handler(buf))
         secret_val = "xyz"
@@ -225,8 +199,6 @@ class TestDiagnosticRedaction:
 # ---------------------------------------------------------------------------
 class TestDiagnosticLogLevel:
     def test_suppressed_when_info_disabled(self):
-        import io
-
         buf = io.StringIO()
         handler = _text_handler(buf)
         handler.setLevel(logging.WARNING)
@@ -235,8 +207,6 @@ class TestDiagnosticLogLevel:
         assert buf.getvalue() == ""
 
     def test_emitted_at_info(self):
-        import io
-
         buf = io.StringIO()
         logger = _make_logger(_text_handler(buf), level=logging.INFO)
         emit_diagnostic(logger, "should_appear", "cat")
@@ -248,8 +218,6 @@ class TestDiagnosticLogLevel:
 # ---------------------------------------------------------------------------
 class TestEmitDiagnosticPlainLogger:
     def test_plain_logger(self):
-        import io
-
         buf = io.StringIO()
         logger = _make_logger(_json_handler(buf))
         emit_diagnostic(logger, "ev", "cat", key="val")
