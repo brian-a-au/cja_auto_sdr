@@ -13,7 +13,9 @@ import re
 import threading
 import time
 from collections import defaultdict
+from collections.abc import Mapping
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
@@ -32,6 +34,7 @@ from cja_auto_sdr.org.models import (
     DataViewCluster,
     DataViewSummary,
     OrgReportConfig,
+    OrgReportLockRuntimeState,
     OrgReportResult,
     SimilarityPair,
 )
@@ -86,7 +89,9 @@ class OrgComponentAnalyzer:
         self.cache = cache
         self._thread_local = threading.local()
         self._active_lock: OrgReportLock | None = None
-        self._last_lock_backend: str | None = None
+        self._lock_runtime_state = OrgReportLockRuntimeState(
+            stale_threshold_seconds=self.config.lock_stale_threshold_seconds
+        )
 
         # Handle cache clear option
         if config.clear_cache and self.cache:
@@ -95,7 +100,82 @@ class OrgComponentAnalyzer:
 
     @property
     def last_lock_backend(self) -> str | None:
-        return self._last_lock_backend
+        return self._lock_runtime_state.backend
+
+    @property
+    def lock_runtime_state(self) -> OrgReportLockRuntimeState:
+        """Return a snapshot of lock runtime state captured during execution."""
+        return replace(self._lock_runtime_state)
+
+    def _reset_lock_runtime_state(self) -> None:
+        self._lock_runtime_state = OrgReportLockRuntimeState(
+            stale_threshold_seconds=self.config.lock_stale_threshold_seconds
+        )
+
+    def _record_lock_runtime_state(
+        self,
+        *,
+        acquired: bool,
+        contention: bool,
+        backend: str | None = None,
+        ownership_lost: bool = False,
+        holder_pid: int | None = None,
+        holder_owner: str | None = None,
+        started_at: str | None = None,
+    ) -> None:
+        self._lock_runtime_state = OrgReportLockRuntimeState(
+            observed=True,
+            acquired=acquired,
+            contention=contention,
+            stale_threshold_seconds=self.config.lock_stale_threshold_seconds,
+            backend=backend,
+            ownership_lost=ownership_lost,
+            holder_pid=holder_pid,
+            holder_owner=holder_owner,
+            started_at=started_at,
+        )
+
+    def _mark_lock_ownership_lost(self) -> None:
+        self._lock_runtime_state.observed = True
+        self._lock_runtime_state.acquired = True
+        self._lock_runtime_state.contention = False
+        self._lock_runtime_state.ownership_lost = True
+
+    @staticmethod
+    def _normalize_lock_info_text(value: Any) -> str | None:
+        if value is None:
+            return None
+        text = str(value).strip()
+        return text or None
+
+    @classmethod
+    def _normalize_lock_info_pid(cls, value: Any) -> int | None:
+        if isinstance(value, bool):
+            return None
+        if isinstance(value, int):
+            return value
+        if isinstance(value, str):
+            stripped = value.strip()
+            if not stripped:
+                return None
+            try:
+                return int(stripped)
+            except ValueError:
+                return None
+        return None
+
+    @classmethod
+    def _extract_contention_lock_info(cls, lock_info: Any) -> tuple[int | None, str | None, str | None, str | None]:
+        """Normalize lock-holder metadata without inferring fields from the contender."""
+        if not isinstance(lock_info, Mapping):
+            return None, None, None, None
+
+        return (
+            cls._normalize_lock_info_pid(lock_info.get("pid")),
+            cls._normalize_lock_info_text(lock_info.get("started_at")),
+            cls._normalize_lock_info_text(lock_info.get("owner")),
+            cls._normalize_lock_info_text(lock_info.get("backend")),
+        )
 
     def run_analysis(self) -> OrgReportResult:
         """Execute the full org-wide component analysis.
@@ -106,7 +186,7 @@ class OrgComponentAnalyzer:
         Raises:
             ConcurrentOrgReportError: If another org-report is already running for this org
         """
-        self._last_lock_backend = None
+        self._reset_lock_runtime_state()
 
         # Check for concurrent runs (unless skip_lock is set)
         if not self.config.skip_lock:
@@ -121,15 +201,28 @@ class OrgComponentAnalyzer:
             with lock:
                 if not lock.acquired:
                     lock_info = lock.get_lock_info()
+                    holder_pid, started_at, holder_owner, lock_backend = self._extract_contention_lock_info(lock_info)
+                    self._record_lock_runtime_state(
+                        acquired=False,
+                        contention=True,
+                        backend=lock_backend,
+                        holder_pid=holder_pid,
+                        holder_owner=holder_owner,
+                        started_at=started_at,
+                    )
                     raise ConcurrentOrgReportError(
                         org_id=self.org_id,
-                        lock_holder_pid=lock_info.get("pid") if lock_info else None,
-                        started_at=lock_info.get("started_at") if lock_info else None,
-                        lock_holder_owner=lock_info.get("owner") if lock_info else None,
-                        lock_backend=lock_info.get("backend") if lock_info else None,
+                        lock_holder_pid=holder_pid,
+                        started_at=started_at,
+                        lock_holder_owner=holder_owner,
+                        lock_backend=lock_backend,
                     )
                 self._active_lock = lock
-                self._last_lock_backend = lock.backend_name
+                self._record_lock_runtime_state(
+                    acquired=True,
+                    contention=False,
+                    backend=lock.backend_name,
+                )
                 try:
                     self._assert_lock_healthy()
                     quick_check_result = self._quick_check_empty_org()
@@ -137,10 +230,14 @@ class OrgComponentAnalyzer:
                         return quick_check_result
                     # Run the analysis while holding the lock
                     return self._run_analysis_impl()
+                except LockOwnershipLostError:
+                    self._mark_lock_ownership_lost()
+                    raise
                 finally:
                     self._active_lock = None
         else:
             # Skip lock (for testing)
+            self._record_lock_runtime_state(acquired=False, contention=False)
             return self._run_analysis_impl()
 
     def _assert_lock_healthy(self) -> None:

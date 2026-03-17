@@ -200,6 +200,7 @@ from cja_auto_sdr.org.models import (
     OrgReportComparison,
     OrgReportComparisonInput,
     OrgReportConfig,
+    OrgReportLockRuntimeState,
     OrgReportResult,
     OrgReportTrending,
     SimilarityPair,
@@ -1892,11 +1893,11 @@ def _record_org_report_lock_runtime_details(
     acquired: bool,
     contention: bool,
     stale_threshold_seconds: int,
-    backend: Any = None,
+    backend: str | None = None,
     ownership_lost: bool = False,
     holder_pid: int | None = None,
-    holder_owner: Any = None,
-    started_at: Any = None,
+    holder_owner: str | None = None,
+    started_at: str | None = None,
 ) -> None:
     """Populate the flat org-report lock runtime sink in one place."""
     if runtime_details is None:
@@ -1920,6 +1921,34 @@ def _record_org_report_lock_runtime_details(
 
     started_at_text = _normalize_optional_detail_text(started_at)
     _replace_runtime_detail_value(runtime_details, key="lock_started_at", value=started_at_text)
+
+
+def _copy_org_report_lock_runtime_details_from_state(
+    runtime_details: dict[str, Any] | None,
+    *,
+    lock_state: OrgReportLockRuntimeState | None,
+    default_stale_threshold_seconds: int,
+) -> bool:
+    """Copy analyzer-owned lock state into the flat runtime-details sink."""
+    if runtime_details is None or lock_state is None or not lock_state.observed:
+        return False
+
+    stale_threshold_seconds = lock_state.stale_threshold_seconds
+    if not isinstance(stale_threshold_seconds, int):
+        stale_threshold_seconds = default_stale_threshold_seconds
+
+    _record_org_report_lock_runtime_details(
+        runtime_details,
+        acquired=lock_state.acquired,
+        contention=lock_state.contention,
+        stale_threshold_seconds=stale_threshold_seconds,
+        backend=lock_state.backend,
+        ownership_lost=lock_state.ownership_lost,
+        holder_pid=lock_state.holder_pid,
+        holder_owner=lock_state.holder_owner,
+        started_at=lock_state.started_at,
+    )
+    return True
 
 
 def _build_org_report_lock_run_summary_block(lock_details: Mapping[str, Any]) -> dict[str, Any]:
@@ -8592,6 +8621,8 @@ def run_org_report(
     if not _validate_org_report_output_request(output_format, output_to_stdout, _status_print):
         return False, False
 
+    analyzer: OrgComponentAnalyzer | None = None
+
     if not quiet:
         _status_print()
         _status_print("=" * 110)
@@ -8612,7 +8643,6 @@ def run_org_report(
         org_id = credentials.get("org_id", "unknown") if credentials else "unknown"
 
         cja = cjapy.CJA()
-        analyzer: OrgComponentAnalyzer | None = None
 
         # Create cache if caching enabled
         cache = None
@@ -8626,12 +8656,10 @@ def run_org_report(
         # Run analysis
         analyzer = OrgComponentAnalyzer(cja, org_config, logger, org_id=org_id, cache=cache)
         result = analyzer.run_analysis()
-        _record_org_report_lock_runtime_details(
+        _copy_org_report_lock_runtime_details_from_state(
             runtime_details,
-            acquired=True,
-            contention=False,
-            stale_threshold_seconds=org_config.lock_stale_threshold_seconds,
-            backend=getattr(analyzer, "last_lock_backend", None),
+            lock_state=analyzer.lock_runtime_state,
+            default_stale_threshold_seconds=org_config.lock_stale_threshold_seconds,
         )
         requested_baseline_path = _requested_org_report_baseline_path(org_config)
 
@@ -8797,29 +8825,41 @@ def run_org_report(
     except ConcurrentOrgReportError as e:
         _status_print(ConsoleColors.error(f"ERROR: Org report failed: {e!s}"))
         logger.exception("Org report error")
-        _record_org_report_lock_runtime_details(
+        copied_from_state = _copy_org_report_lock_runtime_details_from_state(
             runtime_details,
-            acquired=False,
-            contention=True,
-            stale_threshold_seconds=org_config.lock_stale_threshold_seconds,
-            backend=e.lock_backend,
-            holder_pid=e.lock_holder_pid,
-            holder_owner=e.lock_holder_owner,
-            started_at=e.started_at,
+            lock_state=analyzer.lock_runtime_state if analyzer is not None else None,
+            default_stale_threshold_seconds=org_config.lock_stale_threshold_seconds,
         )
+        if not copied_from_state:
+            _record_org_report_lock_runtime_details(
+                runtime_details,
+                acquired=False,
+                contention=True,
+                stale_threshold_seconds=org_config.lock_stale_threshold_seconds,
+                backend=e.lock_backend,
+                holder_pid=e.lock_holder_pid,
+                holder_owner=e.lock_holder_owner,
+                started_at=e.started_at,
+            )
         return False, False
 
     except LockOwnershipLostError:
         _status_print(ConsoleColors.error("ERROR: Org report failed: lock ownership lost during execution"))
         logger.exception("Org report error: lock ownership lost")
-        _record_org_report_lock_runtime_details(
+        copied_from_state = _copy_org_report_lock_runtime_details_from_state(
             runtime_details,
-            acquired=True,
-            contention=False,
-            stale_threshold_seconds=org_config.lock_stale_threshold_seconds,
-            backend=getattr(analyzer, "last_lock_backend", None) if analyzer is not None else None,
-            ownership_lost=True,
+            lock_state=analyzer.lock_runtime_state if analyzer is not None else None,
+            default_stale_threshold_seconds=org_config.lock_stale_threshold_seconds,
         )
+        if not copied_from_state:
+            _record_org_report_lock_runtime_details(
+                runtime_details,
+                acquired=True,
+                contention=False,
+                stale_threshold_seconds=org_config.lock_stale_threshold_seconds,
+                backend=getattr(analyzer, "last_lock_backend", None) if analyzer is not None else None,
+                ownership_lost=True,
+            )
         return False, False
 
     except FileNotFoundError:
@@ -8838,6 +8878,11 @@ def run_org_report(
             logger.exception("Org report error")
         else:
             logger.exception("Unexpected org report error")
+        _copy_org_report_lock_runtime_details_from_state(
+            runtime_details,
+            lock_state=analyzer.lock_runtime_state if analyzer is not None else None,
+            default_stale_threshold_seconds=org_config.lock_stale_threshold_seconds,
+        )
         return False, False
 
 

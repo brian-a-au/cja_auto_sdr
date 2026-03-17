@@ -105,6 +105,21 @@ class OrgReportConfig:
 
 
 @dataclass
+class OrgReportLockRuntimeState:
+    """Authoritative org-report lock state captured during analyzer execution."""
+
+    observed: bool = False
+    acquired: bool = False
+    contention: bool = False
+    stale_threshold_seconds: int = 3600
+    backend: str | None = None
+    ownership_lost: bool = False
+    holder_pid: int | None = None
+    holder_owner: str | None = None
+    started_at: str | None = None
+
+
+@dataclass
 class ComponentInfo:
     """Metadata for a component tracked across data views.
 

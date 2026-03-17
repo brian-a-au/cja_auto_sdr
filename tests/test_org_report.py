@@ -29,6 +29,7 @@ from cja_auto_sdr.generator import (
     OrgComponentAnalyzer,
     OrgReportCache,
     OrgReportConfig,
+    OrgReportLockRuntimeState,
     OrgReportResult,
     SimilarityPair,
     _merge_org_report_run_summary_details,
@@ -418,6 +419,7 @@ class TestAnalyzerLockIntegration:
         with patch("cja_auto_sdr.org.analyzer.OrgReportLock") as MockLock:
             mock_lock_instance = Mock()
             mock_lock_instance.acquired = True
+            mock_lock_instance.backend_name = "lease"
             mock_lock_instance.lock_lost = False
             mock_lock_instance.__enter__ = Mock(return_value=mock_lock_instance)
             mock_lock_instance.__exit__ = Mock(return_value=None)
@@ -428,6 +430,11 @@ class TestAnalyzerLockIntegration:
             analyzer.run_analysis()
 
             MockLock.assert_called_once_with("test_org@AdobeOrg", stale_threshold_seconds=900)
+            assert analyzer.lock_runtime_state.observed is True
+            assert analyzer.lock_runtime_state.acquired is True
+            assert analyzer.lock_runtime_state.contention is False
+            assert analyzer.lock_runtime_state.backend == "lease"
+            assert analyzer.lock_runtime_state.stale_threshold_seconds == 900
 
     def test_analyzer_passes_lock_owner_and_backend_to_exception(self):
         """Test that analyzer includes owner and backend in ConcurrentOrgReportError"""
@@ -441,6 +448,7 @@ class TestAnalyzerLockIntegration:
         with patch("cja_auto_sdr.org.analyzer.OrgReportLock") as MockLock:
             mock_lock_instance = Mock()
             mock_lock_instance.acquired = False
+            mock_lock_instance.backend_name = "lease"
             mock_lock_instance.get_lock_info.return_value = {
                 "pid": 12345,
                 "started_at": "2024-01-15T10:00:00",
@@ -459,6 +467,78 @@ class TestAnalyzerLockIntegration:
             assert exc_info.value.lock_holder_owner == "other-org"
             assert exc_info.value.lock_backend == "lease"
             assert exc_info.value.lock_holder_pid == 12345
+            assert analyzer.lock_runtime_state.observed is True
+            assert analyzer.lock_runtime_state.acquired is False
+            assert analyzer.lock_runtime_state.contention is True
+            assert analyzer.lock_runtime_state.backend == "lease"
+            assert analyzer.lock_runtime_state.holder_pid == 12345
+            assert analyzer.lock_runtime_state.holder_owner == "other-org"
+            assert analyzer.lock_runtime_state.started_at == "2024-01-15T10:00:00"
+
+    def test_analyzer_preserves_unknown_backend_when_lock_info_lacks_backend(self):
+        """Contention telemetry must not infer holder backend from the contender."""
+        import logging
+
+        mock_cja = Mock()
+        logger = logging.getLogger("test_lock_backend_unknown")
+
+        config = OrgReportConfig(skip_lock=False)
+
+        with patch("cja_auto_sdr.org.analyzer.OrgReportLock") as MockLock:
+            mock_lock_instance = Mock()
+            mock_lock_instance.acquired = False
+            mock_lock_instance.backend_name = "lease"
+            mock_lock_instance.get_lock_info.return_value = {
+                "pid": 12345,
+                "started_at": "2024-01-15T10:00:00",
+                "owner": "other-org",
+            }
+            mock_lock_instance.__enter__ = Mock(return_value=mock_lock_instance)
+            mock_lock_instance.__exit__ = Mock(return_value=None)
+            MockLock.return_value = mock_lock_instance
+
+            analyzer = OrgComponentAnalyzer(mock_cja, config, logger, org_id="test_org@AdobeOrg")
+
+            with pytest.raises(ConcurrentOrgReportError) as exc_info:
+                analyzer.run_analysis()
+
+            assert exc_info.value.lock_backend is None
+            assert analyzer.lock_runtime_state.backend is None
+            assert analyzer.lock_runtime_state.holder_pid == 12345
+            assert analyzer.lock_runtime_state.holder_owner == "other-org"
+            assert analyzer.lock_runtime_state.started_at == "2024-01-15T10:00:00"
+
+    def test_analyzer_treats_corrupt_lock_info_as_unknown_metadata(self):
+        """Corrupt holder metadata should not crash contention handling."""
+        import logging
+
+        mock_cja = Mock()
+        logger = logging.getLogger("test_lock_info_corrupt")
+
+        config = OrgReportConfig(skip_lock=False)
+
+        with patch("cja_auto_sdr.org.analyzer.OrgReportLock") as MockLock:
+            mock_lock_instance = Mock()
+            mock_lock_instance.acquired = False
+            mock_lock_instance.backend_name = "fcntl"
+            mock_lock_instance.get_lock_info.return_value = "corrupt-json"
+            mock_lock_instance.__enter__ = Mock(return_value=mock_lock_instance)
+            mock_lock_instance.__exit__ = Mock(return_value=None)
+            MockLock.return_value = mock_lock_instance
+
+            analyzer = OrgComponentAnalyzer(mock_cja, config, logger, org_id="test_org@AdobeOrg")
+
+            with pytest.raises(ConcurrentOrgReportError) as exc_info:
+                analyzer.run_analysis()
+
+            assert exc_info.value.lock_backend is None
+            assert exc_info.value.lock_holder_pid is None
+            assert exc_info.value.lock_holder_owner is None
+            assert exc_info.value.started_at is None
+            assert analyzer.lock_runtime_state.backend is None
+            assert analyzer.lock_runtime_state.holder_pid is None
+            assert analyzer.lock_runtime_state.holder_owner is None
+            assert analyzer.lock_runtime_state.started_at is None
 
     def test_analyzer_skip_lock_option(self):
         """Test that skip_lock=True bypasses the lock"""
@@ -474,6 +554,10 @@ class TestAnalyzerLockIntegration:
         # Should not raise even if we don't mock the lock
         result = analyzer.run_analysis()
         assert result is not None
+        assert analyzer.lock_runtime_state.observed is True
+        assert analyzer.lock_runtime_state.acquired is False
+        assert analyzer.lock_runtime_state.contention is False
+        assert analyzer.lock_runtime_state.backend is None
 
     def test_quick_check_empty_org_returns_empty_result(self):
         """Test that quick check returns empty OrgReportResult when no data views exist"""
@@ -514,6 +598,7 @@ class TestAnalyzerLockIntegration:
         with patch("cja_auto_sdr.org.analyzer.OrgReportLock") as MockLock:
             mock_lock_instance = Mock()
             mock_lock_instance.acquired = True
+            mock_lock_instance.backend_name = "lease"
             mock_lock_instance.ensure_healthy.side_effect = [
                 None,
                 LockOwnershipLostError("/tmp/test.lock", reason="heartbeat metadata write failed"),
@@ -530,6 +615,11 @@ class TestAnalyzerLockIntegration:
 
             analyzer._quick_check_empty_org.assert_called_once()
             mock_cja.getDataViews.assert_not_called()
+            assert analyzer.lock_runtime_state.observed is True
+            assert analyzer.lock_runtime_state.acquired is True
+            assert analyzer.lock_runtime_state.contention is False
+            assert analyzer.lock_runtime_state.backend == "lease"
+            assert analyzer.lock_runtime_state.ownership_lost is True
 
     def test_fetch_cancels_executor_immediately_when_lock_is_lost(self):
         """Parallel fetch must not block on remaining futures after lock ownership loss."""
@@ -4339,7 +4429,13 @@ class TestRunOrgReportRuntimeDetails:
         mock_result.duration = 1.0
         mock_result.governance_violations = None
         mock_analyzer_cls.return_value.run_analysis.return_value = mock_result
-        mock_analyzer_cls.return_value.last_lock_backend = "lease"
+        mock_analyzer_cls.return_value.lock_runtime_state = OrgReportLockRuntimeState(
+            observed=True,
+            acquired=True,
+            contention=False,
+            stale_threshold_seconds=600,
+            backend="lease",
+        )
         mock_write_json.return_value = str(tmp_path / "report.json")
 
         org_config = OrgReportConfig(lock_stale_threshold_seconds=600)
@@ -4381,7 +4477,13 @@ class TestRunOrgReportRuntimeDetails:
         mock_result.duration = 1.0
         mock_result.governance_violations = None
         mock_analyzer_cls.return_value.run_analysis.return_value = mock_result
-        mock_analyzer_cls.return_value.last_lock_backend = "fcntl"
+        mock_analyzer_cls.return_value.lock_runtime_state = OrgReportLockRuntimeState(
+            observed=True,
+            acquired=True,
+            contention=False,
+            stale_threshold_seconds=900,
+            backend="fcntl",
+        )
 
         org_config = OrgReportConfig(org_stats_only=True, lock_stale_threshold_seconds=900)
         details: dict = {}
@@ -4414,6 +4516,16 @@ class TestRunOrgReportRuntimeDetails:
             lock_backend="lease",
             started_at="2026-03-15T10:00:00",
         )
+        mock_analyzer_cls.return_value.lock_runtime_state = OrgReportLockRuntimeState(
+            observed=True,
+            acquired=False,
+            contention=True,
+            stale_threshold_seconds=1800,
+            backend="lease",
+            holder_pid=9999,
+            holder_owner="other-user",
+            started_at="2026-03-15T10:00:00",
+        )
 
         org_config = OrgReportConfig(lock_stale_threshold_seconds=1800)
         details: dict = {}
@@ -4437,12 +4549,62 @@ class TestRunOrgReportRuntimeDetails:
     @patch("cja_auto_sdr.generator.OrgComponentAnalyzer")
     @patch("cja_auto_sdr.generator.cjapy")
     @patch("cja_auto_sdr.generator.configure_cjapy")
+    def test_runtime_details_omit_unknown_backend_on_contention(
+        self, mock_configure, mock_cjapy, mock_analyzer_cls, tmp_path
+    ):
+        mock_configure.return_value = (True, "config.json", {"org_id": "org123"})
+        mock_analyzer_cls.return_value.run_analysis.side_effect = ConcurrentOrgReportError(
+            org_id="org123",
+            lock_holder_pid=9999,
+            lock_holder_owner="other-user",
+            started_at="2026-03-15T10:00:00",
+        )
+        mock_analyzer_cls.return_value.lock_runtime_state = OrgReportLockRuntimeState(
+            observed=True,
+            acquired=False,
+            contention=True,
+            stale_threshold_seconds=1800,
+            holder_pid=9999,
+            holder_owner="other-user",
+            started_at="2026-03-15T10:00:00",
+        )
+
+        org_config = OrgReportConfig(lock_stale_threshold_seconds=1800)
+        details: dict = {}
+        success, _ = run_org_report(
+            config_file="config.json",
+            output_format="console",
+            output_path=None,
+            output_dir=str(tmp_path),
+            org_config=org_config,
+            runtime_details=details,
+        )
+        assert success is False
+        assert details["lock_acquired"] is False
+        assert details["lock_contention"] is True
+        assert details["lock_holder_pid"] == 9999
+        assert details["lock_holder_owner"] == "other-user"
+        assert details["lock_started_at"] == "2026-03-15T10:00:00"
+        assert details["lock_stale_threshold_seconds"] == 1800
+        assert "lock_backend" not in details
+
+    @patch("cja_auto_sdr.generator.OrgComponentAnalyzer")
+    @patch("cja_auto_sdr.generator.cjapy")
+    @patch("cja_auto_sdr.generator.configure_cjapy")
     def test_runtime_details_populated_on_lock_ownership_lost(
         self, mock_configure, mock_cjapy, mock_analyzer_cls, tmp_path
     ):
         mock_configure.return_value = (True, "config.json", {"org_id": "org123"})
         mock_analyzer_cls.return_value.run_analysis.side_effect = LockOwnershipLostError(
             "/tmp/lock", reason="heartbeat failed"
+        )
+        mock_analyzer_cls.return_value.lock_runtime_state = OrgReportLockRuntimeState(
+            observed=True,
+            acquired=True,
+            contention=False,
+            stale_threshold_seconds=3600,
+            backend="lease",
+            ownership_lost=True,
         )
 
         org_config = OrgReportConfig()
@@ -4459,6 +4621,86 @@ class TestRunOrgReportRuntimeDetails:
         assert details["lock_acquired"] is True
         assert details["lock_ownership_lost"] is True
         assert details["lock_contention"] is False
+        assert details["lock_backend"] == "lease"
+
+    @patch("cja_auto_sdr.generator.append_github_step_summary")
+    @patch("cja_auto_sdr.generator.build_org_step_summary", return_value="")
+    @patch("cja_auto_sdr.generator.write_org_report_json")
+    @patch("cja_auto_sdr.generator.OrgComponentAnalyzer")
+    @patch("cja_auto_sdr.generator.cjapy")
+    @patch("cja_auto_sdr.generator.configure_cjapy")
+    def test_runtime_details_populated_on_skip_lock_success(
+        self, mock_configure, mock_cjapy, mock_analyzer_cls, mock_write_json, mock_build_summary, mock_append, tmp_path
+    ):
+        mock_configure.return_value = (True, "config.json", {"org_id": "org123"})
+        mock_result = Mock()
+        mock_result.total_data_views = 1
+        mock_result.thresholds_exceeded = False
+        mock_result.duration = 1.0
+        mock_result.governance_violations = None
+        mock_analyzer_cls.return_value.run_analysis.return_value = mock_result
+        mock_analyzer_cls.return_value.lock_runtime_state = OrgReportLockRuntimeState(
+            observed=True,
+            acquired=False,
+            contention=False,
+            stale_threshold_seconds=1200,
+        )
+        mock_write_json.return_value = str(tmp_path / "report.json")
+
+        details: dict = {}
+        success, _ = run_org_report(
+            config_file="config.json",
+            output_format="json",
+            output_path=str(tmp_path / "report.json"),
+            output_dir=str(tmp_path),
+            org_config=OrgReportConfig(skip_lock=True, lock_stale_threshold_seconds=1200),
+            runtime_details=details,
+        )
+
+        assert success is True
+        assert details["lock_acquired"] is False
+        assert details["lock_contention"] is False
+        assert details["lock_stale_threshold_seconds"] == 1200
+        assert "lock_backend" not in details
+
+    @patch("cja_auto_sdr.generator.write_org_report_json")
+    @patch("cja_auto_sdr.generator.OrgComponentAnalyzer")
+    @patch("cja_auto_sdr.generator.cjapy")
+    @patch("cja_auto_sdr.generator.configure_cjapy")
+    def test_runtime_details_survive_post_lock_output_failure(
+        self, mock_configure, mock_cjapy, mock_analyzer_cls, mock_write_json, tmp_path
+    ):
+        mock_configure.return_value = (True, "config.json", {"org_id": "org123"})
+        mock_result = Mock()
+        mock_result.total_data_views = 1
+        mock_result.thresholds_exceeded = False
+        mock_result.duration = 1.0
+        mock_result.governance_violations = None
+        mock_analyzer_cls.return_value.run_analysis.return_value = mock_result
+        mock_analyzer_cls.return_value.lock_runtime_state = OrgReportLockRuntimeState(
+            observed=True,
+            acquired=True,
+            contention=False,
+            stale_threshold_seconds=600,
+            backend="lease",
+        )
+        mock_write_json.side_effect = RuntimeError("disk full")
+
+        details: dict = {}
+        success, _ = run_org_report(
+            config_file="config.json",
+            output_format="json",
+            output_path=str(tmp_path / "report.json"),
+            output_dir=str(tmp_path),
+            org_config=OrgReportConfig(lock_stale_threshold_seconds=600),
+            runtime_details=details,
+        )
+
+        assert success is False
+        assert details["lock_acquired"] is True
+        assert details["lock_contention"] is False
+        assert details["lock_backend"] == "lease"
+        assert details["lock_stale_threshold_seconds"] == 600
 
     def test_runtime_details_none_is_safe(self, tmp_path):
         """run_org_report should not crash when runtime_details is None (default)."""
@@ -4527,6 +4769,20 @@ class TestOrgReportRunSummaryDetails:
         assert details["lock"]["acquired"] is False
         assert details["lock"]["contention_observed"] is True
         assert details["lock"]["backend"] == "filesystem"
+        assert details["lock"]["lost_during_run"] is False
+
+    def test_lock_block_for_skip_lock_run(self):
+        details = self._merge_details(
+            {
+                "lock_acquired": False,
+                "lock_contention": False,
+                "lock_stale_threshold_seconds": 1200,
+            }
+        )
+
+        assert details["lock"]["acquired"] is False
+        assert details["lock"]["contention_observed"] is False
+        assert details["lock"]["stale_threshold_seconds"] == 1200
         assert details["lock"]["lost_during_run"] is False
 
     def test_lock_block_for_ownership_loss(self):
