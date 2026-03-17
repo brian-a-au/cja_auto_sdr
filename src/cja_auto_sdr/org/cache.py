@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from cja_auto_sdr.core.json_io import write_json_atomic
-from cja_auto_sdr.core.locks.manager import LockManager
+from cja_auto_sdr.core.locks.manager import LockManager, normalize_lock_stale_threshold_seconds
 from cja_auto_sdr.org.models import DataViewSummary
 from cja_auto_sdr.org.snapshot_utils import (
     ORG_REPORT_SNAPSHOT_ROOT_DIRNAME,
@@ -75,12 +75,13 @@ class OrgReportLock:
 
         safe_org_id = re.sub(r"[^a-zA-Z0-9_-]", "_", org_id)
         self.lock_file = lock_dir / f"org_report_{safe_org_id}.lock"
-        self.stale_threshold = stale_threshold_seconds
+        normalized_stale_threshold_seconds = normalize_lock_stale_threshold_seconds(stale_threshold_seconds)
+        self.stale_threshold = normalized_stale_threshold_seconds
         self.acquired = False
         self._manager = LockManager(
             lock_path=self.lock_file,
             owner=org_id,
-            stale_threshold_seconds=stale_threshold_seconds,
+            stale_threshold_seconds=normalized_stale_threshold_seconds,
             backend_name=lock_backend,
         )
 

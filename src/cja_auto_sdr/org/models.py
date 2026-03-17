@@ -10,6 +10,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any
 
+from cja_auto_sdr.core.locks.manager import normalize_lock_stale_threshold_seconds
 from cja_auto_sdr.org.identifiers import normalize_org_report_data_view_id
 
 
@@ -103,6 +104,9 @@ class OrgReportConfig:
     skip_lock: bool = False  # Skip the file-based lock that prevents concurrent runs (for testing)
     lock_stale_threshold_seconds: int = 3600  # Stale lease recovery threshold for org-report lock
 
+    def __post_init__(self) -> None:
+        self.lock_stale_threshold_seconds = normalize_lock_stale_threshold_seconds(self.lock_stale_threshold_seconds)
+
 
 @dataclass
 class OrgReportLockRuntimeState:
@@ -117,6 +121,9 @@ class OrgReportLockRuntimeState:
     holder_pid: int | None = None
     holder_owner: str | None = None
     started_at: str | None = None
+
+    def __post_init__(self) -> None:
+        self.stale_threshold_seconds = normalize_lock_stale_threshold_seconds(self.stale_threshold_seconds)
 
 
 @dataclass

@@ -28,6 +28,11 @@ from cja_auto_sdr.core.logging import emit_diagnostic
 DEFAULT_LOCK_BACKEND_ENV = "CJA_LOCK_BACKEND"
 
 
+def normalize_lock_stale_threshold_seconds(stale_threshold_seconds: int) -> int:
+    """Clamp stale-threshold inputs to the minimum supported lease window."""
+    return max(1, stale_threshold_seconds)
+
+
 def _utcnow_iso() -> str:
     return datetime.now(UTC).isoformat()
 
@@ -103,7 +108,7 @@ class LockManager:
     ):
         self.lock_path = lock_path
         self.owner = owner
-        self.stale_threshold_seconds = max(1, stale_threshold_seconds)
+        self.stale_threshold_seconds = normalize_lock_stale_threshold_seconds(stale_threshold_seconds)
         self.logger = logger or logging.getLogger(__name__)
         self.backend = create_lock_backend(backend_name, logger=self.logger)
 

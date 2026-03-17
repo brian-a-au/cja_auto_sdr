@@ -169,6 +169,7 @@ from cja_auto_sdr.core.exceptions import (
     RetryableHTTPError,
     ValidationError,
 )
+from cja_auto_sdr.core.locks.manager import normalize_lock_stale_threshold_seconds
 from cja_auto_sdr.core.version import __version__
 from cja_auto_sdr.org.analyzer import OrgComponentAnalyzer
 from cja_auto_sdr.org.cache import DEFAULT_ORG_REPORT_SNAPSHOT_KEEP_LAST, OrgReportCache
@@ -1887,6 +1888,26 @@ def _replace_runtime_detail_value(
     runtime_details[key] = value
 
 
+_ORG_REPORT_LOCK_RUNTIME_DETAIL_KEYS = (
+    "lock_acquired",
+    "lock_contention",
+    "lock_stale_threshold_seconds",
+    "lock_backend",
+    "lock_ownership_lost",
+    "lock_holder_pid",
+    "lock_holder_owner",
+    "lock_started_at",
+)
+
+
+def _clear_org_report_lock_runtime_details(runtime_details: dict[str, Any] | None) -> None:
+    """Remove prior lock telemetry so reused sinks reflect only the current run."""
+    if runtime_details is None:
+        return
+    for key in _ORG_REPORT_LOCK_RUNTIME_DETAIL_KEYS:
+        runtime_details.pop(key, None)
+
+
 def _record_org_report_lock_runtime_details(
     runtime_details: dict[str, Any] | None,
     *,
@@ -1903,9 +1924,10 @@ def _record_org_report_lock_runtime_details(
     if runtime_details is None:
         return
 
+    normalized_stale_threshold_seconds = normalize_lock_stale_threshold_seconds(stale_threshold_seconds)
     runtime_details["lock_acquired"] = acquired
     runtime_details["lock_contention"] = contention
-    runtime_details["lock_stale_threshold_seconds"] = stale_threshold_seconds
+    runtime_details["lock_stale_threshold_seconds"] = normalized_stale_threshold_seconds
 
     backend_name = _normalize_optional_detail_text(backend)
     _replace_runtime_detail_value(runtime_details, key="lock_backend", value=backend_name)
@@ -1958,7 +1980,9 @@ def _build_org_report_lock_run_summary_block(lock_details: Mapping[str, Any]) ->
     if "lock_acquired" in lock_details:
         lock_block["acquired"] = lock_details["lock_acquired"]
     if "lock_stale_threshold_seconds" in lock_details:
-        lock_block["stale_threshold_seconds"] = lock_details["lock_stale_threshold_seconds"]
+        lock_block["stale_threshold_seconds"] = normalize_lock_stale_threshold_seconds(
+            lock_details["lock_stale_threshold_seconds"]
+        )
     if "lock_contention" in lock_details:
         lock_block["contention_observed"] = lock_details["lock_contention"]
     if "lock_ownership_lost" in lock_details:
@@ -2001,7 +2025,11 @@ def _merge_org_report_run_summary_details(
 
     _merge_run_details(
         run_state,
-        execution_settings={"org_lock_stale_threshold_seconds": org_config.lock_stale_threshold_seconds},
+        execution_settings={
+            "org_lock_stale_threshold_seconds": normalize_lock_stale_threshold_seconds(
+                org_config.lock_stale_threshold_seconds
+            )
+        },
     )
 
 
@@ -8618,6 +8646,7 @@ def run_org_report(
         kwargs.setdefault("file", status_stream)
         print(*args, **kwargs)
 
+    _clear_org_report_lock_runtime_details(runtime_details)
     if not _validate_org_report_output_request(output_format, output_to_stdout, _status_print):
         return False, False
 

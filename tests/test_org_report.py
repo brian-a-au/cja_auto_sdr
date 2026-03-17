@@ -436,6 +436,30 @@ class TestAnalyzerLockIntegration:
             assert analyzer.lock_runtime_state.backend == "lease"
             assert analyzer.lock_runtime_state.stale_threshold_seconds == 900
 
+    def test_analyzer_clamps_non_positive_stale_threshold_before_lock_creation(self):
+        """Programmatic invalid thresholds must match the lock manager's effective value."""
+        import logging
+
+        mock_cja = Mock()
+        logger = logging.getLogger("test_stale_threshold_clamped")
+        config = OrgReportConfig(skip_lock=False, lock_stale_threshold_seconds=0)
+
+        with patch("cja_auto_sdr.org.analyzer.OrgReportLock") as MockLock:
+            mock_lock_instance = Mock()
+            mock_lock_instance.acquired = True
+            mock_lock_instance.backend_name = "lease"
+            mock_lock_instance.lock_lost = False
+            mock_lock_instance.__enter__ = Mock(return_value=mock_lock_instance)
+            mock_lock_instance.__exit__ = Mock(return_value=None)
+            MockLock.return_value = mock_lock_instance
+
+            mock_cja.getDataViews.return_value = []
+            analyzer = OrgComponentAnalyzer(mock_cja, config, logger, org_id="test_org@AdobeOrg")
+            analyzer.run_analysis()
+
+            MockLock.assert_called_once_with("test_org@AdobeOrg", stale_threshold_seconds=1)
+            assert analyzer.lock_runtime_state.stale_threshold_seconds == 1
+
     def test_analyzer_passes_lock_owner_and_backend_to_exception(self):
         """Test that analyzer includes owner and backend in ConcurrentOrgReportError"""
         import logging
@@ -4377,6 +4401,14 @@ class TestOrgReportConfigLockThreshold:
         config = OrgReportConfig(lock_stale_threshold_seconds=900)
         assert config.lock_stale_threshold_seconds == 900
 
+    def test_non_positive_values_are_clamped(self):
+        assert OrgReportConfig(lock_stale_threshold_seconds=0).lock_stale_threshold_seconds == 1
+        assert OrgReportConfig(lock_stale_threshold_seconds=-900).lock_stale_threshold_seconds == 1
+
+    def test_runtime_state_non_positive_values_are_clamped(self):
+        assert OrgReportLockRuntimeState(stale_threshold_seconds=0).stale_threshold_seconds == 1
+        assert OrgReportLockRuntimeState(stale_threshold_seconds=-10).stale_threshold_seconds == 1
+
 
 class TestRunOrgReportRuntimeDetails:
     """Tests for runtime_details sink in run_org_report."""
@@ -4412,6 +4444,18 @@ class TestRunOrgReportRuntimeDetails:
         assert "lock_holder_pid" not in details
         assert "lock_holder_owner" not in details
         assert "lock_started_at" not in details
+
+    def test_lock_runtime_details_normalize_non_positive_thresholds(self):
+        details: dict[str, object] = {}
+
+        _record_org_report_lock_runtime_details(
+            details,
+            acquired=True,
+            contention=False,
+            stale_threshold_seconds=0,
+        )
+
+        assert details["lock_stale_threshold_seconds"] == 1
 
     @patch("cja_auto_sdr.generator.append_github_step_summary")
     @patch("cja_auto_sdr.generator.build_org_step_summary", return_value="")
@@ -4716,6 +4760,33 @@ class TestRunOrgReportRuntimeDetails:
             )
             assert success is False
 
+    @patch("cja_auto_sdr.generator.configure_cjapy")
+    def test_runtime_details_clear_stale_lock_fields_on_early_failure(self, mock_configure, tmp_path):
+        mock_configure.return_value = (False, "bad config", None)
+        details = {
+            "unrelated": "keep",
+            "lock_acquired": True,
+            "lock_contention": False,
+            "lock_stale_threshold_seconds": 900,
+            "lock_backend": "lease",
+            "lock_ownership_lost": True,
+            "lock_holder_pid": 9999,
+            "lock_holder_owner": "other-user",
+            "lock_started_at": "2026-03-15T10:00:00",
+        }
+
+        success, _ = run_org_report(
+            config_file="config.json",
+            output_format="console",
+            output_path=None,
+            output_dir=str(tmp_path),
+            org_config=OrgReportConfig(),
+            runtime_details=details,
+        )
+
+        assert success is False
+        assert details == {"unrelated": "keep"}
+
 
 class TestOrgReportRunSummaryDetails:
     def _merge_details(
@@ -4811,6 +4882,19 @@ class TestOrgReportRunSummaryDetails:
         )
 
         assert details["execution_settings"]["org_lock_stale_threshold_seconds"] == 7200
+
+    def test_non_positive_lock_thresholds_are_normalized_in_summary(self):
+        details = self._merge_details(
+            {
+                "lock_acquired": True,
+                "lock_contention": False,
+                "lock_stale_threshold_seconds": 0,
+            },
+            lock_stale_threshold_seconds=0,
+        )
+
+        assert details["lock"]["stale_threshold_seconds"] == 1
+        assert details["execution_settings"]["org_lock_stale_threshold_seconds"] == 1
 
     def test_operation_success_and_threshold_flags_are_preserved(self):
         details = self._merge_details(
