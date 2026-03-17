@@ -129,6 +129,18 @@ class TestEmitDiagnosticJSON:
         assert record["event"] == "ping"
         assert record["event_category"] == "health"
 
+    def test_json_uses_callsite_source_metadata(self):
+        buf = io.StringIO()
+        logger = _make_logger(_json_handler(buf))
+
+        def emit_from_test():
+            emit_diagnostic(logger, "test_event", "resilience")
+
+        emit_from_test()
+        record = json.loads(buf.getvalue().strip())
+        assert record["module"] == "test_diagnostic_events"
+        assert record["function"] == "emit_from_test"
+
 
 # ---------------------------------------------------------------------------
 # ContextLoggerAdapter.emit_diagnostic
@@ -152,6 +164,19 @@ class TestContextLoggerAdapterEmitDiagnostic:
         assert record["event"] == "ev"
         assert record["run_id"] == "abc123"
         assert record["key"] == "val"
+
+    def test_adapter_uses_callsite_source_metadata(self):
+        buf = io.StringIO()
+        base = _make_logger(_json_handler(buf))
+        adapter = ContextLoggerAdapter(base, {"run_id": "abc123"})
+
+        def emit_from_adapter_callsite():
+            adapter.emit_diagnostic("ev", "cat", key="val")
+
+        emit_from_adapter_callsite()
+        record = json.loads(buf.getvalue().strip())
+        assert record["module"] == "test_diagnostic_events"
+        assert record["function"] == "emit_from_adapter_callsite"
 
     def test_with_log_context_adapter(self):
         buf = io.StringIO()

@@ -325,6 +325,31 @@ def prepare_sdr_execution_context(
     }
 
 
+def _build_run_summary_execution_settings(
+    *,
+    processing_mode: str,
+    workers_requested_token: str | int | None,
+    effective_workers: int | None,
+    api_auto_tune_requested: bool,
+    circuit_breaker_enabled: bool,
+    shared_cache_active: bool,
+) -> dict[str, Any]:
+    """Build run-summary execution settings from the actual processing path."""
+    execution_settings: dict[str, Any] = {
+        "api_auto_tune_requested": api_auto_tune_requested,
+        "circuit_breaker_enabled": circuit_breaker_enabled,
+    }
+
+    if processing_mode == "batch":
+        if workers_requested_token is not None:
+            execution_settings["batch_workers_requested"] = workers_requested_token
+        if effective_workers is not None:
+            execution_settings["batch_workers_effective"] = int(effective_workers)
+        execution_settings["shared_cache_active"] = bool(shared_cache_active)
+
+    return execution_settings
+
+
 def _run_quality_report_mode(
     args: argparse.Namespace,
     *,
@@ -733,10 +758,16 @@ def execute_sdr_processing_modes(
     inventory_order: list[str],
     api_tuning_config: Any,
     circuit_breaker_config: Any,
+    workers_requested_token: str | int | None = None,
+    api_auto_tune_requested: bool = False,
+    circuit_breaker_enabled: bool = False,
+    shared_cache_active: bool = False,
 ) -> dict[str, Any]:
     """Execute the remaining SDR/quality-report processing branches for ``_main_impl()``."""
+    processing_mode = "single"
+
     if quality_report_only:
-        return _run_quality_report_mode(
+        result = _run_quality_report_mode(
             args,
             data_views=data_views,
             effective_log_level=effective_log_level,
@@ -745,9 +776,9 @@ def execute_sdr_processing_modes(
             api_tuning_config=api_tuning_config,
             circuit_breaker_config=circuit_breaker_config,
         )
-
-    if args.batch or len(data_views) > 1:
-        return _run_batch_mode(
+        processing_mode = "quality_report"
+    elif args.batch or len(data_views) > 1:
+        result = _run_batch_mode(
             args,
             data_views=data_views,
             effective_log_level=effective_log_level,
@@ -759,15 +790,28 @@ def execute_sdr_processing_modes(
             api_tuning_config=api_tuning_config,
             circuit_breaker_config=circuit_breaker_config,
         )
+        processing_mode = "batch"
+    else:
+        result = _run_single_mode(
+            args,
+            data_views=data_views,
+            effective_log_level=effective_log_level,
+            sdr_format=sdr_format,
+            processing_start_time=processing_start_time,
+            quality_report_only=quality_report_only,
+            inventory_order=inventory_order,
+            api_tuning_config=api_tuning_config,
+            circuit_breaker_config=circuit_breaker_config,
+        )
 
-    return _run_single_mode(
-        args,
-        data_views=data_views,
-        effective_log_level=effective_log_level,
-        sdr_format=sdr_format,
-        processing_start_time=processing_start_time,
-        quality_report_only=quality_report_only,
-        inventory_order=inventory_order,
-        api_tuning_config=api_tuning_config,
-        circuit_breaker_config=circuit_breaker_config,
+    effective_workers = int(args.workers) if processing_mode == "batch" else None
+    result["processing_mode"] = processing_mode
+    result["execution_settings"] = _build_run_summary_execution_settings(
+        processing_mode=processing_mode,
+        workers_requested_token=workers_requested_token,
+        effective_workers=effective_workers,
+        api_auto_tune_requested=api_auto_tune_requested,
+        circuit_breaker_enabled=circuit_breaker_enabled,
+        shared_cache_active=shared_cache_active,
     )
+    return result

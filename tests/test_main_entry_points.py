@@ -92,6 +92,16 @@ class TestMainImplExitCodes:
         assert "1" in output and "Error" in output
         assert "2" in output
 
+    @patch("cja_auto_sdr.core.exit_codes.print_exit_codes")
+    def test_help_takes_precedence_over_raw_exit_codes_dispatch(self, mock_print_exit_codes, capsys):
+        with patch.object(sys, "argv", ["cja_auto_sdr", "--exit-codes", "--help"]):
+            with pytest.raises(SystemExit) as exc_info:
+                _main_impl()
+
+        assert int(exc_info.value.code) == 0
+        assert "usage:" in capsys.readouterr().out.lower()
+        mock_print_exit_codes.assert_not_called()
+
 
 class TestMainImplSampleConfig:
     """Test _main_impl --sample-config mode."""
@@ -121,6 +131,26 @@ class TestMainImplSampleConfig:
                 _main_impl()
 
         assert exc_info.value.code == 1
+
+    @patch("cja_auto_sdr.generator.generate_sample_config")
+    def test_invalid_unknown_flag_falls_through_to_argparse_error(self, mock_gen, capsys):
+        with patch.object(sys, "argv", ["cja_auto_sdr", "--sample-config", "--bogus"]):
+            with pytest.raises(SystemExit) as exc_info:
+                _main_impl()
+
+        assert exc_info.value.code == 2
+        mock_gen.assert_not_called()
+        assert "unrecognized arguments: --bogus" in capsys.readouterr().err
+
+    @patch("cja_auto_sdr.generator.generate_sample_config")
+    def test_missing_passthrough_value_does_not_dispatch_sample_config(self, mock_gen, capsys):
+        with patch.object(sys, "argv", ["cja_auto_sdr", "--sample-config", "--workers", "--profile"]):
+            with pytest.raises(SystemExit) as exc_info:
+                _main_impl()
+
+        assert exc_info.value.code == 2
+        mock_gen.assert_not_called()
+        assert "expected one argument" in capsys.readouterr().err
 
 
 class TestMainImplProfileManagement:
@@ -238,6 +268,118 @@ class TestMainImplRunState:
                 _main_impl(run_state=run_state)
 
         assert run_state["output_format"] == "json"
+
+    def test_raw_standalone_run_summary_syncs_profile_and_config_metadata(self, capsys):
+        """Standalone early exits should still emit parser-derived run-summary metadata."""
+        with patch.object(
+            sys,
+            "argv",
+            ["cja_auto_sdr", "--exit-codes", "--profile", "demo", "--run-summary-json", "stdout"],
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                main()
+
+        assert int(exc_info.value.code) == 0
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["mode"] == "exit_codes"
+        assert payload["profile"] == "demo"
+        assert payload["config_file"] == "config.json"
+
+    def test_raw_standalone_run_summary_normalizes_attached_short_profile_values(self, capsys):
+        """Standalone reparse should preserve argparse semantics for -p=VALUE."""
+        with patch.object(
+            sys,
+            "argv",
+            ["cja_auto_sdr", "--exit-codes", "-p=demo", "--run-summary-json", "stdout"],
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                main()
+
+        assert int(exc_info.value.code) == 0
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["mode"] == "exit_codes"
+        assert payload["profile"] == "demo"
+
+    def test_raw_standalone_ignores_typed_runtime_flags_across_parser_groups(self, capsys):
+        """Standalone run-summary dispatch should ignore unrelated typed parser options."""
+        with patch.object(
+            sys,
+            "argv",
+            [
+                "cja_auto_sdr",
+                "--exit-codes",
+                "--run-summary-json",
+                "stdout",
+                "--cache-size",
+                "oops",
+                "--max-issues",
+                "nope",
+                "--api-min-workers",
+                "bad",
+            ],
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                main()
+
+        assert int(exc_info.value.code) == 0
+        captured = capsys.readouterr()
+        payload = json.loads(captured.out)
+        assert payload["mode"] == "exit_codes"
+        assert payload["exit_code"] == 0
+        assert "EXIT CODE REFERENCE" in captured.err
+        assert "--cache-size" not in captured.err
+        assert "--max-issues" not in captured.err
+        assert "--api-min-workers" not in captured.err
+
+    def test_raw_standalone_run_summary_honors_output_dir_for_relative_summary_files(self, tmp_path, monkeypatch):
+        """Relative run-summary targets should resolve under explicit --output-dir."""
+        monkeypatch.chdir(tmp_path)
+        reports_dir = tmp_path / "reports"
+        summary_path = reports_dir / "summary.json"
+
+        with patch.object(
+            sys,
+            "argv",
+            [
+                "cja_auto_sdr",
+                "--exit-codes",
+                "--run-summary-json",
+                "summary.json",
+                "--output-dir",
+                "reports",
+                "--format",
+                "json",
+            ],
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                main()
+
+        assert int(exc_info.value.code) == 0
+        assert summary_path.exists()
+        assert not (tmp_path / "summary.json").exists()
+        payload = json.loads(summary_path.read_text(encoding="utf-8"))
+        assert payload["mode"] == "exit_codes"
+        assert payload["output_format"] == "json"
+
+    def test_raw_standalone_version_still_wins_with_run_summary_stdout(self, capsys):
+        """Argparse version action should beat raw standalone dispatch when summary output is requested."""
+        from cja_auto_sdr.core.version import __version__
+
+        with patch.object(
+            sys,
+            "argv",
+            ["cja_auto_sdr", "--exit-codes", "--version", "--run-summary-json", "stdout"],
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                main()
+
+        assert int(exc_info.value.code) == 0
+        captured = capsys.readouterr()
+        payload = json.loads(captured.out)
+        assert payload["mode"] == "unknown"
+        assert payload["exit_code"] == 0
+        assert "EXIT CODE REFERENCE" not in captured.err
+        assert __version__ in captured.err
 
 
 class TestMainWrapper:

@@ -432,7 +432,7 @@ class ContextLoggerAdapter(logging.LoggerAdapter):
         **fields: object,
     ) -> None:
         """Emit a structured diagnostic event through this adapter."""
-        emit_diagnostic(self, event, category, level=level, **fields)
+        emit_diagnostic(self, event, category, level=level, stacklevel=3, **fields)
 
 
 def _format_diagnostic_text_value(value: object) -> str:
@@ -451,6 +451,7 @@ def emit_diagnostic(
     category: str,
     *,
     level: int = logging.INFO,
+    stacklevel: int = 2,
     **fields: object,
 ) -> None:
     """Emit a structured diagnostic event at a configurable log level.
@@ -469,7 +470,7 @@ def emit_diagnostic(
     text_suffix = f": {', '.join(kv_parts)}" if kv_parts else ""
     message = f"[DIAG] {event}{text_suffix}"
 
-    logger.log(level, message, extra=extra)
+    logger.log(level, message, extra=extra, stacklevel=stacklevel)
 
 
 def _unwrap_logger(logger: logging.Logger | logging.LoggerAdapter | None) -> logging.Logger | None:

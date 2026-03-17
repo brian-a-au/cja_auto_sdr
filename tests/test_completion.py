@@ -11,8 +11,9 @@ Covers:
 from __future__ import annotations
 
 import json
+import os
 import sys
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -440,6 +441,71 @@ class TestCompletionSafetyNet:
         assert "--workers must be at least 1" not in captured.err
         assert "register-python-argcomplete" in captured.out
 
+    def test_generator_safety_net_ignores_typed_runtime_flags_across_parser_groups(self, capsys):
+        """Completion should ignore unrelated typed flags from multiple parser sections."""
+        from cja_auto_sdr.generator import _main_impl
+
+        with (
+            patch.object(
+                sys,
+                "argv",
+                [
+                    "cja_auto_sdr",
+                    "--completion",
+                    "bash",
+                    "--cache-size",
+                    "oops",
+                    "--max-issues",
+                    "nope",
+                    "--api-min-workers",
+                    "bad",
+                    "--lock-stale-threshold",
+                    "abc",
+                ],
+            ),
+            patch.dict("sys.modules", {"argcomplete": type(sys)("argcomplete")}),
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                _main_impl()
+
+        assert int(exc_info.value.code) == 0
+        captured = capsys.readouterr()
+        assert "register-python-argcomplete" in captured.out
+        assert "--cache-size" not in captured.err
+        assert "--max-issues" not in captured.err
+        assert "--api-min-workers" not in captured.err
+        assert "--lock-stale-threshold" not in captured.err
+
+    def test_generator_safety_net_invalid_completion_shell_preserves_argparse_error(self, capsys):
+        """Raw standalone dispatch must still honor argparse choices for completion shells."""
+        from cja_auto_sdr.generator import _main_impl
+
+        with (
+            patch.object(sys, "argv", ["cja_auto_sdr", "--completion", "BASH"]),
+            patch("cja_auto_sdr.generator._handle_completion_prevalidation") as mock_completion_prevalidation,
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                _main_impl()
+
+        assert int(exc_info.value.code) == 2
+        assert "invalid choice" in capsys.readouterr().err
+        mock_completion_prevalidation.assert_not_called()
+
+    def test_generator_safety_net_preserves_help_precedence(self, capsys):
+        """Argparse help should win over raw standalone completion dispatch."""
+        from cja_auto_sdr.generator import _main_impl
+
+        with (
+            patch.object(sys, "argv", ["cja_auto_sdr", "--completion", "bash", "--help"]),
+            patch("cja_auto_sdr.generator._handle_completion_prevalidation") as mock_completion_prevalidation,
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                _main_impl()
+
+        assert int(exc_info.value.code) == 0
+        assert "usage:" in capsys.readouterr().out.lower()
+        mock_completion_prevalidation.assert_not_called()
+
     def test_generator_safety_net_bypasses_quality_policy_loading(self, capsys):
         """Completion should not attempt to load quality-policy files."""
         from cja_auto_sdr.generator import _main_impl
@@ -477,3 +543,48 @@ class TestCompletionSafetyNet:
         assert run_state["mode"] == "exit_codes"
         mock_print_exit_codes.assert_called_once()
         mock_completion_prevalidation.assert_not_called()
+
+    def test_generator_safety_net_skips_raw_completion_dispatch_when_argcomplete_active(self):
+        """_ARGCOMPLETE completion requests must reach parser autocomplete hooks."""
+        from cja_auto_sdr.generator import _main_impl
+
+        fake_argcomplete = type(sys)("argcomplete")
+        fake_argcomplete.autocomplete = MagicMock()
+
+        with (
+            patch.object(sys, "argv", ["cja_auto_sdr", "--completion", "b"]),
+            patch.dict(os.environ, {"_ARGCOMPLETE": "1"}),
+            patch("cja_auto_sdr.cli.parser._ARGCOMPLETE_AVAILABLE", True),
+            patch("cja_auto_sdr.cli.parser.argcomplete", fake_argcomplete, create=True),
+            patch("cja_auto_sdr.generator._handle_completion_prevalidation") as mock_completion_prevalidation,
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                _main_impl()
+
+        assert int(exc_info.value.code) == 2
+        fake_argcomplete.autocomplete.assert_called_once()
+        mock_completion_prevalidation.assert_not_called()
+
+    def test_completion_run_summary_syncs_profile_and_config_metadata(self, capsys):
+        """Standalone completion should populate run-summary metadata before early exit."""
+        from cja_auto_sdr.generator import main as generator_main
+
+        fake_argcomplete = type(sys)("argcomplete")
+        fake_argcomplete.autocomplete = lambda *_args, **_kwargs: None
+
+        with (
+            patch.object(
+                sys,
+                "argv",
+                ["cja_auto_sdr", "--completion", "bash", "--profile", "demo", "--run-summary-json", "stdout"],
+            ),
+            patch.dict("sys.modules", {"argcomplete": fake_argcomplete}),
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                generator_main()
+
+        assert int(exc_info.value.code) == 0
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["mode"] == "completion"
+        assert payload["profile"] == "demo"
+        assert payload["config_file"] == "config.json"

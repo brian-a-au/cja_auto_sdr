@@ -17,10 +17,15 @@ import shlex
 import sys
 import types
 from collections.abc import Mapping
-from functools import lru_cache
 from typing import NamedTuple
 
 from cja_auto_sdr.cli.option_resolution import resolve_long_option_token as _resolve_long_option_token
+from cja_auto_sdr.cli.token_scan import (
+    _accepts_inline_option_value,  # noqa: F401
+    _minimum_option_arity,  # noqa: F401
+)
+from cja_auto_sdr.cli.token_scan import option_scan_spec as _fast_path_option_spec
+from cja_auto_sdr.cli.token_scan import scan_option_tokens as _shared_scan_option_tokens
 
 _VERSION_OPTION = "--version"
 _VERSION_SHORT_OPTION = "-V"
@@ -38,13 +43,6 @@ _COMPLETION_SCRIPT_TEMPLATES: dict[str, str] = {
     "zsh": ('autoload -U bashcompinit && bashcompinit\neval "$(register-python-argcomplete {command})"'),
     "fish": "register-python-argcomplete --shell fish {command} | source",
 }
-
-
-class _OptionSpec(NamedTuple):
-    """Minimal option metadata needed for fast-path token scanning."""
-
-    min_arity: int
-    accepts_inline_value: bool
 
 
 class _OptionScanResult(NamedTuple):
@@ -86,50 +84,6 @@ def _is_argcomplete_completion_active(environ: Mapping[str, str] | None = None) 
     return raw_value.strip().lower() not in _FALSEY_ENV_VALUES
 
 
-def _accepts_inline_option_value(nargs: object) -> bool:
-    """Return True when an option can legally consume explicit inline values."""
-    return nargs != 0
-
-
-def _minimum_option_arity(nargs: object) -> int:
-    """Return the minimum positional values an option must consume."""
-    if nargs is None:
-        return 1
-    if isinstance(nargs, int):
-        return max(nargs, 0)
-    if nargs == "+":
-        return 1
-    # Includes 0, "?", "*", argparse.REMAINDER, argparse.PARSER.
-    return 0
-
-
-@lru_cache(maxsize=1)
-def _fast_path_option_spec() -> tuple[frozenset[str], dict[str, _OptionSpec]]:
-    """Return (known_long_options, option_specs) from the configured CLI parser."""
-    from cja_auto_sdr.cli.parser import parse_arguments
-
-    parser = parse_arguments(return_parser=True, enable_autocomplete=False)
-    option_specs: dict[str, _OptionSpec] = {}
-    known_long_options: set[str] = set()
-
-    # CPython argparse internals: `_actions` is intentionally used as the
-    # canonical source of configured option metadata for fast-path scanning.
-    for action in parser._actions:
-        if not action.option_strings:
-            continue
-        action_nargs = getattr(action, "nargs", None)
-        option_spec = _OptionSpec(
-            min_arity=_minimum_option_arity(action_nargs),
-            accepts_inline_value=_accepts_inline_option_value(action_nargs),
-        )
-        for option in action.option_strings:
-            option_specs[option] = option_spec
-            if option.startswith("--"):
-                known_long_options.add(option)
-
-    return frozenset(known_long_options), option_specs
-
-
 def _scan_option_tokens(args: list[str]) -> _OptionScanResult:
     """Scan CLI tokens argparse-style for fast-path decisions.
 
@@ -137,68 +91,8 @@ def _scan_option_tokens(args: list[str]) -> _OptionScanResult:
     before unknown-argument failures), but ambiguous long-option prefixes and
     explicit values for zero-arity options are treated as parse errors.
     """
-    known_long_options, option_specs = _fast_path_option_spec()
-    pending_option_values = 0
-    resolved_options: list[str] = []
-
-    for arg in args:
-        if arg == "--":
-            break
-
-        if pending_option_values > 0:
-            pending_option_values -= 1
-            continue
-
-        if arg.startswith("--"):
-            option_name, has_equals, _inline_value = arg.partition("=")
-            long_resolution = _resolve_long_option_token(option_name, known_long_options)
-            if long_resolution.is_ambiguous:
-                return _OptionScanResult(options=tuple(resolved_options), has_parse_error=True)
-            canonical_option = long_resolution.canonical_option
-            if canonical_option is None:
-                continue
-
-            option_spec = option_specs.get(canonical_option)
-            if option_spec is None:
-                continue
-            if has_equals and not option_spec.accepts_inline_value:
-                return _OptionScanResult(options=tuple(resolved_options), has_parse_error=True)
-
-            resolved_options.append(canonical_option)
-
-            inline_values = 1 if has_equals and option_spec.accepts_inline_value else 0
-            if option_spec.min_arity > inline_values:
-                pending_option_values = option_spec.min_arity - inline_values
-            continue
-
-        if arg.startswith("-") and arg != "-":
-            option_spec = option_specs.get(arg)
-            if option_spec is not None:
-                resolved_options.append(arg)
-                if option_spec.min_arity > 0:
-                    pending_option_values = option_spec.min_arity
-                continue
-
-            # Support short-option clusters like -qV and attached values like -pVALUE.
-            if len(arg) > 2:
-                cluster = arg[1:]
-                for index, short_name in enumerate(cluster):
-                    short_option = f"-{short_name}"
-                    option_spec = option_specs.get(short_option)
-                    if option_spec is None:
-                        break
-                    resolved_options.append(short_option)
-                    attached_value = cluster[index + 1 :]
-                    if option_spec.min_arity > 0:
-                        pending_option_values = (
-                            max(option_spec.min_arity - 1, 0) if attached_value else option_spec.min_arity
-                        )
-                        break
-                    if attached_value.startswith(("=", "-")):
-                        return _OptionScanResult(options=tuple(resolved_options), has_parse_error=True)
-            continue
-
-    return _OptionScanResult(options=tuple(resolved_options), has_parse_error=False)
+    scan = _shared_scan_option_tokens(args, reject_unknown_options=False)
+    return _OptionScanResult(options=scan.options, has_parse_error=scan.has_parse_error)
 
 
 def _has_run_summary_contract_flag(args: list[str]) -> bool:
@@ -208,7 +102,7 @@ def _has_run_summary_contract_flag(args: list[str]) -> bool:
     run-summary handling remains order-independent (e.g., `--version` followed
     by flags that would otherwise consume later tokens).
     """
-    known_long_options, _ = _fast_path_option_spec()
+    scan_spec = _fast_path_option_spec()
 
     for arg in args:
         if arg == "--":
@@ -217,7 +111,7 @@ def _has_run_summary_contract_flag(args: list[str]) -> bool:
             continue
 
         option_name, _, _inline_value = arg.partition("=")
-        long_resolution = _resolve_long_option_token(option_name, known_long_options)
+        long_resolution = _resolve_long_option_token(option_name, scan_spec.known_long_options)
         if long_resolution.canonical_option == _RUN_SUMMARY_OPTION:
             return True
 
@@ -227,8 +121,6 @@ def _has_run_summary_contract_flag(args: list[str]) -> bool:
 def _has_run_summary_flag(args: list[str]) -> bool:
     """Return True when argparse-style scan resolves --run-summary-json."""
     scan = _scan_option_tokens(args)
-    if scan.has_parse_error:
-        return False
     return any(option == _RUN_SUMMARY_OPTION for option in scan.options)
 
 

@@ -16,6 +16,7 @@ from unittest.mock import patch
 import pytest
 
 from cja_auto_sdr.cli.parser import parse_arguments
+from cja_auto_sdr.cli.token_scan import scan_option_occurrences, scan_option_tokens
 from cja_auto_sdr.core.exit_codes import explain_exit_code
 
 # ---------------------------------------------------------------------------
@@ -123,6 +124,40 @@ class TestExplainExitCodeParser:
     def test_parser_default_is_none(self):
         args = parse_arguments(["dv_test"])
         assert args.explain_exit_code is None
+
+
+class TestTokenScanDanglingArguments:
+    def test_marks_missing_single_value_as_parse_error(self):
+        scan = scan_option_tokens(["--sample-config", "--workers"])
+        assert scan.has_parse_error is True
+
+    def test_marks_missing_remaining_nargs_values_as_parse_error(self):
+        scan = scan_option_tokens(["--explain-exit-code", "2", "--profile-import", "client"])
+        assert scan.has_parse_error is True
+
+    def test_strict_scan_rejects_unknown_options_for_raw_standalone_modes(self):
+        scan = scan_option_tokens(["--sample-config", "--bogus"], reject_unknown_options=True)
+        assert scan.has_parse_error is True
+
+    def test_strict_scan_treats_option_tokens_as_missing_values(self):
+        scan = scan_option_tokens(["--sample-config", "--workers", "--profile"], reject_unknown_options=True)
+        assert scan.has_parse_error is True
+
+    def test_tolerant_scan_still_allows_unknown_options_for_entrypoint_fast_path(self):
+        scan = scan_option_tokens(["--exit-codes", "--bogus"])
+        assert scan.options == ("--exit-codes",)
+        assert scan.has_parse_error is False
+
+    def test_occurrence_scan_normalizes_short_attached_values_for_reparse(self):
+        scan = scan_option_occurrences(["--exit-codes", "-p=demo", "--run-summary-json", "stdout"])
+        assert scan.has_parse_error is False
+        assert scan.occurrences[1].canonical_option == "-p"
+        assert scan.occurrences[1].argv_tokens == ("-p", "demo")
+
+    def test_occurrence_scan_preserves_recognized_prefix_from_partial_short_cluster(self):
+        scan = scan_option_occurrences(["-qVx"])
+        assert scan.has_parse_error is False
+        assert scan.options == ("-q", "-V")
 
 
 # ---------------------------------------------------------------------------
@@ -321,6 +356,80 @@ class TestExplainExitCodeValidation:
         assert exc_info.value.code == 1
         assert "--fail-on-quality is only supported in SDR generation mode" in capsys.readouterr().err
 
+    def test_validate_only_alias_still_blocks_standalone_explain(self, capsys):
+        from cja_auto_sdr.__main__ import main as cli_main
+
+        with patch.object(sys, "argv", ["cja_auto_sdr", "--explain-exit-code", "2", "--validate-only"]):
+            with pytest.raises(SystemExit) as exc_info:
+                cli_main()
+
+        assert exc_info.value.code == 1
+        assert "--explain-exit-code cannot be combined with other command modes (dry_run)" in capsys.readouterr().err
+
+    def test_auto_prune_validator_still_runs_before_standalone_explain(self, capsys):
+        from cja_auto_sdr.__main__ import main as cli_main
+
+        with patch.object(sys, "argv", ["cja_auto_sdr", "--explain-exit-code", "2", "--auto-prune"]):
+            with pytest.raises(SystemExit) as exc_info:
+                cli_main()
+
+        assert exc_info.value.code == 1
+        assert "--auto-prune requires --auto-snapshot or --prune-snapshots" in capsys.readouterr().err
+
+    def test_profile_overwrite_does_not_bypass_standalone_validation(self, capsys):
+        from cja_auto_sdr.__main__ import main as cli_main
+
+        with patch.object(sys, "argv", ["cja_auto_sdr", "--explain-exit-code", "2", "--profile-overwrite"]):
+            with pytest.raises(SystemExit) as exc_info:
+                cli_main()
+
+        assert exc_info.value.code == 1
+        assert "--explain-exit-code cannot be combined with other command modes (profile_management)" in (
+            capsys.readouterr().err
+        )
+
+    def test_top_level_cli_ignores_unrelated_typed_flags(self, capsys):
+        from cja_auto_sdr.__main__ import main as cli_main
+
+        with patch.object(
+            sys,
+            "argv",
+            [
+                "cja_auto_sdr",
+                "--explain-exit-code",
+                "2",
+                "--lock-stale-threshold",
+                "abc",
+            ],
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                cli_main()
+
+        assert exc_info.value.code == 0
+        assert "Exit code 2:" in capsys.readouterr().out
+
+    def test_top_level_cli_accepts_space_separated_negative_codes(self, capsys):
+        from cja_auto_sdr.__main__ import main as cli_main
+
+        with patch.object(
+            sys,
+            "argv",
+            [
+                "cja_auto_sdr",
+                "--explain-exit-code",
+                "-1",
+                "--lock-stale-threshold",
+                "abc",
+            ],
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                cli_main()
+
+        assert exc_info.value.code == 0
+        captured = capsys.readouterr()
+        assert "Exit code -1:" in captured.out
+        assert "--lock-stale-threshold" not in captured.err
+
 
 # ---------------------------------------------------------------------------
 # Run-summary interaction tests
@@ -360,7 +469,7 @@ class TestExplainExitCodeRunSummary:
         assert "Exit code 2:" in stderr_output or "Exit code 2:" in stdout_buf.getvalue()
 
     def test_explanation_bypasses_unrelated_validation_with_run_summary_stdout(self, capsys):
-        """Standalone explain mode must ignore generic validation-only flags."""
+        """Standalone explain mode must ignore unrelated typed wrapper flags."""
         from cja_auto_sdr.generator import main as generator_main
 
         with patch.object(
@@ -373,9 +482,9 @@ class TestExplainExitCodeRunSummary:
                 "--run-summary-json",
                 "-",
                 "--workers",
-                "0",
+                "not-a-worker-count",
                 "--lock-stale-threshold",
-                "0",
+                "abc",
             ],
         ):
             with pytest.raises(SystemExit) as exc_info:

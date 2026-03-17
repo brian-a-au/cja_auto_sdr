@@ -707,6 +707,12 @@ class TestFastPathEntryPoint:
         assert _is_fast_path_flag(["prog", "--version", "--v"]) == "--version"
         assert _is_fast_path_flag(["prog", "--version", "--quiet=1"]) == "--version"
 
+    def test_is_fast_path_flag_version_survives_partial_short_cluster_suffixes(self):
+        from cja_auto_sdr.__main__ import _is_fast_path_flag
+
+        assert _is_fast_path_flag(["prog", "-Vx"]) == "--version"
+        assert _is_fast_path_flag(["prog", "-qVx"]) == "--version"
+
     def test_is_fast_path_flag_exit_codes(self):
         from cja_auto_sdr.__main__ import _is_fast_path_flag
 
@@ -864,6 +870,21 @@ class TestFastPathEntryPoint:
 
         captured = capsys.readouterr()
         assert captured.out.strip() == f"cja_auto_sdr {__version__}"
+
+    def test_fast_path_main_version_uses_partial_short_cluster_without_generator_fallback(self, capsys):
+        from cja_auto_sdr.__main__ import main as fast_main
+        from cja_auto_sdr.core.version import __version__
+
+        with (
+            patch.object(sys, "argv", ["cja_auto_sdr", "-qVx"]),
+            patch("cja_auto_sdr.generator.main") as mock_generator_main,
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                fast_main()
+
+        assert exc_info.value.code == 0
+        mock_generator_main.assert_not_called()
+        assert capsys.readouterr().out.strip() == f"cja_auto_sdr {__version__}"
 
     def test_fast_path_main_version_like_value_token_falls_through_to_generator(self):
         from cja_auto_sdr.__main__ import main as fast_main
