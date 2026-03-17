@@ -1586,13 +1586,13 @@ def _dispatch_prevalidation_mode(
             _exit_error("Internal error: completion mode inferred without a completion shell value")
         _handle_completion_prevalidation(completion_shell, run_state=run_state)
 
-    if inferred_mode == RunMode.EXPLAIN_EXIT_CODE:
+    elif inferred_mode == RunMode.EXPLAIN_EXIT_CODE:
         _handle_explain_exit_code_prevalidation(args, run_state=run_state)
 
-    if inferred_mode == RunMode.EXIT_CODES:
+    elif inferred_mode == RunMode.EXIT_CODES:
         _handle_exit_codes_prevalidation()
 
-    if inferred_mode == RunMode.SAMPLE_CONFIG:
+    elif inferred_mode == RunMode.SAMPLE_CONFIG:
         _handle_sample_config_prevalidation(run_state=run_state)
 
 
