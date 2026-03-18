@@ -102,6 +102,16 @@ class TestMainImplExitCodes:
         assert "usage:" in capsys.readouterr().out.lower()
         mock_print_exit_codes.assert_not_called()
 
+    def test_invalid_format_choice_is_ignored_for_raw_exit_codes_dispatch(self, capsys):
+        with patch.object(sys, "argv", ["cja_auto_sdr", "--exit-codes", "--format", "nope"]):
+            with pytest.raises(SystemExit) as exc_info:
+                _main_impl()
+
+        assert int(exc_info.value.code) == 0
+        captured = capsys.readouterr()
+        assert "EXIT CODE REFERENCE" in captured.out
+        assert "invalid choice" not in captured.err
+
 
 class TestMainImplSampleConfig:
     """Test _main_impl --sample-config mode."""
@@ -151,6 +161,18 @@ class TestMainImplSampleConfig:
         assert exc_info.value.code == 2
         mock_gen.assert_not_called()
         assert "expected one argument" in capsys.readouterr().err
+
+    @patch("cja_auto_sdr.generator.generate_sample_config")
+    def test_invalid_format_choice_is_ignored_for_sample_config(self, mock_gen, capsys):
+        mock_gen.return_value = True
+
+        with patch.object(sys, "argv", ["cja_auto_sdr", "--sample-config", "--format", "nope"]):
+            with pytest.raises(SystemExit) as exc_info:
+                _main_impl()
+
+        assert int(exc_info.value.code) == 0
+        mock_gen.assert_called_once()
+        assert "invalid choice" not in capsys.readouterr().err
 
 
 class TestMainImplProfileManagement:
@@ -360,6 +382,24 @@ class TestMainImplRunState:
         payload = json.loads(summary_path.read_text(encoding="utf-8"))
         assert payload["mode"] == "exit_codes"
         assert payload["output_format"] == "json"
+
+    def test_raw_standalone_run_summary_preserves_ignored_format_metadata(self, capsys):
+        """Standalone run-summary should keep raw --format metadata without revalidating choices."""
+        with patch.object(
+            sys,
+            "argv",
+            ["cja_auto_sdr", "--exit-codes", "--run-summary-json", "stdout", "--format", "nope"],
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                main()
+
+        assert int(exc_info.value.code) == 0
+        captured = capsys.readouterr()
+        payload = json.loads(captured.out)
+        assert payload["mode"] == "exit_codes"
+        assert payload["output_format"] == "nope"
+        assert "EXIT CODE REFERENCE" in captured.err
+        assert "invalid choice" not in captured.err
 
     def test_raw_standalone_version_still_wins_with_run_summary_stdout(self, capsys):
         """Argparse version action should beat raw standalone dispatch when summary output is requested."""

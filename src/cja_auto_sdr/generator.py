@@ -480,6 +480,7 @@ class _StandalonePrevalidationRequest:
 
     mode: RunMode
     parsed_args: argparse.Namespace
+    raw_cli_metadata: Mapping[str, Any] = field(default_factory=dict)
 
 
 _RUN_MODE_SELECTOR_DESTS: tuple[tuple[RunMode, tuple[str, ...]], ...] = (
@@ -528,7 +529,8 @@ _RAW_STANDALONE_MODE_DESTS: dict[str, RunMode] = {
     "explain_exit_code": RunMode.EXPLAIN_EXIT_CODE,
     "sample_config": RunMode.SAMPLE_CONFIG,
 }
-_RAW_STANDALONE_METADATA_DESTS = frozenset({"config_file", "format", "output_dir", "profile", "run_summary_json"})
+_RAW_STANDALONE_METADATA_DESTS = frozenset({"config_file", "output_dir", "profile", "run_summary_json"})
+_RAW_STANDALONE_RAW_METADATA_OPTIONS: Mapping[str, str] = {"--format": "output_format"}
 _RAW_STANDALONE_PREVALIDATION_EXTRA_DESTS = frozenset(
     {
         "allow_partial",
@@ -1602,6 +1604,16 @@ def _parse_raw_standalone_prevalidation_args(
     return parse_arguments(filtered_argv)
 
 
+def _extract_raw_standalone_metadata(argv: list[str]) -> dict[str, str]:
+    """Capture raw wrapper metadata that standalone modes intentionally ignore."""
+    raw_metadata: dict[str, str] = {}
+    for option_name, state_key in _RAW_STANDALONE_RAW_METADATA_OPTIONS.items():
+        raw_value = _cli_option_value(option_name, argv=argv)
+        if raw_value is not None:
+            raw_metadata[state_key] = raw_value
+    return raw_metadata
+
+
 def _resolve_raw_standalone_prevalidation_request(
     argv: list[str] | None = None,
 ) -> _StandalonePrevalidationRequest | None:
@@ -1644,7 +1656,11 @@ def _resolve_raw_standalone_prevalidation_request(
     _validate_explain_exit_code_cli_args(parsed_args, active_modes=active_modes)
     _validate_semantic_flag_relationships(parsed_args, inferred_mode=inferred_mode)
 
-    return _StandalonePrevalidationRequest(mode=inferred_mode, parsed_args=parsed_args)
+    return _StandalonePrevalidationRequest(
+        mode=inferred_mode,
+        parsed_args=parsed_args,
+        raw_cli_metadata=_extract_raw_standalone_metadata(tokens),
+    )
 
 
 def _dispatch_raw_standalone_prevalidation_request(
@@ -1658,6 +1674,8 @@ def _dispatch_raw_standalone_prevalidation_request(
         return False
 
     _sync_run_summary_cli_metadata(run_state, request.parsed_args, inferred_mode=request.mode)
+    if run_state is not None and request.raw_cli_metadata:
+        run_state.update(request.raw_cli_metadata)
 
     if request.mode == RunMode.COMPLETION:
         completion_shell = _completion_shell_from_args(request.parsed_args)

@@ -408,6 +408,18 @@ class TestExplainExitCodeValidation:
         assert exc_info.value.code == 0
         assert "Exit code 2:" in capsys.readouterr().out
 
+    def test_top_level_cli_ignores_invalid_format_choice(self, capsys):
+        from cja_auto_sdr.__main__ import main as cli_main
+
+        with patch.object(sys, "argv", ["cja_auto_sdr", "--explain-exit-code", "2", "--format", "nope"]):
+            with pytest.raises(SystemExit) as exc_info:
+                cli_main()
+
+        assert exc_info.value.code == 0
+        captured = capsys.readouterr()
+        assert "Exit code 2:" in captured.out
+        assert "invalid choice" not in captured.err
+
     def test_top_level_cli_accepts_space_separated_negative_codes(self, capsys):
         from cja_auto_sdr.__main__ import main as cli_main
 
@@ -481,6 +493,8 @@ class TestExplainExitCodeRunSummary:
                 "2",
                 "--run-summary-json",
                 "-",
+                "--format",
+                "nope",
                 "--workers",
                 "not-a-worker-count",
                 "--lock-stale-threshold",
@@ -496,4 +510,6 @@ class TestExplainExitCodeRunSummary:
         assert payload["mode"] == "explain_exit_code"
         assert payload["exit_code"] == 0
         assert payload["status"] == "success"
+        assert payload["output_format"] == "nope"
         assert "Exit code 2:" in captured.err
+        assert "invalid choice" not in captured.err

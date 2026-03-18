@@ -453,6 +453,8 @@ class TestCompletionSafetyNet:
                     "cja_auto_sdr",
                     "--completion",
                     "bash",
+                    "--format",
+                    "nope",
                     "--cache-size",
                     "oops",
                     "--max-issues",
@@ -471,6 +473,7 @@ class TestCompletionSafetyNet:
         assert int(exc_info.value.code) == 0
         captured = capsys.readouterr()
         assert "register-python-argcomplete" in captured.out
+        assert "--format" not in captured.err
         assert "--cache-size" not in captured.err
         assert "--max-issues" not in captured.err
         assert "--api-min-workers" not in captured.err
