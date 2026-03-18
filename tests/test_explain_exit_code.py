@@ -18,6 +18,7 @@ import pytest
 from cja_auto_sdr.cli.parser import parse_arguments
 from cja_auto_sdr.cli.token_scan import scan_option_occurrences, scan_option_tokens
 from cja_auto_sdr.core.exit_codes import explain_exit_code
+from cja_auto_sdr.generator import RunMode, _resolve_raw_standalone_prevalidation_request
 
 # ---------------------------------------------------------------------------
 # Shared explainer unit tests
@@ -158,6 +159,155 @@ class TestTokenScanDanglingArguments:
         scan = scan_option_occurrences(["-qVx"])
         assert scan.has_parse_error is False
         assert scan.options == ("-q", "-V")
+
+
+class TestRawStandalonePrevalidation:
+    @pytest.mark.parametrize(
+        ("argv", "expected_mode"),
+        [
+            (["--exit-codes", "--wrapper-job-id", "1"], RunMode.EXIT_CODES),
+            (["--exit-codes", "--wrapper-debug", "false"], RunMode.EXIT_CODES),
+            (["--exit-codes", "--agent-run-id", "abc123"], RunMode.EXIT_CODES),
+            (["--exit-codes", "--agent-run-id", "run_123"], RunMode.EXIT_CODES),
+            (["--exit-codes", "--agent-run-id", "r1"], RunMode.EXIT_CODES),
+            (["--exit-codes", "--run-summary-json", "--wrapper-job-id", "1", "-"], RunMode.EXIT_CODES),
+            (["--exit-codes", "--run-summary-json", "--agent-run-id", "abc123", "-"], RunMode.EXIT_CODES),
+            (["--exit-codes", "--run-summary-json", "--agent-run-id=abc123", "-"], RunMode.EXIT_CODES),
+            (["--exit-codes", "--run-summary-json", "--agent-trace", "false", "-"], RunMode.EXIT_CODES),
+            (["--format", "--wrapper-job-id", "1", "json", "--exit-codes"], RunMode.EXIT_CODES),
+            (["--exit-codes", "--config-file", "--agent-run-id", "abc123", "cfg.json"], RunMode.EXIT_CODES),
+            (["--format", "--agent-run-id=abc123", "json", "--exit-codes"], RunMode.EXIT_CODES),
+            (["--sample-config", "--agent-run-id=abc123"], RunMode.SAMPLE_CONFIG),
+            (["--sample-config", "--agent-run-id", "abc123"], RunMode.SAMPLE_CONFIG),
+            (["--sample-config", "--agent-trace", "false"], RunMode.SAMPLE_CONFIG),
+            (["--completion", "bash", "--wrapper-job-id", "1"], RunMode.COMPLETION),
+            (["--completion", "bash", "--agent-run-id", "abc123"], RunMode.COMPLETION),
+            (["--completion", "bash", "--agent-run-id", "run_123"], RunMode.COMPLETION),
+            (["--completion", "--agent-run-id=abc123", "bash"], RunMode.COMPLETION),
+            (["--completion", "--wrapper-debug=bash"], RunMode.COMPLETION),
+            (["--completion", "--wrapper-debug", "bash"], RunMode.COMPLETION),
+            (["--completion", "--wrapper-debug", "false", "bash"], RunMode.COMPLETION),
+            (["--completion", "--wrapper-job-id", "1", "bash"], RunMode.COMPLETION),
+            (["--agent-run-id", "abc123", "--explain-exit-code", "2"], RunMode.EXPLAIN_EXIT_CODE),
+            (["--explain-exit-code", "2", "--agent-run-id", "abc123"], RunMode.EXPLAIN_EXIT_CODE),
+            (["--explain-exit-code", "--agent-run-id=abc123", "2"], RunMode.EXPLAIN_EXIT_CODE),
+            (["--explain-exit-code", "--agent-trace=2"], RunMode.EXPLAIN_EXIT_CODE),
+            (["--explain-exit-code", "--agent-trace", "2"], RunMode.EXPLAIN_EXIT_CODE),
+            (["--explain-exit-code", "--agent-trace", "false", "2"], RunMode.EXPLAIN_EXIT_CODE),
+            (["--explain-exit-code", "--agent-run-id", "abc123", "2"], RunMode.EXPLAIN_EXIT_CODE),
+            (["--exit-codes", "--completion", "bash", "--wrapper-job-id", "1"], RunMode.EXIT_CODES),
+        ],
+    )
+    def test_request_ignores_unknown_wrapper_flags(self, argv, expected_mode):
+        request = _resolve_raw_standalone_prevalidation_request(argv=argv)
+
+        assert request is not None
+        assert request.mode is expected_mode
+
+    def test_request_still_rejects_unknown_non_wrapper_flags(self):
+        request = _resolve_raw_standalone_prevalidation_request(argv=["--sample-config", "--bogus"])
+
+        assert request is None
+
+    def test_request_recovers_split_wrapper_hidden_metadata(self):
+        request = _resolve_raw_standalone_prevalidation_request(
+            argv=[
+                "--exit-codes",
+                "--run-summary-json",
+                "--agent-run-id",
+                "abc123",
+                "-",
+                "--config-file",
+                "--agent-run-id",
+                "abc123",
+                "cfg.json",
+            ]
+        )
+
+        assert request is not None
+        assert request.mode is RunMode.EXIT_CODES
+        assert dict(request.raw_cli_metadata) == {
+            "run_summary_output": "-",
+            "config_file": "cfg.json",
+        }
+
+    @pytest.mark.parametrize(
+        "argv",
+        [
+            ["--completion", "--wrapper-job-id", "bash"],
+            ["--completion", "--wrapper-job-id", "bash", "zsh"],
+            ["--completion", "--wrapper-job-id=bash", "zsh"],
+            ["--completion", "--wrapper-debug=bash", "zsh"],
+            ["--completion", "--wrapper-debug=bash", "--wrapper-job-id", "extra"],
+            ["--completion", "--wrapper-debug=bash", "--wrapper-job-id", "dv1"],
+            ["--explain-exit-code", "--agent-run-id", "2"],
+            ["--explain-exit-code", "--agent-run-id", "2", "3"],
+            ["--explain-exit-code", "--agent-run-id=2", "3"],
+            ["--explain-exit-code", "--agent-trace", "0", "2"],
+            ["--explain-exit-code", "--agent-trace", "1", "2"],
+            ["--explain-exit-code", "--agent-trace=1", "2"],
+            ["--explain-exit-code", "--agent-trace=2", "--wrapper-job-id", "extra"],
+            ["--explain-exit-code", "--agent-trace=2", "--wrapper-job-id", "dv1"],
+            ["--exit-codes", "--agent-run-id"],
+            ["--sample-config", "--wrapper-job-id"],
+            ["--exit-codes", "--run-summary-json", "--wrapper-debug", "bash", "stdout"],
+            ["--exit-codes", "--run-summary-json", "--wrapper-debug=bash", "stdout"],
+            ["--exit-codes", "--output-dir", "--wrapper-debug", "bash", "reports"],
+            ["--format", "--wrapper-debug=json", "--exit-codes"],
+        ],
+    )
+    def test_request_rejects_ambiguous_wrapper_values(self, argv):
+        request = _resolve_raw_standalone_prevalidation_request(argv=argv)
+
+        assert request is None
+
+    @pytest.mark.parametrize(
+        "argv",
+        [
+            ["--exit-codes", "--wrapper-job-id", "dv1"],
+            ["--exit-codes", "--wrapper-job-id", "dv_12345"],
+            ["--sample-config", "--wrapper-job-id", "dv_12345"],
+            ["--explain-exit-code", "2", "--wrapper-job-id", "extra"],
+        ],
+    )
+    def test_request_rejects_post_command_wrapper_values_that_look_like_extra_args(self, argv):
+        request = _resolve_raw_standalone_prevalidation_request(argv=argv)
+
+        assert request is None
+
+    @pytest.mark.parametrize(
+        "argv",
+        [
+            ["--sample-config", "--wrapper-debug=--exit-codes"],
+            ["--sample-config", "--wrapper-debug=--run-summary-json", "-"],
+        ],
+    )
+    def test_request_does_not_reinterpret_attached_wrapper_payload_as_top_level_option(self, argv):
+        request = _resolve_raw_standalone_prevalidation_request(argv=argv)
+
+        assert request is None
+
+    def test_request_handles_many_wrapper_metadata_pairs(self):
+        request = _resolve_raw_standalone_prevalidation_request(
+            argv=[
+                "--exit-codes",
+                "--wrapper-a",
+                "1",
+                "--wrapper-b",
+                "2",
+                "--wrapper-c",
+                "3",
+                "--wrapper-d",
+                "4",
+                "--wrapper-e",
+                "5",
+                "--wrapper-f",
+                "6",
+            ],
+        )
+
+        assert request is not None
+        assert request.mode is RunMode.EXIT_CODES
 
 
 # ---------------------------------------------------------------------------
@@ -420,6 +570,161 @@ class TestExplainExitCodeValidation:
         assert "Exit code 2:" in captured.out
         assert "invalid choice" not in captured.err
 
+    def test_top_level_cli_ignores_wrapper_flag_before_explain_operand(self, capsys):
+        from cja_auto_sdr.__main__ import main as cli_main
+
+        with patch.object(
+            sys,
+            "argv",
+            ["cja_auto_sdr", "--explain-exit-code", "--agent-trace", "2"],
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                cli_main()
+
+        assert exc_info.value.code == 0
+        assert "Exit code 2:" in capsys.readouterr().out
+
+    def test_top_level_cli_ignores_flaglike_wrapper_boolean_before_explain_operand(self, capsys):
+        from cja_auto_sdr.__main__ import main as cli_main
+
+        with patch.object(
+            sys,
+            "argv",
+            ["cja_auto_sdr", "--explain-exit-code", "--agent-trace", "false", "2"],
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                cli_main()
+
+        assert exc_info.value.code == 0
+        assert "Exit code 2:" in capsys.readouterr().out
+
+    def test_top_level_cli_rejects_ambiguous_wrapper_value_before_explain_operand(self, capsys):
+        from cja_auto_sdr.__main__ import main as cli_main
+
+        with patch.object(
+            sys,
+            "argv",
+            ["cja_auto_sdr", "--explain-exit-code", "--agent-run-id", "2"],
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                cli_main()
+
+        assert exc_info.value.code != 0
+        assert "expected one argument" in capsys.readouterr().err
+
+    def test_top_level_cli_rejects_ambiguous_wrapper_value_even_with_later_operand(self, capsys):
+        from cja_auto_sdr.__main__ import main as cli_main
+
+        with patch.object(
+            sys,
+            "argv",
+            ["cja_auto_sdr", "--explain-exit-code", "--agent-run-id", "2", "3"],
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                cli_main()
+
+        assert exc_info.value.code != 0
+        assert "expected one argument" in capsys.readouterr().err
+
+    def test_top_level_cli_rejects_attached_wrapper_value_before_explain_operand(self, capsys):
+        from cja_auto_sdr.__main__ import main as cli_main
+
+        with patch.object(
+            sys,
+            "argv",
+            ["cja_auto_sdr", "--explain-exit-code", "--agent-run-id=2", "3"],
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                cli_main()
+
+        assert exc_info.value.code != 0
+        assert "expected one argument" in capsys.readouterr().err
+
+    def test_top_level_cli_rejects_flaglike_boolean_wrapper_value_before_explain_operand(self, capsys):
+        from cja_auto_sdr.__main__ import main as cli_main
+
+        with patch.object(
+            sys,
+            "argv",
+            ["cja_auto_sdr", "--explain-exit-code", "--agent-trace", "1", "2"],
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                cli_main()
+
+        assert exc_info.value.code != 0
+        assert "expected one argument" in capsys.readouterr().err
+
+    def test_top_level_cli_accepts_attached_flaglike_wrapper_value_before_explain_operand(self, capsys):
+        from cja_auto_sdr.__main__ import main as cli_main
+
+        with patch.object(
+            sys,
+            "argv",
+            ["cja_auto_sdr", "--explain-exit-code", "--agent-trace=2"],
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                cli_main()
+
+        assert exc_info.value.code == 0
+        assert "Exit code 2:" in capsys.readouterr().out
+
+    def test_top_level_cli_rejects_unsafe_wrapper_after_attached_flaglike_operand_recovery(self, capsys):
+        from cja_auto_sdr.__main__ import main as cli_main
+
+        with patch.object(
+            sys,
+            "argv",
+            ["cja_auto_sdr", "--explain-exit-code", "--agent-trace=2", "--wrapper-job-id", "extra"],
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                cli_main()
+
+        assert exc_info.value.code != 0
+        captured_err = capsys.readouterr().err
+        assert "expected one argument" in captured_err or "unrecognized arguments" in captured_err
+
+    def test_top_level_cli_accepts_safe_attached_wrapper_value_before_explain_operand(self, capsys):
+        from cja_auto_sdr.__main__ import main as cli_main
+
+        with patch.object(
+            sys,
+            "argv",
+            ["cja_auto_sdr", "--explain-exit-code", "--agent-run-id=abc123", "2"],
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                cli_main()
+
+        assert exc_info.value.code == 0
+        assert "Exit code 2:" in capsys.readouterr().out
+
+    def test_top_level_cli_rejects_post_command_wrapper_value_that_looks_like_extra_arg(self, capsys):
+        from cja_auto_sdr.__main__ import main as cli_main
+
+        with patch.object(
+            sys,
+            "argv",
+            ["cja_auto_sdr", "--explain-exit-code", "2", "--wrapper-job-id", "extra"],
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                cli_main()
+
+        assert exc_info.value.code != 0
+        assert "unrecognized arguments" in capsys.readouterr().err
+
+    def test_top_level_cli_accepts_post_command_space_separated_run_id(self, capsys):
+        from cja_auto_sdr.__main__ import main as cli_main
+
+        with patch.object(
+            sys,
+            "argv",
+            ["cja_auto_sdr", "--explain-exit-code", "2", "--agent-run-id", "abc123"],
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                cli_main()
+
+        assert exc_info.value.code == 0
+        assert "Exit code 2:" in capsys.readouterr().out
+
     def test_top_level_cli_accepts_space_separated_negative_codes(self, capsys):
         from cja_auto_sdr.__main__ import main as cli_main
 
@@ -481,7 +786,7 @@ class TestExplainExitCodeRunSummary:
         assert "Exit code 2:" in stderr_output or "Exit code 2:" in stdout_buf.getvalue()
 
     def test_explanation_bypasses_unrelated_validation_with_run_summary_stdout(self, capsys):
-        """Standalone explain mode must ignore unrelated typed wrapper flags."""
+        """Standalone explain mode must ignore unrelated typed and wrapper flags."""
         from cja_auto_sdr.generator import main as generator_main
 
         with patch.object(
@@ -491,6 +796,8 @@ class TestExplainExitCodeRunSummary:
                 "cja_auto_sdr",
                 "--explain-exit-code",
                 "2",
+                "--agent-run-id",
+                "abc123",
                 "--run-summary-json",
                 "-",
                 "--format",

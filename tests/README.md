@@ -121,7 +121,7 @@ tests/
 └── README.md                        # This file
 ```
 
-**Total: 6,459 comprehensive tests**
+**Total: 6,573 comprehensive tests**
 
 ### Test Count Breakdown
 
@@ -131,7 +131,7 @@ tests/
 | `test_ux_features.py` | 123 | UX features: --open, --stats, --output, --list-dataviews formats, inventory validation, inventory summary, include-all-inventory |
 | `test_org_report.py` | 204 | Org-wide component analysis: config, distribution, similarity, output formats, large org scaling, output path aliases |
 | `test_org_report_integration.py` | 17 | Org-wide analysis integration tests: end-to-end flows, caching, filtering, governance |
-| `test_cli.py` | 441 | Command-line interface and argument parsing |
+| `test_cli.py` | 449 | Command-line interface and argument parsing |
 | `test_profiles.py` | 77 | Multi-organization profile support |
 | `test_derived_inventory.py` | 62 | Derived fields inventory feature |
 | `test_inventory_utils.py` | 47 | Inventory utilities and helpers |
@@ -166,7 +166,7 @@ tests/
 | `test_discovery_component_consistency.py` | 7 | Discovery component retrieval consistency |
 | `test_output_content_validation.py` | 29 | Output format content validation (CSV, JSON, HTML, Excel, Markdown roundtrip) |
 | `test_malformed_api_responses.py` | 20 | Negative tests for malformed/unexpected API responses |
-| `test_main_entry_points.py` | 32 | main() and _main_impl() entry points, dispatch, run_state, run summary |
+| `test_main_entry_points.py` | 54 | main() and _main_impl() entry points, dispatch, run_state, run summary |
 | `test_quality_policy_and_run_summary.py` | 97 | Quality policy functions and run summary/status inference |
 | `test_e2e_integration.py` | 16 | End-to-end integration tests with real pipeline, mocked API boundary |
 | `test_api_client.py` | 29 | API client exception paths and error handling |
@@ -210,7 +210,7 @@ tests/
 | `test_update_test_counts.py` | 2 | Test count validation tests |
 | `test_cli_smoke_modes.py` | 10 | CLI smoke tests for core command modes |
 | `test_generator_mock_contract.py` | 2 | Generator mock symbol contract tests |
-| `test_completion.py` | 48 | Shell completion flag (--completion bash/zsh/fish) |
+| `test_completion.py` | 61 | Shell completion flag (--completion bash/zsh/fish) |
 | `test_exception_narrowing.py` | 50 | Exception narrowing boundary tests |
 | `test_coverage_hardening.py` | 108 | Coverage hardening tests |
 | `test_trending_models.py` | 52 | Trending dataclass construction and bridge tests |
@@ -237,7 +237,7 @@ tests/
 | `test_example_automation_scripts.py` | 4 | Automation shell script validation tests |
 | `test_exit_codes.py` | 11 | Exit code helpers and signal detection tests |
 | `test_json_io.py` | 2 | JSON I/O atomic write and read tests |
-| **Total** | **6,459** | **Collected via pytest --collect-only** |
+| **Total** | **6,573** | **Collected via pytest --collect-only** |
 
 ## Running Tests
 
@@ -641,7 +641,7 @@ Check for drift (CI-friendly):
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (6,459 tests total)
+- [x] Comprehensive test coverage (6,573 tests total)
 - [x] Org-wide analysis tests (test_org_report.py) - 204 tests (including large org scaling, output path aliases, memory warnings, smart cache invalidation)
 - [x] Org-wide analysis integration tests (test_org_report_integration.py) - 17 tests (end-to-end flows, caching, filtering, governance thresholds)
 - [x] Profile management tests (test_profiles.py) - 77 tests

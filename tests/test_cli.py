@@ -4881,6 +4881,29 @@ class TestOpenOutputArtifacts(TestRunSummaryOutput):
         assert payload["status"] == "error"
         assert payload["allow_partial"] is True
 
+    @pytest.mark.parametrize(
+        ("argv", "expected_exit_code"),
+        [
+            (["cja_auto_sdr", "--completion", "powershell", "--run-summary-json", "stdout"], 2),
+            (["cja_auto_sdr", "--sample-config", "--allow-partial", "--run-summary-json", "stdout"], 1),
+        ],
+    )
+    def test_invalid_standalone_requests_still_emit_run_summary_json_to_stdout(self, capsys, argv, expected_exit_code):
+        """Standalone parse/validation failures must stay inside the run-summary contract."""
+        from cja_auto_sdr.generator import main
+
+        with patch.object(sys, "argv", argv):
+            with pytest.raises(SystemExit) as exc_info:
+                main()
+
+        assert exc_info.value.code == expected_exit_code
+        captured = capsys.readouterr()
+        payload = json.loads(captured.out)
+        self._assert_run_summary_schema(payload)
+        assert payload["exit_code"] == expected_exit_code
+        assert payload["status"] == "error"
+        assert captured.err
+
     def test_run_summary_missing_value_does_not_write_flag_named_file(self, tmp_path, monkeypatch):
         """Malformed --run-summary-json should not treat the next flag as an output path."""
         from cja_auto_sdr.generator import main
@@ -4888,6 +4911,32 @@ class TestOpenOutputArtifacts(TestRunSummaryOutput):
         bad_output_name = "--list-dataviews"
         monkeypatch.chdir(tmp_path)
         with patch.object(sys, "argv", ["cja_auto_sdr", "--run-summary-json", "--list-dataviews"]):
+            with pytest.raises(SystemExit) as exc_info:
+                main()
+
+        assert exc_info.value.code == 2
+        assert not (tmp_path / bad_output_name).exists()
+
+    @pytest.mark.parametrize(
+        ("argv_tail", "bad_output_name"),
+        [
+            (["--run-summary-json", "--wrapper-debug", "bash", "stdout"], "bash"),
+            (["--run-summary-json", "--wrapper-debug=bash", "stdout"], "bash"),
+            (["--run-summary-json", "--agent-trace", "false", "stdout"], "false"),
+        ],
+    )
+    def test_run_summary_missing_value_does_not_write_wrapper_payload_named_file(
+        self,
+        tmp_path,
+        monkeypatch,
+        argv_tail,
+        bad_output_name,
+    ):
+        """Wrapper payloads must not be reinterpreted as run-summary output paths."""
+        from cja_auto_sdr.generator import main
+
+        monkeypatch.chdir(tmp_path)
+        with patch.object(sys, "argv", ["cja_auto_sdr", *argv_tail]):
             with pytest.raises(SystemExit) as exc_info:
                 main()
 
@@ -4924,6 +4973,9 @@ class TestOpenOutputArtifacts(TestRunSummaryOutput):
             (["--run-summary-j=stdout"], "stdout"),
             (["--run-summary-json", "--list-dataviews"], None),
             (["--run-summary-j", "--list-dataviews"], None),
+            (["--run-summary-json", "--wrapper-debug=bash", "stdout"], None),
+            (["--run-summary-json", "--agent-trace", "false", "stdout"], None),
+            (["--format", "--agent-run-id=abc123", "json"], None),
             (["--run-summary-json", "stdout", "--run-summary-j", "summary.json"], "summary.json"),
             (["--run-summary-json=stdout", "--run-summary-j=summary.json"], "summary.json"),
             (["--run-summary-json", "stdout", "--run-summary-json"], "stdout"),

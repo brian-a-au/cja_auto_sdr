@@ -240,6 +240,109 @@ class TestCompletionFastPath:
         assert "unsupported shell" not in captured.err
 
     @pytest.mark.parametrize(
+        "argv",
+        [
+            ["cja_auto_sdr", "--completion", "bash", "--wrapper-job-id", "1"],
+            ["cja_auto_sdr", "--completion", "bash", "--agent-run-id", "abc123"],
+            ["cja_auto_sdr", "--completion", "bash", "--agent-run-id", "run_123"],
+            ["cja_auto_sdr", "--completion", "--wrapper-debug", "bash"],
+            ["cja_auto_sdr", "--completion", "--wrapper-debug=bash"],
+            ["cja_auto_sdr", "--completion", "--wrapper-debug", "false", "bash"],
+            ["cja_auto_sdr", "--completion", "--wrapper-job-id", "1", "bash"],
+        ],
+    )
+    def test_unknown_wrapper_flag_falls_through_and_still_succeeds(self, argv, capsys):
+        """Unknown wrapper metadata should fall through to generator and still dispatch completion."""
+        from cja_auto_sdr import __main__ as entrypoint
+
+        with (
+            patch.object(sys, "argv", argv),
+            patch.dict("sys.modules", {"argcomplete": type(sys)("argcomplete")}),
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                entrypoint.main()
+
+        assert int(exc_info.value.code) == 0
+        captured = capsys.readouterr()
+        assert "register-python-argcomplete" in captured.out
+        assert "unrecognized arguments" not in captured.err
+
+    def test_ambiguous_wrapper_value_before_completion_operand_falls_back(self, capsys):
+        """Potential wrapper values must not be repurposed as the completion shell."""
+        from cja_auto_sdr import __main__ as entrypoint
+
+        with (
+            patch.object(sys, "argv", ["cja_auto_sdr", "--completion", "--wrapper-job-id", "bash"]),
+            patch.dict("sys.modules", {"argcomplete": type(sys)("argcomplete")}),
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                entrypoint.main()
+
+        assert int(exc_info.value.code) != 0
+        assert "expected one argument" in capsys.readouterr().err
+
+    def test_ambiguous_wrapper_value_before_completion_operand_stays_invalid_with_later_shell(self, capsys):
+        """A skipped wrapper payload must not be accepted just because a later shell exists."""
+        from cja_auto_sdr import __main__ as entrypoint
+
+        with (
+            patch.object(sys, "argv", ["cja_auto_sdr", "--completion", "--wrapper-job-id", "bash", "zsh"]),
+            patch.dict("sys.modules", {"argcomplete": type(sys)("argcomplete")}),
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                entrypoint.main()
+
+        assert int(exc_info.value.code) != 0
+        assert "expected one argument" in capsys.readouterr().err
+
+    def test_attached_wrapper_value_before_completion_operand_falls_back(self, capsys):
+        """Attached wrapper values must not let a later token satisfy --completion."""
+        from cja_auto_sdr import __main__ as entrypoint
+
+        with (
+            patch.object(sys, "argv", ["cja_auto_sdr", "--completion", "--wrapper-job-id=bash", "zsh"]),
+            patch.dict("sys.modules", {"argcomplete": type(sys)("argcomplete")}),
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                entrypoint.main()
+
+        assert int(exc_info.value.code) != 0
+        assert "expected one argument" in capsys.readouterr().err
+
+    def test_safe_attached_wrapper_value_before_completion_operand_still_succeeds(self, capsys):
+        """Attached wrapper metadata should not block completion when it cannot name a shell."""
+        from cja_auto_sdr import __main__ as entrypoint
+
+        with (
+            patch.object(sys, "argv", ["cja_auto_sdr", "--completion", "--agent-run-id=abc123", "bash"]),
+            patch.dict("sys.modules", {"argcomplete": type(sys)("argcomplete")}),
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                entrypoint.main()
+
+        assert int(exc_info.value.code) == 0
+        assert "register-python-argcomplete" in capsys.readouterr().out
+
+    def test_unsafe_wrapper_after_attached_completion_operand_recovery_stays_invalid(self, capsys):
+        """Later unsafe wrappers must still be validated after attached operand recovery."""
+        from cja_auto_sdr import __main__ as entrypoint
+
+        with (
+            patch.object(
+                sys,
+                "argv",
+                ["cja_auto_sdr", "--completion", "--wrapper-debug=bash", "--wrapper-job-id", "extra"],
+            ),
+            patch.dict("sys.modules", {"argcomplete": type(sys)("argcomplete")}),
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                entrypoint.main()
+
+        assert int(exc_info.value.code) != 0
+        captured_err = capsys.readouterr().err
+        assert "expected one argument" in captured_err or "unrecognized arguments" in captured_err
+
+    @pytest.mark.parametrize(
         "argv_tail",
         [
             ["--completion", "bash", "--run-summary-json", "stdout"],
@@ -529,13 +632,20 @@ class TestCompletionSafetyNet:
         assert "Failed to load --quality-policy" not in captured.err
         assert "register-python-argcomplete" in captured.out
 
-    def test_generator_safety_net_exit_codes_precedes_completion(self):
+    @pytest.mark.parametrize(
+        "argv",
+        [
+            ["cja_auto_sdr", "--exit-codes", "--completion", "bash"],
+            ["cja_auto_sdr", "--exit-codes", "--completion", "bash", "--wrapper-job-id", "1"],
+        ],
+    )
+    def test_generator_safety_net_exit_codes_precedes_completion(self, argv):
         """Mixed --exit-codes/--completion should dispatch exit-codes branch first."""
         from cja_auto_sdr.generator import _main_impl
 
         run_state: dict[str, object] = {}
         with (
-            patch.object(sys, "argv", ["cja_auto_sdr", "--exit-codes", "--completion", "bash"]),
+            patch.object(sys, "argv", argv),
             patch("cja_auto_sdr.core.exit_codes.print_exit_codes") as mock_print_exit_codes,
             patch("cja_auto_sdr.generator._handle_completion_prevalidation") as mock_completion_prevalidation,
         ):

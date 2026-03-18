@@ -60,9 +60,14 @@ from cja_auto_sdr.api.resilience import (
     retry_with_backoff,
 )
 from cja_auto_sdr.cli.option_resolution import resolve_long_option_token as _resolve_long_option_token
+from cja_auto_sdr.cli.standalone_prevalidation import (
+    resolve_wrapper_aware_metadata_occurrences as _resolve_wrapper_aware_metadata_occurrences,
+)
+from cja_auto_sdr.cli.standalone_prevalidation import (
+    resolve_wrapper_aware_standalone_occurrences as _resolve_wrapper_aware_standalone_occurrences,
+)
 from cja_auto_sdr.cli.token_scan import OptionOccurrence
 from cja_auto_sdr.cli.token_scan import option_scan_spec as _option_scan_spec
-from cja_auto_sdr.cli.token_scan import scan_option_occurrences as _scan_option_occurrences
 from cja_auto_sdr.core.colors import (
     ConsoleColors,
     _format_error_msg,
@@ -578,6 +583,28 @@ def _raw_standalone_prevalidation_bailout_options() -> frozenset[str]:
     for dest in ("help", "version"):
         bailout_options.update(scan_spec.options_by_dest.get(dest, ()))
     return frozenset(bailout_options)
+
+
+@lru_cache(maxsize=1)
+def _raw_standalone_metadata_options() -> frozenset[str]:
+    """Return known option strings whose values standalone prevalidation preserves."""
+    scan_spec = _option_scan_spec()
+    metadata_options = set(_RAW_STANDALONE_RAW_METADATA_OPTIONS)
+    for dest in _RAW_STANDALONE_METADATA_DESTS:
+        metadata_options.update(scan_spec.options_by_dest.get(dest, ()))
+    return frozenset(metadata_options)
+
+
+@lru_cache(maxsize=1)
+def _raw_standalone_metadata_state_keys() -> Mapping[str, str]:
+    """Return standalone metadata option-to-run-state mappings for occurrence priming."""
+    scan_spec = _option_scan_spec()
+    state_keys: dict[str, str] = dict(_RAW_STANDALONE_RAW_METADATA_OPTIONS)
+    for dest in _RAW_STANDALONE_METADATA_DESTS:
+        state_key = "run_summary_output" if dest == "run_summary_json" else dest
+        for option_name in scan_spec.options_by_dest.get(dest, ()):
+            state_keys[option_name] = state_key
+    return state_keys
 
 
 def _coerce_run_mode(mode: Any) -> RunMode | None:
@@ -1604,14 +1631,32 @@ def _parse_raw_standalone_prevalidation_args(
     return parse_arguments(filtered_argv)
 
 
-def _extract_raw_standalone_metadata(argv: list[str]) -> dict[str, str]:
-    """Capture raw wrapper metadata that standalone modes intentionally ignore."""
+def _extract_raw_standalone_metadata(occurrences: Collection[OptionOccurrence]) -> dict[str, str]:
+    """Capture raw standalone metadata from the sanitized standalone occurrence scan."""
+    state_keys = _raw_standalone_metadata_state_keys()
     raw_metadata: dict[str, str] = {}
-    for option_name, state_key in _RAW_STANDALONE_RAW_METADATA_OPTIONS.items():
-        raw_value = _cli_option_value(option_name, argv=argv)
-        if raw_value is not None:
+    for occurrence in occurrences:
+        state_key = state_keys.get(occurrence.canonical_option)
+        if state_key is None or len(occurrence.argv_tokens) < 2:
+            continue
+        raw_value = occurrence.argv_tokens[-1]
+        if raw_value:
             raw_metadata[state_key] = raw_value
     return raw_metadata
+
+
+def _resolve_raw_standalone_occurrence_scan(
+    argv: list[str],
+) -> tuple[OptionOccurrence, ...] | None:
+    """Return the strict occurrence scan after wrapper-aware standalone sanitization."""
+    standalone_mode_options = {
+        option_name for options in _raw_standalone_mode_options().values() for option_name in options
+    }
+    return _resolve_wrapper_aware_standalone_occurrences(
+        argv,
+        standalone_mode_options=standalone_mode_options,
+        metadata_options=_raw_standalone_metadata_options(),
+    )
 
 
 def _resolve_raw_standalone_prevalidation_request(
@@ -1627,28 +1672,17 @@ def _resolve_raw_standalone_prevalidation_request(
     if not tokens:
         return None
 
-    scan = _scan_option_occurrences(tokens, reject_unknown_options=True)
-    if scan.has_parse_error or scan.positionals:
+    occurrences = _resolve_raw_standalone_occurrence_scan(tokens)
+    if occurrences is None:
         return None
     if any(
-        occurrence.canonical_option in _raw_standalone_prevalidation_bailout_options()
-        for occurrence in scan.occurrences
+        occurrence.canonical_option in _raw_standalone_prevalidation_bailout_options() for occurrence in occurrences
     ):
         return None
 
-    standalone_mode_options = _raw_standalone_mode_options()
-    active_standalone_modes = {
-        mode
-        for mode, options in standalone_mode_options.items()
-        if any(occurrence.canonical_option in options for occurrence in scan.occurrences)
-    }
-    if len(active_standalone_modes) != 1:
-        return None
-
-    active_mode = next(iter(active_standalone_modes))
-    parsed_args = _parse_raw_standalone_prevalidation_args(scan.occurrences)
+    parsed_args = _parse_raw_standalone_prevalidation_args(occurrences)
     inferred_mode = _infer_run_mode_enum(parsed_args)
-    if inferred_mode != active_mode:
+    if inferred_mode not in _raw_standalone_mode_options():
         return None
 
     active_modes = _active_run_modes(parsed_args)
@@ -1659,7 +1693,7 @@ def _resolve_raw_standalone_prevalidation_request(
     return _StandalonePrevalidationRequest(
         mode=inferred_mode,
         parsed_args=parsed_args,
-        raw_cli_metadata=_extract_raw_standalone_metadata(tokens),
+        raw_cli_metadata=_extract_raw_standalone_metadata(occurrences),
     )
 
 
@@ -1870,6 +1904,28 @@ def _prime_run_summary_cli_metadata(run_state: dict[str, Any] | None) -> None:
             run_state[state_key] = raw_value
 
     run_state.setdefault("output_dir", ".")
+
+
+def _prime_raw_standalone_occurrence_metadata(run_state: dict[str, Any] | None) -> None:
+    """Prime standalone-derived metadata before early run-summary routing decisions.
+
+    This must remain token-scan only. It cannot call parse-time standalone
+    validation because `main()` still owes the run-summary `try`/`finally`
+    contract for invalid standalone invocations.
+    """
+    if run_state is None:
+        return
+
+    occurrences = _resolve_wrapper_aware_metadata_occurrences(
+        list(sys.argv[1:]),
+        metadata_options=_raw_standalone_metadata_options(),
+    )
+    if not occurrences:
+        return
+
+    raw_metadata = _extract_raw_standalone_metadata(occurrences)
+    if raw_metadata:
+        run_state.update(raw_metadata)
 
 
 def _normalize_partial_reason_values(partial_reasons: Iterable[str] | None) -> list[str]:
@@ -10592,6 +10648,7 @@ def main():
         "allow_partial": _cli_option_specified("--allow-partial"),
     }
     _prime_run_summary_cli_metadata(run_state)
+    _prime_raw_standalone_occurrence_metadata(run_state)
     exit_code = 0
 
     redirect_stdout_for_run_summary = run_state.get("run_summary_output") in ("-", "stdout")
