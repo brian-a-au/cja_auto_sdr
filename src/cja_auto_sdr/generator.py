@@ -59,7 +59,12 @@ from cja_auto_sdr.api.resilience import (
     make_api_call_with_retry,
     retry_with_backoff,
 )
+from cja_auto_sdr.cli.mode_scoped_options import org_report_mode_scoped_option_specs
 from cja_auto_sdr.cli.option_resolution import resolve_long_option_token as _resolve_long_option_token
+from cja_auto_sdr.cli.standalone_policy import (
+    StandalonePrevalidationPolicy,
+    standalone_prevalidation_policy,
+)
 from cja_auto_sdr.core.colors import (
     ConsoleColors,
     _format_error_msg,
@@ -469,44 +474,6 @@ class RunMode(Enum):
     DRY_RUN = "dry_run"
     INVENTORY_SUMMARY = "inventory_summary"
     SDR = "sdr"
-
-
-@dataclass(frozen=True)
-class StandalonePrevalidationPolicy:
-    """Standalone-mode semantic-validation policy before early dispatch."""
-
-    ignored_semantic_dests: frozenset[str] = frozenset()
-
-
-_WRAPPER_EXECUTION_TOLERATED_SEMANTIC_DESTS = frozenset(
-    {
-        "auto_prune",
-        "auto_snapshot",
-        "skip_validation",
-    },
-)
-_INFORMATIONAL_MODE_TOLERATED_SEMANTIC_DESTS = (
-    frozenset(
-        {
-            "allow_partial",
-            "fail_on_quality",
-            "quality_report",
-        }
-    )
-    | _WRAPPER_EXECUTION_TOLERATED_SEMANTIC_DESTS
-)
-_INFORMATIONAL_STANDALONE_POLICY = StandalonePrevalidationPolicy(
-    ignored_semantic_dests=_INFORMATIONAL_MODE_TOLERATED_SEMANTIC_DESTS,
-)
-_SAMPLE_CONFIG_STANDALONE_POLICY = StandalonePrevalidationPolicy(
-    ignored_semantic_dests=_WRAPPER_EXECUTION_TOLERATED_SEMANTIC_DESTS,
-)
-_STANDALONE_PREVALIDATION_POLICIES: Mapping[RunMode, StandalonePrevalidationPolicy] = {
-    RunMode.COMPLETION: _INFORMATIONAL_STANDALONE_POLICY,
-    RunMode.EXPLAIN_EXIT_CODE: _INFORMATIONAL_STANDALONE_POLICY,
-    RunMode.EXIT_CODES: _INFORMATIONAL_STANDALONE_POLICY,
-    RunMode.SAMPLE_CONFIG: _SAMPLE_CONFIG_STANDALONE_POLICY,
-}
 
 
 def _coerce_run_mode(mode: Any) -> RunMode | None:
@@ -1459,13 +1426,13 @@ def _validate_mode_scoped_option(
     if not is_configured:
         return
 
-    if inferred_mode != required_mode:
-        required_label = f"--{required_mode.value.replace('_', '-')}"
-        _exit_error(mode_error or f"{option_name} is only valid with {required_label}")
-
     for error in value_errors:
         if error:
             _exit_error(error)
+
+    if inferred_mode != required_mode:
+        required_label = f"--{required_mode.value.replace('_', '-')}"
+        _exit_error(mode_error or f"{option_name} is only valid with {required_label}")
 
 
 def _org_report_snapshot_retention_flags_specified(argv: list[str] | None = None) -> tuple[bool, bool]:
@@ -1474,6 +1441,23 @@ def _org_report_snapshot_retention_flags_specified(argv: list[str] | None = None
         _cli_option_specified("--org-report-keep-last", argv=argv),
         _cli_option_specified("--org-report-keep-since", argv=argv),
     )
+
+
+def _validate_org_report_mode_scoped_cli_args(
+    args: argparse.Namespace,
+    *,
+    inferred_mode: RunMode,
+) -> None:
+    """Validate org-report-only CLI flags on the current parsed argv."""
+    for option_spec in org_report_mode_scoped_option_specs():
+        _validate_mode_scoped_option(
+            option_name=option_spec.option_name,
+            inferred_mode=inferred_mode,
+            required_mode=RunMode.ORG_REPORT,
+            is_configured=option_spec.is_configured(args, option_specified=_cli_option_specified),
+            mode_error=option_spec.mode_error,
+            value_errors=option_spec.resolve_value_errors(args),
+        )
 
 
 def _validate_org_report_snapshot_cli_args(
@@ -1610,7 +1594,7 @@ def _handle_sample_config_prevalidation(
 
 def _standalone_prevalidation_policy(inferred_mode: RunMode) -> StandalonePrevalidationPolicy | None:
     """Return standalone semantic-validation policy for the inferred mode."""
-    return _STANDALONE_PREVALIDATION_POLICIES.get(inferred_mode)
+    return standalone_prevalidation_policy(inferred_mode.value)
 
 
 def _resolve_semantic_validation_args(
@@ -1639,6 +1623,51 @@ def _resolve_semantic_validation_args(
         current_value = getattr(sanitized_args, dest, None)
         setattr(sanitized_args, dest, False if isinstance(current_value, bool) else None)
     return sanitized_args
+
+
+def _load_quality_policy_if_configured(
+    args: argparse.Namespace,
+    *,
+    inferred_mode: RunMode,
+    run_state: dict[str, Any] | None = None,
+) -> None:
+    """Load and apply quality-policy context for the current CLI mode."""
+    quality_policy_path = getattr(args, "quality_policy", None)
+    if not quality_policy_path:
+        return
+
+    if run_state is not None:
+        run_state["quality_policy"] = {
+            "path": str(Path(quality_policy_path).expanduser()),
+            "applied": {},
+        }
+
+    try:
+        quality_policy = load_quality_policy(quality_policy_path)
+    except (OSError, json.JSONDecodeError, ValueError) as e:
+        _exit_error(f"Failed to load --quality-policy '{quality_policy_path}': {e}")
+
+    applied_quality_policy: dict[str, Any] = {}
+    if inferred_mode == RunMode.SDR:
+        applied_quality_policy = apply_quality_policy_defaults(args, quality_policy)
+        _sync_run_summary_cli_metadata(run_state, args, inferred_mode=inferred_mode)
+
+    if run_state is not None and isinstance(run_state.get("quality_policy"), dict):
+        run_state["quality_policy"]["applied"] = applied_quality_policy
+
+
+def _run_standalone_prevalidation_guardrails(
+    args: argparse.Namespace,
+    *,
+    inferred_mode: RunMode,
+) -> None:
+    """Run late-bound checks that must still fail closed before standalone exits."""
+    policy = _standalone_prevalidation_policy(inferred_mode)
+    if policy is None:
+        return
+
+    if policy.validate_org_report_mode_scoped_options:
+        _validate_org_report_mode_scoped_cli_args(args, inferred_mode=inferred_mode)
 
 
 def _dispatch_prevalidation_mode(
@@ -9800,6 +9829,7 @@ def _main_impl(run_state: dict[str, Any] | None = None):
     _validate_org_report_snapshot_cli_args(args, active_modes=active_modes)
     _validate_explain_exit_code_cli_args(args, active_modes=active_modes)
     _validate_semantic_flag_relationships(prevalidation_effective_args, inferred_mode=inferred_mode)
+    _run_standalone_prevalidation_guardrails(args, inferred_mode=inferred_mode)
     # Early-exit standalone modes still dispatch before deeper normalization
     # and runtime validation, but only after semantic validation runs against
     # the correct standalone policy view of the parsed argv.
@@ -9807,24 +9837,8 @@ def _main_impl(run_state: dict[str, Any] | None = None):
 
     run_summary_to_stdout = getattr(args, "run_summary_json", None) in ("-", "stdout")
     quality_policy_path = getattr(args, "quality_policy", None)
-    applied_quality_policy: dict[str, Any] = {}
+    _load_quality_policy_if_configured(args, inferred_mode=inferred_mode, run_state=run_state)
     if quality_policy_path:
-        if run_state is not None:
-            run_state["quality_policy"] = {
-                "path": str(Path(quality_policy_path).expanduser()),
-                "applied": {},
-            }
-        try:
-            quality_policy = load_quality_policy(quality_policy_path)
-        except (OSError, json.JSONDecodeError, ValueError) as e:
-            _exit_error(f"Failed to load --quality-policy '{quality_policy_path}': {e}")
-        # Only apply quality defaults for SDR generation mode. This keeps
-        # shared policy files usable across non-SDR commands.
-        if inferred_mode == RunMode.SDR:
-            applied_quality_policy = apply_quality_policy_defaults(args, quality_policy)
-            _sync_run_summary_cli_metadata(run_state, args, inferred_mode=inferred_mode)
-        if run_state is not None and isinstance(run_state.get("quality_policy"), dict):
-            run_state["quality_policy"]["applied"] = applied_quality_policy
         # Policy defaults mutate args late, so semantic validation must run
         # again against the effective execution args before deeper processing.
         _validate_semantic_flag_relationships(args, inferred_mode=inferred_mode)
@@ -9864,35 +9878,13 @@ def _main_impl(run_state: dict[str, Any] | None = None):
         _exit_error("--retry-base-delay cannot be negative")
     if args.retry_max_delay < args.retry_base_delay:
         _exit_error("--retry-max-delay must be >= --retry-base-delay")
-    if getattr(args, "org_sample_size", None) is not None and args.org_sample_size < 1:
-        _exit_error("--sample must be at least 1")
 
     # Track whether retention flags were explicitly provided so auto-prune
     # defaults don't override intentional values like --keep-last 0.
     keep_last_specified = _cli_option_specified("--keep-last")
     keep_since_specified = _cli_option_specified("--keep-since")
 
-    trending_window = getattr(args, "trending_window", None)
-    _validate_mode_scoped_option(
-        option_name="--trending-window",
-        inferred_mode=inferred_mode,
-        required_mode=RunMode.ORG_REPORT,
-        is_configured=trending_window is not None,
-        mode_error="--trending-window is only supported with --org-report",
-        value_errors=(
-            "--trending-window must be >= 2" if trending_window is not None and trending_window < 2 else None,
-        ),
-    )
-
-    org_lock_stale = getattr(args, "org_lock_stale_threshold", 3600)
-    _validate_mode_scoped_option(
-        option_name="--lock-stale-threshold",
-        inferred_mode=inferred_mode,
-        required_mode=RunMode.ORG_REPORT,
-        is_configured=_cli_option_specified("--lock-stale-threshold"),
-        mode_error="--lock-stale-threshold is only valid with --org-report",
-        value_errors=("--lock-stale-threshold must be greater than 0" if org_lock_stale <= 0 else None,),
-    )
+    _validate_org_report_mode_scoped_cli_args(args, inferred_mode=inferred_mode)
 
     # Propagate retry config via env vars so both the current process
     # (read by _effective_retry_config in resilience.py) and child

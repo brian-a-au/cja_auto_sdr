@@ -143,6 +143,13 @@ class TestExplainExitCodeFastPath:
 
         assert _is_fast_path_flag(["prog", "--explain-exit-code=2"]) == "--explain-exit-code"
 
+    def test_is_fast_path_flag_tolerates_wrapper_quality_policy(self):
+        from cja_auto_sdr.__main__ import _is_fast_path_flag
+
+        assert _is_fast_path_flag(["prog", "--explain-exit-code", "2", "--quality-policy", "policy.json"]) == (
+            "--explain-exit-code"
+        )
+
     def test_is_fast_path_flag_prefix_abbreviation(self):
         from cja_auto_sdr.__main__ import _is_fast_path_flag
 
@@ -174,6 +181,20 @@ class TestExplainExitCodeFastPath:
         captured = capsys.readouterr()
         assert "Exit code 2:" in captured.out
         assert "Policy threshold exceeded" in captured.out
+
+    def test_fast_path_main_keeps_tolerated_wrapper_quality_policy(self, capsys):
+        from cja_auto_sdr.__main__ import main as fast_main
+
+        with (
+            patch.object(sys, "argv", ["cja_auto_sdr", "--explain-exit-code", "2", "--quality-policy", "policy.json"]),
+            patch("cja_auto_sdr.generator.main") as mock_gen_main,
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                fast_main()
+
+        assert exc_info.value.code == 0
+        mock_gen_main.assert_not_called()
+        assert "Exit code 2:" in capsys.readouterr().out
 
     def test_fast_path_main_falls_through_when_argcomplete_active(self):
         from cja_auto_sdr.__main__ import main as fast_main
@@ -336,6 +357,25 @@ class TestExplainExitCodeValidation:
         assert "Exit code 2:" in captured.out
         assert "--auto-prune requires --auto-snapshot or --prune-snapshots" not in captured.err
 
+    def test_ignores_quality_policy_file_errors(self, capsys, tmp_path):
+        """Standalone explain mode should ignore wrapper-carried quality-policy files."""
+        from cja_auto_sdr.generator import main as generator_main
+
+        missing_policy = tmp_path / "missing_quality_policy.json"
+
+        with patch.object(
+            sys,
+            "argv",
+            ["cja_auto_sdr", "--explain-exit-code", "2", "--quality-policy", str(missing_policy)],
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                generator_main()
+
+        assert exc_info.value.code == 0
+        captured = capsys.readouterr()
+        assert "Exit code 2:" in captured.out
+        assert f"Failed to load --quality-policy '{missing_policy}'" not in captured.err
+
 
 # ---------------------------------------------------------------------------
 # Run-summary interaction tests
@@ -374,7 +414,7 @@ class TestExplainExitCodeRunSummary:
         stderr_output = stderr_buf.getvalue()
         assert "Exit code 2:" in stderr_output or "Exit code 2:" in stdout_buf.getvalue()
 
-    def test_explanation_bypasses_unrelated_validation_with_run_summary_stdout(self, capsys):
+    def test_explanation_bypasses_unrelated_generic_validation_with_run_summary_stdout(self, capsys):
         """Standalone explain mode must ignore generic validation-only flags."""
         from cja_auto_sdr.generator import main as generator_main
 
@@ -388,8 +428,6 @@ class TestExplainExitCodeRunSummary:
                 "--run-summary-json",
                 "-",
                 "--workers",
-                "0",
-                "--lock-stale-threshold",
                 "0",
             ],
         ):

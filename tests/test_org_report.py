@@ -460,8 +460,8 @@ class TestAnalyzerLockIntegration:
             MockLock.assert_called_once_with("test_org@AdobeOrg", stale_threshold_seconds=1)
             assert analyzer.lock_runtime_state.stale_threshold_seconds == 1
 
-    def test_analyzer_passes_lock_owner_and_backend_to_exception(self):
-        """Test that analyzer includes owner and backend in ConcurrentOrgReportError"""
+    def test_analyzer_prefers_holder_host_and_backend_in_exception(self):
+        """Test that analyzer surfaces holder host instead of the locked org id."""
         import logging
 
         mock_cja = Mock()
@@ -477,7 +477,9 @@ class TestAnalyzerLockIntegration:
                 "pid": 12345,
                 "started_at": "2024-01-15T10:00:00",
                 "owner": "other-org",
+                "host": "ci-runner-01",
                 "backend": "lease",
+                "version": 1,
             }
             mock_lock_instance.__enter__ = Mock(return_value=mock_lock_instance)
             mock_lock_instance.__exit__ = Mock(return_value=None)
@@ -488,7 +490,7 @@ class TestAnalyzerLockIntegration:
             with pytest.raises(ConcurrentOrgReportError) as exc_info:
                 analyzer.run_analysis()
 
-            assert exc_info.value.lock_holder_owner == "other-org"
+            assert exc_info.value.lock_holder_owner == "ci-runner-01"
             assert exc_info.value.lock_backend == "lease"
             assert exc_info.value.lock_holder_pid == 12345
             assert analyzer.lock_runtime_state.observed is True
@@ -496,8 +498,154 @@ class TestAnalyzerLockIntegration:
             assert analyzer.lock_runtime_state.contention is True
             assert analyzer.lock_runtime_state.backend == "lease"
             assert analyzer.lock_runtime_state.holder_pid == 12345
-            assert analyzer.lock_runtime_state.holder_owner == "other-org"
+            assert analyzer.lock_runtime_state.holder_owner == "ci-runner-01"
             assert analyzer.lock_runtime_state.started_at == "2024-01-15T10:00:00"
+
+    def test_analyzer_preserves_owner_for_legacy_lock_metadata_with_synthesized_host(self):
+        """Legacy lock metadata may backfill host locally, so owner must remain authoritative."""
+        import logging
+
+        mock_cja = Mock()
+        logger = logging.getLogger("test_legacy_lock_identity")
+
+        config = OrgReportConfig(skip_lock=False)
+
+        with patch("cja_auto_sdr.org.analyzer.OrgReportLock") as MockLock:
+            mock_lock_instance = Mock()
+            mock_lock_instance.acquired = False
+            mock_lock_instance.backend_name = "lease"
+            mock_lock_instance.get_lock_info.return_value = {
+                "pid": 12345,
+                "started_at": "2024-01-15T10:00:00",
+                "owner": "legacy-owner",
+                "host": "local-reader-host",
+                "backend": "legacy",
+                "version": 0,
+            }
+            mock_lock_instance.__enter__ = Mock(return_value=mock_lock_instance)
+            mock_lock_instance.__exit__ = Mock(return_value=None)
+            MockLock.return_value = mock_lock_instance
+
+            analyzer = OrgComponentAnalyzer(mock_cja, config, logger, org_id="test_org@AdobeOrg")
+
+            with pytest.raises(ConcurrentOrgReportError) as exc_info:
+                analyzer.run_analysis()
+
+            assert exc_info.value.lock_holder_owner == "legacy-owner"
+            assert analyzer.lock_runtime_state.holder_owner == "legacy-owner"
+            assert analyzer.lock_runtime_state.backend == "legacy"
+
+    def test_analyzer_treats_ownerless_legacy_lock_metadata_as_unknown_holder(self):
+        """Ownerless legacy metadata must not fall back to a synthesized reader host."""
+        import logging
+
+        mock_cja = Mock()
+        logger = logging.getLogger("test_legacy_lock_identity_unknown")
+
+        config = OrgReportConfig(skip_lock=False)
+
+        with patch("cja_auto_sdr.org.analyzer.OrgReportLock") as MockLock:
+            mock_lock_instance = Mock()
+            mock_lock_instance.acquired = False
+            mock_lock_instance.backend_name = "lease"
+            mock_lock_instance.get_lock_info.return_value = {
+                "pid": 12345,
+                "started_at": "2024-01-15T10:00:00",
+                "owner": "",
+                "host": "local-reader-host",
+                "backend": "legacy",
+                "version": 0,
+            }
+            mock_lock_instance.__enter__ = Mock(return_value=mock_lock_instance)
+            mock_lock_instance.__exit__ = Mock(return_value=None)
+            MockLock.return_value = mock_lock_instance
+
+            analyzer = OrgComponentAnalyzer(mock_cja, config, logger, org_id="test_org@AdobeOrg")
+
+            with pytest.raises(ConcurrentOrgReportError) as exc_info:
+                analyzer.run_analysis()
+
+            assert exc_info.value.lock_holder_pid == 12345
+            assert exc_info.value.started_at == "2024-01-15T10:00:00"
+            assert exc_info.value.lock_holder_owner is None
+            assert analyzer.lock_runtime_state.holder_pid == 12345
+            assert analyzer.lock_runtime_state.started_at == "2024-01-15T10:00:00"
+            assert analyzer.lock_runtime_state.holder_owner is None
+            assert analyzer.lock_runtime_state.backend == "legacy"
+
+    def test_analyzer_treats_release_tombstone_lock_metadata_as_unknown_holder(self):
+        """Release tombstones are stale markers, not real contention owners."""
+        import logging
+
+        mock_cja = Mock()
+        logger = logging.getLogger("test_tombstone_lock_identity")
+
+        config = OrgReportConfig(skip_lock=False)
+
+        with patch("cja_auto_sdr.org.analyzer.OrgReportLock") as MockLock:
+            mock_lock_instance = Mock()
+            mock_lock_instance.acquired = False
+            mock_lock_instance.backend_name = "lease"
+            mock_lock_instance.get_lock_info.return_value = {
+                "pid": -1,
+                "started_at": "1970-01-01T00:00:00+00:00",
+                "owner": "",
+                "host": "released",
+                "backend": "lease",
+                "version": 1,
+            }
+            mock_lock_instance.__enter__ = Mock(return_value=mock_lock_instance)
+            mock_lock_instance.__exit__ = Mock(return_value=None)
+            MockLock.return_value = mock_lock_instance
+
+            analyzer = OrgComponentAnalyzer(mock_cja, config, logger, org_id="test_org@AdobeOrg")
+
+            with pytest.raises(ConcurrentOrgReportError) as exc_info:
+                analyzer.run_analysis()
+
+            assert exc_info.value.lock_backend == "lease"
+            assert exc_info.value.lock_holder_pid is None
+            assert exc_info.value.lock_holder_owner is None
+            assert exc_info.value.started_at is None
+            assert analyzer.lock_runtime_state.backend == "lease"
+            assert analyzer.lock_runtime_state.holder_pid is None
+            assert analyzer.lock_runtime_state.holder_owner is None
+            assert analyzer.lock_runtime_state.started_at is None
+
+    def test_extract_contention_lock_info_treats_hostless_non_live_sentinels_as_unknown(self):
+        """Defensive normalization should suppress impossible holder sentinels even without host."""
+        holder_pid, started_at, holder_owner, lock_backend = OrgComponentAnalyzer._extract_contention_lock_info(
+            {
+                "pid": -1,
+                "started_at": "1970-01-01T00:00:00+00:00",
+                "owner": "",
+                "backend": "lease",
+                "version": 1,
+            }
+        )
+
+        assert holder_pid is None
+        assert started_at is None
+        assert holder_owner is None
+        assert lock_backend == "lease"
+
+    def test_extract_contention_lock_info_does_not_fallback_to_host_for_ownerless_legacy_metadata(self):
+        """Legacy host values can be synthesized by the reader and must not identify the holder."""
+        holder_pid, started_at, holder_owner, lock_backend = OrgComponentAnalyzer._extract_contention_lock_info(
+            {
+                "pid": 12345,
+                "started_at": "2024-01-15T10:00:00",
+                "owner": "",
+                "host": "local-reader-host",
+                "backend": "legacy",
+                "version": 0,
+            }
+        )
+
+        assert holder_pid == 12345
+        assert started_at == "2024-01-15T10:00:00"
+        assert holder_owner is None
+        assert lock_backend == "legacy"
 
     def test_analyzer_preserves_unknown_backend_when_lock_info_lacks_backend(self):
         """Contention telemetry must not infer holder backend from the contender."""

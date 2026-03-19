@@ -580,6 +580,22 @@ class TestConsoleScriptEntryPoints:
                     assert exc_info.value.code == 0
                     mock_gen.assert_called_once()
 
+    def test_main_function_with_sample_config_ignores_quality_policy_file_errors(self, tmp_path, capsys):
+        """Sample-config should ignore wrapper-carried quality-policy files."""
+        from cja_auto_sdr.generator import main
+
+        missing_policy = tmp_path / "missing_quality_policy.json"
+
+        with patch.object(sys, "argv", ["cja_auto_sdr", "--sample-config", "--quality-policy", str(missing_policy)]):
+            with patch("cja_auto_sdr.generator.generate_sample_config") as mock_gen:
+                mock_gen.return_value = True
+                with pytest.raises(SystemExit) as exc_info:
+                    main()
+
+        assert exc_info.value.code == 0
+        assert f"Failed to load --quality-policy '{missing_policy}'" not in capsys.readouterr().err
+        mock_gen.assert_called_once()
+
     def test_entry_point_defined_in_pyproject(self):
         """Test that console script entry points are defined in pyproject.toml"""
         pyproject_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "pyproject.toml")
@@ -711,6 +727,13 @@ class TestFastPathEntryPoint:
         from cja_auto_sdr.__main__ import _is_fast_path_flag
 
         assert _is_fast_path_flag(["prog", "--exit-codes"]) == "--exit-codes"
+        assert _is_fast_path_flag(["prog", "--exit-codes", "--quality-policy", "policy.json"]) == "--exit-codes"
+        assert _is_fast_path_flag(["prog", "--exit-codes", "--format", "json"]) == "--exit-codes"
+
+    def test_is_fast_path_flag_exit_codes_still_rejects_non_tolerated_mode_scoped_flags(self):
+        from cja_auto_sdr.__main__ import _is_fast_path_flag
+
+        assert _is_fast_path_flag(["prog", "--exit-codes", "--trending-window", "3"]) is None
 
     def test_is_fast_path_flag_none_for_regular_args(self):
         from cja_auto_sdr.__main__ import _is_fast_path_flag
@@ -774,6 +797,12 @@ class TestFastPathEntryPoint:
         [
             (["prog", "--completion", "bash"], "bash"),
             (["prog", "--completion=zsh"], "zsh"),
+            (["prog", "--profile", "client-a", "--completion", "bash"], "bash"),
+            (["prog", "--completion", "bash", "--quality-policy", "policy.json"], "bash"),
+            (["prog", "--completion", "bash", "--trending-window", "3"], "bash"),
+            (["prog", "--completion", "bash", "--lock-stale-threshold", "900"], "bash"),
+            (["prog", "--completion", "bash", "--cluster"], "bash"),
+            (["prog", "--completion", "bash", "--duplicate-threshold", "5"], "bash"),
             (["prog", "--completion"], None),
             (["prog", "--completion", "ksh"], None),
             (["prog", "--profile", "--completion", "bash"], None),
@@ -940,6 +969,26 @@ class TestFastPathEntryPoint:
             with pytest.raises(SystemExit) as exc_info:
                 fast_main()
             assert exc_info.value.code == 0
+
+    @pytest.mark.parametrize(
+        "argv",
+        [
+            ["cja_auto_sdr", "--exit-codes", "--quality-policy", "policy.json"],
+            ["cja_auto_sdr", "--exit-codes", "--format", "json"],
+        ],
+    )
+    def test_fast_path_main_exit_codes_keeps_tolerated_wrapper_flags(self, argv):
+        from cja_auto_sdr.__main__ import main as fast_main
+
+        with (
+            patch.object(sys, "argv", argv),
+            patch("cja_auto_sdr.generator.main") as mock_gen_main,
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                fast_main()
+
+        assert exc_info.value.code == 0
+        mock_gen_main.assert_not_called()
 
     def test_fast_path_main_version_falls_through_when_argcomplete_active(self):
         from cja_auto_sdr.__main__ import main as fast_main
@@ -5074,18 +5123,55 @@ class TestOrgReportArgumentValidation:
         assert "--lock-stale-threshold is only valid with --org-report" in capsys.readouterr().err
         mock_list_dataviews.assert_not_called()
 
-    def test_lock_stale_threshold_is_ignored_for_standalone_explain_exit_code(self, capsys):
-        """Standalone explain mode should ignore unrelated org-report-only flags."""
+    @pytest.mark.parametrize(
+        ("argv", "expected_error"),
+        [
+            (["cja_auto_sdr", "--exit-codes", "--cluster"], "--cluster is only valid with --org-report"),
+            (
+                ["cja_auto_sdr", "--explain-exit-code", "2", "--duplicate-threshold", "5"],
+                "--duplicate-threshold is only valid with --org-report",
+            ),
+        ],
+    )
+    def test_org_report_only_flags_fail_closed_for_standalone_utility_modes(self, argv, expected_error, capsys):
+        """Standalone utility modes should reject all org-report-only flags before early exit."""
+        from cja_auto_sdr.generator import main
+
+        with patch.object(sys, "argv", argv):
+            with pytest.raises(SystemExit) as exc_info:
+                main()
+
+        assert exc_info.value.code == 1
+        captured = capsys.readouterr()
+        assert expected_error in captured.err
+        assert "Exit code 2:" not in captured.out
+        assert "EXIT CODE REFERENCE" not in captured.out
+
+    def test_lock_stale_threshold_requires_org_report_even_for_standalone_explain_exit_code(self, capsys):
+        """Standalone explain mode should still fail closed on org-report-only flags."""
         from cja_auto_sdr.generator import main
 
         with patch.object(sys, "argv", ["cja_auto_sdr", "--explain-exit-code", "2", "--lock-stale-threshold", "3600"]):
             with pytest.raises(SystemExit) as exc_info:
                 main()
 
-        assert exc_info.value.code == 0
+        assert exc_info.value.code == 1
         captured = capsys.readouterr()
-        assert "Exit code 2:" in captured.out
-        assert "--lock-stale-threshold is only valid with --org-report" not in captured.err
+        assert "Exit code 2:" not in captured.out
+        assert "--lock-stale-threshold is only valid with --org-report" in captured.err
+
+    @patch("cja_auto_sdr.generator.generate_sample_config")
+    def test_sample_config_rejects_compare_org_report_before_generation(self, mock_generate_sample_config, capsys):
+        """Sample-config should fail closed on org-report-only flags before generation."""
+        from cja_auto_sdr.generator import main
+
+        with patch.object(sys, "argv", ["cja_auto_sdr", "--sample-config", "--compare-org-report", "prev.json"]):
+            with pytest.raises(SystemExit) as exc_info:
+                main()
+
+        assert exc_info.value.code == 1
+        assert "--compare-org-report is only valid with --org-report" in capsys.readouterr().err
+        mock_generate_sample_config.assert_not_called()
 
     @patch("cja_auto_sdr.generator.list_dataviews")
     def test_lock_stale_threshold_rejects_zero(self, mock_list_dataviews, capsys):

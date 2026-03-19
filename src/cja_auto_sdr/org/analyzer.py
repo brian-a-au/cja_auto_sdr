@@ -73,6 +73,8 @@ class OrgComponentAnalyzer:
     """
 
     _lock_health_poll_seconds = 0.25
+    _NON_LIVE_CONTENTION_LOCK_HOSTS = frozenset({"released"})
+    _NON_LIVE_CONTENTION_LOCK_STARTED_AT_VALUES = frozenset({"1970-01-01T00:00:00+00:00"})
 
     def __init__(
         self,
@@ -164,16 +166,92 @@ class OrgComponentAnalyzer:
                 return None
         return None
 
+    @staticmethod
+    def _normalize_lock_info_version(value: Any) -> int | None:
+        if isinstance(value, bool):
+            return None
+        if isinstance(value, int):
+            return value
+        if isinstance(value, str):
+            stripped = value.strip()
+            if not stripped:
+                return None
+            try:
+                return int(stripped)
+            except ValueError:
+                return None
+        return None
+
+    @classmethod
+    def _is_legacy_contention_lock_info(cls, lock_info: Mapping[str, Any]) -> bool:
+        """Legacy lock metadata can synthesize host locally when read back."""
+        version = cls._normalize_lock_info_version(lock_info.get("version"))
+        if version is not None:
+            return version <= 0
+        backend = cls._normalize_lock_info_text(lock_info.get("backend"))
+        return backend == "legacy"
+
+    @classmethod
+    def _is_non_live_contention_lock_info(
+        cls,
+        *,
+        holder_pid: int | None,
+        started_at: str | None,
+        host_identity: str | None,
+        owner_identity: str | None,
+    ) -> bool:
+        """Treat tombstones and similar sentinels as unknown holder metadata."""
+        if host_identity in cls._NON_LIVE_CONTENTION_LOCK_HOSTS:
+            return True
+        if owner_identity is not None:
+            return False
+        if holder_pid is not None and holder_pid < 0:
+            return True
+        return started_at in cls._NON_LIVE_CONTENTION_LOCK_STARTED_AT_VALUES
+
+    @classmethod
+    def _select_contention_holder_identity(
+        cls,
+        lock_info: Mapping[str, Any],
+        *,
+        host_identity: str | None,
+        owner_identity: str | None,
+    ) -> str | None:
+        """Prefer live-host identity only when the metadata format makes host authoritative."""
+        if cls._is_legacy_contention_lock_info(lock_info):
+            return owner_identity
+        return host_identity or owner_identity
+
     @classmethod
     def _extract_contention_lock_info(cls, lock_info: Any) -> tuple[int | None, str | None, str | None, str | None]:
-        """Normalize lock-holder metadata without inferring fields from the contender."""
+        """Normalize holder metadata with legacy-aware host/owner precedence."""
         if not isinstance(lock_info, Mapping):
             return None, None, None, None
 
+        holder_pid = cls._normalize_lock_info_pid(lock_info.get("pid"))
+        started_at = cls._normalize_lock_info_text(lock_info.get("started_at"))
+        host_identity = cls._normalize_lock_info_text(lock_info.get("host"))
+        owner_identity = cls._normalize_lock_info_text(lock_info.get("owner"))
+        if cls._is_non_live_contention_lock_info(
+            holder_pid=holder_pid,
+            started_at=started_at,
+            host_identity=host_identity,
+            owner_identity=owner_identity,
+        ):
+            holder_pid = None
+            started_at = None
+            host_identity = None
+            owner_identity = None
+        holder_identity = cls._select_contention_holder_identity(
+            lock_info,
+            host_identity=host_identity,
+            owner_identity=owner_identity,
+        )
+
         return (
-            cls._normalize_lock_info_pid(lock_info.get("pid")),
-            cls._normalize_lock_info_text(lock_info.get("started_at")),
-            cls._normalize_lock_info_text(lock_info.get("owner")),
+            holder_pid,
+            started_at,
+            holder_identity,
             cls._normalize_lock_info_text(lock_info.get("backend")),
         )
 

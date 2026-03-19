@@ -184,6 +184,33 @@ class TestCompletionFastPath:
         stdout = capsys.readouterr().out.strip()
         assert stdout == _COMPLETION_SCRIPTS["fish"]
 
+    @pytest.mark.parametrize(
+        "argv_tail",
+        [
+            ["--completion", "bash", "--quality-policy", "policy.json"],
+            ["--completion", "bash", "--trending-window", "3"],
+            ["--completion", "bash", "--lock-stale-threshold", "900"],
+            ["--completion", "bash", "--cluster"],
+            ["--completion", "bash", "--duplicate-threshold", "5"],
+            ["--profile", "client-a", "--completion", "bash"],
+        ],
+    )
+    def test_fast_path_preserves_tolerated_wrapper_flags(self, argv_tail, capsys):
+        """Wrapper-carried tolerated flags should still stay on the lightweight path."""
+        from cja_auto_sdr import __main__ as entrypoint
+
+        with (
+            patch.object(sys, "argv", ["cja_auto_sdr", *argv_tail]),
+            patch.dict("sys.modules", {"argcomplete": type(sys)("argcomplete")}),
+            patch("cja_auto_sdr.generator.main") as mock_generator_main,
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                entrypoint.main()
+
+        assert int(exc_info.value.code) == 0
+        mock_generator_main.assert_not_called()
+        assert "register-python-argcomplete" in capsys.readouterr().out
+
     def test_fast_path_missing_shell_falls_through_to_generator(self):
         """Invalid standalone completion requests must defer to argparse path."""
         from cja_auto_sdr import __main__ as entrypoint
@@ -491,6 +518,32 @@ class TestCompletionSafetyNet:
         captured = capsys.readouterr()
         assert "Failed to load --quality-policy" not in captured.err
         assert "register-python-argcomplete" in captured.out
+
+    @pytest.mark.parametrize(
+        "argv_tail",
+        [
+            ["--completion", "bash", "--trending-window", "3"],
+            ["--completion", "bash", "--lock-stale-threshold", "900"],
+            ["--completion", "bash", "--cluster"],
+            ["--completion", "bash", "--duplicate-threshold", "5"],
+        ],
+    )
+    def test_generator_safety_net_bypasses_org_report_only_flags(self, argv_tail, capsys):
+        """Completion should ignore org-report-only flags carried by wrappers."""
+        from cja_auto_sdr.generator import _main_impl
+
+        with (
+            patch.object(sys, "argv", ["cja_auto_sdr", *argv_tail]),
+            patch.dict("sys.modules", {"argcomplete": type(sys)("argcomplete")}),
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                _main_impl()
+
+        assert int(exc_info.value.code) == 0
+        captured = capsys.readouterr()
+        assert "register-python-argcomplete" in captured.out
+        assert "--trending-window" not in captured.err
+        assert "--lock-stale-threshold" not in captured.err
 
     def test_generator_safety_net_exit_codes_precedes_completion(self):
         """Mixed --exit-codes/--completion should dispatch exit-codes branch first."""
