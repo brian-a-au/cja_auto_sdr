@@ -9208,6 +9208,9 @@ def _execute_sdr_processing_modes(
     inventory_order: list[str],
     api_tuning_config: Any,
     circuit_breaker_config: Any,
+    workers_requested_value: str | int | None = None,
+    api_auto_tune_requested: bool = False,
+    circuit_breaker_enabled: bool = False,
 ) -> dict[str, Any]:
     from cja_auto_sdr.cli.execution import execute_sdr_processing_modes as _impl
 
@@ -9222,6 +9225,9 @@ def _execute_sdr_processing_modes(
         inventory_order=inventory_order,
         api_tuning_config=api_tuning_config,
         circuit_breaker_config=circuit_breaker_config,
+        workers_requested_value=workers_requested_value,
+        api_auto_tune_requested=api_auto_tune_requested,
+        circuit_breaker_enabled=circuit_breaker_enabled,
     )
 
 
@@ -9756,17 +9762,17 @@ def _main_impl(run_state: dict[str, Any] | None = None):
     ConsoleColors.configure(no_color=getattr(args, "no_color", False))
 
     # Parse and validate --workers argument
-    workers_requested_token: str | int = args.workers  # preserve original CLI token
+    workers_requested_value: str | int = args.workers  # preserve original CLI input
     workers_auto = False
     if args.workers.lower() == "auto":
         workers_auto = True
-        workers_requested_token = "auto"
+        workers_requested_value = "auto"
         # Will be set later based on data view count
         args.workers = DEFAULT_BATCH_WORKERS  # Temporary default
     else:
         try:
             args.workers = int(args.workers)
-            workers_requested_token = args.workers
+            workers_requested_value = args.workers
         except ValueError:
             _exit_error(f"--workers must be 'auto' or an integer, got '{args.workers}'")
 
@@ -10248,16 +10254,6 @@ def _main_impl(run_state: dict[str, Any] | None = None):
     circuit_breaker_config = execution_context["circuit_breaker_config"]
     inventory_order = execution_context["inventory_order"]
 
-    # Build execution_settings for run-summary details enrichment.
-    # batch_workers_effective is set *after* execution because auto-detection
-    # happens inside _run_batch_mode which mutates args.workers.
-    _execution_settings_base = {
-        "batch_workers_requested": workers_requested_token,
-        "api_auto_tune_requested": execution_context["api_auto_tune_requested"],
-        "circuit_breaker_enabled": execution_context["circuit_breaker_enabled"],
-        "shared_cache_active": execution_context["shared_cache_active"],
-    }
-
     successful_results: list[ProcessingResult] = []
     quality_report_results: list[ProcessingResult] = []
     processed_results: list[ProcessingResult] = []
@@ -10274,17 +10270,16 @@ def _main_impl(run_state: dict[str, Any] | None = None):
         inventory_order=inventory_order,
         api_tuning_config=api_tuning_config,
         circuit_breaker_config=circuit_breaker_config,
+        workers_requested_value=workers_requested_value,
+        api_auto_tune_requested=execution_context["api_auto_tune_requested"],
+        circuit_breaker_enabled=execution_context["circuit_breaker_enabled"],
     )
     successful_results = list(execution_result["successful_results"])
     quality_report_results = list(execution_result["quality_report_results"])
     processed_results = list(execution_result["processed_results"])
     overall_failure = bool(execution_result["overall_failure"])
     processing_failures_detected = bool(execution_result["processing_failures_detected"])
-
-    # Finalize execution_settings now that args.workers reflects the
-    # auto-detected effective value (mutated by _run_batch_mode).
-    _execution_settings_base["batch_workers_effective"] = int(args.workers)
-    _merge_run_details(run_state, execution_settings=_execution_settings_base)
+    _merge_run_details(run_state, execution_settings=execution_result["execution_settings"])
 
     all_quality_issues = aggregate_quality_issues(successful_results)
     if run_state is not None:

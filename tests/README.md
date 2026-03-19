@@ -121,7 +121,7 @@ tests/
 └── README.md                        # This file
 ```
 
-**Total: 6,425 comprehensive tests**
+**Total: 6,429 comprehensive tests**
 
 ### Test Count Breakdown
 
@@ -224,7 +224,7 @@ tests/
 | `test_cli_diff_contracts.py` | 69 | CLI/diff public API contract tests |
 | `test_list_command_edge_cases.py` | 45 | List command edge cases and coverage |
 | `test_cli_commands_config_coverage.py` | 20 | Config command edge cases and coverage |
-| `test_cli_execution.py` | 23 | CLI execution edge cases and coverage |
+| `test_cli_execution.py` | 27 | CLI execution edge cases and coverage |
 | `test_diff_git_coverage.py` | 27 | Diff/git subprocess error path coverage |
 | `test_generator_trending_coverage.py` | 19 | Generator trending integration coverage |
 | `test_check_version_sync.py` | 18 | Version string sync validation across files |
@@ -237,7 +237,7 @@ tests/
 | `test_example_automation_scripts.py` | 4 | Automation shell script validation tests |
 | `test_exit_codes.py` | 11 | Exit code helpers and signal detection tests |
 | `test_json_io.py` | 2 | JSON I/O atomic write and read tests |
-| **Total** | **6,425** | **Collected via pytest --collect-only** |
+| **Total** | **6,429** | **Collected via pytest --collect-only** |
 
 ## Running Tests
 
@@ -641,7 +641,7 @@ Check for drift (CI-friendly):
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (6,425 tests total)
+- [x] Comprehensive test coverage (6,429 tests total)
 - [x] Org-wide analysis tests (test_org_report.py) - 204 tests (including large org scaling, output path aliases, memory warnings, smart cache invalidation)
 - [x] Org-wide analysis integration tests (test_org_report_integration.py) - 17 tests (end-to-end flows, caching, filtering, governance thresholds)
 - [x] Profile management tests (test_profiles.py) - 77 tests
