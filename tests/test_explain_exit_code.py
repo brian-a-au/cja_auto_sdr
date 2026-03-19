@@ -311,15 +311,30 @@ class TestExplainExitCodeValidation:
 
         assert exc_info.value.code == 1
 
-    def test_rejects_sdr_only_fail_on_quality_flag(self, capsys):
+    def test_ignores_sdr_only_fail_on_quality_flag(self, capsys):
         from cja_auto_sdr.generator import main as generator_main
 
         with patch.object(sys, "argv", ["cja_auto_sdr", "--explain-exit-code", "2", "--fail-on-quality", "HIGH"]):
             with pytest.raises(SystemExit) as exc_info:
                 generator_main()
 
-        assert exc_info.value.code == 1
-        assert "--fail-on-quality is only supported in SDR generation mode" in capsys.readouterr().err
+        assert exc_info.value.code == 0
+        captured = capsys.readouterr()
+        assert "Exit code 2:" in captured.out
+        assert "--fail-on-quality is only supported in SDR generation mode" not in captured.err
+
+    def test_ignores_auto_prune_semantic_validation(self, capsys):
+        """Standalone explain mode should ignore shared snapshot automation flags."""
+        from cja_auto_sdr.generator import main as generator_main
+
+        with patch.object(sys, "argv", ["cja_auto_sdr", "--explain-exit-code", "2", "--auto-prune"]):
+            with pytest.raises(SystemExit) as exc_info:
+                generator_main()
+
+        assert exc_info.value.code == 0
+        captured = capsys.readouterr()
+        assert "Exit code 2:" in captured.out
+        assert "--auto-prune requires --auto-snapshot or --prune-snapshots" not in captured.err
 
 
 # ---------------------------------------------------------------------------

@@ -1200,16 +1200,40 @@ class TestQualityGateAndReport:
         assert exc_info.value.code == 1
         mock_handle_diff.assert_not_called()
 
+    @pytest.mark.parametrize(
+        ("argv", "expected_error"),
+        [
+            (
+                ["cja_auto_sdr", "--sample-config", "--quality-report", "json"],
+                "--quality-report is only supported in SDR generation mode",
+            ),
+            (
+                ["cja_auto_sdr", "--sample-config", "--fail-on-quality", "HIGH"],
+                "--fail-on-quality is only supported in SDR generation mode",
+            ),
+            (
+                ["cja_auto_sdr", "--sample-config", "--allow-partial"],
+                "--allow-partial is only supported in SDR generation mode",
+            ),
+        ],
+    )
     @patch("cja_auto_sdr.generator.generate_sample_config")
-    def test_quality_report_rejects_non_sdr_sample_config_mode(self, mock_generate_sample_config):
-        """Quality report should fail fast for sample-config mode instead of being ignored."""
+    def test_sdr_only_policy_flags_reject_non_sdr_sample_config_mode(
+        self,
+        mock_generate_sample_config,
+        argv,
+        expected_error,
+        capsys,
+    ):
+        """SDR-only policy flags should fail fast for sample-config mode instead of being ignored."""
         from cja_auto_sdr.generator import main
 
-        with patch.object(sys, "argv", ["cja_auto_sdr", "--sample-config", "--quality-report", "json"]):
+        with patch.object(sys, "argv", argv):
             with pytest.raises(SystemExit) as exc_info:
                 main()
 
         assert exc_info.value.code == 1
+        assert expected_error in capsys.readouterr().err
         mock_generate_sample_config.assert_not_called()
 
     @patch("cja_auto_sdr.generator.write_quality_report_output")
@@ -4437,6 +4461,32 @@ class TestOpenOutputArtifacts(TestRunSummaryOutput):
         assert payload["mode"] == "exit_codes"
         assert "EXIT CODE REFERENCE" not in result.stdout
         assert "EXIT CODE REFERENCE" in result.stderr
+
+    def test_run_summary_exit_codes_ignored_allow_partial_reports_false(self, tmp_path):
+        """Ignored standalone flags should not survive into run-summary telemetry."""
+        from cja_auto_sdr.generator import main
+
+        summary_file = tmp_path / "run_summary_exit_codes_allow_partial_ignored.json"
+        with patch.object(
+            sys,
+            "argv",
+            [
+                "cja_auto_sdr",
+                "--exit-codes",
+                "--allow-partial",
+                "--run-summary-json",
+                str(summary_file),
+            ],
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                main()
+
+        assert exc_info.value.code == 0
+        payload = json.loads(summary_file.read_text())
+        self._assert_run_summary_schema(payload)
+        assert payload["mode"] == "exit_codes"
+        assert payload["status"] == "success"
+        assert payload["allow_partial"] is False
 
     def test_run_summary_completion_mode_classification(self, tmp_path):
         """Completion runs should emit run summary mode=completion."""

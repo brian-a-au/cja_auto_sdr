@@ -471,6 +471,44 @@ class RunMode(Enum):
     SDR = "sdr"
 
 
+@dataclass(frozen=True)
+class StandalonePrevalidationPolicy:
+    """Standalone-mode semantic-validation policy before early dispatch."""
+
+    ignored_semantic_dests: frozenset[str] = frozenset()
+
+
+_WRAPPER_EXECUTION_TOLERATED_SEMANTIC_DESTS = frozenset(
+    {
+        "auto_prune",
+        "auto_snapshot",
+        "skip_validation",
+    },
+)
+_INFORMATIONAL_MODE_TOLERATED_SEMANTIC_DESTS = (
+    frozenset(
+        {
+            "allow_partial",
+            "fail_on_quality",
+            "quality_report",
+        }
+    )
+    | _WRAPPER_EXECUTION_TOLERATED_SEMANTIC_DESTS
+)
+_INFORMATIONAL_STANDALONE_POLICY = StandalonePrevalidationPolicy(
+    ignored_semantic_dests=_INFORMATIONAL_MODE_TOLERATED_SEMANTIC_DESTS,
+)
+_SAMPLE_CONFIG_STANDALONE_POLICY = StandalonePrevalidationPolicy(
+    ignored_semantic_dests=_WRAPPER_EXECUTION_TOLERATED_SEMANTIC_DESTS,
+)
+_STANDALONE_PREVALIDATION_POLICIES: Mapping[RunMode, StandalonePrevalidationPolicy] = {
+    RunMode.COMPLETION: _INFORMATIONAL_STANDALONE_POLICY,
+    RunMode.EXPLAIN_EXIT_CODE: _INFORMATIONAL_STANDALONE_POLICY,
+    RunMode.EXIT_CODES: _INFORMATIONAL_STANDALONE_POLICY,
+    RunMode.SAMPLE_CONFIG: _SAMPLE_CONFIG_STANDALONE_POLICY,
+}
+
+
 def _coerce_run_mode(mode: Any) -> RunMode | None:
     """Convert a raw run mode value to RunMode when possible."""
     if isinstance(mode, RunMode):
@@ -1563,11 +1601,44 @@ def _handle_exit_codes_prevalidation() -> NoReturn:
 def _handle_sample_config_prevalidation(
     run_state: dict[str, Any] | None = None,
 ) -> NoReturn:
-    """Handle sample-config generation before unrelated shared validation runs."""
+    """Handle sample-config generation after standalone semantic validation."""
     success = generate_sample_config()
     if run_state is not None:
         run_state["details"] = {"operation_success": success}
     sys.exit(0 if success else 1)
+
+
+def _standalone_prevalidation_policy(inferred_mode: RunMode) -> StandalonePrevalidationPolicy | None:
+    """Return standalone semantic-validation policy for the inferred mode."""
+    return _STANDALONE_PREVALIDATION_POLICIES.get(inferred_mode)
+
+
+def _resolve_semantic_validation_args(
+    args: argparse.Namespace,
+    *,
+    inferred_mode: RunMode,
+) -> argparse.Namespace:
+    """Return the effective args namespace for standalone prevalidation logic.
+
+    Completion, explain-exit-code, and exit-codes intentionally ignore the
+    full informational-mode tolerance set. Sample-config uses only the
+    wrapper-carried execution subset so wrappers can pass shared execution
+    flags without suppressing fail-closed validation for SDR-only policy
+    options such as --allow-partial, --fail-on-quality, or --quality-report.
+
+    This effective view is shared by standalone semantic validation and the
+    initial run-summary metadata sync so structured telemetry reflects the same
+    ignored-flag policy as the prevalidation path.
+    """
+    policy = _standalone_prevalidation_policy(inferred_mode)
+    if policy is None or not policy.ignored_semantic_dests:
+        return args
+
+    sanitized_args = argparse.Namespace(**vars(args))
+    for dest in policy.ignored_semantic_dests:
+        current_value = getattr(sanitized_args, dest, None)
+        setattr(sanitized_args, dest, False if isinstance(current_value, bool) else None)
+    return sanitized_args
 
 
 def _dispatch_prevalidation_mode(
@@ -1575,24 +1646,23 @@ def _dispatch_prevalidation_mode(
     inferred_mode: RunMode,
     run_state: dict[str, Any] | None = None,
 ) -> None:
-    """Dispatch standalone modes before shared validation and normalization.
+    """Dispatch standalone early-exit modes after semantic validation passes."""
+    if _standalone_prevalidation_policy(inferred_mode) is None:
+        return
 
-    These modes are intentionally isolated from unrelated generic flags so
-    wrappers can pass through shared argv without breaking standalone commands.
-    """
     if inferred_mode == RunMode.COMPLETION:
         completion_shell = _completion_shell_from_args(args)
         if completion_shell is None:
             _exit_error("Internal error: completion mode inferred without a completion shell value")
         _handle_completion_prevalidation(completion_shell, run_state=run_state)
 
-    if inferred_mode == RunMode.EXPLAIN_EXIT_CODE:
+    elif inferred_mode == RunMode.EXPLAIN_EXIT_CODE:
         _handle_explain_exit_code_prevalidation(args, run_state=run_state)
 
-    if inferred_mode == RunMode.EXIT_CODES:
+    elif inferred_mode == RunMode.EXIT_CODES:
         _handle_exit_codes_prevalidation()
 
-    if inferred_mode == RunMode.SAMPLE_CONFIG:
+    elif inferred_mode == RunMode.SAMPLE_CONFIG:
         _handle_sample_config_prevalidation(run_state=run_state)
 
 
@@ -1603,9 +1673,9 @@ def _validate_semantic_flag_relationships(
 ) -> None:
     """Validate semantic flag relationships on the current effective args.
 
-    This validator is intentionally pure and idempotent so it can run both on
-    the raw parsed CLI args before standalone dispatch and again after quality
-    policy defaults mutate SDR execution args.
+    This validator is intentionally pure and idempotent so it can run on
+    parsed execution args and again after quality policy defaults mutate SDR
+    execution args.
     """
     non_sdr_mode = inferred_mode != RunMode.SDR
     if getattr(args, "allow_partial", False) and non_sdr_mode:
@@ -9725,13 +9795,14 @@ def _main_impl(run_state: dict[str, Any] | None = None):
     args = parse_arguments()
     inferred_mode = _infer_run_mode_enum(args)
     active_modes = _active_run_modes(args)
-    _sync_run_summary_cli_metadata(run_state, args, inferred_mode=inferred_mode)
+    prevalidation_effective_args = _resolve_semantic_validation_args(args, inferred_mode=inferred_mode)
+    _sync_run_summary_cli_metadata(run_state, prevalidation_effective_args, inferred_mode=inferred_mode)
     _validate_org_report_snapshot_cli_args(args, active_modes=active_modes)
     _validate_explain_exit_code_cli_args(args, active_modes=active_modes)
-    _validate_semantic_flag_relationships(args, inferred_mode=inferred_mode)
-
-    # Dispatch early command modes before unrelated validation. Use inferred
-    # mode so dispatch precedence cannot diverge from run-mode classification.
+    _validate_semantic_flag_relationships(prevalidation_effective_args, inferred_mode=inferred_mode)
+    # Early-exit standalone modes still dispatch before deeper normalization
+    # and runtime validation, but only after semantic validation runs against
+    # the correct standalone policy view of the parsed argv.
     _dispatch_prevalidation_mode(args, inferred_mode, run_state=run_state)
 
     run_summary_to_stdout = getattr(args, "run_summary_json", None) in ("-", "stdout")

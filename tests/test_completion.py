@@ -440,6 +440,38 @@ class TestCompletionSafetyNet:
         assert "--workers must be at least 1" not in captured.err
         assert "register-python-argcomplete" in captured.out
 
+    def test_generator_safety_net_bypasses_auto_prune_semantic_validation(self, capsys):
+        """Completion should ignore shared snapshot automation flags."""
+        from cja_auto_sdr.generator import _main_impl
+
+        with (
+            patch.object(sys, "argv", ["cja_auto_sdr", "--completion", "bash", "--auto-prune"]),
+            patch.dict("sys.modules", {"argcomplete": type(sys)("argcomplete")}),
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                _main_impl()
+
+        assert int(exc_info.value.code) == 0
+        captured = capsys.readouterr()
+        assert "--auto-prune requires --auto-snapshot or --prune-snapshots" not in captured.err
+        assert "register-python-argcomplete" in captured.out
+
+    def test_generator_safety_net_still_rejects_profile_overwrite_conflict(self, capsys):
+        """Completion should still fail closed on real semantic conflicts."""
+        from cja_auto_sdr.generator import _main_impl
+
+        with (
+            patch.object(sys, "argv", ["cja_auto_sdr", "--completion", "bash", "--profile-overwrite"]),
+            patch.dict("sys.modules", {"argcomplete": type(sys)("argcomplete")}),
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                _main_impl()
+
+        assert int(exc_info.value.code) == 1
+        captured = capsys.readouterr()
+        assert "--profile-overwrite requires --profile-import" in captured.err
+        assert "register-python-argcomplete" not in captured.out
+
     def test_generator_safety_net_bypasses_quality_policy_loading(self, capsys):
         """Completion should not attempt to load quality-policy files."""
         from cja_auto_sdr.generator import _main_impl
