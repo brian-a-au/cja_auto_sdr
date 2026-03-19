@@ -121,7 +121,7 @@ tests/
 └── README.md                        # This file
 ```
 
-**Total: 6,423 comprehensive tests**
+**Total: 6,425 comprehensive tests**
 
 ### Test Count Breakdown
 
@@ -237,7 +237,7 @@ tests/
 | `test_example_automation_scripts.py` | 4 | Automation shell script validation tests |
 | `test_exit_codes.py` | 11 | Exit code helpers and signal detection tests |
 | `test_json_io.py` | 2 | JSON I/O atomic write and read tests |
-| **Total** | **6,423** | **Collected via pytest --collect-only** |
+| **Total** | **6,425** | **Collected via pytest --collect-only** |
 
 ## Running Tests
 
@@ -641,7 +641,7 @@ Check for drift (CI-friendly):
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (6,423 tests total)
+- [x] Comprehensive test coverage (6,425 tests total)
 - [x] Org-wide analysis tests (test_org_report.py) - 204 tests (including large org scaling, output path aliases, memory warnings, smart cache invalidation)
 - [x] Org-wide analysis integration tests (test_org_report_integration.py) - 17 tests (end-to-end flows, caching, filtering, governance thresholds)
 - [x] Profile management tests (test_profiles.py) - 77 tests
