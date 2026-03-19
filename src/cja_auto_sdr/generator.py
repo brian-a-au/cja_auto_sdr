@@ -60,14 +60,6 @@ from cja_auto_sdr.api.resilience import (
     retry_with_backoff,
 )
 from cja_auto_sdr.cli.option_resolution import resolve_long_option_token as _resolve_long_option_token
-from cja_auto_sdr.cli.standalone_prevalidation import (
-    resolve_wrapper_aware_metadata_occurrences as _resolve_wrapper_aware_metadata_occurrences,
-)
-from cja_auto_sdr.cli.standalone_prevalidation import (
-    resolve_wrapper_aware_standalone_occurrences as _resolve_wrapper_aware_standalone_occurrences,
-)
-from cja_auto_sdr.cli.token_scan import OptionOccurrence
-from cja_auto_sdr.cli.token_scan import option_scan_spec as _option_scan_spec
 from cja_auto_sdr.core.colors import (
     ConsoleColors,
     _format_error_msg,
@@ -477,134 +469,6 @@ class RunMode(Enum):
     DRY_RUN = "dry_run"
     INVENTORY_SUMMARY = "inventory_summary"
     SDR = "sdr"
-
-
-@dataclass(frozen=True)
-class _StandalonePrevalidationRequest:
-    """Standalone-mode request with parser-validated args."""
-
-    mode: RunMode
-    parsed_args: argparse.Namespace
-    raw_cli_metadata: Mapping[str, Any] = field(default_factory=dict)
-
-
-_RUN_MODE_SELECTOR_DESTS: tuple[tuple[RunMode, tuple[str, ...]], ...] = (
-    (RunMode.EXPLAIN_EXIT_CODE, ("explain_exit_code",)),
-    (RunMode.EXIT_CODES, ("exit_codes",)),
-    (RunMode.COMPLETION, ("completion",)),
-    (RunMode.SAMPLE_CONFIG, ("sample_config",)),
-    (
-        RunMode.PROFILE_MANAGEMENT,
-        ("profile_list", "profile_add", "profile_test", "profile_import", "profile_show", "profile_overwrite"),
-    ),
-    (RunMode.GIT_INIT, ("git_init",)),
-    (
-        RunMode.DISCOVERY,
-        (
-            "list_dataviews",
-            "list_connections",
-            "list_datasets",
-            "describe_dataview",
-            "list_metrics",
-            "list_dimensions",
-            "list_segments",
-            "list_calculated_metrics",
-        ),
-    ),
-    (RunMode.CONFIG_STATUS, ("config_status", "config_json")),
-    (RunMode.VALIDATE_CONFIG, ("validate_config",)),
-    (RunMode.STATS, ("stats",)),
-    (
-        RunMode.ORG_REPORT_SNAPSHOTS,
-        ("list_org_report_snapshots", "inspect_org_report_snapshot", "prune_org_report_snapshots"),
-    ),
-    (RunMode.ORG_REPORT, ("org_report",)),
-    (RunMode.LIST_SNAPSHOTS, ("list_snapshots",)),
-    (RunMode.PRUNE_SNAPSHOTS, ("prune_snapshots",)),
-    (RunMode.COMPARE_SNAPSHOTS, ("compare_snapshots",)),
-    (RunMode.DIFF, ("diff",)),
-    (RunMode.SNAPSHOT, ("snapshot",)),
-    (RunMode.DIFF_SNAPSHOT, ("compare_with_prev", "diff_snapshot")),
-    (RunMode.DRY_RUN, ("dry_run",)),
-    (RunMode.INVENTORY_SUMMARY, ("inventory_summary",)),
-)
-_RAW_STANDALONE_MODE_DESTS: dict[str, RunMode] = {
-    "completion": RunMode.COMPLETION,
-    "exit_codes": RunMode.EXIT_CODES,
-    "explain_exit_code": RunMode.EXPLAIN_EXIT_CODE,
-    "sample_config": RunMode.SAMPLE_CONFIG,
-}
-_RAW_STANDALONE_METADATA_DESTS = frozenset({"config_file", "output_dir", "profile", "run_summary_json"})
-_RAW_STANDALONE_RAW_METADATA_OPTIONS: Mapping[str, str] = {"--format": "output_format"}
-_RAW_STANDALONE_PREVALIDATION_EXTRA_DESTS = frozenset(
-    {
-        "allow_partial",
-        "auto_prune",
-        "auto_snapshot",
-        "fail_on_quality",
-        "org_report_keep_last",
-        "org_report_keep_since",
-        "org_report_snapshot_org",
-        "quality_report",
-        "skip_validation",
-    },
-)
-
-
-@lru_cache(maxsize=1)
-def _raw_standalone_prevalidation_parse_options() -> frozenset[str]:
-    """Return parser-derived options that can affect pre-dispatch standalone semantics."""
-    scan_spec = _option_scan_spec()
-    parse_dests = (
-        _RAW_STANDALONE_METADATA_DESTS
-        | _RAW_STANDALONE_PREVALIDATION_EXTRA_DESTS
-        | frozenset(dest for _mode, dests in _RUN_MODE_SELECTOR_DESTS for dest in dests)
-    )
-    parse_options: set[str] = set()
-    for dest in parse_dests:
-        parse_options.update(scan_spec.options_by_dest.get(dest, ()))
-    return frozenset(parse_options)
-
-
-@lru_cache(maxsize=1)
-def _raw_standalone_mode_options() -> dict[RunMode, frozenset[str]]:
-    """Return parser-derived option strings for standalone informational modes."""
-    scan_spec = _option_scan_spec()
-    return {
-        mode: frozenset(scan_spec.options_by_dest.get(dest, ())) for dest, mode in _RAW_STANDALONE_MODE_DESTS.items()
-    }
-
-
-@lru_cache(maxsize=1)
-def _raw_standalone_prevalidation_bailout_options() -> frozenset[str]:
-    """Return parser-action options that must keep full argparse precedence."""
-    scan_spec = _option_scan_spec()
-    bailout_options: set[str] = set()
-    for dest in ("help", "version"):
-        bailout_options.update(scan_spec.options_by_dest.get(dest, ()))
-    return frozenset(bailout_options)
-
-
-@lru_cache(maxsize=1)
-def _raw_standalone_metadata_options() -> frozenset[str]:
-    """Return known option strings whose values standalone prevalidation preserves."""
-    scan_spec = _option_scan_spec()
-    metadata_options = set(_RAW_STANDALONE_RAW_METADATA_OPTIONS)
-    for dest in _RAW_STANDALONE_METADATA_DESTS:
-        metadata_options.update(scan_spec.options_by_dest.get(dest, ()))
-    return frozenset(metadata_options)
-
-
-@lru_cache(maxsize=1)
-def _raw_standalone_metadata_state_keys() -> Mapping[str, str]:
-    """Return standalone metadata option-to-run-state mappings for occurrence priming."""
-    scan_spec = _option_scan_spec()
-    state_keys: dict[str, str] = dict(_RAW_STANDALONE_RAW_METADATA_OPTIONS)
-    for dest in _RAW_STANDALONE_METADATA_DESTS:
-        state_key = "run_summary_output" if dest == "run_summary_json" else dest
-        for option_name in scan_spec.options_by_dest.get(dest, ()):
-            state_keys[option_name] = state_key
-    return state_keys
 
 
 def _coerce_run_mode(mode: Any) -> RunMode | None:
@@ -1475,23 +1339,60 @@ def _infer_run_status(exit_code: int, run_state: dict[str, Any]) -> str:
 def _run_mode_checks(args: argparse.Namespace) -> tuple[tuple[RunMode, bool], ...]:
     """Build run-mode checks once so inference and validation share precedence."""
     completion_shell = _completion_shell_from_args(args)
-    checks: list[tuple[RunMode, bool]] = []
-    for mode, dests in _RUN_MODE_SELECTOR_DESTS:
-        if mode == RunMode.COMPLETION:
-            checks.append((mode, completion_shell is not None))
-            continue
-        checks.append(
-            (
-                mode,
-                any(
-                    getattr(args, dest, None) is not None
-                    if dest == "explain_exit_code"
-                    else bool(getattr(args, dest, None))
-                    for dest in dests
-                ),
+    return (
+        (RunMode.EXPLAIN_EXIT_CODE, getattr(args, "explain_exit_code", None) is not None),
+        (RunMode.EXIT_CODES, getattr(args, "exit_codes", False)),
+        (RunMode.COMPLETION, completion_shell is not None),
+        (RunMode.SAMPLE_CONFIG, getattr(args, "sample_config", False)),
+        (
+            RunMode.PROFILE_MANAGEMENT,
+            bool(
+                getattr(args, "profile_list", False)
+                or getattr(args, "profile_add", None)
+                or getattr(args, "profile_test", None)
+                or getattr(args, "profile_import", None)
+                or getattr(args, "profile_show", None)
+                or getattr(args, "profile_overwrite", False),
             ),
-        )
-    return tuple(checks)
+        ),
+        (RunMode.GIT_INIT, getattr(args, "git_init", False)),
+        (
+            RunMode.DISCOVERY,
+            bool(
+                getattr(args, "list_dataviews", False)
+                or getattr(args, "list_connections", False)
+                or getattr(args, "list_datasets", False)
+                or getattr(args, "describe_dataview", None)
+                or getattr(args, "list_metrics", None)
+                or getattr(args, "list_dimensions", None)
+                or getattr(args, "list_segments", None)
+                or getattr(args, "list_calculated_metrics", None)
+            ),
+        ),
+        (RunMode.CONFIG_STATUS, bool(getattr(args, "config_status", False) or getattr(args, "config_json", False))),
+        (RunMode.VALIDATE_CONFIG, getattr(args, "validate_config", False)),
+        (RunMode.STATS, getattr(args, "stats", False)),
+        (
+            RunMode.ORG_REPORT_SNAPSHOTS,
+            bool(
+                getattr(args, "list_org_report_snapshots", False)
+                or getattr(args, "inspect_org_report_snapshot", None)
+                or getattr(args, "prune_org_report_snapshots", False)
+            ),
+        ),
+        (RunMode.ORG_REPORT, getattr(args, "org_report", False)),
+        (RunMode.LIST_SNAPSHOTS, getattr(args, "list_snapshots", False)),
+        (RunMode.PRUNE_SNAPSHOTS, getattr(args, "prune_snapshots", False)),
+        (RunMode.COMPARE_SNAPSHOTS, bool(getattr(args, "compare_snapshots", None))),
+        (RunMode.DIFF, getattr(args, "diff", False)),
+        (RunMode.SNAPSHOT, bool(getattr(args, "snapshot", None))),
+        (
+            RunMode.DIFF_SNAPSHOT,
+            bool(getattr(args, "compare_with_prev", False) or getattr(args, "diff_snapshot", None)),
+        ),
+        (RunMode.DRY_RUN, getattr(args, "dry_run", False)),
+        (RunMode.INVENTORY_SUMMARY, getattr(args, "inventory_summary", False)),
+    )
 
 
 def _infer_run_mode_enum(args: argparse.Namespace) -> RunMode:
@@ -1610,128 +1511,6 @@ def _validate_explain_exit_code_cli_args(
         )
 
 
-def _build_raw_standalone_prevalidation_argv(
-    occurrences: Collection[OptionOccurrence],
-) -> list[str]:
-    """Build the parser-sensitive argv subset for standalone prevalidation."""
-    parse_options = _raw_standalone_prevalidation_parse_options()
-    filtered_argv: list[str] = []
-    for occurrence in occurrences:
-        if occurrence.canonical_option not in parse_options:
-            continue
-        filtered_argv.extend(occurrence.argv_tokens)
-    return filtered_argv
-
-
-def _parse_raw_standalone_prevalidation_args(
-    occurrences: Collection[OptionOccurrence],
-) -> argparse.Namespace:
-    """Parse the standalone prevalidation subset with real argparse semantics."""
-    filtered_argv = _build_raw_standalone_prevalidation_argv(occurrences)
-    return parse_arguments(filtered_argv)
-
-
-def _extract_raw_standalone_metadata(occurrences: Collection[OptionOccurrence]) -> dict[str, str]:
-    """Capture raw standalone metadata from the sanitized standalone occurrence scan."""
-    state_keys = _raw_standalone_metadata_state_keys()
-    raw_metadata: dict[str, str] = {}
-    for occurrence in occurrences:
-        state_key = state_keys.get(occurrence.canonical_option)
-        if state_key is None or len(occurrence.argv_tokens) < 2:
-            continue
-        raw_value = occurrence.argv_tokens[-1]
-        if raw_value:
-            raw_metadata[state_key] = raw_value
-    return raw_metadata
-
-
-def _resolve_raw_standalone_occurrence_scan(
-    argv: list[str],
-) -> tuple[OptionOccurrence, ...] | None:
-    """Return the strict occurrence scan after wrapper-aware standalone sanitization."""
-    standalone_mode_options = {
-        option_name for options in _raw_standalone_mode_options().values() for option_name in options
-    }
-    return _resolve_wrapper_aware_standalone_occurrences(
-        argv,
-        standalone_mode_options=standalone_mode_options,
-        metadata_options=_raw_standalone_metadata_options(),
-    )
-
-
-def _resolve_raw_standalone_prevalidation_request(
-    argv: list[str] | None = None,
-) -> _StandalonePrevalidationRequest | None:
-    """Resolve standalone informational modes before full argparse coercion.
-
-    This detector is intentionally conservative: it only intercepts requests
-    that are clearly standalone and ignores wrapper-style runtime flags that
-    should not block informational commands.
-    """
-    tokens = list(sys.argv[1:] if argv is None else argv)
-    if not tokens:
-        return None
-
-    occurrences = _resolve_raw_standalone_occurrence_scan(tokens)
-    if occurrences is None:
-        return None
-    if any(
-        occurrence.canonical_option in _raw_standalone_prevalidation_bailout_options() for occurrence in occurrences
-    ):
-        return None
-
-    parsed_args = _parse_raw_standalone_prevalidation_args(occurrences)
-    inferred_mode = _infer_run_mode_enum(parsed_args)
-    if inferred_mode not in _raw_standalone_mode_options():
-        return None
-
-    active_modes = _active_run_modes(parsed_args)
-    _validate_org_report_snapshot_cli_args(parsed_args, active_modes=active_modes)
-    _validate_explain_exit_code_cli_args(parsed_args, active_modes=active_modes)
-    _validate_semantic_flag_relationships(parsed_args, inferred_mode=inferred_mode)
-
-    return _StandalonePrevalidationRequest(
-        mode=inferred_mode,
-        parsed_args=parsed_args,
-        raw_cli_metadata=_extract_raw_standalone_metadata(occurrences),
-    )
-
-
-def _dispatch_raw_standalone_prevalidation_request(
-    run_state: dict[str, Any] | None = None,
-    *,
-    argv: list[str] | None = None,
-) -> bool:
-    """Dispatch standalone informational commands before full parser coercion."""
-    request = _resolve_raw_standalone_prevalidation_request(argv=argv)
-    if request is None:
-        return False
-
-    _sync_run_summary_cli_metadata(run_state, request.parsed_args, inferred_mode=request.mode)
-    if run_state is not None and request.raw_cli_metadata:
-        run_state.update(request.raw_cli_metadata)
-
-    if request.mode == RunMode.COMPLETION:
-        completion_shell = _completion_shell_from_args(request.parsed_args)
-        if completion_shell is None:
-            _exit_error("Internal error: completion mode inferred without a completion shell value")
-        _handle_completion_prevalidation(completion_shell, run_state=run_state)
-
-    if request.mode == RunMode.EXPLAIN_EXIT_CODE:
-        _handle_explain_exit_code_prevalidation(
-            getattr(request.parsed_args, "explain_exit_code", None),
-            run_state=run_state,
-        )
-
-    if request.mode == RunMode.EXIT_CODES:
-        _handle_exit_codes_prevalidation(run_state=run_state)
-
-    if request.mode == RunMode.SAMPLE_CONFIG:
-        _handle_sample_config_prevalidation(run_state=run_state)
-
-    return True
-
-
 def _completion_shell_from_args(args: argparse.Namespace) -> str | None:
     """Return normalized completion shell from parsed args, if present."""
     raw_completion = getattr(args, "completion", None)
@@ -1757,10 +1536,11 @@ def _handle_completion_prevalidation(
 
 
 def _handle_explain_exit_code_prevalidation(
-    explain_code: int | None,
+    args: argparse.Namespace,
     run_state: dict[str, Any] | None = None,
 ) -> NoReturn:
     """Handle exit-code explanation before unrelated shared validation runs."""
+    explain_code = getattr(args, "explain_exit_code", None)
     if explain_code is None:
         _exit_error("Internal error: explain-exit-code mode inferred without a code value")
 
@@ -1772,12 +1552,10 @@ def _handle_explain_exit_code_prevalidation(
     sys.exit(0)
 
 
-def _handle_exit_codes_prevalidation(run_state: dict[str, Any] | None = None) -> NoReturn:
+def _handle_exit_codes_prevalidation() -> NoReturn:
     """Handle exit-code reference output before unrelated shared validation runs."""
     from cja_auto_sdr.core.exit_codes import print_exit_codes
 
-    if run_state is not None:
-        run_state["details"] = {"operation_success": True}
     print_exit_codes(banner_width=BANNER_WIDTH)
     sys.exit(0)
 
@@ -1808,13 +1586,13 @@ def _dispatch_prevalidation_mode(
             _exit_error("Internal error: completion mode inferred without a completion shell value")
         _handle_completion_prevalidation(completion_shell, run_state=run_state)
 
-    elif inferred_mode == RunMode.EXPLAIN_EXIT_CODE:
-        _handle_explain_exit_code_prevalidation(getattr(args, "explain_exit_code", None), run_state=run_state)
+    if inferred_mode == RunMode.EXPLAIN_EXIT_CODE:
+        _handle_explain_exit_code_prevalidation(args, run_state=run_state)
 
-    elif inferred_mode == RunMode.EXIT_CODES:
-        _handle_exit_codes_prevalidation(run_state=run_state)
+    if inferred_mode == RunMode.EXIT_CODES:
+        _handle_exit_codes_prevalidation()
 
-    elif inferred_mode == RunMode.SAMPLE_CONFIG:
+    if inferred_mode == RunMode.SAMPLE_CONFIG:
         _handle_sample_config_prevalidation(run_state=run_state)
 
 
@@ -1879,53 +1657,6 @@ def _sync_run_summary_cli_metadata(
     run_state["data_view_inputs"] = list(getattr(args, "data_views", []))
     run_state["run_summary_output"] = getattr(args, "run_summary_json", run_state.get("run_summary_output"))
     run_state["allow_partial"] = bool(getattr(args, "allow_partial", False))
-
-
-def _prime_run_summary_cli_metadata(run_state: dict[str, Any] | None) -> None:
-    """Best-effort raw CLI metadata capture for early argparse exits.
-
-    Full parser sync remains authoritative; this only preserves explicit caller
-    intent for paths that can exit before `_sync_run_summary_cli_metadata()`
-    runs, such as argparse help/version actions.
-    """
-    if run_state is None:
-        return
-
-    raw_mappings = (
-        ("--config-file", "config_file"),
-        ("--format", "output_format"),
-        ("--output-dir", "output_dir"),
-        ("--profile", "profile"),
-        ("--run-summary-json", "run_summary_output"),
-    )
-    for option_name, state_key in raw_mappings:
-        raw_value = _cli_option_value(option_name)
-        if raw_value is not None:
-            run_state[state_key] = raw_value
-
-    run_state.setdefault("output_dir", ".")
-
-
-def _prime_raw_standalone_occurrence_metadata(run_state: dict[str, Any] | None) -> None:
-    """Prime standalone-derived metadata before early run-summary routing decisions.
-
-    This must remain token-scan only. It cannot call parse-time standalone
-    validation because `main()` still owes the run-summary `try`/`finally`
-    contract for invalid standalone invocations.
-    """
-    if run_state is None:
-        return
-
-    occurrences = _resolve_wrapper_aware_metadata_occurrences(
-        list(sys.argv[1:]),
-        metadata_options=_raw_standalone_metadata_options(),
-    )
-    if not occurrences:
-        return
-
-    raw_metadata = _extract_raw_standalone_metadata(occurrences)
-    if raw_metadata:
-        run_state.update(raw_metadata)
 
 
 def _normalize_partial_reason_values(partial_reasons: Iterable[str] | None) -> list[str]:
@@ -9477,10 +9208,6 @@ def _execute_sdr_processing_modes(
     inventory_order: list[str],
     api_tuning_config: Any,
     circuit_breaker_config: Any,
-    workers_requested_token: str | int | None = None,
-    api_auto_tune_requested: bool = False,
-    circuit_breaker_enabled: bool = False,
-    shared_cache_active: bool = False,
 ) -> dict[str, Any]:
     from cja_auto_sdr.cli.execution import execute_sdr_processing_modes as _impl
 
@@ -9495,10 +9222,6 @@ def _execute_sdr_processing_modes(
         inventory_order=inventory_order,
         api_tuning_config=api_tuning_config,
         circuit_breaker_config=circuit_breaker_config,
-        workers_requested_token=workers_requested_token,
-        api_auto_tune_requested=api_auto_tune_requested,
-        circuit_breaker_enabled=circuit_breaker_enabled,
-        shared_cache_active=shared_cache_active,
     )
 
 
@@ -9991,14 +9714,6 @@ def _dispatch_post_validation_report_modes(
 
 def _main_impl(run_state: dict[str, Any] | None = None):
     """Main CLI implementation."""
-
-    from cja_auto_sdr.__main__ import _is_argcomplete_completion_active
-
-    # Standalone informational modes must be able to ignore unrelated typed
-    # wrapper flags before full argparse coercion runs, but argcomplete shell
-    # completion must still reach parser-side hooks.
-    if not _is_argcomplete_completion_active() and _dispatch_raw_standalone_prevalidation_request(run_state=run_state):
-        return
 
     # Parse arguments (will show error and help if no data views provided)
     args = parse_arguments()
@@ -10533,6 +10248,16 @@ def _main_impl(run_state: dict[str, Any] | None = None):
     circuit_breaker_config = execution_context["circuit_breaker_config"]
     inventory_order = execution_context["inventory_order"]
 
+    # Build execution_settings for run-summary details enrichment.
+    # batch_workers_effective is set *after* execution because auto-detection
+    # happens inside _run_batch_mode which mutates args.workers.
+    _execution_settings_base = {
+        "batch_workers_requested": workers_requested_token,
+        "api_auto_tune_requested": execution_context["api_auto_tune_requested"],
+        "circuit_breaker_enabled": execution_context["circuit_breaker_enabled"],
+        "shared_cache_active": execution_context["shared_cache_active"],
+    }
+
     successful_results: list[ProcessingResult] = []
     quality_report_results: list[ProcessingResult] = []
     processed_results: list[ProcessingResult] = []
@@ -10549,19 +10274,17 @@ def _main_impl(run_state: dict[str, Any] | None = None):
         inventory_order=inventory_order,
         api_tuning_config=api_tuning_config,
         circuit_breaker_config=circuit_breaker_config,
-        workers_requested_token=workers_requested_token,
-        api_auto_tune_requested=execution_context["api_auto_tune_requested"],
-        circuit_breaker_enabled=execution_context["circuit_breaker_enabled"],
-        shared_cache_active=execution_context["shared_cache_active"],
     )
     successful_results = list(execution_result["successful_results"])
     quality_report_results = list(execution_result["quality_report_results"])
     processed_results = list(execution_result["processed_results"])
     overall_failure = bool(execution_result["overall_failure"])
     processing_failures_detected = bool(execution_result["processing_failures_detected"])
-    execution_settings = execution_result.get("execution_settings")
-    if isinstance(execution_settings, dict):
-        _merge_run_details(run_state, execution_settings=execution_settings)
+
+    # Finalize execution_settings now that args.workers reflects the
+    # auto-detected effective value (mutated by _run_batch_mode).
+    _execution_settings_base["batch_workers_effective"] = int(args.workers)
+    _merge_run_details(run_state, execution_settings=_execution_settings_base)
 
     all_quality_issues = aggregate_quality_issues(successful_results)
     if run_state is not None:
@@ -10647,8 +10370,6 @@ def main():
         "quality_policy": None,
         "allow_partial": _cli_option_specified("--allow-partial"),
     }
-    _prime_run_summary_cli_metadata(run_state)
-    _prime_raw_standalone_occurrence_metadata(run_state)
     exit_code = 0
 
     redirect_stdout_for_run_summary = run_state.get("run_summary_output") in ("-", "stdout")

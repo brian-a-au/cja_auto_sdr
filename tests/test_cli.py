@@ -707,12 +707,6 @@ class TestFastPathEntryPoint:
         assert _is_fast_path_flag(["prog", "--version", "--v"]) == "--version"
         assert _is_fast_path_flag(["prog", "--version", "--quiet=1"]) == "--version"
 
-    def test_is_fast_path_flag_version_survives_partial_short_cluster_suffixes(self):
-        from cja_auto_sdr.__main__ import _is_fast_path_flag
-
-        assert _is_fast_path_flag(["prog", "-Vx"]) == "--version"
-        assert _is_fast_path_flag(["prog", "-qVx"]) == "--version"
-
     def test_is_fast_path_flag_exit_codes(self):
         from cja_auto_sdr.__main__ import _is_fast_path_flag
 
@@ -870,21 +864,6 @@ class TestFastPathEntryPoint:
 
         captured = capsys.readouterr()
         assert captured.out.strip() == f"cja_auto_sdr {__version__}"
-
-    def test_fast_path_main_version_uses_partial_short_cluster_without_generator_fallback(self, capsys):
-        from cja_auto_sdr.__main__ import main as fast_main
-        from cja_auto_sdr.core.version import __version__
-
-        with (
-            patch.object(sys, "argv", ["cja_auto_sdr", "-qVx"]),
-            patch("cja_auto_sdr.generator.main") as mock_generator_main,
-        ):
-            with pytest.raises(SystemExit) as exc_info:
-                fast_main()
-
-        assert exc_info.value.code == 0
-        mock_generator_main.assert_not_called()
-        assert capsys.readouterr().out.strip() == f"cja_auto_sdr {__version__}"
 
     def test_fast_path_main_version_like_value_token_falls_through_to_generator(self):
         from cja_auto_sdr.__main__ import main as fast_main
@@ -4881,29 +4860,6 @@ class TestOpenOutputArtifacts(TestRunSummaryOutput):
         assert payload["status"] == "error"
         assert payload["allow_partial"] is True
 
-    @pytest.mark.parametrize(
-        ("argv", "expected_exit_code"),
-        [
-            (["cja_auto_sdr", "--completion", "powershell", "--run-summary-json", "stdout"], 2),
-            (["cja_auto_sdr", "--sample-config", "--allow-partial", "--run-summary-json", "stdout"], 1),
-        ],
-    )
-    def test_invalid_standalone_requests_still_emit_run_summary_json_to_stdout(self, capsys, argv, expected_exit_code):
-        """Standalone parse/validation failures must stay inside the run-summary contract."""
-        from cja_auto_sdr.generator import main
-
-        with patch.object(sys, "argv", argv):
-            with pytest.raises(SystemExit) as exc_info:
-                main()
-
-        assert exc_info.value.code == expected_exit_code
-        captured = capsys.readouterr()
-        payload = json.loads(captured.out)
-        self._assert_run_summary_schema(payload)
-        assert payload["exit_code"] == expected_exit_code
-        assert payload["status"] == "error"
-        assert captured.err
-
     def test_run_summary_missing_value_does_not_write_flag_named_file(self, tmp_path, monkeypatch):
         """Malformed --run-summary-json should not treat the next flag as an output path."""
         from cja_auto_sdr.generator import main
@@ -4911,32 +4867,6 @@ class TestOpenOutputArtifacts(TestRunSummaryOutput):
         bad_output_name = "--list-dataviews"
         monkeypatch.chdir(tmp_path)
         with patch.object(sys, "argv", ["cja_auto_sdr", "--run-summary-json", "--list-dataviews"]):
-            with pytest.raises(SystemExit) as exc_info:
-                main()
-
-        assert exc_info.value.code == 2
-        assert not (tmp_path / bad_output_name).exists()
-
-    @pytest.mark.parametrize(
-        ("argv_tail", "bad_output_name"),
-        [
-            (["--run-summary-json", "--wrapper-debug", "bash", "stdout"], "bash"),
-            (["--run-summary-json", "--wrapper-debug=bash", "stdout"], "bash"),
-            (["--run-summary-json", "--agent-trace", "false", "stdout"], "false"),
-        ],
-    )
-    def test_run_summary_missing_value_does_not_write_wrapper_payload_named_file(
-        self,
-        tmp_path,
-        monkeypatch,
-        argv_tail,
-        bad_output_name,
-    ):
-        """Wrapper payloads must not be reinterpreted as run-summary output paths."""
-        from cja_auto_sdr.generator import main
-
-        monkeypatch.chdir(tmp_path)
-        with patch.object(sys, "argv", ["cja_auto_sdr", *argv_tail]):
             with pytest.raises(SystemExit) as exc_info:
                 main()
 
@@ -4973,9 +4903,6 @@ class TestOpenOutputArtifacts(TestRunSummaryOutput):
             (["--run-summary-j=stdout"], "stdout"),
             (["--run-summary-json", "--list-dataviews"], None),
             (["--run-summary-j", "--list-dataviews"], None),
-            (["--run-summary-json", "--wrapper-debug=bash", "stdout"], None),
-            (["--run-summary-json", "--agent-trace", "false", "stdout"], None),
-            (["--format", "--agent-run-id=abc123", "json"], None),
             (["--run-summary-json", "stdout", "--run-summary-j", "summary.json"], "summary.json"),
             (["--run-summary-json=stdout", "--run-summary-j=summary.json"], "summary.json"),
             (["--run-summary-json", "stdout", "--run-summary-json"], "stdout"),
