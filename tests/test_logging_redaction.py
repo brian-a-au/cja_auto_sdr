@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import sys
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -1011,3 +1012,18 @@ class TestCollectDependencyVersions:
         dep_line = dep_lines[0]
         for pkg in _CORE_DEPENDENCIES:
             assert f"{pkg}=?" in dep_line
+
+
+class TestSetupLoggingConsoleOnly:
+    """Covers the console-only setup path when no log file is active."""
+
+    def test_logging_console_only_init(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        import cja_auto_sdr.core.logging as log_mod
+
+        monkeypatch.setattr(log_mod, "_logging_initialized", False)
+        monkeypatch.setattr(log_mod, "_current_log_file", None)
+        monkeypatch.chdir(tmp_path)
+
+        logger = log_mod.setup_logging(data_view_id=None, batch_mode=True, log_level="INFO")
+        assert logger is not None
+        assert isinstance(logger, logging.Logger)

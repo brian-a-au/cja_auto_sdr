@@ -65,10 +65,19 @@ jobs:
       - name: Verify version strings are in sync
         run: uv run python scripts/check_version_sync.py
       - name: Run unit tests with coverage
-        run: >
-          uv run pytest tests/ -v --tb=short
-          -m "unit and not slow"
-          --cov=cja_auto_sdr --cov-report=term --cov-fail-under=95
+        shell: bash
+        run: |
+          set -o pipefail
+          uv run pytest tests/ -v --tb=short \
+            -m "unit and not slow" \
+            --cov=cja_auto_sdr --cov-report=term --cov-fail-under=95 \
+            --durations=25 | tee /tmp/test-unit.log
+          {
+            echo "### test-unit slowest tests"
+            echo '```text'
+            sed -n '/= slowest 25 durations =/,$p' /tmp/test-unit.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   test-integration:
     runs-on: ubuntu-latest
@@ -84,7 +93,16 @@ jobs:
       - name: Sync dependencies
         run: uv sync --dev --extra clustering
       - name: Run integration, end-to-end, and slow test slices
-        run: uv run pytest tests/ -q --tb=short -m "integration or e2e or slow"
+        shell: bash
+        run: |
+          set -o pipefail
+          uv run pytest tests/ -q --tb=short -m "integration or e2e or slow" --durations=25 | tee /tmp/test-integration.log
+          {
+            echo "### test-integration slowest tests"
+            echo '```text'
+            sed -n '/= slowest 25 durations =/,$p' /tmp/test-integration.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   run-summary-contract:
     runs-on: ubuntu-latest
@@ -100,7 +118,10 @@ jobs:
       - name: Sync dependencies
         run: uv sync --dev
       - name: Run run-summary JSON contract tests
-        run: uv run pytest -q tests/test_cli.py -k "run_summary and subprocess"
+        run: >
+          uv run pytest -q
+          tests/test_quality_policy_and_run_summary.py::TestRunSummaryOutput
+          tests/test_quality_policy_and_run_summary.py::TestOpenOutputArtifacts
 
   smoke-test:
     runs-on: ${{ matrix.os }}

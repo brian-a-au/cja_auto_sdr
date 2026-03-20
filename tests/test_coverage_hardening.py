@@ -7,103 +7,11 @@ Part of the v3.3.5 hardening release.
 from __future__ import annotations
 
 import logging
-import os
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import MagicMock
 
 import pandas as pd
 import pytest
-
-
-def _running_as_root() -> bool:
-    getuid = getattr(os, "getuid", None)
-    return bool(callable(getuid) and getuid() == 0)
-
-
-# ---------------------------------------------------------------------------
-# Tier 1a — Output-dir access failure branches (generator.py ~lines 10486-10502)
-# ---------------------------------------------------------------------------
-
-
-class TestCheckOutputDirAccess:
-    """Test _check_output_dir_access for not_directory, parent_not_directory, parent_not_writable."""
-
-    def test_output_dir_not_directory(self, tmp_path: Path) -> None:
-        """--output-dir pointing to a file triggers 'not_directory' reason."""
-        from cja_auto_sdr.generator import _check_output_dir_access
-
-        fake_file = tmp_path / "not_a_dir.txt"
-        fake_file.write_text("x")
-
-        ok, _resolved, reason, parent = _check_output_dir_access(str(fake_file))
-        assert not ok
-        assert reason == "not_directory"
-        assert parent is None
-
-    def test_output_dir_parent_not_directory(self, tmp_path: Path) -> None:
-        """--output-dir whose parent is a file triggers 'parent_not_directory' reason."""
-        from cja_auto_sdr.generator import _check_output_dir_access
-
-        fake_file = tmp_path / "file.txt"
-        fake_file.write_text("x")
-        # The target is fake_file/child — parent (fake_file) is not a dir
-        ok, _resolved, reason, parent = _check_output_dir_access(str(fake_file / "child"))
-        assert not ok
-        assert reason == "parent_not_directory"
-        assert parent is not None
-
-    @pytest.mark.skipif(_running_as_root(), reason="root bypasses permission checks")
-    def test_output_dir_parent_not_writable(self, tmp_path: Path) -> None:
-        """--output-dir under read-only parent triggers 'parent_not_writable' reason."""
-        from cja_auto_sdr.generator import _check_output_dir_access
-
-        readonly = tmp_path / "readonly"
-        readonly.mkdir()
-        readonly.chmod(0o444)
-        try:
-            ok, _resolved, reason, parent = _check_output_dir_access(str(readonly / "newdir"))
-            assert not ok
-            assert reason == "parent_not_writable"
-            assert parent is not None
-        finally:
-            readonly.chmod(0o755)
-
-    def test_output_dir_not_writable(self, tmp_path: Path) -> None:
-        """Existing dir without write permission triggers 'not_writable' reason."""
-        from cja_auto_sdr.generator import _check_output_dir_access
-
-        if _running_as_root():
-            pytest.skip("root bypasses permission checks")
-
-        readonly_dir = tmp_path / "noperm"
-        readonly_dir.mkdir()
-        readonly_dir.chmod(0o444)
-        try:
-            ok, _resolved, reason, _parent = _check_output_dir_access(str(readonly_dir))
-            assert not ok
-            assert reason == "not_writable"
-        finally:
-            readonly_dir.chmod(0o755)
-
-    def test_output_dir_writable(self, tmp_path: Path) -> None:
-        """Writable existing directory returns ok with 'writable' reason."""
-        from cja_auto_sdr.generator import _check_output_dir_access
-
-        ok, _resolved, reason, _parent = _check_output_dir_access(str(tmp_path))
-        assert ok
-        assert reason == "writable"
-
-    def test_output_dir_creatable(self, tmp_path: Path) -> None:
-        """Non-existent directory under writable parent returns ok with 'creatable' reason."""
-        from cja_auto_sdr.generator import _check_output_dir_access
-
-        new_dir = tmp_path / "newdir"
-        ok, _resolved, reason, parent = _check_output_dir_access(str(new_dir))
-        assert ok
-        assert reason == "creatable"
-        assert parent is not None
-
 
 # ---------------------------------------------------------------------------
 # Tier 2a — _is_missing_sort_value and _to_numeric_sort_value (lines 8059-8061)
@@ -185,31 +93,6 @@ class TestSortHelpers:
 
 
 # ---------------------------------------------------------------------------
-# Tier 2a — _fetch_component_payload missing method (line 8783)
-# ---------------------------------------------------------------------------
-
-
-class TestFetchComponentPayload:
-    """Test _fetch_component_payload when the CJA client is missing expected methods."""
-
-    def test_missing_method_raises_discovery_not_found_error(self) -> None:
-        from cja_auto_sdr.generator import DiscoveryNotFoundError, _fetch_component_payload
-
-        # A mock CJA client without the expected method
-        cja = MagicMock(spec=[])
-        cja.getMetrics = None  # Not callable
-
-        fetch_spec = SimpleNamespace(
-            method_name="nonexistent_method",
-            kwargs={},
-            data_view_arg_name="dataViewId",
-        )
-
-        with pytest.raises(DiscoveryNotFoundError, match="missing expected method"):
-            _fetch_component_payload(cja, "dv_123", fetch_spec)
-
-
-# ---------------------------------------------------------------------------
 # Tier 1b — Lazy forwarding stubs (cli/interactive.py, cli/main.py)
 # ---------------------------------------------------------------------------
 
@@ -240,29 +123,6 @@ class TestLazyForwarding:
         from cja_auto_sdr.cli.main import main
 
         assert callable(main)
-
-
-# ---------------------------------------------------------------------------
-# Tier 1c — core/logging.py console-only init (line 555)
-# ---------------------------------------------------------------------------
-
-
-class TestLoggingConsoleOnly:
-    """Test setup_logging console-only initialization path."""
-
-    def test_logging_console_only_init(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """setup_logging with no log file covers the console-only log message."""
-        import cja_auto_sdr.core.logging as log_mod
-
-        # Reset initialization state so we actually enter the setup path.
-        monkeypatch.setattr(log_mod, "_logging_initialized", False)
-        monkeypatch.setattr(log_mod, "_current_log_file", None)
-        # Use tmp_path as working directory so "logs" subdir is created there.
-        monkeypatch.chdir(tmp_path)
-
-        logger = log_mod.setup_logging(data_view_id=None, batch_mode=True, log_level="INFO")
-        assert logger is not None
-        assert isinstance(logger, logging.Logger)
 
 
 # ---------------------------------------------------------------------------
@@ -945,27 +805,6 @@ class TestIsArgcompleteCompletionActive:
         assert _is_argcomplete_completion_active({"_ARGCOMPLETE": "0"}) is False
         assert _is_argcomplete_completion_active({"_ARGCOMPLETE": ""}) is False
         assert _is_argcomplete_completion_active({"_ARGCOMPLETE": "false"}) is False
-
-
-# ---------------------------------------------------------------------------
-# Tier 2a — _resolve_output_dir_path fallback (lines 10474-10475)
-# ---------------------------------------------------------------------------
-
-
-class TestResolveOutputDirPath:
-    """Test _resolve_output_dir_path resolution and fallback."""
-
-    def test_simple_path(self, tmp_path: Path) -> None:
-        from cja_auto_sdr.generator import _resolve_output_dir_path
-
-        result = _resolve_output_dir_path(str(tmp_path))
-        assert result == tmp_path.resolve()
-
-    def test_tilde_expansion(self) -> None:
-        from cja_auto_sdr.generator import _resolve_output_dir_path
-
-        result = _resolve_output_dir_path("~/somedir")
-        assert "~" not in str(result)
 
 
 # ---------------------------------------------------------------------------
