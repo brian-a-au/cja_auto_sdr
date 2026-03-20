@@ -151,7 +151,7 @@ class OrgComponentAnalyzer:
         return text or None
 
     @classmethod
-    def _normalize_lock_info_int(cls, value: object, field_name: str) -> int | None:
+    def _normalize_lock_info_int(cls, value: object, _field_name: str) -> int | None:
         """Normalize a lock-info field to int or None.
 
         Rejects booleans, accepts ints directly, attempts int() parse on strings.
