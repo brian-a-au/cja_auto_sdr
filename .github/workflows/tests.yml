@@ -49,7 +49,7 @@ jobs:
       - name: Run focused release-gate contract tests
         run: uv run pytest -q tests/test_check_version_sync.py tests/test_cli_color_policy_e2e.py
 
-  test:
+  test-unit:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
@@ -64,8 +64,45 @@ jobs:
         run: uv sync --dev --extra clustering
       - name: Verify version strings are in sync
         run: uv run python scripts/check_version_sync.py
-      - name: Run tests with coverage
-        run: uv run pytest tests/ -v --tb=short --cov=cja_auto_sdr --cov-report=term --cov-fail-under=95
+      - name: Run unit tests with coverage (95% gate applies to this slice)
+        shell: bash
+        run: |
+          set -o pipefail
+          uv run pytest tests/ -v --tb=short \
+            -m "unit and not slow" \
+            --cov=cja_auto_sdr --cov-report=term --cov-fail-under=95 \
+            --durations=25 | tee /tmp/test-unit.log
+          {
+            echo "### test-unit slowest tests"
+            echo '```text'
+            sed -n '/= slowest 25 durations =/,$p' /tmp/test-unit.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  test-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        python-version: ["3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Sync dependencies
+        run: uv sync --dev --extra clustering
+      - name: Run integration, end-to-end, and slow test slices
+        shell: bash
+        run: |
+          set -o pipefail
+          uv run pytest tests/ -q --tb=short -m "integration or e2e or slow" --durations=25 | tee /tmp/test-integration.log
+          {
+            echo "### test-integration slowest tests"
+            echo '```text'
+            sed -n '/= slowest 25 durations =/,$p' /tmp/test-integration.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   run-summary-contract:
     runs-on: ubuntu-latest
@@ -81,14 +118,16 @@ jobs:
       - name: Sync dependencies
         run: uv sync --dev
       - name: Run run-summary JSON contract tests
-        run: uv run pytest -q tests/test_cli.py -k "run_summary and subprocess"
+        run: >
+          uv run pytest -q tests/test_quality_policy_and_run_summary.py
+          -m run_summary_contract
 
   smoke-test:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
     strategy:
       matrix:
-        os: [windows-latest, macos-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
         python-version: ["3.14"]
     steps:
       - uses: actions/checkout@v4
@@ -103,9 +142,7 @@ jobs:
           uv run python -m cja_auto_sdr --exit-codes
           uv run python -m cja_auto_sdr --help
       - name: Smoke test - parser and contract tests
-        run: >
-          uv run pytest tests/test_cli.py -q --tb=short
-          -k "TestCLIArguments or TestConsoleScriptEntryPoints or TestFastPathEntryPoint"
+        run: uv run pytest tests/ -q --tb=short -m smoke
 
   build:
     runs-on: ubuntu-latest

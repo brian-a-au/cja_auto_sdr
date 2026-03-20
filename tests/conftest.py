@@ -2,6 +2,7 @@
 
 import json
 import os
+from pathlib import Path
 from unittest.mock import Mock
 
 import pandas as pd
@@ -16,6 +17,7 @@ from cja_auto_sdr.org.models import (
     OrgReportResult,
     SimilarityPair,
 )
+from tests.category_rules import auto_test_markers_for_file
 
 
 @pytest.fixture(autouse=True)
@@ -26,6 +28,28 @@ def clear_fast_path_option_spec_cache():
     _fast_path_option_spec.cache_clear()
     yield
     _fast_path_option_spec.cache_clear()
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_collection_modifyitems(config, items):
+    """Auto-classify tests so marker-based selection stays maintainable.
+
+    The suite is currently organized primarily by file naming rather than by
+    nested unit/integration directories. Apply stable markers centrally so CI
+    and local development can target fast unit runs, smoke checks, and broader
+    integration coverage without requiring per-test boilerplate.
+    """
+    del config  # Hook signature requires config even though classification is static.
+
+    for item in items:
+        module_name = Path(str(item.fspath)).name
+        existing_markers = {marker.name for marker in item.iter_markers()}
+        auto_markers = auto_test_markers_for_file(module_name)
+
+        for marker_name in auto_markers:
+            if marker_name not in existing_markers:
+                item.add_marker(getattr(pytest.mark, marker_name))
+                existing_markers.add(marker_name)
 
 
 @pytest.fixture

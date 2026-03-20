@@ -28,4 +28,4 @@ jobs:
       - name: Sync dependencies
         run: uv sync --dev
       - name: Verify test counts are up to date
-        run: uv run python scripts/update_test_counts.py --check
+        run: uv run python scripts/update_test_counts.py --check --write-summary-markdown "$GITHUB_STEP_SUMMARY"

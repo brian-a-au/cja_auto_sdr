@@ -1426,13 +1426,14 @@ def _validate_mode_scoped_option(
     if not is_configured:
         return
 
-    for error in value_errors:
-        if error:
-            _exit_error(error)
-
+    # Check mode scope first — more actionable for wrong-mode usage
     if inferred_mode != required_mode:
         required_label = f"--{required_mode.value.replace('_', '-')}"
         _exit_error(mode_error or f"{option_name} is only valid with {required_label}")
+
+    for error in value_errors:
+        if error:
+            _exit_error(error)
 
 
 def _org_report_snapshot_retention_flags_specified(argv: list[str] | None = None) -> tuple[bool, bool]:

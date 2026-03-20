@@ -112,6 +112,24 @@ class TestAPIWorkerTunerScaling:
 
         assert tuner.current_workers == 5
 
+    def test_truncates_response_times_beyond_sample_window(self):
+        """Rolling samples should trim to sample_window when no scaling adjustment occurs."""
+        config = APITuningConfig(
+            sample_window=3,
+            cooldown_seconds=0,
+            scale_up_threshold_ms=100,
+            scale_down_threshold_ms=2000,
+            min_workers=1,
+            max_workers=10,
+        )
+        tuner = APIWorkerTuner(config=config, initial_workers=3)
+
+        for _ in range(5):
+            tuner.record_response_time(500.0)
+
+        with tuner._lock:
+            assert len(tuner._response_times) == config.sample_window
+
     def test_does_not_exceed_max_workers(self):
         """Should not scale beyond max_workers"""
         config = APITuningConfig(

@@ -22,6 +22,7 @@ from __future__ import annotations
 import importlib.metadata
 import json
 import logging
+import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -96,6 +97,11 @@ def _make_generator_mock(
     gen._config_from_env = MagicMock()
 
     return gen
+
+
+def _running_as_root() -> bool:
+    getuid = getattr(os, "getuid", None)
+    return bool(callable(getuid) and getuid() == 0)
 
 
 # ---------------------------------------------------------------------------
@@ -198,6 +204,22 @@ class TestResolveOutputDirPathFallback:
         assert isinstance(result, Path)
 
 
+class TestResolveOutputDirPathAdditionalCases:
+    """Basic resolution paths should stay owned by the config command suite."""
+
+    def test_simple_path(self, tmp_path: Path) -> None:
+        from cja_auto_sdr.cli.commands.config import _resolve_output_dir_path
+
+        result = _resolve_output_dir_path(str(tmp_path))
+        assert result == tmp_path.resolve()
+
+    def test_tilde_expansion(self) -> None:
+        from cja_auto_sdr.cli.commands.config import _resolve_output_dir_path
+
+        result = _resolve_output_dir_path("~/somedir")
+        assert "~" not in str(result)
+
+
 # ---------------------------------------------------------------------------
 # _check_output_dir_access — L246: no_existing_parent
 # ---------------------------------------------------------------------------
@@ -219,6 +241,52 @@ class TestCheckOutputDirAccessNoExistingParent:
         assert ok is False
         assert reason == "no_existing_parent"
         assert parent is None
+
+
+class TestCheckOutputDirAccessAdditionalReasons:
+    """Remaining output-dir access branches belong with the config command coverage suite."""
+
+    def test_parent_not_directory(self, tmp_path: Path) -> None:
+        from cja_auto_sdr.cli.commands.config import _check_output_dir_access
+
+        fake_file = tmp_path / "file.txt"
+        fake_file.write_text("x")
+
+        ok, _resolved, reason, parent = _check_output_dir_access(str(fake_file / "child"))
+        assert not ok
+        assert reason == "parent_not_directory"
+        assert parent is not None
+
+    @pytest.mark.skipif(_running_as_root(), reason="root bypasses permission checks")
+    def test_parent_not_writable(self, tmp_path: Path) -> None:
+        from cja_auto_sdr.cli.commands.config import _check_output_dir_access
+
+        readonly = tmp_path / "readonly"
+        readonly.mkdir()
+        readonly.chmod(0o444)
+        try:
+            ok, _resolved, reason, parent = _check_output_dir_access(str(readonly / "newdir"))
+            assert not ok
+            assert reason == "parent_not_writable"
+            assert parent is not None
+        finally:
+            readonly.chmod(0o755)
+
+    def test_not_writable(self, tmp_path: Path) -> None:
+        from cja_auto_sdr.cli.commands.config import _check_output_dir_access
+
+        if _running_as_root():
+            pytest.skip("root bypasses permission checks")
+
+        readonly_dir = tmp_path / "noperm"
+        readonly_dir.mkdir()
+        readonly_dir.chmod(0o444)
+        try:
+            ok, _resolved, reason, _parent = _check_output_dir_access(str(readonly_dir))
+            assert not ok
+            assert reason == "not_writable"
+        finally:
+            readonly_dir.chmod(0o755)
 
 
 # ---------------------------------------------------------------------------

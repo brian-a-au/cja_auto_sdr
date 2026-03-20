@@ -630,6 +630,36 @@ class TestGitCommitSnapshot:
         assert success is False
         assert "Git error:" in message
 
+    def test_push_success_logs_and_returns_sha(self, tmp_path):
+        """Successful push should preserve the short SHA return contract."""
+        subprocess.run(["git", "init"], cwd=str(tmp_path), capture_output=True)
+        subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=str(tmp_path), capture_output=True)
+        subprocess.run(["git", "config", "user.name", "Test User"], cwd=str(tmp_path), capture_output=True)
+
+        dv_dir = tmp_path / "Push_Test_dv_push"
+        dv_dir.mkdir()
+        (dv_dir / "metadata.json").write_text('{"test": "push"}')
+
+        original_run = subprocess.run
+
+        def mock_run(cmd, *args, **kwargs):
+            if cmd == ["git", "push"]:
+                return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+            return original_run(cmd, *args, **kwargs)
+
+        with patch("subprocess.run", side_effect=mock_run):
+            success, result = git_commit_snapshot(
+                snapshot_dir=tmp_path,
+                data_view_id="dv_push",
+                data_view_name="Push Test",
+                metrics_count=1,
+                dimensions_count=1,
+                push=True,
+            )
+
+        assert success is True
+        assert len(result) == 8
+
 
 class TestCLIGitArguments:
     """Tests for Git-related CLI arguments."""

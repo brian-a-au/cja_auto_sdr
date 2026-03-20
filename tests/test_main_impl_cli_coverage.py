@@ -306,7 +306,7 @@ class TestWorkerValidation:
     @patch("cja_auto_sdr.generator._cli_option_specified", _mock_cli_option_specified)
     def test_org_sample_size_zero_exits_1(self, capsys):
         """Line 13678-13679: --sample < 1."""
-        args = _make_args(org_sample_size=0)
+        args = _make_args(org_report=True, org_sample_size=0)
         with patch("cja_auto_sdr.generator.parse_arguments", return_value=args):
             with pytest.raises(SystemExit) as exc_info:
                 _main_impl()

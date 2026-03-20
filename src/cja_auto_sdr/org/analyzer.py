@@ -151,7 +151,12 @@ class OrgComponentAnalyzer:
         return text or None
 
     @classmethod
-    def _normalize_lock_info_pid(cls, value: Any) -> int | None:
+    def _normalize_lock_info_int(cls, value: object, _field_name: str = "") -> int | None:
+        """Normalize a lock-info field to int or None.
+
+        Rejects booleans, accepts ints directly, attempts int() parse on strings.
+        ``_field_name`` is retained only for compatibility with older call sites.
+        """
         if isinstance(value, bool):
             return None
         if isinstance(value, int):
@@ -166,21 +171,13 @@ class OrgComponentAnalyzer:
                 return None
         return None
 
-    @staticmethod
-    def _normalize_lock_info_version(value: Any) -> int | None:
-        if isinstance(value, bool):
-            return None
-        if isinstance(value, int):
-            return value
-        if isinstance(value, str):
-            stripped = value.strip()
-            if not stripped:
-                return None
-            try:
-                return int(stripped)
-            except ValueError:
-                return None
-        return None
+    @classmethod
+    def _normalize_lock_info_pid(cls, value: Any) -> int | None:
+        return cls._normalize_lock_info_int(value)
+
+    @classmethod
+    def _normalize_lock_info_version(cls, value: Any) -> int | None:
+        return cls._normalize_lock_info_int(value)
 
     @classmethod
     def _is_legacy_contention_lock_info(cls, lock_info: Mapping[str, Any]) -> bool:
