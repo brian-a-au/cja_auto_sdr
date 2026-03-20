@@ -693,13 +693,15 @@ class TestBuildOrgReportLockRunSummaryBlock:
     """Tests for _build_org_report_lock_run_summary_block reshaping contract."""
 
     def test_happy_path_all_fields(self):
-        block = _build_org_report_lock_run_summary_block({
-            "lock_acquired": True,
-            "lock_stale_threshold_seconds": 3600,
-            "lock_contention": False,
-            "lock_ownership_lost": False,
-            "lock_backend": "lease",
-        })
+        block = _build_org_report_lock_run_summary_block(
+            {
+                "lock_acquired": True,
+                "lock_stale_threshold_seconds": 3600,
+                "lock_contention": False,
+                "lock_ownership_lost": False,
+                "lock_backend": "lease",
+            }
+        )
         assert block["acquired"] is True
         assert block["stale_threshold_seconds"] == 3600
         assert block["contention_observed"] is False
@@ -708,20 +710,24 @@ class TestBuildOrgReportLockRunSummaryBlock:
         assert "loss_reason" not in block
 
     def test_acquired_then_lost(self):
-        block = _build_org_report_lock_run_summary_block({
-            "lock_acquired": True,
-            "lock_ownership_lost": True,
-            "lock_backend": "lease",
-        })
+        block = _build_org_report_lock_run_summary_block(
+            {
+                "lock_acquired": True,
+                "lock_ownership_lost": True,
+                "lock_backend": "lease",
+            }
+        )
         assert block["acquired"] is True
         assert block["lost_during_run"] is True
         assert block["loss_reason"] == "ownership_lost_during_execution"
 
     def test_contention_at_startup_not_acquired(self):
-        block = _build_org_report_lock_run_summary_block({
-            "lock_acquired": False,
-            "lock_contention": True,
-        })
+        block = _build_org_report_lock_run_summary_block(
+            {
+                "lock_acquired": False,
+                "lock_contention": True,
+            }
+        )
         assert block["acquired"] is False
         assert block["contention_observed"] is True
         assert block["lost_during_run"] is False  # default when acquired present
@@ -758,8 +764,10 @@ class TestBuildOrgReportLockRunSummaryBlock:
         assert block["stale_threshold_seconds"] > 0  # clamped to minimum
 
     def test_loss_reason_not_set_when_ownership_not_lost(self):
-        block = _build_org_report_lock_run_summary_block({
-            "lock_acquired": True,
-            "lock_ownership_lost": False,
-        })
+        block = _build_org_report_lock_run_summary_block(
+            {
+                "lock_acquired": True,
+                "lock_ownership_lost": False,
+            }
+        )
         assert "loss_reason" not in block

@@ -7,6 +7,16 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.4.4] - 2026-03-19
+
+### Changed
+- Deduplicate lock-info normalization helpers: extract shared `_normalize_lock_info_int` classmethod in `OrgComponentAnalyzer`
+- Normalize PEP 758 bare-comma `except` syntax to tuple form in `_signal_name` for codebase consistency
+- Swap validation order in `_validate_mode_scoped_option`: mode-scope error now fires before value-constraint error for more actionable diagnostics
+
+### Added
+- ~66 new direct unit tests for lock-info normalization classmethods, lock run-summary block builder, and mode-scoped validation ordering (6,486 → 6,552 tests)
+
 ## [3.4.3] - 2026-03-18
 
 ### Added
