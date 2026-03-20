@@ -15,6 +15,12 @@ from unittest.mock import MagicMock
 import pandas as pd
 import pytest
 
+
+def _running_as_root() -> bool:
+    getuid = getattr(os, "getuid", None)
+    return bool(callable(getuid) and getuid() == 0)
+
+
 # ---------------------------------------------------------------------------
 # Tier 1a — Output-dir access failure branches (generator.py ~lines 10486-10502)
 # ---------------------------------------------------------------------------
@@ -47,7 +53,7 @@ class TestCheckOutputDirAccess:
         assert reason == "parent_not_directory"
         assert parent is not None
 
-    @pytest.mark.skipif(os.getuid() == 0, reason="root bypasses permission checks")
+    @pytest.mark.skipif(_running_as_root(), reason="root bypasses permission checks")
     def test_output_dir_parent_not_writable(self, tmp_path: Path) -> None:
         """--output-dir under read-only parent triggers 'parent_not_writable' reason."""
         from cja_auto_sdr.generator import _check_output_dir_access
@@ -67,7 +73,7 @@ class TestCheckOutputDirAccess:
         """Existing dir without write permission triggers 'not_writable' reason."""
         from cja_auto_sdr.generator import _check_output_dir_access
 
-        if os.getuid() == 0:
+        if _running_as_root():
             pytest.skip("root bypasses permission checks")
 
         readonly_dir = tmp_path / "noperm"
