@@ -14,13 +14,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`--explain-exit-code CODE`** flag: Human-readable exit code explanations with automation guidance; fast-path in `__main__.py`, shared explainer in `core/exit_codes.py`
 - **`--lock-stale-threshold SECONDS`** flag: Org-report lock stale-threshold control with enriched `ConcurrentOrgReportError` metadata (`lock_holder_owner`, `lock_backend`)
 - **Run summary details enrichment**: `_merge_run_details()` helper, `execution_settings` block (batch workers, resilience flags), org-report `lock` block (acquired, contention, loss tracking)
-- **Standalone CLI hardening**: New `cli/standalone_prevalidation.py` and `cli/token_scan.py` modules for prevalidation dispatch and token scanning
-- ~287 new tests across 2 new + 11 existing test files (6,286 → 6,573 tests)
+- **Standalone CLI hardening**: New `cli/standalone_policy.py` and `cli/mode_scoped_options.py` modules for prevalidation policies and mode-scoped option metadata
+- ~200 new tests across 6 new + 9 existing test files (6,286 → 6,486 tests)
 
 ### Changed
 - Lock telemetry invariants normalized across acquire/release/heartbeat-loss paths
 - Resilience observability coverage refined across circuit breaker, lock manager, and batch processor
-- Documentation updated: CLI_REFERENCE.md, QUICK_REFERENCE.md, ORG_WIDE_ANALYSIS.md, AGENTS.md
+- Documentation updated: CLI_REFERENCE.md, QUICK_REFERENCE.md, ORG_WIDE_ANALYSIS.md, AGENTS.md, CONFIGURATION.md, QUICKSTART_GUIDE.md
 
 ## [3.4.2] - 2026-03-15
 
