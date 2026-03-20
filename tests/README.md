@@ -23,11 +23,13 @@ tests/
 ├── test_discovery_payloads.py       # Discovery payload classification tests
 ├── test_discovery_component_consistency.py  # Discovery component consistency tests
 ├── test_dry_run.py                  # Dry-run mode tests
+├── test_diagnostic_events.py        # Structured diagnostic event vocabulary and redaction tests
 ├── test_early_exit.py               # Early exit optimization tests
 ├── test_edge_cases.py               # Edge cases and configuration tests
 ├── test_env_credentials.py          # Environment variable credentials tests
 ├── test_error_messages.py           # Enhanced error message tests
 ├── test_excel_formatting.py         # Excel formatting tests
+├── test_explain_exit_code.py        # Exit-code explainer, fast-path dispatch, and run-summary tests
 ├── test_git_integration.py          # Git integration and snapshot tests
 ├── test_inventory_utils.py          # Inventory utilities tests
 ├── test_logging_optimization.py     # Logging optimization tests
@@ -67,7 +69,9 @@ tests/
 ├── test_api_coverage.py             # API module coverage (cache, quality, fetch, resilience)
 ├── test_diff_coverage.py            # Diff module coverage (comparator, models, git)
 ├── test_generator_coverage.py       # Generator utility function coverage
+├── test_generator_discovery_compat_coverage.py  # Generator discovery compatibility coverage
 ├── test_segments_coverage.py        # Segments module coverage (operators, containers)
+├── test_small_gap_coverage.py       # Small remaining gap coverage across utility modules
 ├── test_small_module_coverage.py    # Small module coverage (logging, utils, calc metrics)
 ├── test_diff_inventory_output.py   # Inventory diff output across all formats
 ├── test_cli_command_handlers.py    # CLI dispatch (--stats, --org-report, --list-snapshots, discovery inspection)
@@ -117,11 +121,12 @@ tests/
 ├── test_github_actions_audit.py     # GitHub Actions audit workflow helper tests
 ├── test_example_automation_scripts.py # Automation shell script validation tests
 ├── test_exit_codes.py               # Exit code helpers and signal detection tests
+├── test_remaining_gap_coverage_pass2.py # Pass-2 remaining gap coverage across CLI, models, and writers
 ├── test_json_io.py                  # JSON I/O atomic write and read tests
 └── README.md                        # This file
 ```
 
-**Total: 6,616 comprehensive tests**
+**Total: 6,618 comprehensive tests**
 
 ### Test Count Breakdown
 
@@ -130,16 +135,16 @@ tests/
 
 | Category | Tests | Files | Notes |
 |----------|-------|-------|-------|
-| `unit` | 6,510 | 109 | Default primary category for files without explicit integration/e2e/smoke scope |
+| `unit` | 6,512 | 109 | Default primary category for files without explicit integration/e2e/smoke scope |
 | `integration` | 73 | 3 | Cross-module integration suites |
 | `e2e` | 23 | 2 | End-to-end suites with a mocked external boundary |
 | `smoke` | 10 | 1 | Lightweight command-mode coverage |
 | `slow` | 7 | 1 | Overlay marker; these tests are also counted in a primary category |
-| **Primary Total** | **6,616** | **115** | **unit + integration + e2e + smoke** |
+| **Primary Total** | **6,618** | **115** | **unit + integration + e2e + smoke** |
 
 | CI Slice | Tests | Files | Selector |
 |----------|-------|-------|----------|
-| `test-unit` | 6,503 | 108 | `-m "unit and not slow"` |
+| `test-unit` | 6,505 | 108 | `-m "unit and not slow"` |
 | `test-integration` | 103 | 6 | `-m "integration or e2e or slow"` |
 | `smoke-test` | 10 | 1 | `-m smoke` |
 <!-- END GENERATED TEST CATEGORY SUMMARY -->
@@ -166,6 +171,7 @@ tests/
 | `test_parallel_api_fetcher.py` | 35 | Parallel API data fetching |
 | `test_api_tuning.py` | 24 | API worker auto-tuning |
 | `test_error_messages.py` | 23 | Enhanced error messages and guidance |
+| `test_explain_exit_code.py` | 44 | --explain-exit-code shared explainer, parser, fast-path, and run-summary behavior |
 | `test_circuit_breaker.py` | 25 | Circuit breaker pattern |
 | `test_retry.py` | 25 | Retry with exponential backoff |
 | `test_batch_processor.py` | 26 | Batch processing of multiple data views |
@@ -184,6 +190,7 @@ tests/
 | `test_discovery_normalization.py` | 17 | Discovery normalization helpers (missing values, owner extraction, tags) |
 | `test_discovery_payloads.py` | 60 | Discovery payload classification (error detection, component extraction) |
 | `test_discovery_component_consistency.py` | 7 | Discovery component retrieval consistency |
+| `test_diagnostic_events.py` | 23 | Structured diagnostic event vocabulary, logger adapters, and redaction |
 | `test_output_content_validation.py` | 29 | Output format content validation (CSV, JSON, HTML, Excel, Markdown roundtrip) |
 | `test_malformed_api_responses.py` | 20 | Negative tests for malformed/unexpected API responses |
 | `test_main_entry_points.py` | 41 | main() and _main_impl() entry points, dispatch, run_state, run summary |
@@ -206,7 +213,9 @@ tests/
 | `test_api_coverage.py` | 94 | API cache, quality, fetch, resilience exception paths |
 | `test_diff_coverage.py` | 61 | Diff comparator, models, git integration edge cases |
 | `test_generator_coverage.py` | 143 | Generator utility functions — coercion, normalization, diff formatting |
+| `test_generator_discovery_compat_coverage.py` | 41 | Generator discovery helper parity with extracted list-command implementations |
 | `test_segments_coverage.py` | 78 | Segment comparison operators, container types, sequence variants |
+| `test_small_gap_coverage.py` | 18 | Small remaining gap coverage for JSON I/O, logging fallbacks, and pipeline wrappers |
 | `test_small_module_coverage.py` | 111 | Logging, utils, calculated metrics, constants, lazy, tuning, locks, org cache |
 | `test_diff_inventory_output.py` | 88 | Inventory diff output across all formats (console, JSON, HTML, Excel, MD, CSV) |
 | `test_cli_command_handlers.py` | 146 | CLI dispatch for --stats, --org-report, --list-snapshots, discovery inspection, diff config unpacking |
@@ -226,7 +235,7 @@ tests/
 | `test_output_writer_coverage.py` | 36 | Output writer edge cases and coverage |
 | `test_backwards_compat.py` | 34 | Backwards compatibility tests |
 | `test_exception_contracts.py` | 19 | Exception boundary contract tests |
-| `test_update_test_counts.py` | 5 | Test count validation tests |
+| `test_update_test_counts.py` | 7 | Test count validation tests |
 | `test_cli_smoke_modes.py` | 10 | CLI smoke tests for core command modes |
 | `test_generator_mock_contract.py` | 2 | Generator mock symbol contract tests |
 | `test_completion.py` | 55 | Shell completion flag (--completion bash/zsh/fish) |
@@ -255,9 +264,10 @@ tests/
 | `test_github_actions_audit.py` | 7 | GitHub Actions audit workflow helper and manifest staging tests |
 | `test_example_automation_scripts.py` | 4 | Automation shell script validation tests |
 | `test_exit_codes.py` | 11 | Exit code helpers and signal detection tests |
+| `test_remaining_gap_coverage_pass2.py` | 8 | Pass-2 remaining gap coverage across fast-path CLI, discovery payloads, org models, and output writers |
 | `test_json_io.py` | 2 | JSON I/O atomic write and read tests |
 | `test_lock_info_normalization.py` | 53 | Lock-info normalization classmethod direct unit tests |
-| **Total** | **6,616** | **Collected via pytest --collect-only** |
+| **Total** | **6,618** | **Collected via pytest --collect-only** |
 
 ## Running Tests
 
@@ -273,8 +283,9 @@ pytest
 
 ### Run By Test Category
 
-Markers are auto-assigned centrally in `tests/conftest.py`, so new tests only
-need a stable file home to participate in the category split.
+Markers are auto-assigned centrally in `tests/conftest.py`. New non-unit test
+modules should include `integration`, `e2e`, `smoke`, `slow`, or `perf` in the
+filename so they land in the intended CI slice without manual marker plumbing.
 
 ```bash
 # Fast default development loop
@@ -706,12 +717,15 @@ Check for drift (CI-friendly):
 .venv/bin/python scripts/update_test_counts.py --check
 ```
 
+The sync script also fails if collected `test_*.py` modules are missing from
+the `tests/README.md` inventory tree or count table.
+
 ## Completed Enhancements
 
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (6,616 tests total)
+- [x] Comprehensive test coverage (6,618 tests total)
 - [x] Org-wide analysis tests (test_org_report.py) - 209 tests (including large org scaling, output path aliases, memory warnings, smart cache invalidation)
 - [x] Org-wide analysis integration tests (test_org_report_integration.py) - 17 tests (end-to-end flows, caching, filtering, governance thresholds)
 - [x] Profile management tests (test_profiles.py) - 77 tests

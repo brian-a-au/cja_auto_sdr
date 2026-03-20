@@ -4,6 +4,9 @@ Update test-count references in documentation using pytest collection output.
 Usage:
   uv run python scripts/update_test_counts.py           # update files in-place
   uv run python scripts/update_test_counts.py --check   # fail if updates are needed
+
+The script also validates that every collected ``tests/test_*.py`` module is
+represented in the tests/README inventory tree and count table.
 """
 
 from __future__ import annotations
@@ -12,6 +15,7 @@ import argparse
 import re
 import subprocess
 import sys
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -120,6 +124,37 @@ def summarize_test_categories(counts: dict[str, int]) -> dict[str, dict[str, Cat
         "primary": primary_counts,
         "markers": marker_counts,
         "ci_slices": ci_slice_counts,
+    }
+
+
+def documented_test_files_in_tests_readme(text: str) -> dict[str, set[str]]:
+    tree_files: set[str] = set()
+    table_files: set[str] = set()
+
+    for line in text.splitlines():
+        tree_match = re.match(r"^\s*(?:├──|└──)\s+(test_[^\s]+)", line)
+        if tree_match:
+            tree_files.add(tree_match.group(1))
+
+        table_match = re.match(r"^\|\s+`(test_[^`]+)`\s+\|", line)
+        if table_match:
+            table_files.add(table_match.group(1))
+
+    return {"tree": tree_files, "table": table_files}
+
+
+def find_tests_readme_inventory_mismatches(
+    text: str,
+    counts: Mapping[str, int],
+) -> dict[str, tuple[str, ...]]:
+    documented = documented_test_files_in_tests_readme(text)
+    collected = set(counts)
+
+    return {
+        "missing_tree_entries": tuple(sorted(collected - documented["tree"])),
+        "missing_count_rows": tuple(sorted(collected - documented["table"])),
+        "stale_tree_entries": tuple(sorted(documented["tree"] - collected)),
+        "stale_count_rows": tuple(sorted(documented["table"] - collected)),
     }
 
 
@@ -311,9 +346,9 @@ def main() -> int:
     files.append((readme_path, update_readme(readme_path.read_text(), total)))
 
     tests_readme_path = ROOT / "tests" / "README.md"
-    files.append(
-        (tests_readme_path, update_tests_readme(tests_readme_path.read_text(), counts, total, category_summary))
-    )
+    tests_readme_text = tests_readme_path.read_text()
+    inventory_mismatches = find_tests_readme_inventory_mismatches(tests_readme_text, counts)
+    files.append((tests_readme_path, update_tests_readme(tests_readme_text, counts, total, category_summary)))
 
     diff_docs_path = ROOT / "docs" / "DIFF_COMPARISON.md"
     if diff_docs_path.exists() and "test_diff_comparison.py" in counts:
@@ -330,11 +365,16 @@ def main() -> int:
             )
         )
 
+    if args.write_summary_markdown:
+        write_summary_markdown(args.write_summary_markdown, render_category_summary_markdown(category_summary, total))
+
+    if any(inventory_mismatches.values()):
+        for label, entries in inventory_mismatches.items():
+            if entries:
+                sys.stdout.write(f"tests/README.md {label}: {', '.join(entries)}\n")
+        return 1
+
     if args.check:
-        if args.write_summary_markdown:
-            write_summary_markdown(
-                args.write_summary_markdown, render_category_summary_markdown(category_summary, total)
-            )
         for path, new_content in files:
             if path.read_text() != new_content:
                 sys.stdout.write(f"Out of date: {path.relative_to(ROOT)}\n")
@@ -343,8 +383,6 @@ def main() -> int:
         return 0
 
     changed = apply_updates(files)
-    if args.write_summary_markdown:
-        write_summary_markdown(args.write_summary_markdown, render_category_summary_markdown(category_summary, total))
     sys.stdout.write(f"Updated {changed} file(s).\n")
     return 0
 

@@ -1,11 +1,14 @@
 from scripts.update_test_counts import (
     GENERATED_CATEGORY_BLOCK_END,
     GENERATED_CATEGORY_BLOCK_START,
+    find_tests_readme_inventory_mismatches,
     parse_counts,
     render_category_summary_markdown,
     summarize_test_categories,
     update_tests_readme,
 )
+
+from tests.category_rules import auto_test_markers_for_file, file_scoped_test_markers
 
 
 def test_parse_counts_with_paths():
@@ -88,3 +91,40 @@ old content
     assert GENERATED_CATEGORY_BLOCK_START in updated
     assert GENERATED_CATEGORY_BLOCK_END in updated
     assert "| `unit` | 2 | 1 |" in updated
+
+
+def test_find_tests_readme_inventory_mismatches_detects_missing_and_stale_entries():
+    readme = """
+tests/
+├── test_alpha.py  # Present in tree
+└── test_stale_tree.py  # Stale in tree
+
+| Test File | Tests | Coverage Area |
+|-----------|-------|---------------|
+| `test_alpha.py` | 2 | Present in table |
+| `test_stale_row.py` | 1 | Stale in table |
+""".strip()
+
+    mismatches = find_tests_readme_inventory_mismatches(
+        readme,
+        {
+            "test_alpha.py": 2,
+            "test_beta.py": 3,
+        },
+    )
+
+    assert mismatches == {
+        "missing_tree_entries": ("test_beta.py",),
+        "missing_count_rows": ("test_beta.py",),
+        "stale_tree_entries": ("test_stale_tree.py",),
+        "stale_count_rows": ("test_stale_row.py",),
+    }
+
+
+def test_category_rules_use_filename_conventions_for_future_non_unit_modules():
+    assert file_scoped_test_markers("test_future_integration.py") == ("integration",)
+    assert file_scoped_test_markers("test_future_e2e_flow.py") == ("e2e",)
+    assert file_scoped_test_markers("test_future_smoke_modes.py") == ("smoke",)
+    assert file_scoped_test_markers("test_cache_perf.py") == ("slow",)
+    assert auto_test_markers_for_file("test_cache_perf.py") == ("unit", "slow")
+    assert auto_test_markers_for_file("test_plain_unit_case.py") == ("unit",)

@@ -2,37 +2,31 @@
 
 from __future__ import annotations
 
-_INTEGRATION_TEST_FILES = frozenset(
-    {
-        "test_git_integration.py",
-        "test_org_report_integration.py",
-        "test_trending_integration.py",
-    },
-)
-_E2E_TEST_FILES = frozenset(
-    {
-        "test_cli_color_policy_e2e.py",
-        "test_e2e_integration.py",
-    },
-)
-_SMOKE_TEST_FILES = frozenset({"test_cli_smoke_modes.py"})
-_SLOW_TEST_FILES = frozenset({"test_perf.py"})
+from pathlib import Path
 
 PRIMARY_TEST_MARKERS = ("unit", "integration", "e2e", "smoke")
 ALL_TEST_MARKERS = (*PRIMARY_TEST_MARKERS, "slow")
 
 
+def _module_name_tokens(module_name: str) -> frozenset[str]:
+    return frozenset(token for token in Path(module_name).stem.split("_") if token)
+
+
 def file_scoped_test_markers(module_name: str) -> tuple[str, ...]:
-    """Return explicit file-level markers for a collected test module."""
+    """Return file-level markers inferred from stable test-module naming."""
+    tokens = _module_name_tokens(module_name)
     markers: list[str] = []
-    if module_name in _INTEGRATION_TEST_FILES:
-        markers.append("integration")
-    if module_name in _E2E_TEST_FILES:
+
+    if "e2e" in tokens:
         markers.append("e2e")
-    if module_name in _SMOKE_TEST_FILES:
+    elif "smoke" in tokens:
         markers.append("smoke")
-    if module_name in _SLOW_TEST_FILES:
+    elif "integration" in tokens:
+        markers.append("integration")
+
+    if "slow" in tokens or "perf" in tokens:
         markers.append("slow")
+
     return tuple(markers)
 
 

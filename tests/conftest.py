@@ -17,7 +17,7 @@ from cja_auto_sdr.org.models import (
     OrgReportResult,
     SimilarityPair,
 )
-from tests.category_rules import PRIMARY_TEST_MARKERS, file_scoped_test_markers
+from tests.category_rules import auto_test_markers_for_file
 
 
 @pytest.fixture(autouse=True)
@@ -44,15 +44,12 @@ def pytest_collection_modifyitems(config, items):
     for item in items:
         module_name = Path(str(item.fspath)).name
         existing_markers = {marker.name for marker in item.iter_markers()}
-        auto_markers = file_scoped_test_markers(module_name)
+        auto_markers = auto_test_markers_for_file(module_name)
 
         for marker_name in auto_markers:
             if marker_name not in existing_markers:
                 item.add_marker(getattr(pytest.mark, marker_name))
                 existing_markers.add(marker_name)
-
-        if not existing_markers.intersection(PRIMARY_TEST_MARKERS):
-            item.add_marker(pytest.mark.unit)
 
 
 @pytest.fixture
