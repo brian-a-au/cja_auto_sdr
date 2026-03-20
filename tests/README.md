@@ -253,6 +253,31 @@ uv run pytest
 pytest
 ```
 
+### Run By Test Category
+
+Markers are auto-assigned centrally in `tests/conftest.py`, so new tests only
+need a stable file home to participate in the category split.
+
+```bash
+# Fast default development loop
+uv run pytest -m "unit and not slow"
+
+# Cross-module integration coverage
+uv run pytest -m integration
+
+# End-to-end flows with a mocked external boundary
+uv run pytest -m e2e
+
+# Lightweight smoke checks for core command modes
+uv run pytest -m smoke
+
+# Performance or intentionally slower slices
+uv run pytest -m slow
+
+# Everything except the slower/non-unit slices
+uv run pytest -m "unit and not slow and not integration and not e2e and not smoke"
+```
+
 ### Run Specific Test Files
 
 ```bash
@@ -329,6 +354,21 @@ uv run pytest --cov=cja_auto_sdr --cov-report=html --cov-report=term
 ```
 
 ## Test Categories
+
+### Marker Taxonomy
+
+- `unit`: Default marker for tests that are not explicitly classified as `integration`, `e2e`, or `smoke`
+- `integration`: File-level integration suites such as `test_git_integration.py`, `test_org_report_integration.py`, and `test_trending_integration.py`
+- `e2e`: End-to-end suites such as `test_e2e_integration.py` and `test_cli_color_policy_e2e.py`
+- `smoke`: Lightweight command-mode coverage in `test_cli_smoke_modes.py`
+- `slow`: Performance-oriented tests in `test_perf.py`
+
+### CI Mapping
+
+- Linux unit coverage job: `pytest -m "unit and not slow" --cov=...`
+- Linux integration job: `pytest -m "integration or e2e or slow"`
+- macOS/Windows smoke job: `pytest -m smoke` plus direct CLI smoke commands
+- Release-gate focused PR job: targeted contract tests for version sync and CLI color policy
 
 ### CLI Tests (`test_cli.py`)
 - **Argument parsing**: Tests command-line argument parsing

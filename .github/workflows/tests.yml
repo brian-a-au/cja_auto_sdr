@@ -49,7 +49,7 @@ jobs:
       - name: Run focused release-gate contract tests
         run: uv run pytest -q tests/test_check_version_sync.py tests/test_cli_color_policy_e2e.py
 
-  test:
+  test-unit:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
@@ -64,8 +64,27 @@ jobs:
         run: uv sync --dev --extra clustering
       - name: Verify version strings are in sync
         run: uv run python scripts/check_version_sync.py
-      - name: Run tests with coverage
-        run: uv run pytest tests/ -v --tb=short --cov=cja_auto_sdr --cov-report=term --cov-fail-under=95
+      - name: Run unit tests with coverage
+        run: >
+          uv run pytest tests/ -v --tb=short
+          -m "unit and not slow"
+          --cov=cja_auto_sdr --cov-report=term --cov-fail-under=95
+
+  test-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        python-version: ["3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Sync dependencies
+        run: uv sync --dev --extra clustering
+      - name: Run integration, end-to-end, and slow test slices
+        run: uv run pytest tests/ -q --tb=short -m "integration or e2e or slow"
 
   run-summary-contract:
     runs-on: ubuntu-latest
@@ -103,9 +122,7 @@ jobs:
           uv run python -m cja_auto_sdr --exit-codes
           uv run python -m cja_auto_sdr --help
       - name: Smoke test - parser and contract tests
-        run: >
-          uv run pytest tests/test_cli.py -q --tb=short
-          -k "TestCLIArguments or TestConsoleScriptEntryPoints or TestFastPathEntryPoint"
+        run: uv run pytest tests/ -q --tb=short -m smoke
 
   build:
     runs-on: ubuntu-latest
