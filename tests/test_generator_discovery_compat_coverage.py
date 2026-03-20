@@ -177,10 +177,7 @@ def test_fetch_describe_dataview_table_wraps_description_and_handles_na_total() 
             "id": "dv_1",
             "name": "Wrapped View",
             "owner": {"name": "Alice"},
-            "description": (
-                "A deliberately long description that should wrap "
-                "across multiple lines in table mode."
-            ),
+            "description": ("A deliberately long description that should wrap across multiple lines in table mode."),
             "parentDataGroupId": "conn_wrapped",
             "created": "2025-01-01",
             "modified": "2025-01-02",
@@ -674,4 +671,6 @@ def test_segment_and_calculated_metric_display_rows_match_extracted_module() -> 
     }
 
     assert generator._build_segment_display_row(item) == list_commands._build_segment_display_row(item)
-    assert generator._build_calculated_metric_display_row(item) == list_commands._build_calculated_metric_display_row(item)
+    assert generator._build_calculated_metric_display_row(item) == list_commands._build_calculated_metric_display_row(
+        item
+    )
