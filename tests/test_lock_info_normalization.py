@@ -44,3 +44,24 @@ class TestNormalizeLockInfoInt:
 
     def test_list_returns_none(self):
         assert OrgComponentAnalyzer._normalize_lock_info_int([1], "pid") is None
+
+
+class TestSignalNameExceptionSyntax:
+    """Verify _signal_name handles both ValueError and AttributeError from invalid signal numbers."""
+
+    def test_valid_signal_returns_name(self):
+        import signal
+
+        from cja_auto_sdr.core.exit_codes import _signal_name
+
+        # SIGTERM is universally available
+        assert _signal_name(signal.SIGTERM.value) == "SIGTERM"
+
+    def test_invalid_signal_number_returns_none(self):
+        from cja_auto_sdr.core.exit_codes import _signal_name
+        # 999 is not a valid signal number
+        assert _signal_name(999) is None
+
+    def test_zero_returns_none(self):
+        from cja_auto_sdr.core.exit_codes import _signal_name
+        assert _signal_name(0) is None
