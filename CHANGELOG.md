@@ -7,15 +7,19 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [3.4.4] - 2026-03-19
+## [3.4.4] - 2026-03-20
 
 ### Changed
 - Deduplicate lock-info normalization helpers: extract shared `_normalize_lock_info_int` classmethod in `OrgComponentAnalyzer`
 - Normalize PEP 758 bare-comma `except` syntax to tuple form in `_signal_name` for codebase consistency
 - Swap validation order in `_validate_mode_scoped_option`: mode-scope error now fires before value-constraint error for more actionable diagnostics
+- Fix exit-code regression in run-summary flow to prevent silent failures
+- Organize pytest categories and CI slices: introduce `category_rules.py` and `conftest.py` markers for structured test categorization
+- Extract run-summary tests into dedicated file and tighten CI matrix
+- Harden test inventory validation and expand smoke CI across platforms
 
 ### Added
-- ~66 new direct unit tests for lock-info normalization classmethods, lock run-summary block builder, and mode-scoped validation ordering (6,486 → 6,552 tests)
+- ~133 new tests: lock-info normalization, discovery/utility coverage, logging redaction, CLI config coverage, API tuning, git integration edge cases, gap coverage, run-summary contract tests (6,486 → 6,619 tests)
 
 ## [3.4.3] - 2026-03-18
 
