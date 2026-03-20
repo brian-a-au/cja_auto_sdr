@@ -5211,6 +5211,36 @@ class TestOrgReportArgumentValidation:
         args = parse_arguments(["--org-report"])
         assert args.org_lock_stale_threshold == 3600
 
+    @patch("cja_auto_sdr.generator.list_dataviews")
+    def test_lock_stale_threshold_wrong_mode_with_invalid_value_reports_mode_error(self, mock_list_dataviews, capsys):
+        """Wrong mode + invalid value should report mode error, not value error."""
+        from cja_auto_sdr.generator import main
+
+        # --lock-stale-threshold 0 in SDR mode: should get mode error, not "must be greater than 0"
+        with patch.object(sys, "argv", ["cja_auto_sdr", "--list-dataviews", "--lock-stale-threshold", "0"]):
+            with pytest.raises(SystemExit) as exc_info:
+                main()
+
+        assert exc_info.value.code == 1
+        err = capsys.readouterr().err
+        assert "--lock-stale-threshold is only valid with --org-report" in err
+        assert "must be greater than 0" not in err
+        mock_list_dataviews.assert_not_called()
+
+    @patch("cja_auto_sdr.generator.list_dataviews")
+    def test_trending_window_wrong_mode_with_invalid_value_reports_mode_error(self, mock_list_dataviews, capsys):
+        """Wrong mode + invalid trending-window should report mode error, not value error."""
+        from cja_auto_sdr.generator import main
+
+        with patch.object(sys, "argv", ["cja_auto_sdr", "--list-dataviews", "--trending-window", "0"]):
+            with pytest.raises(SystemExit) as exc_info:
+                main()
+
+        assert exc_info.value.code == 1
+        err = capsys.readouterr().err
+        assert "--trending-window is only supported with --org-report" in err
+        mock_list_dataviews.assert_not_called()
+
 
 class TestProfileImportCLI:
     """Tests for non-interactive --profile-import CLI flow."""
