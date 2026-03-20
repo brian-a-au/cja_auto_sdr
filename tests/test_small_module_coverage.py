@@ -22,8 +22,6 @@ from unittest.mock import MagicMock, patch
 import pandas as pd
 import pytest
 
-from cja_auto_sdr.api.tuning import APIWorkerTuner
-from cja_auto_sdr.core.config import APITuningConfig
 from cja_auto_sdr.core.constants import auto_detect_workers
 from cja_auto_sdr.core.lazy import make_getattr
 from cja_auto_sdr.core.locks.manager import LockManager
@@ -937,36 +935,6 @@ class TestMakeGetattrLazyTargetMissing:
             getattr_fn("nonexistent")
 
 
-# ==================== api/tuning.py ====================
-
-
-class TestAPITunerResponseTimeTrimming:
-    """Cover line 93: trimming response_times list when over sample_window."""
-
-    def test_response_times_trimmed_to_window(self):
-        """Line 93: list exceeds sample_window and gets trimmed."""
-        config = APITuningConfig(
-            sample_window=3,
-            cooldown_seconds=0,
-            min_workers=1,
-            max_workers=10,
-            scale_up_threshold_ms=100,
-            scale_down_threshold_ms=1000,
-        )
-        tuner = APIWorkerTuner(config=config, initial_workers=3)
-
-        # Record more than sample_window responses, all fast
-        tuner.record_response_time(50)
-        tuner.record_response_time(50)
-        tuner.record_response_time(50)  # Window full, triggers evaluation
-
-        # Record one more - should trim to last 3
-        tuner.record_response_time(50)
-
-        with tuner._lock:
-            assert len(tuner._response_times) <= config.sample_window
-
-
 # ==================== core/locks/manager.py ====================
 
 
@@ -1107,18 +1075,6 @@ class TestLoggingMiscBranches:
         from cja_auto_sdr.core.logging import _is_sensitive_field
 
         assert _is_sensitive_field("___") is False
-
-    def test_flush_handlers_dedup(self):
-        """Line 407: duplicate handler IDs are skipped."""
-        from cja_auto_sdr.core.logging import flush_logging_handlers
-
-        logger = logging.getLogger("test_dedup_flush")
-        handler = logging.StreamHandler()
-        logger.addHandler(handler)
-        logger.addHandler(handler)  # same handler added twice
-        # Should not error even with duplicate handlers
-        flush_logging_handlers(logger)
-        logger.removeHandler(handler)
 
 
 # ==================== calculated_metrics.py — additional coverage ====================

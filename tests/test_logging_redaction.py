@@ -767,6 +767,61 @@ class TestFlushLoggingHandlers:
             logger.removeHandler(bad_handler)
             logger.propagate = True
 
+    def test_deduplicates_shared_handler_across_propagation_chain(self):
+        shared_handler = logging.StreamHandler()
+        shared_handler.flush = MagicMock()
+
+        parent = logging.getLogger("test.flush.parent")
+        child = logging.getLogger("test.flush.parent.child")
+        original_parent_handlers = list(parent.handlers)
+        original_child_handlers = list(child.handlers)
+        original_parent_propagate = parent.propagate
+        original_child_propagate = child.propagate
+
+        parent.handlers = [shared_handler]
+        parent.propagate = False
+        child.handlers = [shared_handler]
+        child.propagate = True
+
+        try:
+            flush_logging_handlers(child)
+        finally:
+            child.handlers = original_child_handlers
+            parent.handlers = original_parent_handlers
+            child.propagate = original_child_propagate
+            parent.propagate = original_parent_propagate
+
+        shared_handler.flush.assert_called_once()
+
+    def test_flushes_distinct_handlers_across_propagation_chain(self):
+        parent_handler = logging.StreamHandler()
+        child_handler = logging.StreamHandler()
+        parent_handler.flush = MagicMock()
+        child_handler.flush = MagicMock()
+
+        parent = logging.getLogger("test.flush.distinct.parent")
+        child = logging.getLogger("test.flush.distinct.parent.child")
+        original_parent_handlers = list(parent.handlers)
+        original_child_handlers = list(child.handlers)
+        original_parent_propagate = parent.propagate
+        original_child_propagate = child.propagate
+
+        parent.handlers = [parent_handler]
+        parent.propagate = False
+        child.handlers = [child_handler]
+        child.propagate = True
+
+        try:
+            flush_logging_handlers(child)
+        finally:
+            child.handlers = original_child_handlers
+            parent.handlers = original_parent_handlers
+            child.propagate = original_child_propagate
+            parent.propagate = original_parent_propagate
+
+        parent_handler.flush.assert_called_once()
+        child_handler.flush.assert_called_once()
+
 
 # ---------------------------------------------------------------------------
 # _collect_dependency_versions

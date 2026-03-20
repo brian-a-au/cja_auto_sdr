@@ -82,7 +82,6 @@ tests/
 ├── test_lock_backends.py            # Lock backends edge cases and coverage
 ├── test_main_impl_cli_coverage.py   # _main_impl CLI path coverage
 ├── test_main_impl_coverage.py       # _main_impl coverage edge cases
-├── test_near_100_coverage.py        # Near-100% coverage gap tests
 ├── test_org_cache_branches.py       # Org cache branch coverage
 ├── test_org_writer_coverage.py      # Org writer edge cases and coverage
 ├── test_output_writer_coverage.py   # Output writer edge cases and coverage
@@ -122,9 +121,29 @@ tests/
 └── README.md                        # This file
 ```
 
-**Total: 6,619 comprehensive tests**
+**Total: 6,620 comprehensive tests**
 
 ### Test Count Breakdown
+
+<!-- BEGIN GENERATED TEST CATEGORY SUMMARY -->
+#### Category Summary
+
+| Category | Tests | Files | Notes |
+|----------|-------|-------|-------|
+| `unit` | 6,514 | 109 | Default primary category for files without explicit integration/e2e/smoke scope |
+| `integration` | 73 | 3 | Cross-module integration suites |
+| `e2e` | 23 | 2 | End-to-end suites with a mocked external boundary |
+| `smoke` | 10 | 1 | Lightweight command-mode coverage |
+| `slow` | 7 | 1 | Overlay marker; these tests are also counted in a primary category |
+| **Primary Total** | **6,620** | **115** | **unit + integration + e2e + smoke** |
+
+| CI Slice | Tests | Files | Selector |
+|----------|-------|-------|----------|
+| `test-unit` | 6,507 | 108 | `-m "unit and not slow"` |
+| `test-integration` | 103 | 6 | `-m "integration or e2e or slow"` |
+| `smoke-test` | 10 | 1 | `-m smoke` |
+<!-- END GENERATED TEST CATEGORY SUMMARY -->
+
 
 | Test File | Tests | Coverage Area |
 |-----------|-------|---------------|
@@ -139,13 +158,13 @@ tests/
 | `test_segments_inventory.py` | 48 | Segments inventory feature |
 | `test_edge_cases.py` | 39 | Edge cases, configuration dataclasses, custom exceptions |
 | `test_calculated_metrics_inventory.py` | 285 | Calculated metrics inventory feature |
-| `test_git_integration.py` | 40 | Git integration, snapshot management, inventory snapshots |
+| `test_git_integration.py` | 41 | Git integration, snapshot management, inventory snapshots |
 | `test_output_formats.py` | 37 | CSV, JSON, HTML, Markdown output generation |
 | `test_cja_initialization.py` | 48 | CJA connection and configuration validation |
 | `test_utils.py` | 50 | Utility functions and helpers |
 | `test_excel_formatting.py` | 25 | Excel sheet formatting and styling |
 | `test_parallel_api_fetcher.py` | 35 | Parallel API data fetching |
-| `test_api_tuning.py` | 23 | API worker auto-tuning |
+| `test_api_tuning.py` | 24 | API worker auto-tuning |
 | `test_error_messages.py` | 23 | Enhanced error messages and guidance |
 | `test_circuit_breaker.py` | 25 | Circuit breaker pattern |
 | `test_retry.py` | 25 | Retry with exponential backoff |
@@ -177,7 +196,7 @@ tests/
 | `test_snapshot.py` | 78 | Diff snapshot creation and comparison |
 | `test_colors.py` | 122 | Console color formatting, themes, TTY detection |
 | `test_exceptions.py` | 68 | Custom exception classes construction and formatting |
-| `test_logging_redaction.py` | 158 | Logging, sensitive data redaction, JSON formatter |
+| `test_logging_redaction.py` | 160 | Logging, sensitive data redaction, JSON formatter |
 | `test_config_dataclasses.py` | 88 | Config dataclasses and constants functions |
 | `test_lock_manager.py` | 65 | Lock manager acquire/release/heartbeat lifecycle |
 | `test_lazy_forwarding.py` | 71 | Lazy-forwarding infrastructure and make_getattr() |
@@ -188,7 +207,7 @@ tests/
 | `test_diff_coverage.py` | 61 | Diff comparator, models, git integration edge cases |
 | `test_generator_coverage.py` | 143 | Generator utility functions — coercion, normalization, diff formatting |
 | `test_segments_coverage.py` | 78 | Segment comparison operators, container types, sequence variants |
-| `test_small_module_coverage.py` | 113 | Logging, utils, calculated metrics, constants, lazy, tuning, locks, org cache |
+| `test_small_module_coverage.py` | 111 | Logging, utils, calculated metrics, constants, lazy, tuning, locks, org cache |
 | `test_diff_inventory_output.py` | 88 | Inventory diff output across all formats (console, JSON, HTML, Excel, MD, CSV) |
 | `test_cli_command_handlers.py` | 146 | CLI dispatch for --stats, --org-report, --list-snapshots, discovery inspection, diff config unpacking |
 | `test_profile_management.py` | 47 | Interactive profile creation, import, test, show |
@@ -202,13 +221,12 @@ tests/
 | `test_lock_backends.py` | 46 | Lock backends edge cases and coverage |
 | `test_main_impl_cli_coverage.py` | 90 | _main_impl CLI path coverage |
 | `test_main_impl_coverage.py` | 57 | _main_impl coverage edge cases |
-| `test_near_100_coverage.py` | 4 | Near-100% coverage gap tests |
 | `test_org_cache_branches.py` | 49 | Org cache branch coverage |
 | `test_org_writer_coverage.py` | 143 | Org writer edge cases and coverage |
 | `test_output_writer_coverage.py` | 36 | Output writer edge cases and coverage |
 | `test_backwards_compat.py` | 34 | Backwards compatibility tests |
 | `test_exception_contracts.py` | 19 | Exception boundary contract tests |
-| `test_update_test_counts.py` | 2 | Test count validation tests |
+| `test_update_test_counts.py` | 5 | Test count validation tests |
 | `test_cli_smoke_modes.py` | 10 | CLI smoke tests for core command modes |
 | `test_generator_mock_contract.py` | 2 | Generator mock symbol contract tests |
 | `test_completion.py` | 55 | Shell completion flag (--completion bash/zsh/fish) |
@@ -239,7 +257,7 @@ tests/
 | `test_exit_codes.py` | 11 | Exit code helpers and signal detection tests |
 | `test_json_io.py` | 2 | JSON I/O atomic write and read tests |
 | `test_lock_info_normalization.py` | 53 | Lock-info normalization classmethod direct unit tests |
-| **Total** | **6,619** | **Collected via pytest --collect-only** |
+| **Total** | **6,620** | **Collected via pytest --collect-only** |
 
 ## Running Tests
 
@@ -276,6 +294,16 @@ uv run pytest -m slow
 
 # Everything except the slower/non-unit slices
 uv run pytest -m "unit and not slow and not integration and not e2e and not smoke"
+```
+
+### Recommended Local Commands
+
+```bash
+# Fast pre-push loop (matches the Linux unit CI slice)
+uv run pytest -m "unit and not slow"
+
+# Full pre-merge validation
+uv run pytest tests/ -q --tb=short
 ```
 
 ### Run Specific Test Files
@@ -683,18 +711,18 @@ Check for drift (CI-friendly):
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (6,619 tests total)
+- [x] Comprehensive test coverage (6,620 tests total)
 - [x] Org-wide analysis tests (test_org_report.py) - 209 tests (including large org scaling, output path aliases, memory warnings, smart cache invalidation)
 - [x] Org-wide analysis integration tests (test_org_report_integration.py) - 17 tests (end-to-end flows, caching, filtering, governance thresholds)
 - [x] Profile management tests (test_profiles.py) - 77 tests
-- [x] API worker auto-tuning tests (test_api_tuning.py) - 23 tests
+- [x] API worker auto-tuning tests (test_api_tuning.py) - 24 tests
 - [x] Circuit breaker pattern tests (test_circuit_breaker.py) - 25 tests
 - [x] Shared validation cache tests (test_shared_cache.py) - 22 tests
 - [x] Calculated metrics inventory tests (test_calculated_metrics_inventory.py) - 285 tests
 - [x] Segments inventory tests (test_segments_inventory.py) - 48 tests
 - [x] Derived fields inventory tests (test_derived_inventory.py) - 62 tests
 - [x] Inventory utilities tests (test_inventory_utils.py) - 47 tests
-- [x] Git integration tests (test_git_integration.py) - 40 tests
+- [x] Git integration tests (test_git_integration.py) - 41 tests
 - [x] Inventory diff support in snapshot comparisons (test_diff_comparison.py) - 169 tests
 - [x] Inventory summary and include-all-inventory tests (test_ux_features.py) - 123 tests
 - [x] Parallel validation tests (test_parallel_validation.py)

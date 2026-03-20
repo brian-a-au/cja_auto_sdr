@@ -12,9 +12,24 @@ import argparse
 import re
 import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    # Keep the repo root importable when the script is launched via its file path.
+    sys.path.insert(0, str(ROOT))
+
+from tests.category_rules import ALL_TEST_MARKERS, PRIMARY_TEST_MARKERS, auto_test_markers_for_file  # noqa: E402
+
+GENERATED_CATEGORY_BLOCK_START = "<!-- BEGIN GENERATED TEST CATEGORY SUMMARY -->"
+GENERATED_CATEGORY_BLOCK_END = "<!-- END GENERATED TEST CATEGORY SUMMARY -->"
+
+
+@dataclass(frozen=True)
+class CategoryStats:
+    tests: int = 0
+    files: int = 0
 
 
 def run_pytest_collect() -> str:
@@ -51,6 +66,126 @@ def parse_counts(collect_output: str) -> dict[str, int]:
     return counts
 
 
+def summarize_test_categories(counts: dict[str, int]) -> dict[str, dict[str, CategoryStats]]:
+    marker_counts = {marker: CategoryStats() for marker in ALL_TEST_MARKERS}
+    primary_counts = {marker: CategoryStats() for marker in PRIMARY_TEST_MARKERS}
+    ci_slice_counts = {
+        "test-unit": CategoryStats(),
+        "test-integration": CategoryStats(),
+        "smoke-test": CategoryStats(),
+    }
+
+    for module_name, test_count in counts.items():
+        markers = set(auto_test_markers_for_file(module_name))
+
+        for marker in ALL_TEST_MARKERS:
+            if marker in markers:
+                current = marker_counts[marker]
+                marker_counts[marker] = CategoryStats(
+                    tests=current.tests + test_count,
+                    files=current.files + 1,
+                )
+
+        for marker in PRIMARY_TEST_MARKERS:
+            if marker in markers:
+                current = primary_counts[marker]
+                primary_counts[marker] = CategoryStats(
+                    tests=current.tests + test_count,
+                    files=current.files + 1,
+                )
+                break
+
+        if "unit" in markers and "slow" not in markers:
+            current = ci_slice_counts["test-unit"]
+            ci_slice_counts["test-unit"] = CategoryStats(
+                tests=current.tests + test_count,
+                files=current.files + 1,
+            )
+
+        if {"integration", "e2e", "slow"} & markers:
+            current = ci_slice_counts["test-integration"]
+            ci_slice_counts["test-integration"] = CategoryStats(
+                tests=current.tests + test_count,
+                files=current.files + 1,
+            )
+
+        if "smoke" in markers:
+            current = ci_slice_counts["smoke-test"]
+            ci_slice_counts["smoke-test"] = CategoryStats(
+                tests=current.tests + test_count,
+                files=current.files + 1,
+            )
+
+    return {
+        "primary": primary_counts,
+        "markers": marker_counts,
+        "ci_slices": ci_slice_counts,
+    }
+
+
+def render_category_summary_markdown(
+    summary: dict[str, dict[str, CategoryStats]],
+    total: int,
+    *,
+    heading_level: str | None = "###",
+    heading_title: str = "Test Category Breakdown",
+) -> str:
+    lines: list[str] = []
+    if heading_level:
+        lines.extend([f"{heading_level} {heading_title}", ""])
+
+    lines.extend(
+        [
+            "| Category | Tests | Files | Notes |",
+            "|----------|-------|-------|-------|",
+            "| `unit` | "
+            f"{summary['primary']['unit'].tests:,} | {summary['primary']['unit'].files} | "
+            "Default primary category for files without explicit integration/e2e/smoke scope |",
+            "| `integration` | "
+            f"{summary['primary']['integration'].tests:,} | {summary['primary']['integration'].files} | "
+            "Cross-module integration suites |",
+            "| `e2e` | "
+            f"{summary['primary']['e2e'].tests:,} | {summary['primary']['e2e'].files} | "
+            "End-to-end suites with a mocked external boundary |",
+            "| `smoke` | "
+            f"{summary['primary']['smoke'].tests:,} | {summary['primary']['smoke'].files} | "
+            "Lightweight command-mode coverage |",
+            "| `slow` | "
+            f"{summary['markers']['slow'].tests:,} | {summary['markers']['slow'].files} | "
+            "Overlay marker; these tests are also counted in a primary category |",
+            f"| **Primary Total** | **{total:,}** | **{sum(stats.files for stats in summary['primary'].values())}** | **unit + integration + e2e + smoke** |",
+            "",
+            "| CI Slice | Tests | Files | Selector |",
+            "|----------|-------|-------|----------|",
+            "| `test-unit` | "
+            f"{summary['ci_slices']['test-unit'].tests:,} | {summary['ci_slices']['test-unit'].files} | "
+            '`-m "unit and not slow"` |',
+            "| `test-integration` | "
+            f"{summary['ci_slices']['test-integration'].tests:,} | {summary['ci_slices']['test-integration'].files} | "
+            '`-m "integration or e2e or slow"` |',
+            "| `smoke-test` | "
+            f"{summary['ci_slices']['smoke-test'].tests:,} | {summary['ci_slices']['smoke-test'].files} | "
+            "`-m smoke` |",
+        ],
+    )
+    return "\n".join(lines) + "\n"
+
+
+def replace_generated_block(text: str, replacement: str) -> str:
+    pattern = re.compile(
+        rf"{re.escape(GENERATED_CATEGORY_BLOCK_START)}\n.*?{re.escape(GENERATED_CATEGORY_BLOCK_END)}",
+        re.DOTALL,
+    )
+    block = f"{GENERATED_CATEGORY_BLOCK_START}\n{replacement.rstrip()}\n{GENERATED_CATEGORY_BLOCK_END}"
+    if pattern.search(text):
+        return pattern.sub(block, text)
+    return text.replace(
+        "### Test Count Breakdown\n",
+        f"### Test Count Breakdown\n\n{block}\n\n",
+        1,
+    )
+
+
 def update_readme(text: str, total: int) -> str:
     return re.sub(
         r"Test suite \(.*?tests\)",
@@ -59,7 +194,12 @@ def update_readme(text: str, total: int) -> str:
     )
 
 
-def update_tests_readme(text: str, counts: dict[str, int], total: int) -> str:
+def update_tests_readme(
+    text: str,
+    counts: dict[str, int],
+    total: int,
+    summary: dict[str, dict[str, CategoryStats]],
+) -> str:
     lines = text.splitlines()
     updated: list[str] = []
 
@@ -99,7 +239,14 @@ def update_tests_readme(text: str, counts: dict[str, int], total: int) -> str:
 
         updated.append(updated_line)
 
-    return "\n".join(updated) + "\n"
+    updated_text = "\n".join(updated) + "\n"
+    category_summary = render_category_summary_markdown(
+        summary,
+        total,
+        heading_level="####",
+        heading_title="Category Summary",
+    )
+    return replace_generated_block(updated_text, category_summary)
 
 
 def update_diff_comparison_docs(text: str, count: int) -> str:
@@ -133,9 +280,21 @@ def apply_updates(files: list[tuple[Path, str]]) -> int:
     return changed
 
 
+def write_summary_markdown(path: str, markdown: str) -> None:
+    if path == "-":
+        sys.stdout.write(markdown)
+        return
+    with Path(path).open("a", encoding="utf-8") as handle:
+        handle.write(markdown)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="Fail if updates are needed.")
+    parser.add_argument(
+        "--write-summary-markdown",
+        help="Append the generated test-category Markdown summary to this file path, or '-' for stdout.",
+    )
     args = parser.parse_args()
 
     collect_output = run_pytest_collect()
@@ -144,6 +303,7 @@ def main() -> int:
         raise RuntimeError("No tests detected from pytest collection output.")
 
     total = sum(counts.values())
+    category_summary = summarize_test_categories(counts)
 
     files: list[tuple[Path, str]] = []
 
@@ -151,7 +311,9 @@ def main() -> int:
     files.append((readme_path, update_readme(readme_path.read_text(), total)))
 
     tests_readme_path = ROOT / "tests" / "README.md"
-    files.append((tests_readme_path, update_tests_readme(tests_readme_path.read_text(), counts, total)))
+    files.append(
+        (tests_readme_path, update_tests_readme(tests_readme_path.read_text(), counts, total, category_summary))
+    )
 
     diff_docs_path = ROOT / "docs" / "DIFF_COMPARISON.md"
     if diff_docs_path.exists() and "test_diff_comparison.py" in counts:
@@ -169,6 +331,10 @@ def main() -> int:
         )
 
     if args.check:
+        if args.write_summary_markdown:
+            write_summary_markdown(
+                args.write_summary_markdown, render_category_summary_markdown(category_summary, total)
+            )
         for path, new_content in files:
             if path.read_text() != new_content:
                 sys.stdout.write(f"Out of date: {path.relative_to(ROOT)}\n")
@@ -177,6 +343,8 @@ def main() -> int:
         return 0
 
     changed = apply_updates(files)
+    if args.write_summary_markdown:
+        write_summary_markdown(args.write_summary_markdown, render_category_summary_markdown(category_summary, total))
     sys.stdout.write(f"Updated {changed} file(s).\n")
     return 0
 

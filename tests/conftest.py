@@ -17,23 +17,7 @@ from cja_auto_sdr.org.models import (
     OrgReportResult,
     SimilarityPair,
 )
-
-_INTEGRATION_TEST_FILES = frozenset(
-    {
-        "test_git_integration.py",
-        "test_org_report_integration.py",
-        "test_trending_integration.py",
-    },
-)
-_E2E_TEST_FILES = frozenset(
-    {
-        "test_cli_color_policy_e2e.py",
-        "test_e2e_integration.py",
-    },
-)
-_SMOKE_TEST_FILES = frozenset({"test_cli_smoke_modes.py"})
-_SLOW_TEST_FILES = frozenset({"test_perf.py"})
-_PRIMARY_TEST_MARKERS = ("unit", "integration", "e2e", "smoke")
+from tests.category_rules import PRIMARY_TEST_MARKERS, file_scoped_test_markers
 
 
 @pytest.fixture(autouse=True)
@@ -44,20 +28,6 @@ def clear_fast_path_option_spec_cache():
     _fast_path_option_spec.cache_clear()
     yield
     _fast_path_option_spec.cache_clear()
-
-
-def _auto_test_markers_for_file(module_name: str) -> tuple[str, ...]:
-    """Return the auto-applied marker names for a collected test module."""
-    markers: list[str] = []
-    if module_name in _INTEGRATION_TEST_FILES:
-        markers.append("integration")
-    if module_name in _E2E_TEST_FILES:
-        markers.append("e2e")
-    if module_name in _SMOKE_TEST_FILES:
-        markers.append("smoke")
-    if module_name in _SLOW_TEST_FILES:
-        markers.append("slow")
-    return tuple(markers)
 
 
 @pytest.hookimpl(tryfirst=True)
@@ -74,14 +44,14 @@ def pytest_collection_modifyitems(config, items):
     for item in items:
         module_name = Path(str(item.fspath)).name
         existing_markers = {marker.name for marker in item.iter_markers()}
-        auto_markers = _auto_test_markers_for_file(module_name)
+        auto_markers = file_scoped_test_markers(module_name)
 
         for marker_name in auto_markers:
             if marker_name not in existing_markers:
                 item.add_marker(getattr(pytest.mark, marker_name))
                 existing_markers.add(marker_name)
 
-        if not existing_markers.intersection(_PRIMARY_TEST_MARKERS):
+        if not existing_markers.intersection(PRIMARY_TEST_MARKERS):
             item.add_marker(pytest.mark.unit)
 
 
