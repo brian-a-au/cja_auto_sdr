@@ -50,6 +50,7 @@ class TestRunSummarySchemaVersion:
         assert RUN_SUMMARY_SCHEMA_VERSION == "1.1"
 
 
+@pytest.mark.run_summary_contract
 class TestRunSummaryOutput:
     """Tests for --run-summary-json output."""
 
@@ -290,6 +291,7 @@ class TestRunSummaryOutput:
         assert payload["results"][0]["output_files"] == ["report.xlsx", "report.json", "report.html"]
 
 
+@pytest.mark.run_summary_contract
 class TestOpenOutputArtifacts(TestRunSummaryOutput):
     """Tests for opening normalized emitted artifact paths."""
 

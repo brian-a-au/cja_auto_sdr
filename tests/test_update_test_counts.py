@@ -68,6 +68,7 @@ def test_render_category_summary_markdown_includes_ci_selectors():
     assert '`-m "unit and not slow"`' in markdown
     assert '`-m "integration or e2e or slow"`' in markdown
     assert "| `slow` | 2 | 1 |" in markdown
+    assert "`--cov-fail-under=95` gate currently runs only in the `test-unit` CI slice" in markdown
 
 
 def test_update_tests_readme_replaces_generated_category_block():

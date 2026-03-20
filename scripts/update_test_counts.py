@@ -201,6 +201,8 @@ def render_category_summary_markdown(
             "| `smoke-test` | "
             f"{summary['ci_slices']['smoke-test'].tests:,} | {summary['ci_slices']['smoke-test'].files} | "
             "`-m smoke` |",
+            "",
+            "> Coverage note: the `--cov-fail-under=95` gate currently runs only in the `test-unit` CI slice.",
         ],
     )
     return "\n".join(lines) + "\n"
