@@ -16,9 +16,9 @@ from cja_auto_sdr.cli.mode_scoped_options import (
     org_report_mode_scoped_option_names,
 )
 from cja_auto_sdr.core.logging import (
-    SensitiveDataFilter,
     _LOG_FORMAT_ERROR,
     _LOG_REDACTION_ERROR,
+    SensitiveDataFilter,
     _format_diagnostic_text_value,
     _safe_json_dumps,
     _safe_redact_extra_fields,
@@ -190,7 +190,7 @@ def test_safe_redaction_helpers_return_fallbacks_on_recoverable_errors() -> None
 def test_safe_json_dumps_falls_back_to_format_error_payload() -> None:
     calls = {"count": 0}
 
-    def flaky_json_dumps(payload, default=None):  # noqa: ANN001
+    def flaky_json_dumps(payload, default=None):
         calls["count"] += 1
         if calls["count"] == 1:
             raise RuntimeError("boom")
@@ -274,7 +274,7 @@ def test_dispatch_snapshot_cli_modes_prune_stdout_forces_json_output() -> None:
 def test_safe_json_dumps_fallback_payload_is_valid_json() -> None:
     calls = {"count": 0}
 
-    def flaky_json_dumps(payload, default=None):  # noqa: ANN001
+    def flaky_json_dumps(payload, default=None):
         calls["count"] += 1
         if calls["count"] == 1:
             raise RuntimeError("boom")
