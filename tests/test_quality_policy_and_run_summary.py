@@ -3,7 +3,7 @@
 Covers: normalize_quality_severity, count_quality_issues_by_severity,
 has_quality_issues_at_or_above, aggregate_quality_issues, load_quality_policy,
 apply_quality_policy_defaults, _normalize_exit_code, _infer_run_status,
-_coerce_run_mode.
+_merge_run_details, and _coerce_run_mode.
 """
 
 import argparse
@@ -17,11 +17,13 @@ import pytest
 
 from cja_auto_sdr.generator import (
     FAILURE_CODE_REGISTRY,
+    RUN_SUMMARY_SCHEMA_VERSION,
     ProcessingResult,
     RunMode,
     _coerce_run_mode,
     _collect_environment_info,
     _infer_run_status,
+    _merge_run_details,
     _normalize_exit_code,
     _normalize_failure_identity,
     _normalize_output_artifact_state,
@@ -34,6 +36,52 @@ from cja_auto_sdr.generator import (
     load_quality_policy,
     normalize_quality_severity,
 )
+
+# ==================== run-summary details helpers ====================
+
+
+class TestRunSummarySchemaVersion:
+    def test_schema_version_matches_current_contract(self):
+        assert RUN_SUMMARY_SCHEMA_VERSION == "1.1"
+
+
+class TestMergeRunDetails:
+    def test_adds_new_key(self):
+        run_state = {"details": {}}
+        _merge_run_details(run_state, execution_settings={"a": 1})
+        assert run_state["details"]["execution_settings"] == {"a": 1}
+
+    def test_does_not_overwrite_existing_key(self):
+        run_state = {"details": {"execution_settings": {"original": True}}}
+        _merge_run_details(run_state, execution_settings={"replaced": True})
+        assert run_state["details"]["execution_settings"] == {"original": True}
+
+    def test_preserves_existing_operation_success(self):
+        run_state = {"details": {"operation_success": True}}
+        _merge_run_details(run_state, execution_settings={"a": 1})
+        assert run_state["details"]["operation_success"] is True
+        assert run_state["details"]["execution_settings"] == {"a": 1}
+
+    def test_creates_details_if_missing(self):
+        run_state = {}
+        _merge_run_details(run_state, lock={"acquired": True})
+        assert run_state["details"]["lock"] == {"acquired": True}
+
+    def test_none_run_state_is_noop(self):
+        _merge_run_details(None, execution_settings={"a": 1})
+
+    def test_merges_multiple_new_keys(self):
+        run_state = {"details": {}}
+        _merge_run_details(run_state, execution_settings={"a": 1}, lock={"b": 2})
+        assert run_state["details"]["execution_settings"] == {"a": 1}
+        assert run_state["details"]["lock"] == {"b": 2}
+
+    def test_only_adds_missing_keys(self):
+        run_state = {"details": {"lock": {"existing": True}}}
+        _merge_run_details(run_state, lock={"new": True}, execution_settings={"x": 1})
+        assert run_state["details"]["lock"] == {"existing": True}
+        assert run_state["details"]["execution_settings"] == {"x": 1}
+
 
 # ==================== normalize_quality_severity ====================
 
@@ -423,6 +471,14 @@ class TestInferRunStatus:
             "details": {"operation_success": False},
         }
         assert _infer_run_status(2, run_state) == "error"
+
+    def test_explain_exit_code_mode_with_zero_exit_is_success(self):
+        run_state = {"mode": RunMode.EXPLAIN_EXIT_CODE, "details": {"explained_code": 2}}
+        assert _infer_run_status(0, run_state) == "success"
+
+    def test_explain_exit_code_mode_with_nonzero_exit_is_error(self):
+        run_state = {"mode": RunMode.EXPLAIN_EXIT_CODE, "details": {}}
+        assert _infer_run_status(1, run_state) == "error"
 
 
 class TestFailureCodeRegistry:

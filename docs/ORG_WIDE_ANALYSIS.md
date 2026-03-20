@@ -582,6 +582,15 @@ If you see this error:
    - Default backend (`fcntl` on POSIX): lock is released by the OS when the process exits
    - If `flock` is unsupported on the lock filesystem at runtime, lock handling automatically falls back to the lease backend
    - Fallback backend (`lease`): same-host dead PIDs are reclaimed immediately; otherwise stale leases expire based on threshold
+4. Use `--lock-stale-threshold SECONDS` to control how long a lease must be idle before stale recovery kicks in (default: 3600). This is not a blocking wait timeout.
+
+**Contention metadata:** When a concurrent-run error (`ConcurrentOrgReportError`) is raised, the error includes best-effort metadata about the lock holder when available:
+- `lock_holder_owner` — hostname or identifier of the process holding the lock
+- `lock_backend` — which lock backend is active (`fcntl` or `lease`)
+- `pid` — process ID of the lock holder
+- `started_at` — when the holding process acquired the lock
+
+This metadata helps diagnose contention in multi-host or shared-filesystem environments.
 
 The lock file is stored in:
 - **macOS/Linux:** `~/.cja_auto_sdr/locks/`
@@ -592,6 +601,13 @@ Optional backend override (advanced/debug):
 ```bash
 # auto (default), fcntl, or lease
 export CJA_LOCK_BACKEND=auto
+```
+
+Adjust stale-lease threshold (useful for shorter CI jobs):
+
+```bash
+# Reclaim stale leases after 15 minutes instead of 1 hour
+cja_auto_sdr --org-report --lock-stale-threshold 900
 ```
 
 To force bypass the lock (for testing only):

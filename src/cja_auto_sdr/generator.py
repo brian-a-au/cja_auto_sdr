@@ -59,7 +59,12 @@ from cja_auto_sdr.api.resilience import (
     make_api_call_with_retry,
     retry_with_backoff,
 )
+from cja_auto_sdr.cli.mode_scoped_options import org_report_mode_scoped_option_specs
 from cja_auto_sdr.cli.option_resolution import resolve_long_option_token as _resolve_long_option_token
+from cja_auto_sdr.cli.standalone_policy import (
+    StandalonePrevalidationPolicy,
+    standalone_prevalidation_policy,
+)
 from cja_auto_sdr.core.colors import (
     ConsoleColors,
     _format_error_msg,
@@ -158,8 +163,10 @@ from cja_auto_sdr.core.exceptions import (
     APIError,
     CircuitBreakerOpen,
     CJASDRError,
+    ConcurrentOrgReportError,
     ConfigurationError,
     CredentialSourceError,
+    LockOwnershipLostError,
     OutputError,
     ProfileConfigError,
     ProfileError,
@@ -167,6 +174,7 @@ from cja_auto_sdr.core.exceptions import (
     RetryableHTTPError,
     ValidationError,
 )
+from cja_auto_sdr.core.locks.manager import normalize_lock_stale_threshold_seconds
 from cja_auto_sdr.core.version import __version__
 from cja_auto_sdr.org.analyzer import OrgComponentAnalyzer
 from cja_auto_sdr.org.cache import DEFAULT_ORG_REPORT_SNAPSHOT_KEEP_LAST, OrgReportCache
@@ -198,6 +206,7 @@ from cja_auto_sdr.org.models import (
     OrgReportComparison,
     OrgReportComparisonInput,
     OrgReportConfig,
+    OrgReportLockRuntimeState,
     OrgReportResult,
     OrgReportTrending,
     SimilarityPair,
@@ -445,6 +454,7 @@ class RunMode(Enum):
     """CLI run modes used by dispatch and run summary classification."""
 
     EXIT_CODES = "exit_codes"
+    EXPLAIN_EXIT_CODE = "explain_exit_code"
     COMPLETION = "completion"
     SAMPLE_CONFIG = "sample_config"
     PROFILE_MANAGEMENT = "profile_management"
@@ -1335,6 +1345,7 @@ def _run_mode_checks(args: argparse.Namespace) -> tuple[tuple[RunMode, bool], ..
     """Build run-mode checks once so inference and validation share precedence."""
     completion_shell = _completion_shell_from_args(args)
     return (
+        (RunMode.EXPLAIN_EXIT_CODE, getattr(args, "explain_exit_code", None) is not None),
         (RunMode.EXIT_CODES, getattr(args, "exit_codes", False)),
         (RunMode.COMPLETION, completion_shell is not None),
         (RunMode.SAMPLE_CONFIG, getattr(args, "sample_config", False)),
@@ -1402,12 +1413,51 @@ def _active_run_modes(args: argparse.Namespace) -> list[RunMode]:
     return [mode for mode, is_active in _run_mode_checks(args) if is_active]
 
 
+def _validate_mode_scoped_option(
+    *,
+    option_name: str,
+    inferred_mode: RunMode,
+    required_mode: RunMode,
+    is_configured: bool,
+    mode_error: str | None = None,
+    value_errors: Iterable[str | None] = (),
+) -> None:
+    """Fail closed when an explicitly configured option is used outside its command mode."""
+    if not is_configured:
+        return
+
+    for error in value_errors:
+        if error:
+            _exit_error(error)
+
+    if inferred_mode != required_mode:
+        required_label = f"--{required_mode.value.replace('_', '-')}"
+        _exit_error(mode_error or f"{option_name} is only valid with {required_label}")
+
+
 def _org_report_snapshot_retention_flags_specified(argv: list[str] | None = None) -> tuple[bool, bool]:
     """Return whether org-report snapshot retention flags were explicitly provided."""
     return (
         _cli_option_specified("--org-report-keep-last", argv=argv),
         _cli_option_specified("--org-report-keep-since", argv=argv),
     )
+
+
+def _validate_org_report_mode_scoped_cli_args(
+    args: argparse.Namespace,
+    *,
+    inferred_mode: RunMode,
+) -> None:
+    """Validate org-report-only CLI flags on the current parsed argv."""
+    for option_spec in org_report_mode_scoped_option_specs():
+        _validate_mode_scoped_option(
+            option_name=option_spec.option_name,
+            inferred_mode=inferred_mode,
+            required_mode=RunMode.ORG_REPORT,
+            is_configured=option_spec.is_configured(args, option_specified=_cli_option_specified),
+            mode_error=option_spec.mode_error,
+            value_errors=option_spec.resolve_value_errors(args),
+        )
 
 
 def _validate_org_report_snapshot_cli_args(
@@ -1460,6 +1510,29 @@ def _validate_org_report_snapshot_cli_args(
         )
 
 
+def _validate_explain_exit_code_cli_args(
+    args: argparse.Namespace,
+    *,
+    active_modes: Collection[RunMode],
+) -> None:
+    """Fail closed for invalid --explain-exit-code combinations."""
+    if getattr(args, "explain_exit_code", None) is None:
+        return
+
+    if getattr(args, "data_views", []):
+        _exit_error("--explain-exit-code does not accept positional data view arguments")
+
+    conflicting_modes = sorted(
+        {mode for mode in active_modes if mode != RunMode.EXPLAIN_EXIT_CODE},
+        key=lambda m: m.value,
+    )
+    if conflicting_modes:
+        conflict_labels = ", ".join(mode.value for mode in conflicting_modes)
+        _exit_error(
+            f"--explain-exit-code cannot be combined with other command modes ({conflict_labels})",
+        )
+
+
 def _completion_shell_from_args(args: argparse.Namespace) -> str | None:
     """Return normalized completion shell from parsed args, if present."""
     raw_completion = getattr(args, "completion", None)
@@ -1484,23 +1557,180 @@ def _handle_completion_prevalidation(
         raise
 
 
+def _handle_explain_exit_code_prevalidation(
+    args: argparse.Namespace,
+    run_state: dict[str, Any] | None = None,
+) -> NoReturn:
+    """Handle exit-code explanation before unrelated shared validation runs."""
+    explain_code = getattr(args, "explain_exit_code", None)
+    if explain_code is None:
+        _exit_error("Internal error: explain-exit-code mode inferred without a code value")
+
+    from cja_auto_sdr.core.exit_codes import explain_exit_code
+
+    if run_state is not None:
+        run_state["details"] = {"explained_code": explain_code}
+    explain_exit_code(explain_code)
+    sys.exit(0)
+
+
+def _handle_exit_codes_prevalidation() -> NoReturn:
+    """Handle exit-code reference output before unrelated shared validation runs."""
+    from cja_auto_sdr.core.exit_codes import print_exit_codes
+
+    print_exit_codes(banner_width=BANNER_WIDTH)
+    sys.exit(0)
+
+
+def _handle_sample_config_prevalidation(
+    run_state: dict[str, Any] | None = None,
+) -> NoReturn:
+    """Handle sample-config generation after standalone semantic validation."""
+    success = generate_sample_config()
+    if run_state is not None:
+        run_state["details"] = {"operation_success": success}
+    sys.exit(0 if success else 1)
+
+
+def _standalone_prevalidation_policy(inferred_mode: RunMode) -> StandalonePrevalidationPolicy | None:
+    """Return standalone semantic-validation policy for the inferred mode."""
+    return standalone_prevalidation_policy(inferred_mode.value)
+
+
+def _resolve_semantic_validation_args(
+    args: argparse.Namespace,
+    *,
+    inferred_mode: RunMode,
+) -> argparse.Namespace:
+    """Return the effective args namespace for standalone prevalidation logic.
+
+    Completion, explain-exit-code, and exit-codes intentionally ignore the
+    full informational-mode tolerance set. Sample-config uses only the
+    wrapper-carried execution subset so wrappers can pass shared execution
+    flags without suppressing fail-closed validation for SDR-only policy
+    options such as --allow-partial, --fail-on-quality, or --quality-report.
+
+    This effective view is shared by standalone semantic validation and the
+    initial run-summary metadata sync so structured telemetry reflects the same
+    ignored-flag policy as the prevalidation path.
+    """
+    policy = _standalone_prevalidation_policy(inferred_mode)
+    if policy is None or not policy.ignored_semantic_dests:
+        return args
+
+    sanitized_args = argparse.Namespace(**vars(args))
+    for dest in policy.ignored_semantic_dests:
+        current_value = getattr(sanitized_args, dest, None)
+        setattr(sanitized_args, dest, False if isinstance(current_value, bool) else None)
+    return sanitized_args
+
+
+def _load_quality_policy_if_configured(
+    args: argparse.Namespace,
+    *,
+    inferred_mode: RunMode,
+    run_state: dict[str, Any] | None = None,
+) -> None:
+    """Load and apply quality-policy context for the current CLI mode."""
+    quality_policy_path = getattr(args, "quality_policy", None)
+    if not quality_policy_path:
+        return
+
+    if run_state is not None:
+        run_state["quality_policy"] = {
+            "path": str(Path(quality_policy_path).expanduser()),
+            "applied": {},
+        }
+
+    try:
+        quality_policy = load_quality_policy(quality_policy_path)
+    except (OSError, json.JSONDecodeError, ValueError) as e:
+        _exit_error(f"Failed to load --quality-policy '{quality_policy_path}': {e}")
+
+    applied_quality_policy: dict[str, Any] = {}
+    if inferred_mode == RunMode.SDR:
+        applied_quality_policy = apply_quality_policy_defaults(args, quality_policy)
+        _sync_run_summary_cli_metadata(run_state, args, inferred_mode=inferred_mode)
+
+    if run_state is not None and isinstance(run_state.get("quality_policy"), dict):
+        run_state["quality_policy"]["applied"] = applied_quality_policy
+
+
+def _run_standalone_prevalidation_guardrails(
+    args: argparse.Namespace,
+    *,
+    inferred_mode: RunMode,
+) -> None:
+    """Run late-bound checks that must still fail closed before standalone exits."""
+    policy = _standalone_prevalidation_policy(inferred_mode)
+    if policy is None:
+        return
+
+    if policy.validate_org_report_mode_scoped_options:
+        _validate_org_report_mode_scoped_cli_args(args, inferred_mode=inferred_mode)
+
+
 def _dispatch_prevalidation_mode(
     args: argparse.Namespace,
     inferred_mode: RunMode,
     run_state: dict[str, Any] | None = None,
 ) -> None:
-    """Dispatch pre-validation command modes using inferred run-mode precedence.
-
-    Completion must short-circuit before unrelated global validation, but only
-    when completion is the selected mode for this argv.
-    """
-    if inferred_mode != RunMode.COMPLETION:
+    """Dispatch standalone early-exit modes after semantic validation passes."""
+    if _standalone_prevalidation_policy(inferred_mode) is None:
         return
 
-    completion_shell = _completion_shell_from_args(args)
-    if completion_shell is None:
-        _exit_error("Internal error: completion mode inferred without a completion shell value")
-    _handle_completion_prevalidation(completion_shell, run_state=run_state)
+    if inferred_mode == RunMode.COMPLETION:
+        completion_shell = _completion_shell_from_args(args)
+        if completion_shell is None:
+            _exit_error("Internal error: completion mode inferred without a completion shell value")
+        _handle_completion_prevalidation(completion_shell, run_state=run_state)
+
+    elif inferred_mode == RunMode.EXPLAIN_EXIT_CODE:
+        _handle_explain_exit_code_prevalidation(args, run_state=run_state)
+
+    elif inferred_mode == RunMode.EXIT_CODES:
+        _handle_exit_codes_prevalidation()
+
+    elif inferred_mode == RunMode.SAMPLE_CONFIG:
+        _handle_sample_config_prevalidation(run_state=run_state)
+
+
+def _validate_semantic_flag_relationships(
+    args: argparse.Namespace,
+    *,
+    inferred_mode: RunMode,
+) -> None:
+    """Validate semantic flag relationships on the current effective args.
+
+    This validator is intentionally pure and idempotent so it can run on
+    parsed execution args and again after quality policy defaults mutate SDR
+    execution args.
+    """
+    non_sdr_mode = inferred_mode != RunMode.SDR
+    if getattr(args, "allow_partial", False) and non_sdr_mode:
+        _exit_error("--allow-partial is only supported in SDR generation mode")
+    if getattr(args, "fail_on_quality", None) and non_sdr_mode:
+        _exit_error("--fail-on-quality is only supported in SDR generation mode")
+    if (
+        getattr(args, "auto_prune", False)
+        and not getattr(args, "auto_snapshot", False)
+        and not getattr(args, "prune_snapshots", False)
+    ):
+        _exit_error("--auto-prune requires --auto-snapshot or --prune-snapshots")
+    if getattr(args, "fail_on_quality", None) and args.skip_validation:
+        _exit_error("--fail-on-quality cannot be used with --skip-validation")
+    if getattr(args, "quality_report", None) and args.skip_validation:
+        _exit_error("--quality-report cannot be used with --skip-validation")
+    if getattr(args, "quality_report", None) and non_sdr_mode:
+        _exit_error("--quality-report is only supported in SDR generation mode")
+    if getattr(args, "allow_partial", False) and getattr(args, "quality_report", None):
+        _exit_error("--allow-partial cannot be used with --quality-report")
+    if getattr(args, "allow_partial", False) and getattr(args, "fail_on_quality", None):
+        _exit_error("--allow-partial cannot be used with --fail-on-quality")
+    if getattr(args, "list_snapshots", False) and getattr(args, "prune_snapshots", False):
+        _exit_error("Use either --list-snapshots or --prune-snapshots, not both")
+    if getattr(args, "profile_overwrite", False) and not getattr(args, "profile_import", None):
+        _exit_error("--profile-overwrite requires --profile-import")
 
 
 def _sync_run_summary_cli_metadata(
@@ -1717,6 +1947,189 @@ def _collect_environment_info() -> dict[str, Any]:
         "platform_version": platform.platform(),
         "dependencies": deps,
     }
+
+
+def _merge_run_details(run_state: dict[str, Any] | None, /, **kwargs: Any) -> None:
+    """Additively merge keys into ``run_state["details"]`` without overwriting existing entries.
+
+    This is used to enrich the run summary ``details`` payload with new optional
+    keys (e.g. ``execution_settings``, ``lock``) while preserving mode-specific
+    fields that were already set (``operation_success``, ``thresholds_exceeded``,
+    etc.).  Passing ``run_state=None`` is a safe no-op so callers don't need to
+    guard against the optional ``run_state``.
+    """
+    if run_state is None:
+        return
+    details = run_state.setdefault("details", {})
+    for key, value in kwargs.items():
+        if key not in details:
+            details[key] = value
+
+
+def _normalize_optional_detail_text(value: Any) -> str | None:
+    """Normalize optional diagnostic text fields to non-empty strings."""
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    return normalized or None
+
+
+def _replace_runtime_detail_value(
+    runtime_details: dict[str, Any],
+    *,
+    key: str,
+    value: Any,
+) -> None:
+    """Set or clear a runtime detail key so reused sinks cannot retain stale state."""
+    if value is None:
+        runtime_details.pop(key, None)
+        return
+    runtime_details[key] = value
+
+
+_ORG_REPORT_LOCK_RUNTIME_DETAIL_KEYS = (
+    "lock_acquired",
+    "lock_contention",
+    "lock_stale_threshold_seconds",
+    "lock_backend",
+    "lock_ownership_lost",
+    "lock_holder_pid",
+    "lock_holder_owner",
+    "lock_started_at",
+)
+
+
+def _clear_org_report_lock_runtime_details(runtime_details: dict[str, Any] | None) -> None:
+    """Remove prior lock telemetry so reused sinks reflect only the current run."""
+    if runtime_details is None:
+        return
+    for key in _ORG_REPORT_LOCK_RUNTIME_DETAIL_KEYS:
+        runtime_details.pop(key, None)
+
+
+def _record_org_report_lock_runtime_details(
+    runtime_details: dict[str, Any] | None,
+    *,
+    acquired: bool,
+    contention: bool,
+    stale_threshold_seconds: int,
+    backend: str | None = None,
+    ownership_lost: bool = False,
+    holder_pid: int | None = None,
+    holder_owner: str | None = None,
+    started_at: str | None = None,
+) -> None:
+    """Populate the flat org-report lock runtime sink in one place."""
+    if runtime_details is None:
+        return
+
+    normalized_stale_threshold_seconds = normalize_lock_stale_threshold_seconds(stale_threshold_seconds)
+    runtime_details["lock_acquired"] = acquired
+    runtime_details["lock_contention"] = contention
+    runtime_details["lock_stale_threshold_seconds"] = normalized_stale_threshold_seconds
+
+    backend_name = _normalize_optional_detail_text(backend)
+    _replace_runtime_detail_value(runtime_details, key="lock_backend", value=backend_name)
+    _replace_runtime_detail_value(
+        runtime_details,
+        key="lock_ownership_lost",
+        value=True if ownership_lost else None,
+    )
+    _replace_runtime_detail_value(runtime_details, key="lock_holder_pid", value=holder_pid)
+
+    holder_owner_text = _normalize_optional_detail_text(holder_owner)
+    _replace_runtime_detail_value(runtime_details, key="lock_holder_owner", value=holder_owner_text)
+
+    started_at_text = _normalize_optional_detail_text(started_at)
+    _replace_runtime_detail_value(runtime_details, key="lock_started_at", value=started_at_text)
+
+
+def _copy_org_report_lock_runtime_details_from_state(
+    runtime_details: dict[str, Any] | None,
+    *,
+    lock_state: OrgReportLockRuntimeState | None,
+    default_stale_threshold_seconds: int,
+) -> bool:
+    """Copy analyzer-owned lock state into the flat runtime-details sink."""
+    if runtime_details is None or lock_state is None or not lock_state.observed:
+        return False
+
+    stale_threshold_seconds = lock_state.stale_threshold_seconds
+    if not isinstance(stale_threshold_seconds, int):
+        stale_threshold_seconds = default_stale_threshold_seconds
+
+    _record_org_report_lock_runtime_details(
+        runtime_details,
+        acquired=lock_state.acquired,
+        contention=lock_state.contention,
+        stale_threshold_seconds=stale_threshold_seconds,
+        backend=lock_state.backend,
+        ownership_lost=lock_state.ownership_lost,
+        holder_pid=lock_state.holder_pid,
+        holder_owner=lock_state.holder_owner,
+        started_at=lock_state.started_at,
+    )
+    return True
+
+
+def _build_org_report_lock_run_summary_block(lock_details: Mapping[str, Any]) -> dict[str, Any]:
+    """Reshape flat org-report lock runtime details into the public run-summary contract."""
+    lock_block: dict[str, Any] = {}
+
+    if "lock_acquired" in lock_details:
+        lock_block["acquired"] = lock_details["lock_acquired"]
+    if "lock_stale_threshold_seconds" in lock_details:
+        lock_block["stale_threshold_seconds"] = normalize_lock_stale_threshold_seconds(
+            lock_details["lock_stale_threshold_seconds"]
+        )
+    if "lock_contention" in lock_details:
+        lock_block["contention_observed"] = lock_details["lock_contention"]
+    if "lock_ownership_lost" in lock_details:
+        lock_block["lost_during_run"] = lock_details["lock_ownership_lost"]
+    elif "lock_acquired" in lock_details:
+        lock_block["lost_during_run"] = False
+
+    backend_name = _normalize_optional_detail_text(lock_details.get("lock_backend"))
+    if backend_name is not None:
+        lock_block["backend"] = backend_name
+
+    if lock_details.get("lock_ownership_lost"):
+        lock_block["loss_reason"] = "ownership_lost_during_execution"
+
+    return lock_block
+
+
+def _merge_org_report_run_summary_details(
+    run_state: dict[str, Any] | None,
+    *,
+    success: bool,
+    thresholds_exceeded: bool,
+    fail_on_threshold: bool,
+    lock_details: Mapping[str, Any],
+    org_config: OrgReportConfig,
+) -> None:
+    """Merge org-report run-summary details with one shared formatter."""
+    if run_state is None:
+        return
+
+    run_state["details"] = {
+        "operation_success": success,
+        "thresholds_exceeded": thresholds_exceeded,
+        "fail_on_threshold": fail_on_threshold,
+    }
+
+    lock_block = _build_org_report_lock_run_summary_block(lock_details)
+    if lock_block:
+        _merge_run_details(run_state, lock=lock_block)
+
+    _merge_run_details(
+        run_state,
+        execution_settings={
+            "org_lock_stale_threshold_seconds": normalize_lock_stale_threshold_seconds(
+                org_config.lock_stale_threshold_seconds
+            )
+        },
+    )
 
 
 def _build_run_summary_payload(
@@ -8301,6 +8714,7 @@ def run_org_report(
     profile: str | None = None,
     quiet: bool = False,
     trending_window: int | None = None,
+    runtime_details: dict[str, Any] | None = None,
 ) -> tuple[bool, bool]:
     """Run org-wide component analysis and generate report.
 
@@ -8313,6 +8727,7 @@ def run_org_report(
         profile: Optional profile name for credentials
         quiet: Suppress progress output
         trending_window: If set, compute trending across last N cached snapshots
+        runtime_details: Optional mutable dict to receive additive lock execution details
 
     Returns:
         Tuple of (success, thresholds_exceeded) - thresholds_exceeded triggers exit code 2
@@ -8330,8 +8745,11 @@ def run_org_report(
         kwargs.setdefault("file", status_stream)
         print(*args, **kwargs)
 
+    _clear_org_report_lock_runtime_details(runtime_details)
     if not _validate_org_report_output_request(output_format, output_to_stdout, _status_print):
         return False, False
+
+    analyzer: OrgComponentAnalyzer | None = None
 
     if not quiet:
         _status_print()
@@ -8366,6 +8784,11 @@ def run_org_report(
         # Run analysis
         analyzer = OrgComponentAnalyzer(cja, org_config, logger, org_id=org_id, cache=cache)
         result = analyzer.run_analysis()
+        _copy_org_report_lock_runtime_details_from_state(
+            runtime_details,
+            lock_state=analyzer.lock_runtime_state,
+            default_stale_threshold_seconds=org_config.lock_stale_threshold_seconds,
+        )
         requested_baseline_path = _requested_org_report_baseline_path(org_config)
 
         if result.total_data_views == 0:
@@ -8527,6 +8950,46 @@ def run_org_report(
         append_github_step_summary(build_org_step_summary(result), logger)
         return True, result.thresholds_exceeded
 
+    except ConcurrentOrgReportError as e:
+        _status_print(ConsoleColors.error(f"ERROR: Org report failed: {e!s}"))
+        logger.exception("Org report error")
+        copied_from_state = _copy_org_report_lock_runtime_details_from_state(
+            runtime_details,
+            lock_state=analyzer.lock_runtime_state if analyzer is not None else None,
+            default_stale_threshold_seconds=org_config.lock_stale_threshold_seconds,
+        )
+        if not copied_from_state:
+            _record_org_report_lock_runtime_details(
+                runtime_details,
+                acquired=False,
+                contention=True,
+                stale_threshold_seconds=org_config.lock_stale_threshold_seconds,
+                backend=e.lock_backend,
+                holder_pid=e.lock_holder_pid,
+                holder_owner=e.lock_holder_owner,
+                started_at=e.started_at,
+            )
+        return False, False
+
+    except LockOwnershipLostError:
+        _status_print(ConsoleColors.error("ERROR: Org report failed: lock ownership lost during execution"))
+        logger.exception("Org report error: lock ownership lost")
+        copied_from_state = _copy_org_report_lock_runtime_details_from_state(
+            runtime_details,
+            lock_state=analyzer.lock_runtime_state if analyzer is not None else None,
+            default_stale_threshold_seconds=org_config.lock_stale_threshold_seconds,
+        )
+        if not copied_from_state:
+            _record_org_report_lock_runtime_details(
+                runtime_details,
+                acquired=True,
+                contention=False,
+                stale_threshold_seconds=org_config.lock_stale_threshold_seconds,
+                backend=getattr(analyzer, "last_lock_backend", None) if analyzer is not None else None,
+                ownership_lost=True,
+            )
+        return False, False
+
     except FileNotFoundError:
         _status_print(ConsoleColors.error(f"ERROR: Configuration file '{config_file}' not found"))
         return False, False
@@ -8543,6 +9006,11 @@ def run_org_report(
             logger.exception("Org report error")
         else:
             logger.exception("Unexpected org report error")
+        _copy_org_report_lock_runtime_details_from_state(
+            runtime_details,
+            lock_state=analyzer.lock_runtime_state if analyzer is not None else None,
+            default_stale_threshold_seconds=org_config.lock_stale_threshold_seconds,
+        )
         return False, False
 
 
@@ -8839,6 +9307,9 @@ def _execute_sdr_processing_modes(
     inventory_order: list[str],
     api_tuning_config: Any,
     circuit_breaker_config: Any,
+    workers_requested_value: str | int | None = None,
+    api_auto_tune_requested: bool = False,
+    circuit_breaker_enabled: bool = False,
 ) -> dict[str, Any]:
     from cja_auto_sdr.cli.execution import execute_sdr_processing_modes as _impl
 
@@ -8853,6 +9324,9 @@ def _execute_sdr_processing_modes(
         inventory_order=inventory_order,
         api_tuning_config=api_tuning_config,
         circuit_breaker_config=circuit_breaker_config,
+        workers_requested_value=workers_requested_value,
+        api_auto_tune_requested=api_auto_tune_requested,
+        circuit_breaker_enabled=circuit_breaker_enabled,
     )
 
 
@@ -9305,13 +9779,13 @@ def _dispatch_post_validation_report_modes(
             compare_org_report=getattr(args, "org_compare_report", None),
             include_owner_summary=getattr(args, "org_owner_summary", False),
             flag_stale=getattr(args, "org_flag_stale", False),
+            lock_stale_threshold_seconds=getattr(args, "org_lock_stale_threshold", 3600),
         )
 
         output_format = args.format or "console"
         trending_window = getattr(args, "trending_window", None)
-        if trending_window is not None and trending_window < 2:
-            _exit_error("--trending-window must be >= 2")
 
+        lock_details: dict[str, Any] = {}
         success, thresholds_exceeded = run_org_report(
             config_file=args.config_file,
             output_format=output_format,
@@ -9321,14 +9795,18 @@ def _dispatch_post_validation_report_modes(
             profile=getattr(args, "profile", None),
             quiet=args.quiet,
             trending_window=trending_window,
+            runtime_details=lock_details,
         )
         if run_state is not None:
             run_state["output_format"] = output_format
-            run_state["details"] = {
-                "operation_success": success,
-                "thresholds_exceeded": thresholds_exceeded,
-                "fail_on_threshold": org_config.fail_on_threshold,
-            }
+            _merge_org_report_run_summary_details(
+                run_state,
+                success=success,
+                thresholds_exceeded=thresholds_exceeded,
+                fail_on_threshold=org_config.fail_on_threshold,
+                lock_details=lock_details,
+                org_config=org_config,
+            )
 
         if success:
             if thresholds_exceeded and org_config.fail_on_threshold:
@@ -9346,46 +9824,40 @@ def _main_impl(run_state: dict[str, Any] | None = None):
     args = parse_arguments()
     inferred_mode = _infer_run_mode_enum(args)
     active_modes = _active_run_modes(args)
-    _sync_run_summary_cli_metadata(run_state, args, inferred_mode=inferred_mode)
+    prevalidation_effective_args = _resolve_semantic_validation_args(args, inferred_mode=inferred_mode)
+    _sync_run_summary_cli_metadata(run_state, prevalidation_effective_args, inferred_mode=inferred_mode)
     _validate_org_report_snapshot_cli_args(args, active_modes=active_modes)
-
-    # Dispatch early command modes before unrelated validation. Use inferred
-    # mode so dispatch precedence cannot diverge from run-mode classification.
+    _validate_explain_exit_code_cli_args(args, active_modes=active_modes)
+    _validate_semantic_flag_relationships(prevalidation_effective_args, inferred_mode=inferred_mode)
+    _run_standalone_prevalidation_guardrails(args, inferred_mode=inferred_mode)
+    # Early-exit standalone modes still dispatch before deeper normalization
+    # and runtime validation, but only after semantic validation runs against
+    # the correct standalone policy view of the parsed argv.
     _dispatch_prevalidation_mode(args, inferred_mode, run_state=run_state)
 
     run_summary_to_stdout = getattr(args, "run_summary_json", None) in ("-", "stdout")
     quality_policy_path = getattr(args, "quality_policy", None)
-    applied_quality_policy: dict[str, Any] = {}
+    _load_quality_policy_if_configured(args, inferred_mode=inferred_mode, run_state=run_state)
     if quality_policy_path:
-        if run_state is not None:
-            run_state["quality_policy"] = {
-                "path": str(Path(quality_policy_path).expanduser()),
-                "applied": {},
-            }
-        try:
-            quality_policy = load_quality_policy(quality_policy_path)
-        except (OSError, json.JSONDecodeError, ValueError) as e:
-            _exit_error(f"Failed to load --quality-policy '{quality_policy_path}': {e}")
-        # Only apply quality defaults for SDR generation mode. This keeps
-        # shared policy files usable across non-SDR commands.
-        if inferred_mode == RunMode.SDR:
-            applied_quality_policy = apply_quality_policy_defaults(args, quality_policy)
-            _sync_run_summary_cli_metadata(run_state, args, inferred_mode=inferred_mode)
-        if run_state is not None and isinstance(run_state.get("quality_policy"), dict):
-            run_state["quality_policy"]["applied"] = applied_quality_policy
+        # Policy defaults mutate args late, so semantic validation must run
+        # again against the effective execution args before deeper processing.
+        _validate_semantic_flag_relationships(args, inferred_mode=inferred_mode)
 
     # Configure global color policy for all ConsoleColors call sites.
     ConsoleColors.configure(no_color=getattr(args, "no_color", False))
 
     # Parse and validate --workers argument
+    workers_requested_value: str | int = args.workers  # preserve original CLI input
     workers_auto = False
     if args.workers.lower() == "auto":
         workers_auto = True
+        workers_requested_value = "auto"
         # Will be set later based on data view count
         args.workers = DEFAULT_BATCH_WORKERS  # Temporary default
     else:
         try:
             args.workers = int(args.workers)
+            workers_requested_value = args.workers
         except ValueError:
             _exit_error(f"--workers must be 'auto' or an integer, got '{args.workers}'")
 
@@ -9406,43 +9878,13 @@ def _main_impl(run_state: dict[str, Any] | None = None):
         _exit_error("--retry-base-delay cannot be negative")
     if args.retry_max_delay < args.retry_base_delay:
         _exit_error("--retry-max-delay must be >= --retry-base-delay")
-    if getattr(args, "org_sample_size", None) is not None and args.org_sample_size < 1:
-        _exit_error("--sample must be at least 1")
 
     # Track whether retention flags were explicitly provided so auto-prune
     # defaults don't override intentional values like --keep-last 0.
     keep_last_specified = _cli_option_specified("--keep-last")
     keep_since_specified = _cli_option_specified("--keep-since")
 
-    non_sdr_mode = inferred_mode != RunMode.SDR
-    if getattr(args, "allow_partial", False) and non_sdr_mode:
-        _exit_error("--allow-partial is only supported in SDR generation mode")
-    if getattr(args, "fail_on_quality", None) and non_sdr_mode:
-        _exit_error("--fail-on-quality is only supported in SDR generation mode")
-    if getattr(args, "trending_window", None) is not None and inferred_mode != RunMode.ORG_REPORT:
-        _exit_error("--trending-window is only supported with --org-report")
-
-    if (
-        getattr(args, "auto_prune", False)
-        and not getattr(args, "auto_snapshot", False)
-        and not getattr(args, "prune_snapshots", False)
-    ):
-        _exit_error("--auto-prune requires --auto-snapshot or --prune-snapshots")
-    if getattr(args, "fail_on_quality", None) and args.skip_validation:
-        _exit_error("--fail-on-quality cannot be used with --skip-validation")
-    if getattr(args, "quality_report", None) and args.skip_validation:
-        _exit_error("--quality-report cannot be used with --skip-validation")
-    if getattr(args, "quality_report", None) and non_sdr_mode:
-        _exit_error("--quality-report is only supported in SDR generation mode")
-    if getattr(args, "allow_partial", False) and getattr(args, "quality_report", None):
-        _exit_error("--allow-partial cannot be used with --quality-report")
-    if getattr(args, "allow_partial", False) and getattr(args, "fail_on_quality", None):
-        _exit_error("--allow-partial cannot be used with --fail-on-quality")
-
-    if getattr(args, "list_snapshots", False) and getattr(args, "prune_snapshots", False):
-        _exit_error("Use either --list-snapshots or --prune-snapshots, not both")
-    if getattr(args, "profile_overwrite", False) and not getattr(args, "profile_import", None):
-        _exit_error("--profile-overwrite requires --profile-import")
+    _validate_org_report_mode_scoped_cli_args(args, inferred_mode=inferred_mode)
 
     # Propagate retry config via env vars so both the current process
     # (read by _effective_retry_config in resilience.py) and child
@@ -9475,20 +9917,6 @@ def _main_impl(run_state: dict[str, Any] | None = None):
     color_theme = getattr(args, "color_theme", "default")
     if color_theme and color_theme != "default":
         ConsoleColors.set_theme(color_theme)
-
-    # Handle --exit-codes mode (no data view required)
-    if getattr(args, "exit_codes", False):
-        from cja_auto_sdr.core.exit_codes import print_exit_codes
-
-        print_exit_codes(banner_width=BANNER_WIDTH)
-        sys.exit(0)
-
-    # Handle --sample-config mode (no data view required)
-    if args.sample_config:
-        success = generate_sample_config()
-        if run_state is not None:
-            run_state["details"] = {"operation_success": success}
-        sys.exit(0 if success else 1)
 
     # ==================== PROFILE MANAGEMENT COMMANDS ====================
 
@@ -9905,12 +10333,16 @@ def _main_impl(run_state: dict[str, Any] | None = None):
         inventory_order=inventory_order,
         api_tuning_config=api_tuning_config,
         circuit_breaker_config=circuit_breaker_config,
+        workers_requested_value=workers_requested_value,
+        api_auto_tune_requested=execution_context["api_auto_tune_requested"],
+        circuit_breaker_enabled=execution_context["circuit_breaker_enabled"],
     )
     successful_results = list(execution_result["successful_results"])
     quality_report_results = list(execution_result["quality_report_results"])
     processed_results = list(execution_result["processed_results"])
     overall_failure = bool(execution_result["overall_failure"])
     processing_failures_detected = bool(execution_result["processing_failures_detected"])
+    _merge_run_details(run_state, execution_settings=execution_result["execution_settings"])
 
     all_quality_issues = aggregate_quality_issues(successful_results)
     if run_state is not None:

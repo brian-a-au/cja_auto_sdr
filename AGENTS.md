@@ -132,11 +132,21 @@ uv run cja_auto_sdr --org-report --force-similarity
 uv run cja_auto_sdr --org-report --duplicate-threshold 5 --fail-on-threshold
 uv run cja_auto_sdr --org-report --isolated-threshold 0.3 --fail-on-threshold
 
+# Adjust stale-lease threshold (default: 3600s)
+uv run cja_auto_sdr --org-report --lock-stale-threshold 900
+
 # Trending
 uv run cja_auto_sdr --org-report --trending-window 10
 
 # Compare to previous report
 uv run cja_auto_sdr --org-report --compare-org-report prev.json
+```
+
+### Diagnostics
+
+```bash
+# Look up an exit code
+uv run cja_auto_sdr --explain-exit-code 2
 ```
 
 ### Validation
@@ -166,6 +176,8 @@ uv run cja_auto_sdr --config-status --config-json
 
 Exit code 1 takes precedence over 2 if both conditions apply.
 
+Use `--explain-exit-code CODE` to get a human-readable explanation of any exit code (meaning, common causes, automation guidance). Always exits 0.
+
 ---
 
 ## Output Conventions
@@ -179,6 +191,7 @@ Exit code 1 takes precedence over 2 if both conditions apply.
   {"error": "Configuration error: Missing credentials", "error_type": "configuration_error"}
   ```
 - `--run-summary-json -` writes a structured run summary to stdout regardless of output format.
+- `--explain-exit-code CODE --run-summary-json -` writes the explanation to stderr and the run-summary JSON to stdout, keeping both streams independently parseable.
 - Wrapper note: `scripts/orchestrator.py` is a higher-level JSON wrapper and always emits its own success/error envelope to stdout so callers can parse one stream. The stderr contract above applies to direct `cja_auto_sdr` CLI invocations.
 
 ---

@@ -40,6 +40,7 @@ class _ConsoleColors:
 def _make_args(**overrides) -> argparse.Namespace:
     defaults = {
         "assume_yes": True,
+        "batch": False,
         "quiet": False,
         "dry_run": False,
         "production": False,
@@ -57,6 +58,9 @@ def _make_args(**overrides) -> argparse.Namespace:
         "circuit_breaker": False,
         "circuit_failure_threshold": 5,
         "circuit_timeout": 30.0,
+        "shared_cache": False,
+        "enable_cache": True,
+        "skip_validation": False,
         "inventory_summary": False,
         "include_derived_inventory": False,
         "include_calculated_metrics": False,
@@ -109,6 +113,71 @@ class TestPrepareSdrExecutionContext:
         assert context["api_tuning_config"].max_workers == 8
         assert context["circuit_breaker_config"].failure_threshold == 4
         assert context["circuit_breaker_config"].timeout_seconds == 12.5
+        assert context["api_auto_tune_requested"] is True
+        assert context["circuit_breaker_enabled"] is True
+        assert context["shared_cache_active"] is False
+
+    def test_returns_run_summary_metadata_flags_with_defaults(self):
+        generator = _make_generator()
+
+        with patch("cja_auto_sdr.cli.execution._generator_module", return_value=generator):
+            context = prepare_sdr_execution_context(_make_args(), data_views=["dv_123"], run_state={})
+
+        assert context["api_auto_tune_requested"] is False
+        assert context["circuit_breaker_enabled"] is False
+        assert context["shared_cache_active"] is False
+
+    def test_shared_cache_active_for_batch_with_validation_and_cache_enabled(self):
+        args = _make_args(batch=True, shared_cache=True, enable_cache=True, skip_validation=False)
+        generator = _make_generator()
+
+        with patch("cja_auto_sdr.cli.execution._generator_module", return_value=generator):
+            context = prepare_sdr_execution_context(args, data_views=["dv_123", "dv_456"], run_state={})
+
+        assert context["shared_cache_active"] is True
+
+    def test_shared_cache_inactive_for_single_view_even_when_flag_enabled(self):
+        args = _make_args(shared_cache=True)
+        generator = _make_generator()
+
+        with patch("cja_auto_sdr.cli.execution._generator_module", return_value=generator):
+            context = prepare_sdr_execution_context(args, data_views=["dv_123"], run_state={})
+
+        assert context["shared_cache_active"] is False
+
+    def test_shared_cache_inactive_when_validation_skipped(self):
+        args = _make_args(batch=True, shared_cache=True, enable_cache=True, skip_validation=True)
+        generator = _make_generator()
+
+        with patch("cja_auto_sdr.cli.execution._generator_module", return_value=generator):
+            context = prepare_sdr_execution_context(args, data_views=["dv_123", "dv_456"], run_state={})
+
+        assert context["shared_cache_active"] is False
+
+    def test_shared_cache_inactive_when_cache_disabled(self):
+        args = _make_args(batch=True, shared_cache=True, enable_cache=False, skip_validation=False)
+        generator = _make_generator()
+
+        with patch("cja_auto_sdr.cli.execution._generator_module", return_value=generator):
+            context = prepare_sdr_execution_context(args, data_views=["dv_123", "dv_456"], run_state={})
+
+        assert context["shared_cache_active"] is False
+
+    def test_shared_cache_inactive_for_quality_report_only_runs(self):
+        args = _make_args(
+            batch=True,
+            shared_cache=True,
+            enable_cache=True,
+            skip_validation=False,
+            quality_report="json",
+        )
+        generator = _make_generator()
+
+        with patch("cja_auto_sdr.cli.execution._generator_module", return_value=generator):
+            context = prepare_sdr_execution_context(args, data_views=["dv_123", "dv_456"], run_state={})
+
+        assert context["quality_report_only"] is True
+        assert context["shared_cache_active"] is False
 
     def test_dry_run_exits_after_running_validation(self):
         args = _make_args(dry_run=True, output_dir="/tmp/not-used")
@@ -491,3 +560,166 @@ class TestExecuteSdrProcessingModesQualityOnly:
         assert "Data Quality Issues:" in out
         assert output["overall_failure"] is False
         assert output["quality_report_results"] == []
+
+
+class TestExecuteSdrProcessingModesExecutionSettings:
+    def _make_result(self, success=True):
+        result = MagicMock()
+        result.success = success
+        result.data_view_name = "Test DV"
+        result.data_view_id = "dv_123"
+        result.metrics_count = 10
+        result.dimensions_count = 5
+        result.dq_issues_count = 0
+        result.error_message = "Something failed"
+        result.emitted_output_files = []
+        result.output_file = "/tmp/output/test.xlsx"
+        result.file_size_formatted = "1.2 MB"
+        return result
+
+    def test_single_mode_omits_batch_only_execution_settings(self, capsys):
+        args = _make_args(
+            quiet=False,
+            batch=False,
+            workers=4,
+            continue_on_error=False,
+            show_timings=False,
+            enable_cache=True,
+            cache_size=100,
+            cache_ttl=300,
+            skip_validation=False,
+            max_issues=10,
+            clear_cache=False,
+            production=False,
+            shared_cache=True,
+        )
+        gen = SimpleNamespace(
+            ConsoleColors=_ConsoleColors,
+            process_single_dataview=MagicMock(return_value=self._make_result(success=True)),
+        )
+
+        with patch("cja_auto_sdr.cli.execution._generator_module", return_value=gen):
+            output = execute_sdr_processing_modes(
+                args,
+                data_views=["dv_123"],
+                effective_log_level="INFO",
+                sdr_format="json",
+                processing_start_time=0.0,
+                workers_auto=True,
+                quality_report_only=False,
+                inventory_order=[],
+                api_tuning_config=None,
+                circuit_breaker_config=None,
+                workers_requested_value="auto",
+                api_auto_tune_requested=False,
+                circuit_breaker_enabled=True,
+            )
+
+        capsys.readouterr()
+        assert output["processing_mode"] == "single"
+        assert output["execution_settings"] == {
+            "api_auto_tune_requested": False,
+            "circuit_breaker_enabled": True,
+        }
+
+    def test_quality_report_mode_omits_batch_only_execution_settings(self, capsys):
+        args = _make_args(
+            quiet=False,
+            batch=True,
+            workers=4,
+            continue_on_error=False,
+            show_timings=False,
+            enable_cache=True,
+            cache_size=100,
+            cache_ttl=300,
+            skip_validation=False,
+            max_issues=10,
+            clear_cache=False,
+            production=False,
+            shared_cache=True,
+            quality_report="json",
+        )
+        result = self._make_result(success=True)
+        gen = SimpleNamespace(
+            ConsoleColors=_ConsoleColors,
+            process_single_dataview=MagicMock(return_value=result),
+        )
+
+        with patch("cja_auto_sdr.cli.execution._generator_module", return_value=gen):
+            output = execute_sdr_processing_modes(
+                args,
+                data_views=["dv_123", "dv_456"],
+                effective_log_level="INFO",
+                sdr_format="json",
+                processing_start_time=0.0,
+                workers_auto=True,
+                quality_report_only=True,
+                inventory_order=[],
+                api_tuning_config=None,
+                circuit_breaker_config=None,
+                workers_requested_value="auto",
+                api_auto_tune_requested=True,
+                circuit_breaker_enabled=False,
+            )
+
+        capsys.readouterr()
+        assert output["processing_mode"] == "quality_report"
+        assert output["execution_settings"] == {
+            "api_auto_tune_requested": True,
+            "circuit_breaker_enabled": False,
+        }
+
+    def test_batch_mode_reports_effective_batch_execution_settings(self, capsys):
+        args = _make_args(
+            quiet=False,
+            batch=True,
+            workers=4,
+            continue_on_error=False,
+            show_timings=False,
+            enable_cache=True,
+            cache_size=100,
+            cache_ttl=300,
+            skip_validation=False,
+            max_issues=10,
+            clear_cache=False,
+            production=False,
+            shared_cache=True,
+        )
+        successful_result = self._make_result(success=True)
+        gen = SimpleNamespace(
+            ConsoleColors=_ConsoleColors,
+            auto_detect_workers=MagicMock(return_value=3),
+            BatchProcessor=MagicMock(
+                return_value=SimpleNamespace(
+                    process_batch=MagicMock(return_value={"successful": [successful_result], "failed": []}),
+                ),
+            ),
+            _result_output_paths=MagicMock(return_value=[]),
+        )
+
+        with patch("cja_auto_sdr.cli.execution._generator_module", return_value=gen):
+            output = execute_sdr_processing_modes(
+                args,
+                data_views=["dv_123", "dv_456"],
+                effective_log_level="INFO",
+                sdr_format="json",
+                processing_start_time=0.0,
+                workers_auto=True,
+                quality_report_only=False,
+                inventory_order=[],
+                api_tuning_config=None,
+                circuit_breaker_config=None,
+                workers_requested_value="auto",
+                api_auto_tune_requested=True,
+                circuit_breaker_enabled=True,
+            )
+
+        capsys.readouterr()
+        assert output["processing_mode"] == "batch"
+        assert output["execution_settings"] == {
+            "batch_workers_requested": "auto",
+            "batch_workers_effective": 3,
+            "api_auto_tune_requested": True,
+            "circuit_breaker_enabled": True,
+            "shared_cache_active": True,
+        }

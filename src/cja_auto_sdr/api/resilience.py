@@ -17,6 +17,7 @@ from typing import Any, TypeVar
 from cja_auto_sdr.core.config import CircuitBreakerConfig, CircuitState
 from cja_auto_sdr.core.constants import DEFAULT_RETRY_CONFIG, RETRYABLE_STATUS_CODES
 from cja_auto_sdr.core.exceptions import CircuitBreakerOpen, RetryableHTTPError
+from cja_auto_sdr.core.logging import emit_diagnostic
 
 
 def _parse_env_numeric(value: str | None, cast: Callable[[str], Any]) -> Any | None:
@@ -639,9 +640,14 @@ class CircuitBreaker:
         self._last_state_change_time = time.time()
 
         if old_state != new_state:
-            self.logger.info(
-                f"Circuit breaker state: {old_state.value} → {new_state.value} "
-                f"(failures={self._failure_count}, successes={self._success_count})",
+            emit_diagnostic(
+                self.logger,
+                "circuit_breaker_transition",
+                "resilience",
+                from_state=old_state.value,
+                to_state=new_state.value,
+                failure_count=self._failure_count,
+                success_count=self._success_count,
             )
 
     def get_statistics(self) -> dict[str, Any]:

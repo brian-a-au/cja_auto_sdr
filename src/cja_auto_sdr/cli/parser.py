@@ -257,6 +257,14 @@ Requirements:
     parser.add_argument("--exit-codes", action="store_true", help="Display exit code reference and exit")
 
     parser.add_argument(
+        "--explain-exit-code",
+        type=int,
+        metavar="CODE",
+        dest="explain_exit_code",
+        help="Explain a single exit code and exit (e.g. --explain-exit-code 2)",
+    )
+
+    parser.add_argument(
         "--completion",
         choices=["bash", "zsh", "fish"],
         metavar="SHELL",
@@ -1376,6 +1384,16 @@ Requirements:
         action="store_true",
         dest="org_flag_stale",
         help="Flag components with stale naming patterns (test, old, temp, deprecated, version suffixes, date patterns)",
+    )
+
+    # Lock stale-threshold control
+    org_group.add_argument(
+        "--lock-stale-threshold",
+        type=int,
+        metavar="SECONDS",
+        default=3600,
+        dest="org_lock_stale_threshold",
+        help="Stale lease recovery threshold in seconds for the org-report concurrency lock (default: 3600)",
     )
 
     # Enable shell tab-completion if argcomplete is installed

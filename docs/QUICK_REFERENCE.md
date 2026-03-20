@@ -1,6 +1,6 @@
 # Quick Reference Card
 
-Single-page command cheat sheet for CJA SDR Generator v3.4.2.
+Single-page command cheat sheet for CJA SDR Generator v3.4.3.
 
 ## Four Main Modes
 
@@ -346,6 +346,8 @@ cja_auto_sdr --list-dataviews  # Uses client-a
 | `--allow-partial` | Opt-in exploratory SDR mode: continue on required component fetch or validation runtime failures (not supported with `--quality-report` or `--fail-on-quality`) | SDR only |
 | `--quality-policy PATH` | Load quality defaults from JSON (`fail_on_quality`, `quality_report`, `max_issues`, `allow_partial`); explicit CLI flags take precedence | SDR only |
 | `--run-summary-json PATH` | Write machine-readable run summary JSON; use `-` for stdout | All modes |
+| `--explain-exit-code CODE` | Print human-readable explanation for an exit code and exit 0 | All modes |
+| `--lock-stale-threshold SECONDS` | Stale-lease recovery threshold for org-report lock (> 0) | Org-report only |
 | `--name-match MODE` | Data view name matching: `exact` (default), `insensitive`, or `fuzzy` | All modes |
 | `--include-segments` | Add segments inventory sheet/section | SDR + Snapshot Diff |
 | `--include-derived` | Add derived field inventory sheet/section | SDR only |
@@ -372,6 +374,10 @@ cja_auto_sdr --list-dataviews  # Uses client-a
 > When `output_files` is present, `output_file` remains the primary artifact for backward compatibility and appears first in emitted artifact order.
 >
 > Run summary contract is currently `summary_version: "1.1"` and follows additive forward compatibility (ignore unknown keys).
+>
+> **Run summary `details` enrichment (additive):** The `details` object may contain `execution_settings` (batch workers, auto-tune, circuit breaker, shared cache, org lock threshold) and `lock` (org-report only: backend, acquired, stale threshold, contention observed, lost during run). These keys do not change `summary_version`.
+>
+> **`--explain-exit-code` + `--run-summary-json -`:** When combined, the human-readable explanation is written to stderr and the run-summary JSON is written to stdout, so both streams remain independently parseable.
 
 ### Diff-Specific Options
 
@@ -450,6 +456,12 @@ cja_auto_sdr "Prodction" --name-match fuzzy
 
 # Machine-readable run summary (all modes)
 cja_auto_sdr dv_12345 --run-summary-json ./summary.json
+
+# Look up what an exit code means
+cja_auto_sdr --explain-exit-code 2
+
+# Explain exit code in CI (explanation to stderr, run-summary JSON to stdout)
+cja_auto_sdr --explain-exit-code 1 --run-summary-json -
 
 # Quality policy from file
 cja_auto_sdr dv_12345 --quality-policy ./quality_policy.json

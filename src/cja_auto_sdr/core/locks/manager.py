@@ -23,12 +23,37 @@ from cja_auto_sdr.core.locks.backends import (
     LockHandle,
     LockInfo,
 )
+from cja_auto_sdr.core.logging import emit_diagnostic
 
 DEFAULT_LOCK_BACKEND_ENV = "CJA_LOCK_BACKEND"
 
 
+def normalize_lock_stale_threshold_seconds(stale_threshold_seconds: int) -> int:
+    """Clamp stale-threshold inputs to the minimum supported lease window."""
+    return max(1, stale_threshold_seconds)
+
+
 def _utcnow_iso() -> str:
     return datetime.now(UTC).isoformat()
+
+
+def _emit_lock_backend_fallback(
+    logger: logging.Logger | None,
+    *,
+    from_backend: str,
+    to_backend: str,
+    reason: str,
+) -> None:
+    """Emit fallback diagnostics at warning level so default CLI runs still surface them."""
+    emit_diagnostic(
+        logger or logging.getLogger(__name__),
+        "lock_backend_fallback",
+        "lifecycle",
+        level=logging.WARNING,
+        from_backend=from_backend,
+        to_backend=to_backend,
+        reason=reason,
+    )
 
 
 def create_lock_backend(
@@ -43,13 +68,23 @@ def create_lock_backend(
     if requested == "auto":
         if FcntlFileLockBackend.is_supported():
             return FcntlFileLockBackend()
-        log.warning("fcntl locks unavailable; using lease lock backend")
+        _emit_lock_backend_fallback(
+            log,
+            from_backend="fcntl",
+            to_backend="lease",
+            reason="fcntl_unavailable",
+        )
         return LeaseFileLockBackend()
 
     if requested == "fcntl":
         if FcntlFileLockBackend.is_supported():
             return FcntlFileLockBackend()
-        log.warning("Requested fcntl backend is unavailable; falling back to lease backend")
+        _emit_lock_backend_fallback(
+            log,
+            from_backend="fcntl",
+            to_backend="lease",
+            reason="fcntl_requested_unavailable",
+        )
         return LeaseFileLockBackend()
 
     if requested == "lease":
@@ -73,7 +108,7 @@ class LockManager:
     ):
         self.lock_path = lock_path
         self.owner = owner
-        self.stale_threshold_seconds = max(1, stale_threshold_seconds)
+        self.stale_threshold_seconds = normalize_lock_stale_threshold_seconds(stale_threshold_seconds)
         self.logger = logger or logging.getLogger(__name__)
         self.backend = create_lock_backend(backend_name, logger=self.logger)
 
@@ -95,6 +130,10 @@ class LockManager:
     def lock_lost(self) -> bool:
         return self._lock_lost.is_set()
 
+    @property
+    def backend_name(self) -> str:
+        return getattr(self.backend, "name", "unknown")
+
     def acquire(self) -> bool:
         """Attempt lock acquisition without blocking."""
         with self._state_lock:
@@ -103,11 +142,13 @@ class LockManager:
 
         result = self._acquire_with_result(self.backend, self.lock_path, self.stale_threshold_seconds)
         if result.status == AcquireStatus.BACKEND_UNAVAILABLE and isinstance(self.backend, FcntlFileLockBackend):
-            self.logger.warning(
-                "fcntl backend unavailable for '%s'; falling back to lease backend",
-                self.lock_path,
-            )
             fallback = LeaseFileLockBackend()
+            _emit_lock_backend_fallback(
+                self.logger,
+                from_backend="fcntl",
+                to_backend="lease",
+                reason="acquire_backend_unavailable",
+            )
             result = self._acquire_with_result(fallback, self.lock_path, self.stale_threshold_seconds)
             with self._state_lock:
                 self.backend = fallback
@@ -124,6 +165,20 @@ class LockManager:
 
         handle = result.handle
         if result.status != AcquireStatus.ACQUIRED or handle is None:
+            current_owner = None
+            with suppress(Exception):  # best-effort metadata read
+                info = self.read_info()
+                if info is not None:
+                    current_owner = {k: info[k] for k in ("pid", "owner", "backend", "started_at") if k in info} or None
+            emit_diagnostic(
+                self.logger,
+                "lock_acquire_failed",
+                "lifecycle",
+                lock_path=str(self.lock_path),
+                backend=self.backend.name,
+                reason=result.status.value,
+                current_owner=current_owner or "unknown",
+            )
             return False
 
         lock_info = LockInfo(
@@ -152,6 +207,14 @@ class LockManager:
             self._lock_lost.clear()
             self._lock_lost_reason = None
         self._start_heartbeat_if_needed()
+        emit_diagnostic(
+            self.logger,
+            "lock_acquired",
+            "lifecycle",
+            lock_path=str(self.lock_path),
+            lock_id=lock_info.lock_id,
+            backend=self.backend.name,
+        )
         return True
 
     def release(self) -> None:
@@ -159,11 +222,20 @@ class LockManager:
         self._stop_heartbeat()
         with self._state_lock:
             handle = self._handle
+            lock_info = self._lock_info
             self._handle = None
             self._lock_info = None
         if handle is None:
             return
         self.backend.release(handle)
+        emit_diagnostic(
+            self.logger,
+            "lock_released",
+            "lifecycle",
+            lock_path=str(self.lock_path),
+            lock_id=lock_info.lock_id if lock_info else "unknown",
+            backend=self.backend.name,
+        )
 
     def read_info(self) -> dict | None:
         """Read lock metadata for diagnostics."""
@@ -228,6 +300,7 @@ class LockManager:
         self.logger.error("Lock heartbeat failed for %s; releasing lock (%s)", self.lock_path, error)
         with self._state_lock:
             handle = self._handle
+            lock_info = self._lock_info
             if handle is None:
                 return
             self._handle = None
@@ -235,6 +308,14 @@ class LockManager:
             self._lock_lost_reason = reason
             self._lock_lost.set()
         self._heartbeat_stop.set()
+        emit_diagnostic(
+            self.logger,
+            "lock_heartbeat_lost",
+            "lifecycle",
+            lock_path=str(self.lock_path),
+            lock_id=lock_info.lock_id if lock_info else "unknown",
+            error=str(error),
+        )
         with suppress(OSError):
             self.backend.release(handle)
 

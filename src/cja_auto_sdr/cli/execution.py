@@ -164,6 +164,59 @@ def _confirm_large_batch(args: argparse.Namespace, *, data_views: list[str]) -> 
         sys.exit(0)
 
 
+def _resolve_sdr_processing_mode(
+    args: argparse.Namespace,
+    *,
+    data_views: list[str],
+    quality_report_only: bool,
+) -> str:
+    """Return the effective SDR execution path for the current invocation."""
+    if quality_report_only:
+        return "quality_report"
+    if getattr(args, "batch", False) or len(data_views) > 1:
+        return "batch"
+    return "single"
+
+
+def _resolve_shared_cache_active(
+    args: argparse.Namespace,
+    *,
+    processing_mode: str,
+) -> bool:
+    """Report shared-cache activation only when the batch executor can instantiate it."""
+    return bool(
+        processing_mode == "batch"
+        and getattr(args, "shared_cache", False)
+        and getattr(args, "enable_cache", True)
+        and not getattr(args, "skip_validation", False)
+    )
+
+
+def _build_run_summary_execution_settings(
+    *,
+    processing_mode: str,
+    workers_requested_value: str | int | None,
+    effective_workers: int | None,
+    api_auto_tune_requested: bool,
+    circuit_breaker_enabled: bool,
+    shared_cache_active: bool,
+) -> dict[str, Any]:
+    """Build execution_settings using effective runtime behavior, not raw CLI intent."""
+    execution_settings: dict[str, Any] = {
+        "api_auto_tune_requested": api_auto_tune_requested,
+        "circuit_breaker_enabled": circuit_breaker_enabled,
+    }
+
+    if processing_mode == "batch":
+        if workers_requested_value is not None:
+            execution_settings["batch_workers_requested"] = workers_requested_value
+        if effective_workers is not None:
+            execution_settings["batch_workers_effective"] = int(effective_workers)
+        execution_settings["shared_cache_active"] = shared_cache_active
+
+    return execution_settings
+
+
 def prepare_sdr_execution_context(
     args: argparse.Namespace,
     *,
@@ -296,6 +349,17 @@ def prepare_sdr_execution_context(
             run_state=run_state,
         )
 
+    # --- Execution metadata for run-summary enrichment ---
+    # shared-cache activation must follow the effective processing path, not
+    # just raw CLI intent. Quality-report mode stays sequential even when
+    # multiple data views are supplied, so it cannot activate the shared cache.
+    processing_mode = _resolve_sdr_processing_mode(
+        args,
+        data_views=data_views,
+        quality_report_only=quality_report_only,
+    )
+    shared_cache_active = _resolve_shared_cache_active(args, processing_mode=processing_mode)
+
     return {
         "effective_log_level": effective_log_level,
         "quality_report_format": quality_report_format,
@@ -305,6 +369,9 @@ def prepare_sdr_execution_context(
         "api_tuning_config": api_tuning_config,
         "circuit_breaker_config": circuit_breaker_config,
         "inventory_order": inventory_order,
+        "api_auto_tune_requested": api_tuning_config is not None,
+        "circuit_breaker_enabled": circuit_breaker_config is not None,
+        "shared_cache_active": shared_cache_active,
     }
 
 
@@ -486,6 +553,7 @@ def _run_batch_mode(
         "processed_results": processed_results,
         "overall_failure": bool(results["failed"] and not args.continue_on_error),
         "processing_failures_detected": bool(results.get("failed")),
+        "effective_workers": int(args.workers),
     }
 
 
@@ -716,10 +784,19 @@ def execute_sdr_processing_modes(
     inventory_order: list[str],
     api_tuning_config: Any,
     circuit_breaker_config: Any,
+    workers_requested_value: str | int | None = None,
+    api_auto_tune_requested: bool = False,
+    circuit_breaker_enabled: bool = False,
 ) -> dict[str, Any]:
     """Execute the remaining SDR/quality-report processing branches for ``_main_impl()``."""
-    if quality_report_only:
-        return _run_quality_report_mode(
+    processing_mode = _resolve_sdr_processing_mode(
+        args,
+        data_views=data_views,
+        quality_report_only=quality_report_only,
+    )
+
+    if processing_mode == "quality_report":
+        result = _run_quality_report_mode(
             args,
             data_views=data_views,
             effective_log_level=effective_log_level,
@@ -728,9 +805,8 @@ def execute_sdr_processing_modes(
             api_tuning_config=api_tuning_config,
             circuit_breaker_config=circuit_breaker_config,
         )
-
-    if args.batch or len(data_views) > 1:
-        return _run_batch_mode(
+    elif processing_mode == "batch":
+        result = _run_batch_mode(
             args,
             data_views=data_views,
             effective_log_level=effective_log_level,
@@ -742,15 +818,26 @@ def execute_sdr_processing_modes(
             api_tuning_config=api_tuning_config,
             circuit_breaker_config=circuit_breaker_config,
         )
+    else:
+        result = _run_single_mode(
+            args,
+            data_views=data_views,
+            effective_log_level=effective_log_level,
+            sdr_format=sdr_format,
+            processing_start_time=processing_start_time,
+            quality_report_only=quality_report_only,
+            inventory_order=inventory_order,
+            api_tuning_config=api_tuning_config,
+            circuit_breaker_config=circuit_breaker_config,
+        )
 
-    return _run_single_mode(
-        args,
-        data_views=data_views,
-        effective_log_level=effective_log_level,
-        sdr_format=sdr_format,
-        processing_start_time=processing_start_time,
-        quality_report_only=quality_report_only,
-        inventory_order=inventory_order,
-        api_tuning_config=api_tuning_config,
-        circuit_breaker_config=circuit_breaker_config,
+    result["processing_mode"] = processing_mode
+    result["execution_settings"] = _build_run_summary_execution_settings(
+        processing_mode=processing_mode,
+        workers_requested_value=workers_requested_value,
+        effective_workers=result.get("effective_workers"),
+        api_auto_tune_requested=api_auto_tune_requested,
+        circuit_breaker_enabled=circuit_breaker_enabled,
+        shared_cache_active=_resolve_shared_cache_active(args, processing_mode=processing_mode),
     )
+    return result

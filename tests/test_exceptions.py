@@ -306,6 +306,36 @@ class TestConcurrentOrgReportError:
         expected = "Another --org-report is already running for org 'org123': PID 9999, started at 2026-02-14T10:00:00"
         assert str(err) == expected
 
+    def test_lock_holder_owner_field(self):
+        err = ConcurrentOrgReportError("org123", lock_holder_owner="ci-runner")
+        assert err.lock_holder_owner == "ci-runner"
+        assert "owner ci-runner" in err.details
+
+    def test_lock_backend_field(self):
+        err = ConcurrentOrgReportError("org123", lock_backend="lease")
+        assert err.lock_backend == "lease"
+        assert "backend lease" in err.details
+
+    def test_all_fields_with_owner_and_backend(self):
+        err = ConcurrentOrgReportError(
+            "org123",
+            lock_holder_pid=9999,
+            lock_holder_owner="ci-runner",
+            lock_backend="fcntl",
+            started_at="2026-02-14T10:00:00",
+        )
+        assert err.lock_holder_owner == "ci-runner"
+        assert err.lock_backend == "fcntl"
+        assert "PID 9999" in err.details
+        assert "owner ci-runner" in err.details
+        assert "backend fcntl" in err.details
+        assert "started at 2026-02-14T10:00:00" in err.details
+
+    def test_owner_and_backend_default_to_none(self):
+        err = ConcurrentOrgReportError("org123")
+        assert err.lock_holder_owner is None
+        assert err.lock_backend is None
+
     def test_inherits_cjasdr_error(self):
         assert issubclass(ConcurrentOrgReportError, CJASDRError)
 

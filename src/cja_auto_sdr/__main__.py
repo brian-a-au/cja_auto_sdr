@@ -21,6 +21,7 @@ from functools import lru_cache
 from typing import NamedTuple
 
 from cja_auto_sdr.cli.option_resolution import resolve_long_option_token as _resolve_long_option_token
+from cja_auto_sdr.cli.standalone_policy import standalone_prevalidation_policy
 
 _VERSION_OPTION = "--version"
 _VERSION_SHORT_OPTION = "-V"
@@ -43,6 +44,7 @@ _COMPLETION_SCRIPT_TEMPLATES: dict[str, str] = {
 class _OptionSpec(NamedTuple):
     """Minimal option metadata needed for fast-path token scanning."""
 
+    dest: str
     min_arity: int
     accepts_inline_value: bool
 
@@ -75,6 +77,21 @@ class _ArgparseProbeParseResult(NamedTuple):
 
     namespace: object | None
     termination: _ArgparseProbeResult | None
+
+
+class _FastPathRequest(NamedTuple):
+    """Resolved fast-path request payload."""
+
+    flag: str
+    completion_shell: str | None = None
+    explain_exit_code: int | None = None
+
+
+_STANDALONE_FAST_PATH_MODE_NAMES: Mapping[str, str] = {
+    _COMPLETION_OPTION: "completion",
+    "--exit-codes": "exit_codes",
+    "--explain-exit-code": "explain_exit_code",
+}
 
 
 def _is_argcomplete_completion_active(environ: Mapping[str, str] | None = None) -> bool:
@@ -119,6 +136,7 @@ def _fast_path_option_spec() -> tuple[frozenset[str], dict[str, _OptionSpec]]:
             continue
         action_nargs = getattr(action, "nargs", None)
         option_spec = _OptionSpec(
+            dest=getattr(action, "dest", ""),
             min_arity=_minimum_option_arity(action_nargs),
             accepts_inline_value=_accepts_inline_option_value(action_nargs),
         )
@@ -272,15 +290,86 @@ def _probe_argparse_parse(args: list[str], argv0: str | None = None) -> _Argpars
     return _ArgparseProbeParseResult(namespace=namespace, termination=None)
 
 
-def _is_fast_path_flag(argv: list[str]) -> str | None:
-    """Return the fast-path flag present in *argv*, or ``None``."""
-    # Only consider real arguments (ignore argv[0] script/module path).
+def _primary_fast_path_option_dest(primary_option: str) -> str | None:
+    """Return the argparse dest for the primary fast-path option."""
+    _, option_specs = _fast_path_option_spec()
+    option_spec = option_specs.get(primary_option)
+    if option_spec is None:
+        return None
+    return option_spec.dest
+
+
+def _fast_path_allowed_option_dests(primary_option: str) -> frozenset[str]:
+    """Return option dests that may accompany *primary_option* on the fast path."""
+    allowed_dests: set[str] = set()
+    primary_dest = _primary_fast_path_option_dest(primary_option)
+    if primary_dest:
+        allowed_dests.add(primary_dest)
+
+    mode_name = _STANDALONE_FAST_PATH_MODE_NAMES.get(primary_option)
+    if mode_name is None:
+        return frozenset(allowed_dests)
+
+    policy = standalone_prevalidation_policy(mode_name)
+    if policy is not None:
+        allowed_dests.update(policy.tolerated_fast_path_dests())
+
+    return frozenset(allowed_dests)
+
+
+def _fast_path_options_fit_policy(options: tuple[str, ...], primary_option: str) -> bool:
+    """Return True when all resolved options are tolerated by the standalone policy."""
+    allowed_dests = _fast_path_allowed_option_dests(primary_option)
+    if not allowed_dests:
+        return False
+
+    _, option_specs = _fast_path_option_spec()
+    for option in options:
+        option_spec = option_specs.get(option)
+        if option_spec is None or option_spec.dest not in allowed_dests:
+            return False
+    return True
+
+
+def _resolve_non_version_fast_path_request(
+    scan: _OptionScanResult,
+    namespace: object | None,
+) -> _FastPathRequest | None:
+    """Resolve non-version standalone fast-path requests from a probe parse."""
+    if namespace is None:
+        return None
+
+    if getattr(namespace, "explain_exit_code", None) is not None:
+        if getattr(namespace, "data_views", []):
+            return None
+        if not _fast_path_options_fit_policy(scan.options, "--explain-exit-code"):
+            return None
+        return _FastPathRequest(flag="--explain-exit-code", explain_exit_code=int(namespace.explain_exit_code))
+
+    if getattr(namespace, "exit_codes", False):
+        if getattr(namespace, "data_views", []):
+            return None
+        if not _fast_path_options_fit_policy(scan.options, "--exit-codes"):
+            return None
+        return _FastPathRequest(flag="--exit-codes")
+
+    completion_shell = getattr(namespace, "completion", None)
+    if completion_shell is not None:
+        if getattr(namespace, "data_views", []):
+            return None
+        if not _fast_path_options_fit_policy(scan.options, _COMPLETION_OPTION):
+            return None
+        return _FastPathRequest(flag=_COMPLETION_OPTION, completion_shell=str(completion_shell).lower())
+
+    return None
+
+
+def _resolve_fast_path_request(argv: list[str]) -> _FastPathRequest | None:
+    """Return the resolved fast-path request for *argv*, or ``None``."""
     args = argv[1:]
     if not args:
         return None
 
-    # Preserve run-summary contract: when requested, always route through
-    # generator.main() so summary emission is consistent and order-independent.
     if _has_run_summary_contract_flag(args):
         return None
 
@@ -290,25 +379,27 @@ def _is_fast_path_flag(argv: list[str]) -> str | None:
     if has_version_candidate:
         probe = _probe_argparse_termination(args, argv[0] if argv else None)
         if probe is not None:
-            # argparse exits with status 0 for both help and version actions.
-            # Treat non-help output as version-action termination.
             probe_text = (probe.output or "").lower()
             if probe.status == 0 and probe_text and "usage:" not in probe_text:
-                return _VERSION_OPTION
+                return _FastPathRequest(flag=_VERSION_OPTION)
         return None
 
-    # For non-version requests, parse errors still disable fast-path.
     if scan.has_parse_error:
         return None
 
-    # --help / -h — still needs the full parser for complete output,
-    # so we don't intercept it here.
+    probe = _probe_argparse_parse(args, argv[0] if argv else None)
+    if probe.termination is not None:
+        return None
 
-    # --exit-codes (standalone flag, no other args needed)
-    if args == ["--exit-codes"]:
-        return "--exit-codes"
+    return _resolve_non_version_fast_path_request(scan, probe.namespace)
 
-    return None
+
+def _is_fast_path_flag(argv: list[str]) -> str | None:
+    """Return the fast-path flag present in *argv*, or ``None``."""
+    request = _resolve_fast_path_request(argv)
+    if request is None:
+        return None
+    return request.flag
 
 
 def _resolve_program_name(
@@ -380,6 +471,12 @@ def _print_exit_codes() -> None:
     print_exit_codes(banner_width=BANNER_WIDTH)
 
 
+def _explain_exit_code(code: int) -> None:
+    from cja_auto_sdr.core.exit_codes import explain_exit_code
+
+    explain_exit_code(code)
+
+
 def _handle_completion(shell: str, argv0: str | None = None) -> None:
     """Print the shell completion activation script and exit.
 
@@ -412,39 +509,10 @@ def _completion_fast_path_shell(argv: list[str]) -> str | None:
     Any mixed flags, parse errors, or argparse action precedence cases fall
     through to ``generator.main()`` to preserve parser behavior.
     """
-    args = argv[1:] if len(argv) > 1 else []
-    if not args:
+    request = _resolve_fast_path_request(argv)
+    if request is None or request.flag != _COMPLETION_OPTION:
         return None
-
-    # Preserve run-summary contract: summary emission must route through
-    # generator.main() regardless of option ordering.
-    if _has_run_summary_contract_flag(args):
-        return None
-
-    scan = _scan_option_tokens(args)
-    if scan.has_parse_error:
-        return None
-
-    if _COMPLETION_OPTION not in scan.options:
-        return None
-
-    # Completion fast-path is intentionally strict: only standalone completion
-    # requests are intercepted; mixed option combinations defer to argparse.
-    if any(option != _COMPLETION_OPTION for option in scan.options):
-        return None
-
-    probe = _probe_argparse_parse(args, argv[0] if argv else None)
-    if probe.termination is not None or probe.namespace is None:
-        return None
-
-    completion_shell = getattr(probe.namespace, "completion", None)
-    if completion_shell is None:
-        return None
-
-    if getattr(probe.namespace, "data_views", []):
-        return None
-
-    return str(completion_shell).lower()
+    return request.completion_shell
 
 
 def main() -> None:
@@ -457,22 +525,22 @@ def main() -> None:
         _generator_main()
         return
 
-    # --completion fast-path: only standalone, parser-valid completion requests
-    # are handled here. Mixed/invalid argv must defer to full argparse flow.
-    completion_shell = _completion_fast_path_shell(sys.argv)
-    if completion_shell is not None:
-        _handle_completion(completion_shell, sys.argv[0] if sys.argv else None)
-        # _handle_completion always raises SystemExit; this is a safety net.
-        return  # pragma: no cover
+    request = _resolve_fast_path_request(sys.argv)
 
-    flag = _is_fast_path_flag(sys.argv)
-
-    if flag == "--version":
+    if request is not None and request.flag == "--version":
         _print_version(_resolve_program_name(sys.argv[0] if sys.argv else None))
         raise SystemExit(0)
 
-    if flag == "--exit-codes":
+    if request is not None and request.flag == _COMPLETION_OPTION:
+        _handle_completion(request.completion_shell or "", sys.argv[0] if sys.argv else None)
+        return  # pragma: no cover
+
+    if request is not None and request.flag == "--exit-codes":
         _print_exit_codes()
+        raise SystemExit(0)
+
+    if request is not None and request.flag == "--explain-exit-code" and request.explain_exit_code is not None:
+        _explain_exit_code(request.explain_exit_code)
         raise SystemExit(0)
 
     # All other invocations need the full generator

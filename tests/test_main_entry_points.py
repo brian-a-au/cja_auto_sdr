@@ -14,7 +14,7 @@ from unittest.mock import patch
 
 import pytest
 
-from cja_auto_sdr.generator import _main_impl, main, parse_arguments
+from cja_auto_sdr.generator import RunMode, _main_impl, _resolve_semantic_validation_args, main, parse_arguments
 
 
 def _mock_cli_option_specified(option_name, argv=None):
@@ -72,6 +72,62 @@ class TestMainImplDiscoveryDispatch:
         assert exc_info.value.code == 1
 
 
+class TestStandalonePrevalidationPolicy:
+    """Test standalone semantic-validation policy shaping."""
+
+    @pytest.mark.parametrize(
+        ("argv", "inferred_mode"),
+        [
+            (["--completion", "bash", "--auto-snapshot", "--auto-prune", "--skip-validation"], RunMode.COMPLETION),
+            (
+                ["--explain-exit-code", "2", "--auto-snapshot", "--auto-prune", "--skip-validation"],
+                RunMode.EXPLAIN_EXIT_CODE,
+            ),
+            (["--exit-codes", "--auto-snapshot", "--auto-prune", "--skip-validation"], RunMode.EXIT_CODES),
+            (["--sample-config", "--auto-snapshot", "--auto-prune", "--skip-validation"], RunMode.SAMPLE_CONFIG),
+        ],
+    )
+    def test_wrapper_tolerated_modes_sanitize_shared_sdr_flags(self, argv, inferred_mode):
+        args = parse_arguments(argv)
+
+        sanitized_args = _resolve_semantic_validation_args(args, inferred_mode=inferred_mode)
+
+        assert sanitized_args is not args
+        assert sanitized_args.auto_prune is False
+        assert sanitized_args.auto_snapshot is False
+        assert sanitized_args.skip_validation is False
+
+    def test_sdr_mode_keeps_shared_sdr_flags_intact(self):
+        args = parse_arguments(["dv_test", "--auto-snapshot", "--auto-prune", "--skip-validation"])
+
+        sanitized_args = _resolve_semantic_validation_args(args, inferred_mode=RunMode.SDR)
+
+        assert sanitized_args is args
+        assert sanitized_args.auto_prune is True
+        assert sanitized_args.skip_validation is True
+
+    @pytest.mark.parametrize(
+        ("argv", "expected_dest", "expected_value"),
+        [
+            (["--sample-config", "--quality-report", "json"], "quality_report", "json"),
+            (["--sample-config", "--fail-on-quality", "HIGH"], "fail_on_quality", "HIGH"),
+            (["--sample-config", "--allow-partial"], "allow_partial", True),
+        ],
+    )
+    def test_sample_config_preserves_sdr_only_policy_flags_for_fail_closed_validation(
+        self,
+        argv,
+        expected_dest,
+        expected_value,
+    ):
+        args = parse_arguments(argv)
+
+        sanitized_args = _resolve_semantic_validation_args(args, inferred_mode=RunMode.SAMPLE_CONFIG)
+
+        assert sanitized_args is not args
+        assert getattr(sanitized_args, expected_dest) == expected_value
+
+
 class TestMainImplExitCodes:
     """Test _main_impl --exit-codes mode."""
 
@@ -91,6 +147,76 @@ class TestMainImplExitCodes:
         assert "0" in output and "Success" in output
         assert "1" in output and "Error" in output
         assert "2" in output
+
+    @patch("cja_auto_sdr.generator._cli_option_specified", _mock_cli_option_specified)
+    def test_exit_codes_bypass_auto_prune_semantic_validation(self, capsys):
+        with pytest.raises(SystemExit) as exc_info:
+            with patch("cja_auto_sdr.generator.parse_arguments") as mock_pa:
+                mock_pa.return_value = parse_arguments(["--exit-codes", "--auto-prune"])
+                _main_impl()
+
+        assert exc_info.value.code == 0
+        captured = capsys.readouterr()
+        assert "EXIT CODE REFERENCE" in captured.out
+        assert "--auto-prune requires --auto-snapshot or --prune-snapshots" not in captured.err
+
+    @patch("cja_auto_sdr.generator._cli_option_specified", _mock_cli_option_specified)
+    def test_exit_codes_bypass_quality_policy_loading(self, capsys, tmp_path):
+        missing_policy = tmp_path / "missing_quality_policy.json"
+
+        with pytest.raises(SystemExit) as exc_info:
+            with patch("cja_auto_sdr.generator.parse_arguments") as mock_pa:
+                mock_pa.return_value = parse_arguments(["--exit-codes", "--quality-policy", str(missing_policy)])
+                _main_impl()
+
+        assert exc_info.value.code == 0
+        captured = capsys.readouterr()
+        assert "EXIT CODE REFERENCE" in captured.out
+        assert f"Failed to load --quality-policy '{missing_policy}'" not in captured.err
+
+    @patch("cja_auto_sdr.generator._cli_option_specified", _mock_cli_option_specified)
+    def test_exit_codes_run_state_ignores_allow_partial_metadata(self):
+        run_state = {"mode": "unknown", "details": {}, "allow_partial": True, "run_summary_output": "stdout"}
+
+        with pytest.raises(SystemExit) as exc_info:
+            with patch("cja_auto_sdr.generator.parse_arguments") as mock_pa:
+                mock_pa.return_value = parse_arguments(["--exit-codes", "--allow-partial", "--run-summary-json", "-"])
+                _main_impl(run_state=run_state)
+
+        assert exc_info.value.code == 0
+        assert run_state["allow_partial"] is False
+
+    @patch("cja_auto_sdr.generator._cli_option_specified", _mock_cli_option_specified)
+    @patch("cja_auto_sdr.core.exit_codes.print_exit_codes")
+    def test_exit_codes_still_reject_snapshot_conflicts(self, mock_print_exit_codes, capsys):
+        with pytest.raises(SystemExit) as exc_info:
+            with patch("cja_auto_sdr.generator.parse_arguments") as mock_pa:
+                mock_pa.return_value = parse_arguments(["--exit-codes", "--list-snapshots", "--prune-snapshots"])
+                _main_impl()
+
+        assert exc_info.value.code == 1
+        assert "Use either --list-snapshots or --prune-snapshots, not both" in capsys.readouterr().err
+        mock_print_exit_codes.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "argv",
+        [
+            ["--exit-codes", "--trending-window", "3"],
+            ["--exit-codes", "--cluster"],
+            ["--exit-codes", "--duplicate-threshold", "5"],
+        ],
+    )
+    @patch("cja_auto_sdr.generator._cli_option_specified", _mock_cli_option_specified)
+    @patch("cja_auto_sdr.core.exit_codes.print_exit_codes")
+    def test_exit_codes_still_reject_org_report_only_flags(self, mock_print_exit_codes, capsys, argv):
+        with pytest.raises(SystemExit) as exc_info:
+            with patch("cja_auto_sdr.generator.parse_arguments") as mock_pa:
+                mock_pa.return_value = parse_arguments(argv)
+                _main_impl()
+
+        assert exc_info.value.code == 1
+        assert "--org-report" in capsys.readouterr().err
+        mock_print_exit_codes.assert_not_called()
 
 
 class TestMainImplSampleConfig:
@@ -121,6 +247,70 @@ class TestMainImplSampleConfig:
                 _main_impl()
 
         assert exc_info.value.code == 1
+
+    @pytest.mark.parametrize(
+        ("argv", "expected_error"),
+        [
+            (
+                ["--sample-config", "--quality-report", "json"],
+                "--quality-report is only supported in SDR generation mode",
+            ),
+            (
+                ["--sample-config", "--fail-on-quality", "HIGH"],
+                "--fail-on-quality is only supported in SDR generation mode",
+            ),
+            (["--sample-config", "--allow-partial"], "--allow-partial is only supported in SDR generation mode"),
+        ],
+    )
+    @patch("cja_auto_sdr.generator._cli_option_specified", _mock_cli_option_specified)
+    @patch("cja_auto_sdr.generator.generate_sample_config")
+    def test_sample_config_rejects_sdr_only_policy_flags_before_generation(
+        self,
+        mock_gen,
+        capsys,
+        argv,
+        expected_error,
+    ):
+        with pytest.raises(SystemExit) as exc_info:
+            with patch("cja_auto_sdr.generator.parse_arguments") as mock_pa:
+                mock_pa.return_value = parse_arguments(argv)
+                _main_impl()
+
+        assert exc_info.value.code == 1
+        assert expected_error in capsys.readouterr().err
+        mock_gen.assert_not_called()
+
+    @patch("cja_auto_sdr.generator._cli_option_specified", _mock_cli_option_specified)
+    @patch("cja_auto_sdr.generator.generate_sample_config")
+    def test_sample_config_bypasses_auto_prune_semantic_validation(self, mock_gen, capsys):
+        mock_gen.return_value = True
+
+        with pytest.raises(SystemExit) as exc_info:
+            with patch("cja_auto_sdr.generator.parse_arguments") as mock_pa:
+                mock_pa.return_value = parse_arguments(
+                    ["--sample-config", "--auto-snapshot", "--auto-prune", "--skip-validation"],
+                )
+                _main_impl()
+
+        assert exc_info.value.code == 0
+        captured = capsys.readouterr()
+        assert "--auto-prune requires --auto-snapshot or --prune-snapshots" not in captured.err
+        mock_gen.assert_called_once()
+
+    @patch("cja_auto_sdr.generator._cli_option_specified", _mock_cli_option_specified)
+    @patch("cja_auto_sdr.generator.generate_sample_config")
+    def test_sample_config_ignores_quality_policy_file_errors(self, mock_gen, capsys, tmp_path):
+        mock_gen.return_value = True
+        missing_policy = tmp_path / "missing_quality_policy.json"
+
+        with pytest.raises(SystemExit) as exc_info:
+            with patch("cja_auto_sdr.generator.parse_arguments") as mock_pa:
+                mock_pa.return_value = parse_arguments(["--sample-config", "--quality-policy", str(missing_policy)])
+                _main_impl()
+
+        assert exc_info.value.code == 0
+        assert f"Failed to load --quality-policy '{missing_policy}'" not in capsys.readouterr().err
+        mock_gen.assert_called_once()
 
 
 class TestMainImplProfileManagement:

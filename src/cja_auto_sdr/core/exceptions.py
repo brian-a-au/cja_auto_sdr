@@ -190,6 +190,8 @@ class ConcurrentOrgReportError(CJASDRError):
         org_id: Organization ID that is locked
         lock_holder_pid: PID of the process holding the lock
         started_at: When the other run started
+        lock_holder_owner: Owner identifier from lock metadata (additive, optional)
+        lock_backend: Lock backend name from lock metadata (additive, optional)
     """
 
     def __init__(
@@ -197,15 +199,23 @@ class ConcurrentOrgReportError(CJASDRError):
         org_id: str,
         lock_holder_pid: int | None = None,
         started_at: str | None = None,
+        lock_holder_owner: str | None = None,
+        lock_backend: str | None = None,
     ):
         self.org_id = org_id
         self.lock_holder_pid = lock_holder_pid
         self.started_at = started_at
+        self.lock_holder_owner = lock_holder_owner
+        self.lock_backend = lock_backend
 
         message = f"Another --org-report is already running for org '{org_id}'"
         details_parts = []
         if lock_holder_pid:
             details_parts.append(f"PID {lock_holder_pid}")
+        if lock_holder_owner:
+            details_parts.append(f"owner {lock_holder_owner}")
+        if lock_backend:
+            details_parts.append(f"backend {lock_backend}")
         if started_at:
             details_parts.append(f"started at {started_at}")
 
