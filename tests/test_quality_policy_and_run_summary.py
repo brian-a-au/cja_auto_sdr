@@ -20,6 +20,7 @@ from cja_auto_sdr.generator import (
     RUN_SUMMARY_SCHEMA_VERSION,
     ProcessingResult,
     RunMode,
+    _build_org_report_lock_run_summary_block,
     _coerce_run_mode,
     _collect_environment_info,
     _infer_run_status,
@@ -683,3 +684,82 @@ class TestCollectEnvironmentInfo:
             info = _collect_environment_info()
             assert info["dependencies"]["pandas"] == "unknown"
             assert info["dependencies"]["numpy"] != "unknown"
+
+
+# ==================== lock run-summary block builder ====================
+
+
+class TestBuildOrgReportLockRunSummaryBlock:
+    """Tests for _build_org_report_lock_run_summary_block reshaping contract."""
+
+    def test_happy_path_all_fields(self):
+        block = _build_org_report_lock_run_summary_block({
+            "lock_acquired": True,
+            "lock_stale_threshold_seconds": 3600,
+            "lock_contention": False,
+            "lock_ownership_lost": False,
+            "lock_backend": "lease",
+        })
+        assert block["acquired"] is True
+        assert block["stale_threshold_seconds"] == 3600
+        assert block["contention_observed"] is False
+        assert block["lost_during_run"] is False
+        assert block["backend"] == "lease"
+        assert "loss_reason" not in block
+
+    def test_acquired_then_lost(self):
+        block = _build_org_report_lock_run_summary_block({
+            "lock_acquired": True,
+            "lock_ownership_lost": True,
+            "lock_backend": "lease",
+        })
+        assert block["acquired"] is True
+        assert block["lost_during_run"] is True
+        assert block["loss_reason"] == "ownership_lost_during_execution"
+
+    def test_contention_at_startup_not_acquired(self):
+        block = _build_org_report_lock_run_summary_block({
+            "lock_acquired": False,
+            "lock_contention": True,
+        })
+        assert block["acquired"] is False
+        assert block["contention_observed"] is True
+        assert block["lost_during_run"] is False  # default when acquired present
+
+    def test_empty_details_returns_empty_block(self):
+        block = _build_org_report_lock_run_summary_block({})
+        assert block == {}
+
+    def test_missing_ownership_lost_defaults_false_when_acquired(self):
+        """When lock_acquired is present but lock_ownership_lost is not, lost_during_run defaults to False."""
+        block = _build_org_report_lock_run_summary_block({"lock_acquired": True})
+        assert block["lost_during_run"] is False
+
+    def test_missing_ownership_lost_absent_when_not_acquired_key(self):
+        """When lock_acquired key is missing entirely, lost_during_run is not set."""
+        block = _build_org_report_lock_run_summary_block({"lock_contention": True})
+        assert "lost_during_run" not in block
+
+    def test_backend_whitespace_stripped(self):
+        block = _build_org_report_lock_run_summary_block({"lock_backend": "  lease  "})
+        assert block["backend"] == "lease"
+
+    def test_empty_backend_omitted(self):
+        block = _build_org_report_lock_run_summary_block({"lock_backend": ""})
+        assert "backend" not in block
+
+    def test_none_backend_omitted(self):
+        block = _build_org_report_lock_run_summary_block({"lock_backend": None})
+        assert "backend" not in block
+
+    def test_stale_threshold_normalized(self):
+        """Non-positive thresholds should be clamped by normalize_lock_stale_threshold_seconds."""
+        block = _build_org_report_lock_run_summary_block({"lock_stale_threshold_seconds": -1})
+        assert block["stale_threshold_seconds"] > 0  # clamped to minimum
+
+    def test_loss_reason_not_set_when_ownership_not_lost(self):
+        block = _build_org_report_lock_run_summary_block({
+            "lock_acquired": True,
+            "lock_ownership_lost": False,
+        })
+        assert "loss_reason" not in block
