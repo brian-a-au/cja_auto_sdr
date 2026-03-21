@@ -1481,7 +1481,7 @@ def _fetch_datasets(
             dv_id = _normalize_optional_text(dv.get("id"), default="N/A")
             dv_name = _normalize_optional_text(dv.get("name"), default="N/A")
 
-            if not is_machine_readable:
+            if not is_machine_readable and sys.stdout.isatty():
                 print(f"  [{i + 1}/{len(available_dvs)}] {dv_name}...", end="\r")
 
             parent_conn_id = dv.get("parentDataGroupId")
@@ -1513,7 +1513,7 @@ def _fetch_datasets(
             default_sort_field="name",
         )
 
-        if not is_machine_readable:
+        if not is_machine_readable and sys.stdout.isatty():
             # Clear progress line with ANSI erase-line escape
             print("\033[2K", end="\r")
 

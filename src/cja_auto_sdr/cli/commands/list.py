@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 from collections.abc import Callable
 from typing import Any
 
@@ -947,7 +948,7 @@ def _fetch_datasets(
         for index, dv in enumerate(available_dvs):
             if not isinstance(dv, dict):
                 continue
-            if not is_machine_readable:
+            if not is_machine_readable and sys.stdout.isatty():
                 print(
                     f"  [{index + 1}/{len(available_dvs)}] {_discovery._normalize_optional_text(dv.get('name'), default='N/A')}...",
                     end="\r",
@@ -980,7 +981,7 @@ def _fetch_datasets(
             default_sort_field="name",
         )
 
-        if not is_machine_readable:
+        if not is_machine_readable and sys.stdout.isatty():
             print("\033[2K", end="\r")
 
         warning = (
