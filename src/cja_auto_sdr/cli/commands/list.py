@@ -411,7 +411,7 @@ def _fetch_describe_dataview(data_view_id: str, output_format: str) -> Callable:
                 f"    Metrics:             {n_metrics}",
                 f"    Calculated Metrics:  {n_calc_metrics}",
                 f"    Segments:            {n_segments}",
-                "    ─────────────────────────",
+                f"    {'─' * (len('    Calculated Metrics:  ') + len(str(max(n_dimensions, n_metrics, n_calc_metrics, n_segments, total))) - 4)}",
                 f"    Total:               {total}",
                 "=" * term_width,
                 "",
