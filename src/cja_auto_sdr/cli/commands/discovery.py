@@ -9,12 +9,16 @@ generator.py both import from here instead of maintaining mirrored copies.
 from __future__ import annotations
 
 import json
+import logging
 import re
 import sys
+from collections.abc import Callable
+from dataclasses import dataclass, field
 from typing import Any
 
 import pandas as pd
 
+from cja_auto_sdr.api.resilience import make_api_call_with_retry
 from cja_auto_sdr.core.colors import ConsoleColors
 from cja_auto_sdr.core.discovery_exceptions import (
     is_dataview_lookup_not_found_error as _is_inaccessible_dataview_lookup_error_core,
@@ -26,6 +30,12 @@ from cja_auto_sdr.core.discovery_normalization import (
     extract_owner_name_from_record as _extract_owner_name_from_record_normalized,
 )
 from cja_auto_sdr.core.discovery_normalization import (
+    extract_tags as _extract_tags_normalized,
+)
+from cja_auto_sdr.core.discovery_normalization import (
+    is_missing_value as _is_missing_discovery_value,
+)
+from cja_auto_sdr.core.discovery_normalization import (
     normalize_display_text as _normalize_display_text,
 )
 from cja_auto_sdr.core.discovery_normalization import (
@@ -35,7 +45,16 @@ from cja_auto_sdr.core.discovery_payloads import (
     DataViewLookupAssessment as _DataViewLookupAssessment,
 )
 from cja_auto_sdr.core.discovery_payloads import (
+    PayloadKind as _PayloadKind,
+)
+from cja_auto_sdr.core.discovery_payloads import (
+    assess_component_payload as _assess_component_payload,
+)
+from cja_auto_sdr.core.discovery_payloads import (
     assess_dataview_lookup_payload as _assess_dataview_lookup_payload,
+)
+from cja_auto_sdr.core.discovery_payloads import (
+    count_component_items_or_na as _count_component_items_or_na_from_assessment,
 )
 
 # ---------------------------------------------------------------------------
@@ -136,7 +155,7 @@ def _to_numeric_sort_value(value: Any) -> float | None:
         try:
             if pd.isna(value):
                 return None
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return None
         return float(value)
 
@@ -160,7 +179,7 @@ def _is_missing_sort_value(value: Any) -> bool:
         return True
     try:
         return bool(pd.isna(value))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return False
 
 
@@ -443,3 +462,357 @@ def _resolve_dataview_name(cja: Any, data_view_id: str, *, preferred_name: str |
         return normalized_name
     normalized_preferred = _normalize_optional_text(preferred_name, default="")
     return normalized_preferred or "Unknown"
+
+
+# ---------------------------------------------------------------------------
+# Component fetch specs, helpers, and row builders
+# ---------------------------------------------------------------------------
+
+# Any Exception should degrade to a fallback count for best-effort component counting.
+RECOVERABLE_OPTIONAL_COMPONENT_COUNT_EXCEPTIONS: tuple[type[Exception], ...] = (Exception,)
+
+
+@dataclass(frozen=True)
+class _ComponentFetchSpec:
+    """Describe how to fetch one component collection for a data view."""
+
+    method_name: str
+    data_view_arg_name: str | None = None
+    kwargs: dict[str, str | bool] = field(default_factory=dict)
+
+
+_METRICS_COMPONENT_FETCH_SPEC = _ComponentFetchSpec(
+    method_name="getMetrics",
+    kwargs={"inclType": "hidden", "full": True},
+)
+
+_DIMENSIONS_COMPONENT_FETCH_SPEC = _ComponentFetchSpec(
+    method_name="getDimensions",
+    kwargs={"inclType": "hidden", "full": True},
+)
+
+_SEGMENTS_COMPONENT_FETCH_SPEC = _ComponentFetchSpec(
+    method_name="getFilters",
+    data_view_arg_name="dataIds",
+    kwargs={"full": True},
+)
+
+_CALCULATED_METRICS_COMPONENT_FETCH_SPEC = _ComponentFetchSpec(
+    method_name="getCalculatedMetrics",
+    data_view_arg_name="dataIds",
+    kwargs={"full": True},
+)
+
+
+def _fetch_component_payload(cja: Any, data_view_id: str, fetch_spec: _ComponentFetchSpec) -> Any:
+    """Invoke a component-list API call using a declarative fetch spec."""
+    fetch_method = getattr(cja, fetch_spec.method_name, None)
+    if not callable(fetch_method):
+        raise DiscoveryNotFoundError(
+            f"CJA client missing expected method '{fetch_spec.method_name}' for data view '{data_view_id}'",
+        )
+
+    kwargs = dict(fetch_spec.kwargs)
+    if fetch_spec.data_view_arg_name:
+        kwargs[fetch_spec.data_view_arg_name] = data_view_id
+        return fetch_method(**kwargs)
+    return fetch_method(data_view_id, **kwargs)
+
+
+def _normalize_component_records_or_raise(
+    raw_payload: Any,
+    *,
+    component_label: str,
+    data_view_id: str,
+) -> list[dict[str, Any]]:
+    """Normalize component payloads to dict rows or fail on error-shaped responses."""
+    assessment = _assess_component_payload(raw_payload)
+    if assessment.kind is _PayloadKind.ERROR:
+        raise DiscoveryNotFoundError(f"Failed to retrieve {component_label} for data view '{data_view_id}'")
+    if assessment.kind is _PayloadKind.INVALID:
+        raise DiscoveryNotFoundError(
+            f"Unexpected {component_label} payload type for data view '{data_view_id}'",
+        )
+    return assessment.rows
+
+
+def _count_component_items_for_fetch_spec(cja: Any, data_view_id: str, fetch_spec: _ComponentFetchSpec) -> int | str:
+    """Return a component count for one fetch spec, falling back to 'N/A' on runtime failures."""
+    return _count_component_items_for_fetch_spec_best_effort(
+        cja,
+        data_view_id,
+        fetch_spec,
+        fallback_value="N/A",
+        use_retry=False,
+    )
+
+
+def _count_component_items_for_fetch_spec_best_effort(
+    cja: Any,
+    data_view_id: str,
+    fetch_spec: _ComponentFetchSpec,
+    *,
+    fallback_value: int | str,
+    use_retry: bool,
+    logger: logging.Logger | None = None,
+) -> int | str:
+    """Fetch one component payload and degrade failures to a caller-provided fallback value."""
+    component_label = fetch_spec.method_name
+    try:
+        if use_retry:
+            payload = make_api_call_with_retry(
+                _fetch_component_payload,
+                cja,
+                data_view_id,
+                fetch_spec,
+                logger=logger,
+                operation_name=f"{component_label}({data_view_id})",
+            )
+        else:
+            payload = _fetch_component_payload(cja, data_view_id, fetch_spec)
+
+        count = _count_component_items_or_na_from_assessment(payload)
+        if isinstance(count, int):
+            return count
+        if logger:
+            logger.debug("Could not fetch %s count for %s: non-countable payload", component_label, data_view_id)
+    except RECOVERABLE_OPTIONAL_COMPONENT_COUNT_EXCEPTIONS as e:  # Intentional best-effort boundary
+        if logger:
+            logger.debug("Could not fetch %s count for %s: %s", component_label, data_view_id, e, exc_info=True)
+    return fallback_value
+
+
+def _count_component_items_for_fetch_spec_with_retry(
+    cja: Any,
+    data_view_id: str,
+    fetch_spec: _ComponentFetchSpec,
+    *,
+    logger: logging.Logger,
+) -> int:
+    """Return component count via retry-aware fetches, degrading non-fatal issues to zero."""
+    count = _count_component_items_for_fetch_spec_best_effort(
+        cja,
+        data_view_id,
+        fetch_spec,
+        fallback_value=0,
+        use_retry=True,
+        logger=logger,
+    )
+    return count if isinstance(count, int) else 0
+
+
+def _build_component_list_fetcher(
+    *,
+    data_view_id: str,
+    data_view_name: str | None,
+    output_format: str,
+    filter_pattern: str | None,
+    exclude_pattern: str | None,
+    limit: int | None,
+    sort_expression: str | None,
+    component_label: str,
+    table_item_label: str,
+    component_json_key: str,
+    empty_csv_header: str,
+    fetch_spec: _ComponentFetchSpec,
+    display_row_builder: Callable[[dict[str, Any]], dict[str, Any]],
+    searchable_fields: list[str],
+    csv_columns: list[str],
+    table_columns: list[str],
+    table_labels: list[str],
+    table_row_transform: Callable[[list[dict[str, Any]]], list[dict[str, Any]]] | None = None,
+) -> Callable:
+    """Return a shared fetch-and-format callback for list-* inspection commands."""
+
+    def _inner(cja: Any, is_machine_readable: bool) -> str | None:
+        # Local imports to avoid circular dependency: generator -> discovery -> generator
+        from cja_auto_sdr.generator import _format_as_csv, _format_as_table
+
+        dv_name = _resolve_dataview_name(cja, data_view_id, preferred_name=data_view_name)
+
+        raw_components = _normalize_component_records_or_raise(
+            _fetch_component_payload(cja, data_view_id, fetch_spec),
+            component_label=component_label,
+            data_view_id=data_view_id,
+        )
+
+        if not raw_components:
+            if is_machine_readable:
+                if output_format == "json":
+                    return _format_discovery_json(
+                        {
+                            "dataViewId": data_view_id,
+                            "dataViewName": dv_name,
+                            component_json_key: [],
+                            "count": 0,
+                        }
+                    )
+                return f"{empty_csv_header}\n"
+            return f"\nNo {component_label} found for data view '{data_view_id}'.\n"
+
+        display_data = [display_row_builder(item) for item in raw_components if isinstance(item, dict)]
+        display_data = _apply_discovery_filters_and_sort(
+            display_data,
+            filter_pattern=filter_pattern,
+            exclude_pattern=exclude_pattern,
+            limit=limit,
+            sort_expression=sort_expression,
+            searchable_fields=searchable_fields,
+            default_sort_field="name",
+        )
+
+        if output_format == "json":
+            return _format_discovery_json(
+                {
+                    "dataViewId": data_view_id,
+                    "dataViewName": dv_name,
+                    component_json_key: display_data,
+                    "count": len(display_data),
+                }
+            )
+
+        tabular_data = table_row_transform(display_data) if table_row_transform else display_data
+        if output_format == "csv":
+            return _format_as_csv(csv_columns, tabular_data)
+        return _format_as_table(
+            f"Found {len(tabular_data)} {table_item_label}(s) in data view '{dv_name}':",
+            tabular_data,
+            columns=table_columns,
+            col_labels=table_labels,
+        )
+
+    return _inner
+
+
+def _normalize_component_text_fields(item: dict[str, Any], *, defaults: dict[str, str]) -> dict[str, str]:
+    """Normalize a component row's text fields with per-field defaults."""
+    return {
+        field_name: _normalize_optional_text(item.get(field_name), default=default_value)
+        for field_name, default_value in defaults.items()
+    }
+
+
+def _normalize_optional_component_int(value: Any, *, default: int = 0) -> int:
+    """Normalize optional integer-ish component values for strict JSON output."""
+    if _is_missing_discovery_value(value, treat_blank_string=True, treat_null_like_strings=True):
+        return default
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        if value.is_integer():
+            return int(value)
+        return default
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return default
+        try:
+            return int(stripped)
+        except ValueError:
+            return default
+    return default
+
+
+def _approved_display(value: Any) -> str:
+    """Convert an approved flag to a display string."""
+    if value is None:
+        return "N/A"
+    if isinstance(value, bool):
+        return "Yes" if value else "No"
+    return str(value)
+
+
+def _tags_display(tags: Any) -> str:
+    """Render already-normalized tag lists for table/csv output."""
+    if not isinstance(tags, list):
+        return ""
+    return ", ".join(tag for tag in tags if isinstance(tag, str))
+
+
+def _format_governance_rows_for_tabular(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Convert governance fields into table/csv-friendly strings."""
+    return [
+        {
+            **row,
+            "approved": _approved_display(row.get("approved")),
+            "tags": _tags_display(row.get("tags")),
+        }
+        for row in rows
+    ]
+
+
+def _build_metric_display_row(item: dict[str, Any]) -> dict[str, Any]:
+    """Normalize one metrics-list row for output."""
+    return {
+        **_normalize_component_text_fields(
+            item,
+            defaults={
+                "id": "N/A",
+                "name": "N/A",
+                "type": "N/A",
+                "description": "",
+            },
+        ),
+    }
+
+
+def _build_dimension_display_row(item: dict[str, Any]) -> dict[str, Any]:
+    """Normalize one dimensions-list row for output."""
+    return {
+        **_normalize_component_text_fields(
+            item,
+            defaults={
+                "id": "N/A",
+                "name": "N/A",
+                "type": "N/A",
+                "description": "",
+            },
+        ),
+    }
+
+
+def _build_segment_display_row(item: dict[str, Any]) -> dict[str, Any]:
+    """Normalize one segments-list row for output."""
+    tags = _extract_tags_normalized(item.get("tags"))
+    approved_raw = item.get("approved")
+    return {
+        **_normalize_component_text_fields(
+            item,
+            defaults={
+                "id": "N/A",
+                "name": "N/A",
+                "description": "",
+            },
+        ),
+        "owner": _extract_owner_name_from_record(item),
+        "approved": approved_raw if isinstance(approved_raw, bool) else None,
+        "tags": tags,
+        "created": _extract_timestamp_from_record(item, "created"),
+        "modified": _extract_timestamp_from_record(item, "modified"),
+    }
+
+
+def _build_calculated_metric_display_row(item: dict[str, Any]) -> dict[str, Any]:
+    """Normalize one calculated-metrics row for output."""
+    tags = _extract_tags_normalized(item.get("tags"))
+    approved_raw = item.get("approved")
+    return {
+        **_normalize_component_text_fields(
+            item,
+            defaults={
+                "id": "N/A",
+                "name": "N/A",
+                "description": "",
+                "type": "",
+                "polarity": "",
+            },
+        ),
+        "owner": _extract_owner_name_from_record(item),
+        "precision": _normalize_optional_component_int(item.get("precision"), default=0),
+        "approved": approved_raw if isinstance(approved_raw, bool) else None,
+        "tags": tags,
+        "created": _extract_timestamp_from_record(item, "created"),
+        "modified": _extract_timestamp_from_record(item, "modified"),
+    }
