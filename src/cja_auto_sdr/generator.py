@@ -2586,7 +2586,7 @@ def validate_data_view(cja: cjapy.CJA, data_view_id: str, logger: logging.Logger
 
         return True
 
-    except KeyboardInterrupt, SystemExit:
+    except (KeyboardInterrupt, SystemExit):
         raise
     except RECOVERABLE_CONFIG_API_EXCEPTIONS as e:  # cjapy API/bootstrap calls
         logger.error("=" * BANNER_WIDTH)
@@ -2983,7 +2983,7 @@ def _format_diff_value(val: Any, truncate: bool = True, max_len: int = 30) -> st
     try:
         if pd.isna(val):
             return "(empty)"
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         pass
     result = str(val)
     if truncate and len(result) > max_len:
@@ -6017,7 +6017,7 @@ def run_dry_run(data_views: list[str], config_file: str, logger: logging.Logger,
         else:
             print("  ⚠ API connection returned None - may be unstable")
             available_dvs = []
-    except KeyboardInterrupt, SystemExit:
+    except (KeyboardInterrupt, SystemExit):
         print()
         print(ConsoleColors.warning("Dry-run cancelled."))
         raise
@@ -6109,7 +6109,7 @@ def run_dry_run(data_views: list[str], config_file: str, logger: logging.Logger,
                 )
                 invalid_count += 1
                 all_passed = False
-        except KeyboardInterrupt, SystemExit:
+        except (KeyboardInterrupt, SystemExit):
             print()
             print(ConsoleColors.warning("Validation cancelled."))
             raise
@@ -6830,7 +6830,7 @@ def _to_numeric_sort_value(value: Any) -> float | None:
         try:
             if pd.isna(value):
                 return None
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             return None
         return float(value)
 
@@ -6854,7 +6854,7 @@ def _is_missing_sort_value(value: Any) -> bool:
         return True
     try:
         return bool(pd.isna(value))
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return False
 
 
@@ -8995,7 +8995,7 @@ def run_org_report(
         _status_print(ConsoleColors.error(f"ERROR: Configuration file '{config_file}' not found"))
         return False, False
 
-    except KeyboardInterrupt, SystemExit:
+    except (KeyboardInterrupt, SystemExit):
         if not quiet:
             _status_print()
             _status_print(ConsoleColors.warning("Operation cancelled."))
