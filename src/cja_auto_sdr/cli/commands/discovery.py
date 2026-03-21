@@ -948,14 +948,12 @@ def _fetch_dataviews(
             columns=["id", "name", "owner"],
             col_labels=["ID", "Name", "Owner"],
         )
-        # Compute total width to match table separator for usage footer
-        labels = ["ID", "Name", "Owner"]
-        cols = ["id", "name", "owner"]
-        widths = [
-            max(len(lbl), max((len(str(item.get(col, ""))) for item in display_data), default=0)) + 2
-            for col, lbl in zip(cols, labels, strict=True)
-        ]
-        total_width = sum(widths)
+        # Derive total width from the first separator line in the rendered table
+        table_lines = table.split("\n")
+        total_width = max(
+            (len(line) for line in table_lines if line and line[0] in ("=", "-", "─")),
+            default=60,
+        )
         footer_lines = [
             "=" * total_width,
             "Usage:",
