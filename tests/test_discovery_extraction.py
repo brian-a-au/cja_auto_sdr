@@ -108,7 +108,7 @@ class TestHelpTextImprovements:
         assert "exit code" in output.lower()
         assert "table" in output.lower() or "meaning" in output.lower()
 
-    def test_batch_help_mentions_directory(self):
+    def test_batch_help_describes_parallel_data_views(self):
         import contextlib
         import io
 
@@ -121,7 +121,9 @@ class TestHelpTextImprovements:
         except SystemExit:
             pass
         output = buf.getvalue()
-        assert "batch" in output.lower()
+        assert "Enable batch processing mode: process multiple data" in output
+        assert "views in parallel" in output
+        assert "batch directory of config files" not in output
 
     def test_quiet_help_clarifies_errors(self):
         import contextlib

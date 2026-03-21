@@ -270,7 +270,7 @@ class TestBuildComponentListFetcherEmpty:
         assert result == "id,name,type,description\n"
 
     def test_empty_metrics_json_returns_empty_json(self) -> None:
-        """Empty components + JSON + machine_readable → empty JSON."""
+        """Empty components + JSON + machine_readable preserve dataview metadata."""
         import json
 
         from cja_auto_sdr.cli.commands.list import _fetch_metrics_list
@@ -282,6 +282,8 @@ class TestBuildComponentListFetcherEmpty:
         fetcher = _fetch_metrics_list("dv_test", output_format="json")
         result = fetcher(cja, is_machine_readable=True)
         parsed = json.loads(result)
+        assert parsed["dataViewId"] == "dv_test"
+        assert parsed["dataViewName"] == "Test DV"
         assert parsed["count"] == 0
         assert parsed["metrics"] == []
 

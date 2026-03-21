@@ -127,7 +127,7 @@ tests/
 └── README.md                        # This file
 ```
 
-**Total: 6,660 comprehensive tests**
+**Total: 6,664 comprehensive tests**
 
 ### Test Count Breakdown
 
@@ -136,16 +136,16 @@ tests/
 
 | Category | Tests | Files | Notes |
 |----------|-------|-------|-------|
-| `unit` | 6,554 | 110 | Default primary category for files without explicit integration/e2e/smoke scope |
+| `unit` | 6,558 | 110 | Default primary category for files without explicit integration/e2e/smoke scope |
 | `integration` | 73 | 3 | Cross-module integration suites |
 | `e2e` | 23 | 2 | End-to-end suites with a mocked external boundary |
 | `smoke` | 10 | 1 | Lightweight command-mode coverage |
 | `slow` | 7 | 1 | Overlay marker; these tests are also counted in a primary category |
-| **Primary Total** | **6,660** | **116** | **unit + integration + e2e + smoke** |
+| **Primary Total** | **6,664** | **116** | **unit + integration + e2e + smoke** |
 
 | CI Slice | Tests | Files | Selector |
 |----------|-------|-------|----------|
-| `test-unit` | 6,547 | 109 | `-m "unit and not slow"` |
+| `test-unit` | 6,551 | 109 | `-m "unit and not slow"` |
 | `test-integration` | 103 | 6 | `-m "integration or e2e or slow"` |
 | `smoke-test` | 10 | 1 | `-m smoke` |
 
@@ -159,7 +159,7 @@ tests/
 | `test_ux_features.py` | 123 | UX features: --open, --stats, --output, --list-dataviews formats, inventory validation, inventory summary, include-all-inventory |
 | `test_org_report.py` | 209 | Org-wide component analysis: config, distribution, similarity, output formats, large org scaling, output path aliases |
 | `test_org_report_integration.py` | 17 | Org-wide analysis integration tests: end-to-end flows, caching, filtering, governance |
-| `test_cli.py` | 405 | Command-line interface and argument parsing |
+| `test_cli.py` | 409 | Command-line interface and argument parsing |
 | `test_profiles.py` | 77 | Multi-organization profile support |
 | `test_derived_inventory.py` | 62 | Derived fields inventory feature |
 | `test_inventory_utils.py` | 47 | Inventory utilities and helpers |
@@ -271,7 +271,7 @@ tests/
 | `test_remaining_gap_coverage_pass2.py` | 8 | Pass-2 remaining gap coverage across fast-path CLI, discovery payloads, org models, and output writers |
 | `test_json_io.py` | 2 | JSON I/O atomic write and read tests |
 | `test_lock_info_normalization.py` | 54 | Lock-info normalization classmethod direct unit tests |
-| **Total** | **6,660** | **Collected via pytest --collect-only** |
+| **Total** | **6,664** | **Collected via pytest --collect-only** |
 
 ## Running Tests
 
@@ -729,7 +729,7 @@ the `tests/README.md` inventory tree or count table.
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (6,660 tests total)
+- [x] Comprehensive test coverage (6,664 tests total)
 - [x] Org-wide analysis tests (test_org_report.py) - 209 tests (including large org scaling, output path aliases, memory warnings, smart cache invalidation)
 - [x] Org-wide analysis integration tests (test_org_report_integration.py) - 17 tests (end-to-end flows, caching, filtering, governance thresholds)
 - [x] Profile management tests (test_profiles.py) - 77 tests

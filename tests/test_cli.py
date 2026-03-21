@@ -4976,6 +4976,49 @@ def test_list_inspection_commands_use_canonical_dataview_name_over_preferred_que
     assert len(payload[component_key]) == 1
 
 
+@pytest.mark.parametrize(
+    ("command", "component_method", "component_key"),
+    [
+        (list_metrics, "getMetrics", "metrics"),
+        (list_dimensions, "getDimensions", "dimensions"),
+        (list_segments, "getFilters", "segments"),
+        (list_calculated_metrics, "getCalculatedMetrics", "calculatedMetrics"),
+    ],
+)
+@patch("cja_auto_sdr.generator.cjapy")
+@patch("cja_auto_sdr.generator.configure_cjapy")
+@patch("cja_auto_sdr.generator.resolve_active_profile", return_value=None)
+def test_list_inspection_commands_preserve_dataview_metadata_for_empty_json_payloads(
+    mock_profile,
+    mock_configure,
+    mock_cjapy,
+    command,
+    component_method,
+    component_key,
+):
+    """Empty inspection payloads should keep the same dataview metadata contract as non-empty ones."""
+    mock_configure.return_value = (True, "config", None)
+    cja = mock_cjapy.CJA.return_value
+    cja.getDataView.return_value = {"id": "dv_1", "name": "Production Web"}
+    getattr(cja, component_method).return_value = []
+
+    import io
+    from contextlib import redirect_stdout
+
+    out = io.StringIO()
+    with redirect_stdout(out):
+        result = command("dv_1", output_format="json", data_view_name="Prod Web")
+
+    assert result is True
+    payload = json.loads(out.getvalue())
+    assert payload == {
+        "dataViewId": "dv_1",
+        "dataViewName": "Production Web",
+        component_key: [],
+        "count": 0,
+    }
+
+
 class TestListMetrics:
     """Tests for --list-metrics command."""
 

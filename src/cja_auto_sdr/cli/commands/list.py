@@ -479,58 +479,27 @@ def _build_component_list_fetcher(
     table_labels: list[str],
     table_row_transform: Callable[[list[dict[str, Any]]], list[dict[str, Any]]] | None = None,
 ) -> Callable:
-    """Return a shared fetch-and-format callback for list-* inspection commands."""
-
-    def _inner(cja: Any, is_machine_readable: bool) -> str | None:
-        dv_name = _resolve_dataview_name(cja, data_view_id, preferred_name=data_view_name)
-        raw_components = _normalize_component_records_or_raise(
-            _fetch_component_payload(cja, data_view_id, fetch_spec),
-            component_label=component_label,
-            data_view_id=data_view_id,
-        )
-
-        if not raw_components:
-            if is_machine_readable:
-                if output_format == "json":
-                    return _discovery._format_discovery_json(
-                        {component_json_key: [], "count": 0, "dataViewId": data_view_id}
-                    )
-                return f"{empty_csv_header}\n"
-            return f"\nNo {component_label} found in data view '{dv_name}' ({data_view_id}).\n"
-
-        display_rows = [display_row_builder(item) for item in raw_components if isinstance(item, dict)]
-        display_rows = _discovery._apply_discovery_filters_and_sort(
-            display_rows,
-            filter_pattern=filter_pattern,
-            exclude_pattern=exclude_pattern,
-            limit=limit,
-            sort_expression=sort_expression,
-            searchable_fields=searchable_fields,
-            default_sort_field="name",
-        )
-
-        if output_format == "json":
-            return _discovery._format_discovery_json(
-                {
-                    component_json_key: display_rows,
-                    "count": len(display_rows),
-                    "dataViewId": data_view_id,
-                    "dataViewName": dv_name,
-                }
-            )
-        if output_format == "csv":
-            csv_rows = table_row_transform(display_rows) if table_row_transform else display_rows
-            return _generator._format_as_csv(csv_columns, csv_rows)
-
-        table_rows = table_row_transform(display_rows) if table_row_transform else display_rows
-        return _generator._format_as_table(
-            f"Found {len(table_rows)} {table_item_label}(s) in data view '{dv_name}':",
-            table_rows,
-            columns=table_columns,
-            col_labels=table_labels,
-        )
-
-    return _inner
+    """Return the canonical shared fetch-and-format callback for list-* commands."""
+    return _discovery._build_component_list_fetcher(
+        data_view_id=data_view_id,
+        data_view_name=data_view_name,
+        output_format=output_format,
+        filter_pattern=filter_pattern,
+        exclude_pattern=exclude_pattern,
+        limit=limit,
+        sort_expression=sort_expression,
+        component_label=component_label,
+        table_item_label=table_item_label,
+        component_json_key=component_json_key,
+        empty_csv_header=empty_csv_header,
+        fetch_spec=fetch_spec,
+        display_row_builder=display_row_builder,
+        searchable_fields=searchable_fields,
+        csv_columns=csv_columns,
+        table_columns=table_columns,
+        table_labels=table_labels,
+        table_row_transform=table_row_transform,
+    )
 
 
 def _build_metric_display_row(item: dict[str, Any]) -> dict[str, Any]:

@@ -285,7 +285,7 @@ Requirements:
     parser.add_argument(
         "--batch",
         action="store_true",
-        help="Enable batch processing mode: process multiple data views in parallel from a batch directory of config files",
+        help="Enable batch processing mode: process multiple data views in parallel",
     )
 
     parser.add_argument(
