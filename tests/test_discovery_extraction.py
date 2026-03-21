@@ -144,3 +144,47 @@ class TestDiscoveryComponentHelpers:
         from cja_auto_sdr.cli.commands.discovery import _format_governance_rows_for_tabular
 
         assert callable(_format_governance_rows_for_tabular)
+
+
+class TestDiscoveryFetchers:
+    """Verify discovery fetchers are importable from discovery module."""
+
+    def test_fetch_dataviews(self):
+        from cja_auto_sdr.cli.commands.discovery import _fetch_dataviews
+        assert callable(_fetch_dataviews)
+
+    def test_fetch_describe_dataview(self):
+        from cja_auto_sdr.cli.commands.discovery import _fetch_describe_dataview
+        assert callable(_fetch_describe_dataview)
+
+    def test_fetch_metrics_list(self):
+        from cja_auto_sdr.cli.commands.discovery import _fetch_metrics_list
+        assert callable(_fetch_metrics_list)
+
+    def test_fetch_dimensions_list(self):
+        from cja_auto_sdr.cli.commands.discovery import _fetch_dimensions_list
+        assert callable(_fetch_dimensions_list)
+
+    def test_fetch_segments_list(self):
+        from cja_auto_sdr.cli.commands.discovery import _fetch_segments_list
+        assert callable(_fetch_segments_list)
+
+    def test_fetch_calculated_metrics_list(self):
+        from cja_auto_sdr.cli.commands.discovery import _fetch_calculated_metrics_list
+        assert callable(_fetch_calculated_metrics_list)
+
+    def test_fetch_connections(self):
+        from cja_auto_sdr.cli.commands.discovery import _fetch_connections
+        assert callable(_fetch_connections)
+
+    def test_fetch_datasets(self):
+        from cja_auto_sdr.cli.commands.discovery import _fetch_datasets
+        assert callable(_fetch_datasets)
+
+    def test_extract_dataset_info(self):
+        from cja_auto_sdr.cli.commands.discovery import _extract_dataset_info
+        assert callable(_extract_dataset_info)
+
+    def test_extract_connections_list(self):
+        from cja_auto_sdr.cli.commands.discovery import _extract_connections_list
+        assert callable(_extract_connections_list)

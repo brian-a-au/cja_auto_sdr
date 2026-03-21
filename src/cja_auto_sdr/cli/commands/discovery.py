@@ -11,7 +11,9 @@ from __future__ import annotations
 import json
 import logging
 import re
+import shutil
 import sys
+import textwrap
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
@@ -816,3 +818,771 @@ def _build_calculated_metric_display_row(item: dict[str, Any]) -> dict[str, Any]
         "created": _extract_timestamp_from_record(item, "created"),
         "modified": _extract_timestamp_from_record(item, "modified"),
     }
+
+
+# ---------------------------------------------------------------------------
+# Dataset and connection extractors
+# ---------------------------------------------------------------------------
+
+
+def _extract_dataset_info(dataset: Any) -> dict:
+    """
+    Resilient parser for dataset objects from connection API responses.
+
+    The dataSets field in connection responses may use varying field names.
+    This helper tries common field names and falls back gracefully.
+
+    Args:
+        dataset: A dataset object (dict or other) from the dataSets array
+
+    Returns:
+        Dict with 'id' and 'name' keys (values may be 'N/A' if not found)
+    """
+    if not isinstance(dataset, dict):
+        # Preserve previous fallback semantics for scalar falsey values while
+        # avoiding ambiguous truthiness checks on pandas missing scalars.
+        if _is_missing_discovery_value(dataset, treat_blank_string=True, treat_null_like_strings=True):
+            return {"id": "N/A", "name": "N/A"}
+        if isinstance(dataset, (bool, int, float)) and not dataset:
+            return {"id": "N/A", "name": "N/A"}
+        return {"id": _normalize_display_text(dataset, default="N/A"), "name": "N/A"}
+
+    # Try common ID field names (prefer canonical/camelCase, keep snake_case for compatibility)
+    ds_id = _pick_first_present_text(
+        (
+            dataset.get("id"),
+            dataset.get("datasetId"),
+            dataset.get("dataSetId"),
+            dataset.get("dataset_id"),
+        ),
+        default="N/A",
+        treat_null_like_strings=True,
+    )
+
+    # Try common name field names
+    ds_name = _pick_first_present_text(
+        (
+            dataset.get("name"),
+            dataset.get("datasetName"),
+            dataset.get("dataSetName"),
+            dataset.get("dataset_name"),
+            dataset.get("title"),
+        ),
+        default="N/A",
+        treat_null_like_strings=True,
+    )
+
+    return {"id": ds_id, "name": ds_name}
+
+
+def _extract_connections_list(raw_connections: Any) -> list:
+    """Extract the connection list from a raw getConnections API response."""
+    if isinstance(raw_connections, dict):
+        connections = raw_connections.get("content", raw_connections.get("result", []))
+        if not isinstance(connections, list):
+            # content/result was an unexpected type (e.g. a string); wrap the
+            # whole dict so downstream isinstance(conn, dict) checks can decide
+            # whether to process or skip it.
+            return [raw_connections]
+        return connections
+    if isinstance(raw_connections, list):
+        return raw_connections
+    return []
+
+
+# ---------------------------------------------------------------------------
+# Discovery fetchers
+# ---------------------------------------------------------------------------
+
+
+def _fetch_dataviews(
+    output_format: str,
+    filter_pattern: str | None = None,
+    exclude_pattern: str | None = None,
+    limit: int | None = None,
+    sort_expression: str | None = None,
+) -> Callable:
+    """Return a fetch_and_format callback for list_dataviews."""
+
+    def _inner(cja: Any, is_machine_readable: bool) -> str | None:
+        # Local imports to avoid circular dependency: generator -> discovery -> generator
+        from cja_auto_sdr.generator import _format_as_csv, _format_as_table
+
+        available_dvs = cja.getDataViews()
+
+        if available_dvs is None or (hasattr(available_dvs, "__len__") and len(available_dvs) == 0):
+            if is_machine_readable:
+                if output_format == "json":
+                    return json.dumps({"dataViews": [], "count": 0}, indent=2)
+                return "id,name,owner\n"
+            return "\nNo data views found or no access to any data views.\n"
+
+        if isinstance(available_dvs, pd.DataFrame):
+            available_dvs = available_dvs.to_dict("records")
+
+        display_data = []
+        for dv in available_dvs:
+            if isinstance(dv, dict):
+                dv_id = _normalize_optional_text(dv.get("id"), default="N/A")
+                dv_name = _normalize_optional_text(dv.get("name"), default="N/A")
+                owner_name = _extract_owner_name(dv.get("owner"))
+                display_data.append({"id": dv_id, "name": dv_name, "owner": owner_name})
+
+        display_data = _apply_discovery_filters_and_sort(
+            display_data,
+            filter_pattern=filter_pattern,
+            exclude_pattern=exclude_pattern,
+            limit=limit,
+            sort_expression=sort_expression,
+            searchable_fields=["id", "name", "owner"],
+            default_sort_field="name",
+        )
+
+        if output_format == "json":
+            return _format_discovery_json({"dataViews": display_data, "count": len(display_data)})
+        if output_format == "csv":
+            return _format_as_csv(["id", "name", "owner"], display_data)
+        table = _format_as_table(
+            f"Found {len(display_data)} accessible data view(s):",
+            display_data,
+            columns=["id", "name", "owner"],
+            col_labels=["ID", "Name", "Owner"],
+        )
+        # Compute total width to match table separator for usage footer
+        labels = ["ID", "Name", "Owner"]
+        cols = ["id", "name", "owner"]
+        widths = [
+            max(len(lbl), max((len(str(item.get(col, ""))) for item in display_data), default=0)) + 2
+            for col, lbl in zip(cols, labels, strict=True)
+        ]
+        total_width = sum(widths)
+        footer_lines = [
+            "=" * total_width,
+            "Usage:",
+            "  cja_auto_sdr <DATA_VIEW_ID>       # Use ID directly",
+            '  cja_auto_sdr "<DATA_VIEW_NAME>"   # Use exact name (quotes recommended)',
+            "",
+            "Note: If multiple data views share the same name, all will be processed.",
+            "=" * total_width,
+        ]
+        return table + "\n".join(footer_lines)
+
+    return _inner
+
+
+def _fetch_describe_dataview(
+    data_view_id: str,
+    output_format: str,
+) -> Callable:
+    """Return a fetch_and_format callback for describe_dataview."""
+
+    def _inner(cja: Any, _is_machine_readable: bool) -> str | None:
+        # Local imports to avoid circular dependency: generator -> discovery -> generator
+        from cja_auto_sdr.generator import _format_as_csv
+
+        raw_dv = _require_accessible_dataview(cja, data_view_id)
+
+        dv_metadata = _normalize_describe_dataview_metadata(raw_dv, default_id=data_view_id)
+        dv_id = dv_metadata["id"]
+        dv_name = dv_metadata["name"]
+        owner_name = dv_metadata["owner"]
+        description = dv_metadata["description"]
+        connection_id = dv_metadata["connection_id"]
+        created = dv_metadata["created"]
+        modified = dv_metadata["modified"]
+
+        n_metrics = _count_component_items_for_fetch_spec(
+            cja,
+            data_view_id,
+            _METRICS_COMPONENT_FETCH_SPEC,
+        )
+        n_dimensions = _count_component_items_for_fetch_spec(
+            cja,
+            data_view_id,
+            _DIMENSIONS_COMPONENT_FETCH_SPEC,
+        )
+        n_segments = _count_component_items_for_fetch_spec(
+            cja,
+            data_view_id,
+            _SEGMENTS_COMPONENT_FETCH_SPEC,
+        )
+        n_calc_metrics = _count_component_items_for_fetch_spec(
+            cja,
+            data_view_id,
+            _CALCULATED_METRICS_COMPONENT_FETCH_SPEC,
+        )
+
+        # Compute total only when all counts are numeric
+        counts = [n_metrics, n_dimensions, n_segments, n_calc_metrics]
+        numeric_counts = [c for c in counts if isinstance(c, int)]
+        total = sum(numeric_counts) if len(numeric_counts) == len(counts) else "N/A"
+
+        if output_format == "json":
+            payload = {
+                "dataView": {
+                    "id": dv_id,
+                    "name": dv_name,
+                    "owner": owner_name,
+                    "description": description,
+                    "connectionId": connection_id,
+                    "created": created,
+                    "modified": modified,
+                    "components": {
+                        "dimensions": n_dimensions,
+                        "metrics": n_metrics,
+                        "calculatedMetrics": n_calc_metrics,
+                        "segments": n_segments,
+                        "total": total,
+                    },
+                }
+            }
+            return _format_discovery_json(payload)
+
+        if output_format == "csv":
+            columns = [
+                "id",
+                "name",
+                "owner",
+                "description",
+                "connection_id",
+                "created",
+                "modified",
+                "dimensions",
+                "metrics",
+                "calculated_metrics",
+                "segments",
+                "total",
+            ]
+            row = {
+                "id": dv_id,
+                "name": dv_name,
+                "owner": owner_name,
+                "description": description,
+                "connection_id": connection_id,
+                "created": created,
+                "modified": modified,
+                "dimensions": n_dimensions,
+                "metrics": n_metrics,
+                "calculated_metrics": n_calc_metrics,
+                "segments": n_segments,
+                "total": total,
+            }
+            return _format_as_csv(columns, [row])
+
+        # Table output
+        term_width = shutil.get_terminal_size().columns
+        rule_width = term_width
+        lines: list[str] = []
+        lines.append("")
+        lines.append(f"Data View: {dv_name}")
+        lines.append("=" * rule_width)
+        lines.append(f"  ID:            {dv_id}")
+        lines.append(f"  Owner:         {owner_name}")
+        desc_text = description or "(none)"
+        desc_prefix = "  Description:   "
+        desc_avail = term_width - len(desc_prefix)
+        if desc_avail > 20 and len(desc_text) > desc_avail:
+            wrapped = textwrap.wrap(desc_text, width=desc_avail)
+            lines.append(desc_prefix + wrapped[0])
+            indent = " " * len(desc_prefix)
+            lines.extend(indent + cont for cont in wrapped[1:])
+        else:
+            lines.append(f"{desc_prefix}{desc_text}")
+        lines.append(f"  Connection:    {connection_id}")
+        lines.append(f"  Created:       {created}")
+        lines.append(f"  Modified:      {modified}")
+        lines.append("")
+        lines.append("  Components:")
+        lines.append(f"    Dimensions:          {n_dimensions}")
+        lines.append(f"    Metrics:             {n_metrics}")
+        lines.append(f"    Calculated Metrics:  {n_calc_metrics}")
+        lines.append(f"    Segments:            {n_segments}")
+        lines.append("    ─────────────────────────")
+        lines.append(f"    Total:               {total}")
+        lines.append("=" * rule_width)
+        lines.append("")
+        return "\n".join(lines)
+
+    return _inner
+
+
+def _fetch_metrics_list(
+    data_view_id: str,
+    output_format: str,
+    data_view_name: str | None = None,
+    filter_pattern: str | None = None,
+    exclude_pattern: str | None = None,
+    limit: int | None = None,
+    sort_expression: str | None = None,
+) -> Callable:
+    """Return a fetch_and_format callback for list_metrics."""
+    return _build_component_list_fetcher(
+        data_view_id=data_view_id,
+        data_view_name=data_view_name,
+        output_format=output_format,
+        filter_pattern=filter_pattern,
+        exclude_pattern=exclude_pattern,
+        limit=limit,
+        sort_expression=sort_expression,
+        component_label="metrics",
+        table_item_label="metric",
+        component_json_key="metrics",
+        empty_csv_header="id,name,type,description",
+        fetch_spec=_METRICS_COMPONENT_FETCH_SPEC,
+        display_row_builder=_build_metric_display_row,
+        searchable_fields=["id", "name", "type", "description"],
+        csv_columns=["id", "name", "type", "description"],
+        table_columns=["id", "name", "type", "description"],
+        table_labels=["ID", "Name", "Type", "Description"],
+    )
+
+
+def _fetch_dimensions_list(
+    data_view_id: str,
+    output_format: str,
+    data_view_name: str | None = None,
+    filter_pattern: str | None = None,
+    exclude_pattern: str | None = None,
+    limit: int | None = None,
+    sort_expression: str | None = None,
+) -> Callable:
+    """Return a fetch_and_format callback for list_dimensions."""
+    return _build_component_list_fetcher(
+        data_view_id=data_view_id,
+        data_view_name=data_view_name,
+        output_format=output_format,
+        filter_pattern=filter_pattern,
+        exclude_pattern=exclude_pattern,
+        limit=limit,
+        sort_expression=sort_expression,
+        component_label="dimensions",
+        table_item_label="dimension",
+        component_json_key="dimensions",
+        empty_csv_header="id,name,type,description",
+        fetch_spec=_DIMENSIONS_COMPONENT_FETCH_SPEC,
+        display_row_builder=_build_dimension_display_row,
+        searchable_fields=["id", "name", "type", "description"],
+        csv_columns=["id", "name", "type", "description"],
+        table_columns=["id", "name", "type", "description"],
+        table_labels=["ID", "Name", "Type", "Description"],
+    )
+
+
+def _fetch_segments_list(
+    data_view_id: str,
+    output_format: str,
+    data_view_name: str | None = None,
+    filter_pattern: str | None = None,
+    exclude_pattern: str | None = None,
+    limit: int | None = None,
+    sort_expression: str | None = None,
+) -> Callable:
+    """Return a fetch_and_format callback for list_segments."""
+    return _build_component_list_fetcher(
+        data_view_id=data_view_id,
+        data_view_name=data_view_name,
+        output_format=output_format,
+        filter_pattern=filter_pattern,
+        exclude_pattern=exclude_pattern,
+        limit=limit,
+        sort_expression=sort_expression,
+        component_label="segments",
+        table_item_label="segment",
+        component_json_key="segments",
+        empty_csv_header="id,name,owner,approved,description,tags,created,modified",
+        fetch_spec=_SEGMENTS_COMPONENT_FETCH_SPEC,
+        display_row_builder=_build_segment_display_row,
+        searchable_fields=["id", "name", "owner", "description", "tags"],
+        csv_columns=["id", "name", "owner", "approved", "description", "tags", "created", "modified"],
+        table_columns=["id", "name", "owner", "approved", "description"],
+        table_labels=["ID", "Name", "Owner", "Approved", "Description"],
+        table_row_transform=_format_governance_rows_for_tabular,
+    )
+
+
+def _fetch_calculated_metrics_list(
+    data_view_id: str,
+    output_format: str,
+    data_view_name: str | None = None,
+    filter_pattern: str | None = None,
+    exclude_pattern: str | None = None,
+    limit: int | None = None,
+    sort_expression: str | None = None,
+) -> Callable:
+    """Return a fetch_and_format callback for list_calculated_metrics."""
+    return _build_component_list_fetcher(
+        data_view_id=data_view_id,
+        data_view_name=data_view_name,
+        output_format=output_format,
+        filter_pattern=filter_pattern,
+        exclude_pattern=exclude_pattern,
+        limit=limit,
+        sort_expression=sort_expression,
+        component_label="calculated metrics",
+        table_item_label="calculated metric",
+        component_json_key="calculatedMetrics",
+        empty_csv_header="id,name,owner,type,polarity,precision,approved,tags,created,modified,description",
+        fetch_spec=_CALCULATED_METRICS_COMPONENT_FETCH_SPEC,
+        display_row_builder=_build_calculated_metric_display_row,
+        searchable_fields=["id", "name", "owner", "type", "polarity", "description"],
+        csv_columns=[
+            "id",
+            "name",
+            "owner",
+            "type",
+            "polarity",
+            "precision",
+            "approved",
+            "tags",
+            "created",
+            "modified",
+            "description",
+        ],
+        table_columns=["id", "name", "owner", "type", "polarity", "approved", "description"],
+        table_labels=["ID", "Name", "Owner", "Type", "Polarity", "Approved", "Description"],
+        table_row_transform=_format_governance_rows_for_tabular,
+    )
+
+
+def _fetch_connections(
+    output_format: str,
+    filter_pattern: str | None = None,
+    exclude_pattern: str | None = None,
+    limit: int | None = None,
+    sort_expression: str | None = None,
+) -> Callable:
+    """Return a fetch_and_format callback for list_connections."""
+
+    def _inner(cja: Any, is_machine_readable: bool) -> str | None:
+        # Local imports to avoid circular dependency: generator -> discovery -> generator
+        from cja_auto_sdr.generator import _format_as_csv
+
+        raw_connections = cja.getConnections(output="raw", expansion="name,ownerFullName,dataSets")
+        connections = _extract_connections_list(raw_connections)
+
+        if not connections:
+            # Check whether data views reference connections we can't see
+            # (the GET /connections API requires product-admin privileges).
+            available_dvs = cja.getDataViews()
+            if isinstance(available_dvs, pd.DataFrame):
+                available_dvs = available_dvs.to_dict("records")
+
+            conn_ids_from_dvs: dict[str, int] = {}  # conn_id -> count of data views
+            for dv in available_dvs or []:
+                if not isinstance(dv, dict):
+                    continue
+                pid = dv.get("parentDataGroupId")
+                if not _is_missing_discovery_value(pid, treat_blank_string=True, treat_null_like_strings=True):
+                    conn_ids_from_dvs[pid] = conn_ids_from_dvs.get(pid, 0) + 1
+
+            if conn_ids_from_dvs:
+                # Permissions issue — derive connection IDs from data views
+                _PERM_WARNING = (
+                    "Note: The GET /connections API requires product-admin privileges.\n"
+                    "Connection details are unavailable. Showing connection IDs derived\n"
+                    "from data views instead."
+                )
+                derived = [
+                    {"id": cid, "name": None, "owner": None, "datasets": [], "dataview_count": cnt}
+                    for cid, cnt in sorted(conn_ids_from_dvs.items())
+                ]
+                derived = _apply_discovery_filters_and_sort(
+                    derived,
+                    filter_pattern=filter_pattern,
+                    exclude_pattern=exclude_pattern,
+                    limit=limit,
+                    sort_expression=sort_expression,
+                    searchable_fields=["id", "name", "owner", "dataview_count"],
+                    default_sort_field="id",
+                )
+
+                if output_format == "json":
+                    return _format_discovery_json(
+                        {
+                            "connections": derived,
+                            "count": len(derived),
+                            "warning": _PERM_WARNING.replace("\n", " "),
+                        },
+                    )
+                if output_format == "csv":
+                    flat = [
+                        {
+                            "connection_id": d["id"],
+                            "connection_name": "",
+                            "owner": "",
+                            "dataset_id": "",
+                            "dataset_name": "",
+                            "dataview_count": d["dataview_count"],
+                        }
+                        for d in derived
+                    ]
+                    return _format_as_csv(
+                        ["connection_id", "connection_name", "owner", "dataset_id", "dataset_name", "dataview_count"],
+                        flat,
+                    )
+                lines: list[str] = []
+                lines.append("")
+                lines.append(_PERM_WARNING)
+                lines.append("")
+                lines.append(f"Found {len(derived)} connection(s) referenced by data views:")
+                lines.append("")
+                lines.extend(f"  {d['id']}  ({d['dataview_count']} data view(s))" for d in derived)
+                lines.append("")
+                return "\n".join(lines)
+
+            # Genuinely no connections
+            if is_machine_readable:
+                if output_format == "json":
+                    return _format_discovery_json({"connections": [], "count": 0})
+                return "connection_id,connection_name,owner,dataset_id,dataset_name\n"
+            return "\nNo connections found or no access to any connections.\n"
+
+        display_data = []
+        for conn in connections:
+            if not isinstance(conn, dict):
+                continue
+            conn_id = _normalize_optional_text(conn.get("id"), default="N/A")
+            conn_name = _normalize_optional_text(conn.get("name"), default="N/A")
+            owner_full_name = _normalize_optional_text(conn.get("ownerFullName"), default="")
+            owner_name = owner_full_name or _extract_owner_name(conn.get("owner"))
+
+            raw_datasets = conn.get("dataSets", conn.get("datasets", []))
+            if not isinstance(raw_datasets, list):
+                raw_datasets = []
+            datasets = [_extract_dataset_info(ds) for ds in raw_datasets]
+
+            display_data.append(
+                {
+                    "id": conn_id,
+                    "name": conn_name,
+                    "owner": owner_name,
+                    "datasets": datasets,
+                },
+            )
+
+        display_data = _apply_discovery_filters_and_sort(
+            display_data,
+            filter_pattern=filter_pattern,
+            exclude_pattern=exclude_pattern,
+            limit=limit,
+            sort_expression=sort_expression,
+            searchable_fields=["id", "name", "owner", "datasets"],
+            default_sort_field="name",
+        )
+
+        if output_format == "json":
+            return _format_discovery_json({"connections": display_data, "count": len(display_data)})
+        if output_format == "csv":
+            # Flatten nested datasets: one CSV row per dataset
+            flat_rows: list[dict] = []
+            for conn in display_data:
+                if conn["datasets"]:
+                    flat_rows.extend(
+                        {
+                            "connection_id": conn["id"],
+                            "connection_name": conn["name"],
+                            "owner": conn["owner"],
+                            "dataset_id": ds["id"],
+                            "dataset_name": ds["name"],
+                        }
+                        for ds in conn["datasets"]
+                    )
+                else:
+                    flat_rows.append(
+                        {
+                            "connection_id": conn["id"],
+                            "connection_name": conn["name"],
+                            "owner": conn["owner"],
+                            "dataset_id": "",
+                            "dataset_name": "",
+                        },
+                    )
+            return _format_as_csv(
+                ["connection_id", "connection_name", "owner", "dataset_id", "dataset_name"],
+                flat_rows,
+            )
+        lines: list[str] = []
+        lines.append("")
+        lines.append(f"Found {len(display_data)} accessible connection(s):")
+        lines.append("")
+        for conn in display_data:
+            lines.append(f"Connection: {conn['name']} ({conn['id']})")
+            lines.append(f"Owner: {conn['owner']}")
+            if conn["datasets"]:
+                lines.append(f"Datasets ({len(conn['datasets'])}):")
+                for ds in conn["datasets"]:
+                    lines.append(f"  {ds['id']}  {ds['name']}")
+            else:
+                lines.append("Datasets: (none)")
+            lines.append("")
+        return "\n".join(lines)
+
+    return _inner
+
+
+def _fetch_datasets(
+    output_format: str,
+    filter_pattern: str | None = None,
+    exclude_pattern: str | None = None,
+    limit: int | None = None,
+    sort_expression: str | None = None,
+) -> Callable:
+    """Return a fetch_and_format callback for list_datasets."""
+
+    def _inner(cja: Any, is_machine_readable: bool) -> str | None:
+        # Local imports to avoid circular dependency: generator -> discovery -> generator
+        from cja_auto_sdr.generator import _format_as_csv
+
+        # Step 1: Fetch all connections and build lookup map
+        raw_connections = cja.getConnections(output="raw", expansion="name,ownerFullName,dataSets")
+        conn_map: dict = {}  # connection_id -> {name, datasets}
+        for conn in _extract_connections_list(raw_connections):
+            if not isinstance(conn, dict):
+                continue
+            conn_id = _normalize_optional_text(conn.get("id"), default="")
+            conn_name = _normalize_optional_text(conn.get("name"), default="N/A")
+            raw_datasets = conn.get("dataSets", conn.get("datasets", []))
+            if not isinstance(raw_datasets, list):
+                raw_datasets = []
+            conn_map[conn_id] = {
+                "name": conn_name,
+                "datasets": [_extract_dataset_info(ds) for ds in raw_datasets],
+            }
+
+        # Step 2: Fetch all data views
+        available_dvs = cja.getDataViews()
+        if isinstance(available_dvs, pd.DataFrame):
+            available_dvs = available_dvs.to_dict("records")
+
+        if not available_dvs:
+            if is_machine_readable:
+                if output_format == "json":
+                    return _format_discovery_json({"dataViews": [], "count": 0})
+                return "dataview_id,dataview_name,connection_id,connection_name,dataset_id,dataset_name\n"
+            return "\nNo data views found or no access to any data views.\n"
+
+        # Detect permissions gap: conn_map is empty but data views have connections
+        _no_conn_details = False
+        if not conn_map:
+            for dv in available_dvs or []:
+                if not isinstance(dv, dict):
+                    continue
+                pid = dv.get("parentDataGroupId")
+                if not _is_missing_discovery_value(pid, treat_blank_string=True, treat_null_like_strings=True):
+                    _no_conn_details = True
+                    break
+
+        # Step 3: Build output records using parentDataGroupId
+        if not is_machine_readable:
+            print(f"Processing {len(available_dvs)} data view(s)...")
+        display_data = []
+        for i, dv in enumerate(available_dvs):
+            if not isinstance(dv, dict):
+                continue
+            dv_id = _normalize_optional_text(dv.get("id"), default="N/A")
+            dv_name = _normalize_optional_text(dv.get("name"), default="N/A")
+
+            if not is_machine_readable:
+                print(f"  [{i + 1}/{len(available_dvs)}] {dv_name}...", end="\r")
+
+            parent_conn_id = dv.get("parentDataGroupId")
+            # DataFrame-backed records can carry missing values as NaN/NA.
+            # Normalize to None so machine-readable output emits "N/A", not NaN.
+            if _is_missing_discovery_value(parent_conn_id, treat_blank_string=True, treat_null_like_strings=True):
+                parent_conn_id = None
+
+            conn_info = conn_map.get(parent_conn_id) if parent_conn_id else None
+            conn_name = conn_info.get("name", "N/A") if conn_info else None
+            datasets = conn_info.get("datasets", []) if conn_info else []
+
+            display_data.append(
+                {
+                    "id": dv_id,
+                    "name": dv_name,
+                    "connection": {"id": parent_conn_id or "N/A", "name": conn_name},
+                    "datasets": datasets,
+                },
+            )
+
+        display_data = _apply_discovery_filters_and_sort(
+            display_data,
+            filter_pattern=filter_pattern,
+            exclude_pattern=exclude_pattern,
+            limit=limit,
+            sort_expression=sort_expression,
+            searchable_fields=["id", "name", "connection", "datasets"],
+            default_sort_field="name",
+        )
+
+        if not is_machine_readable:
+            # Clear progress line with ANSI erase-line escape
+            print("\033[2K", end="\r")
+
+        _CONN_PERM_WARNING = (
+            "Note: Connection details are unavailable (the GET /connections API\n"
+            "requires product-admin privileges). Showing connection IDs only."
+        )
+
+        result_payload: dict = {"dataViews": display_data, "count": len(display_data)}
+        if _no_conn_details:
+            result_payload["warning"] = _CONN_PERM_WARNING.replace("\n", " ")
+
+        if output_format == "json":
+            return _format_discovery_json(result_payload)
+        if output_format == "csv":
+            # Flatten nested datasets: one CSV row per dataset per data view
+            flat_rows: list[dict] = []
+            for entry in display_data:
+                conn_id = entry["connection"]["id"]
+                conn_name_val = entry["connection"]["name"] or ""
+                if entry["datasets"]:
+                    flat_rows.extend(
+                        {
+                            "dataview_id": entry["id"],
+                            "dataview_name": entry["name"],
+                            "connection_id": conn_id,
+                            "connection_name": conn_name_val,
+                            "dataset_id": ds["id"],
+                            "dataset_name": ds["name"],
+                        }
+                        for ds in entry["datasets"]
+                    )
+                else:
+                    flat_rows.append(
+                        {
+                            "dataview_id": entry["id"],
+                            "dataview_name": entry["name"],
+                            "connection_id": conn_id,
+                            "connection_name": conn_name_val,
+                            "dataset_id": "",
+                            "dataset_name": "",
+                        },
+                    )
+            return _format_as_csv(
+                ["dataview_id", "dataview_name", "connection_id", "connection_name", "dataset_id", "dataset_name"],
+                flat_rows,
+            )
+        lines: list[str] = []
+        lines.append("")
+        if _no_conn_details:
+            lines.append(_CONN_PERM_WARNING)
+            lines.append("")
+        lines.append(f"Found {len(display_data)} data view(s) with dataset information:")
+        lines.append("")
+        for entry in display_data:
+            lines.append(f"Data View: {entry['name']} ({entry['id']})")
+            c_name = entry["connection"]["name"]
+            c_id = entry["connection"]["id"]
+            if c_name:
+                lines.append(f"Connection: {c_name} ({c_id})")
+            else:
+                lines.append(f"Connection: {c_id}")
+            if entry["datasets"]:
+                lines.append(f"Datasets ({len(entry['datasets'])}):")
+                lines.extend(f"  {ds['id']}  {ds['name']}" for ds in entry["datasets"])
+            elif not _no_conn_details:
+                lines.append("Datasets: (none)")
+            lines.append("")
+        return "\n".join(lines)
+
+    return _inner
