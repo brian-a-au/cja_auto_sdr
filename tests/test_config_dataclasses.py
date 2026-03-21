@@ -434,7 +434,7 @@ class TestFormatAliases:
 # ==================== Constants Values ====================
 class TestConstantValues:
     def test_banner_width(self):
-        assert BANNER_WIDTH == 60
+        assert BANNER_WIDTH == 80
 
     def test_max_batch_workers(self):
         assert MAX_BATCH_WORKERS == 256

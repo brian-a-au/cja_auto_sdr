@@ -35,7 +35,7 @@ import pytest
 
 def _make_generator_mock(
     *,
-    banner_width: int = 60,
+    banner_width: int = 80,
     platform_system: str = "Linux",
     platform_release: str = "5.15.0",
     sys_platform: str = "linux",

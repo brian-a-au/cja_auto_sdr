@@ -344,7 +344,7 @@ class TestConfigCommandSignatures:
 
         with patch("cja_auto_sdr.cli.commands.config._generator_module") as mock_gen:
             mock_gen_obj = MagicMock()
-            mock_gen_obj.BANNER_WIDTH = 60
+            mock_gen_obj.BANNER_WIDTH = 80
             mock_gen_obj.ConsoleColors.error = str
             mock_gen_obj.ConsoleColors.success = str
             mock_gen_obj.load_profile_credentials.return_value = None
@@ -373,7 +373,7 @@ class TestConfigCommandSignatures:
 
         with patch("cja_auto_sdr.cli.commands.config._generator_module") as mock_gen:
             mock_gen_obj = MagicMock()
-            mock_gen_obj.BANNER_WIDTH = 60
+            mock_gen_obj.BANNER_WIDTH = 80
             mock_gen_obj.ConsoleColors.error = str
             mock_gen_obj.ConsoleColors.success = str
             mock_gen_obj.ConsoleColors.info = str
@@ -745,7 +745,7 @@ class TestRunListCommandContract:
             patch("cja_auto_sdr.cli.commands.list._generator") as mock_gen,
         ):
             mock_gen.resolve_active_profile.return_value = None
-            mock_gen.BANNER_WIDTH = 60
+            mock_gen.BANNER_WIDTH = 80
             mock_gen._is_machine_readable_output.return_value = False
             mock_gen.configure_cjapy.return_value = (False, "Config error", None)
             mock_gen._emit_discovery_error = MagicMock()
@@ -764,7 +764,7 @@ class TestRunListCommandContract:
 
         with patch("cja_auto_sdr.cli.commands.list._generator") as mock_gen:
             mock_gen.resolve_active_profile.return_value = None
-            mock_gen.BANNER_WIDTH = 60
+            mock_gen.BANNER_WIDTH = 80
             mock_gen._is_machine_readable_output.return_value = True
             mock_gen.configure_cjapy.return_value = (False, "Bad config", None)
             mock_gen._emit_discovery_error = MagicMock()

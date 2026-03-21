@@ -276,8 +276,8 @@ class TestBannerWidth:
     """Tests for BANNER_WIDTH constant."""
 
     def test_value(self):
-        """BANNER_WIDTH is 60."""
-        assert BANNER_WIDTH == 60
+        """BANNER_WIDTH is 80."""
+        assert BANNER_WIDTH == 80
 
     def test_type(self):
         """BANNER_WIDTH is an int."""

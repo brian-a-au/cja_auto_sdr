@@ -38,7 +38,7 @@ EXTENSION_TO_FORMAT: dict[str, str] = {
 # ==================== DISPLAY CONSTANTS ====================
 
 # Width of banner separator lines (used across CLI output)
-BANNER_WIDTH: int = 60
+BANNER_WIDTH: int = 80
 
 # Progress bar format for tqdm instances
 TQDM_BAR_FORMAT: str = "{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}]"
