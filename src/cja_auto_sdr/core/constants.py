@@ -40,6 +40,9 @@ EXTENSION_TO_FORMAT: dict[str, str] = {
 # Width of banner separator lines (used across CLI output)
 BANNER_WIDTH: int = 60
 
+# Progress bar format for tqdm instances
+TQDM_BAR_FORMAT: str = "{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}]"
+
 # ==================== WORKER LIMITS ====================
 
 # Worker thread/process limits

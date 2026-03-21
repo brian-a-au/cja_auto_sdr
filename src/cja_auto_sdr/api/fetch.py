@@ -17,9 +17,8 @@ from cja_auto_sdr.api.tuning import APIWorkerTuner
 from cja_auto_sdr.core.config import APITuningConfig
 from cja_auto_sdr.core.discovery_payloads import assess_dataview_lookup_payload
 from cja_auto_sdr.core.exceptions import CircuitBreakerOpen
+from cja_auto_sdr.core.constants import TQDM_BAR_FORMAT
 from cja_auto_sdr.core.perf import PerformanceTracker
-
-TQDM_BAR_FORMAT = "{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}]"
 API_FETCH_TASK_COUNT = 3  # metrics + dimensions + dataview
 
 

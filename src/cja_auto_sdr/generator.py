@@ -108,6 +108,7 @@ from cja_auto_sdr.core.constants import (
     QUALITY_SEVERITY_ORDER,
     QUALITY_SEVERITY_RANK,
     RETRYABLE_STATUS_CODES,
+    TQDM_BAR_FORMAT,
     VALIDATION_SCHEMA,
     _get_credential_fields,
     auto_detect_workers,
@@ -241,7 +242,6 @@ from cja_auto_sdr.org.writers import (
     write_org_report_stats_only,
 )
 
-TQDM_BAR_FORMAT = "{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}]"
 PARALLEL_INVENTORY_MIN_TASKS = 2
 
 # ==================== OUTPUT WRITER PROTOCOL ====================

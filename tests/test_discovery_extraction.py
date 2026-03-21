@@ -251,3 +251,12 @@ class TestDiscoveryFetchers:
     def test_extract_connections_list(self):
         from cja_auto_sdr.cli.commands.discovery import _extract_connections_list
         assert callable(_extract_connections_list)
+
+
+class TestTqdmBarFormatCentralized:
+    """Verify TQDM_BAR_FORMAT is centralized in constants."""
+
+    def test_tqdm_bar_format_in_constants(self):
+        from cja_auto_sdr.core.constants import TQDM_BAR_FORMAT
+        assert isinstance(TQDM_BAR_FORMAT, str)
+        assert "{l_bar}" in TQDM_BAR_FORMAT
