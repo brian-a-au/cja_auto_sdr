@@ -395,7 +395,7 @@ class DataViewComparator:
         try:
             if pd.isna(value):
                 return ""
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             pass
         if isinstance(value, str):
             return value.strip()

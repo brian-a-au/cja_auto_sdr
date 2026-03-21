@@ -219,7 +219,7 @@ def _resolve_output_dir_path(output_dir: str | Path) -> Path:
     output_path = Path(output_dir).expanduser()
     try:
         return output_path.resolve(strict=False)
-    except (OSError, RuntimeError, ValueError):
+    except OSError, RuntimeError, ValueError:
         return Path(os.path.abspath(str(output_path)))
 
 
@@ -452,7 +452,7 @@ def validate_config_only(
             print(generator.ConsoleColors.success(f"  \u2713 Found {dv_count} accessible data view(s)"))
         else:
             print(generator.ConsoleColors.warning("  \u26a0 API returned empty response - connection may be unstable"))
-    except (KeyboardInterrupt, SystemExit):
+    except KeyboardInterrupt, SystemExit:
         print()
         print(generator.ConsoleColors.warning("Validation cancelled."))
         raise

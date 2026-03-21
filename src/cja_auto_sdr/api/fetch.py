@@ -15,10 +15,11 @@ from tqdm import tqdm
 from cja_auto_sdr.api.resilience import CircuitBreaker, make_api_call_with_retry
 from cja_auto_sdr.api.tuning import APIWorkerTuner
 from cja_auto_sdr.core.config import APITuningConfig
+from cja_auto_sdr.core.constants import TQDM_BAR_FORMAT
 from cja_auto_sdr.core.discovery_payloads import assess_dataview_lookup_payload
 from cja_auto_sdr.core.exceptions import CircuitBreakerOpen
-from cja_auto_sdr.core.constants import TQDM_BAR_FORMAT
 from cja_auto_sdr.core.perf import PerformanceTracker
+
 API_FETCH_TASK_COUNT = 3  # metrics + dimensions + dataview
 
 

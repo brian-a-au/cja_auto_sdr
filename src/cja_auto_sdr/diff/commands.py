@@ -89,7 +89,7 @@ def handle_snapshot_command(
             print("=" * generator.BANNER_WIDTH)
 
         return True
-    except (KeyboardInterrupt, SystemExit):
+    except KeyboardInterrupt, SystemExit:
         raise
     except generator.RECOVERABLE_COMMAND_HANDLER_EXCEPTIONS as e:
         print(generator.ConsoleColors.error(f"ERROR: Failed to create snapshot: {e!s}"), file=sys.stderr)
@@ -329,7 +329,7 @@ def handle_diff_command(
 
         generator.append_github_step_summary(generator.build_diff_step_summary(diff_result), logger)
         return True, diff_result.summary.has_changes, exit_code_override
-    except (KeyboardInterrupt, SystemExit):
+    except KeyboardInterrupt, SystemExit:
         raise
     except generator.RECOVERABLE_COMMAND_HANDLER_EXCEPTIONS as e:
         print(generator.ConsoleColors.error(f"ERROR: Failed to compare data views: {e!s}"), file=sys.stderr)
@@ -648,7 +648,7 @@ def handle_diff_snapshot_command(
     except ValueError as e:
         print(generator.ConsoleColors.error(f"ERROR: Invalid snapshot file: {e!s}"), file=sys.stderr)
         return False, False, None
-    except (KeyboardInterrupt, SystemExit):
+    except KeyboardInterrupt, SystemExit:
         raise
     except generator.RECOVERABLE_COMMAND_HANDLER_EXCEPTIONS as e:
         print(generator.ConsoleColors.error(f"ERROR: Failed to compare against snapshot: {e!s}"), file=sys.stderr)
@@ -821,7 +821,7 @@ def handle_compare_snapshots_command(
     except ValueError as e:
         print(generator.ConsoleColors.error(f"ERROR: Invalid snapshot file: {e!s}"), file=sys.stderr)
         return False, False, None
-    except (KeyboardInterrupt, SystemExit):
+    except KeyboardInterrupt, SystemExit:
         raise
     except (generator.CJASDRError, OSError) as e:
         print(generator.ConsoleColors.error(f"ERROR: Failed to compare snapshots: {e!s}"), file=sys.stderr)

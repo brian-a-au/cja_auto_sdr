@@ -237,7 +237,7 @@ class BatchProcessor:
                                         pending.cancel()
                                     break
 
-                        except (KeyboardInterrupt, SystemExit):
+                        except KeyboardInterrupt, SystemExit:
                             self.logger.warning(f"[{self.batch_id}] Interrupted - cancelling remaining tasks...")
                             for pending in future_to_dv:
                                 pending.cancel()

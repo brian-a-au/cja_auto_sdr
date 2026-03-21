@@ -53,7 +53,7 @@ def _safe_env_number(env_var: str, default: int | float, cast: Callable[[str], i
         return default
     try:
         return cast(raw)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return default
 
 
@@ -254,7 +254,9 @@ Requirements:
         help="Show program version and exit",
     )
 
-    parser.add_argument("--exit-codes", action="store_true", help="Display a table of all exit codes and their meaning, then exit")
+    parser.add_argument(
+        "--exit-codes", action="store_true", help="Display a table of all exit codes and their meaning, then exit"
+    )
 
     parser.add_argument(
         "--explain-exit-code",
@@ -280,7 +282,11 @@ Requirements:
         "At least one required unless using --version, --list-dataviews, etc.",
     )
 
-    parser.add_argument("--batch", action="store_true", help="Enable batch processing mode: process multiple data views in parallel from a batch directory of config files")
+    parser.add_argument(
+        "--batch",
+        action="store_true",
+        help="Enable batch processing mode: process multiple data views in parallel from a batch directory of config files",
+    )
 
     parser.add_argument(
         "--workers",

@@ -1509,7 +1509,7 @@ class OrgComponentAnalyzer:
                                 "Consider reviewing if still needed or if updates are required.",
                             },
                         )
-                except (ValueError, TypeError):
+                except ValueError, TypeError:
                     pass
 
             # Missing descriptions

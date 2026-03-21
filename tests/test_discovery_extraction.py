@@ -81,8 +81,10 @@ class TestOutputDirectoryErrors:
     """Verify output-directory errors have consistent format."""
 
     def test_not_directory_error_format(self):
-        from cja_auto_sdr.cli import execution
         import inspect
+
+        from cja_auto_sdr.cli import execution
+
         source = inspect.getsource(execution)
         assert "ERROR: Output directory" in source or "ERROR: Cannot" in source
 
@@ -91,8 +93,11 @@ class TestHelpTextImprovements:
     """Verify improved help text for key CLI flags."""
 
     def test_exit_codes_help_text(self):
+        import contextlib
+        import io
+
         from cja_auto_sdr.cli.parser import parse_arguments
-        import io, contextlib
+
         buf = io.StringIO()
         try:
             with contextlib.redirect_stdout(buf):
@@ -104,8 +109,11 @@ class TestHelpTextImprovements:
         assert "table" in output.lower() or "meaning" in output.lower()
 
     def test_batch_help_mentions_directory(self):
+        import contextlib
+        import io
+
         from cja_auto_sdr.cli.parser import parse_arguments
-        import io, contextlib
+
         buf = io.StringIO()
         try:
             with contextlib.redirect_stdout(buf):
@@ -116,8 +124,11 @@ class TestHelpTextImprovements:
         assert "batch" in output.lower()
 
     def test_quiet_help_clarifies_errors(self):
+        import contextlib
+        import io
+
         from cja_auto_sdr.cli.parser import parse_arguments
-        import io, contextlib
+
         buf = io.StringIO()
         try:
             with contextlib.redirect_stdout(buf):
@@ -128,8 +139,11 @@ class TestHelpTextImprovements:
         assert "quiet" in output.lower()
 
     def test_format_uses_shorthand_not_aliases(self):
+        import contextlib
+        import io
+
         from cja_auto_sdr.cli.parser import parse_arguments
-        import io, contextlib
+
         buf = io.StringIO()
         try:
             with contextlib.redirect_stdout(buf):
@@ -214,42 +228,52 @@ class TestDiscoveryFetchers:
 
     def test_fetch_dataviews(self):
         from cja_auto_sdr.cli.commands.discovery import _fetch_dataviews
+
         assert callable(_fetch_dataviews)
 
     def test_fetch_describe_dataview(self):
         from cja_auto_sdr.cli.commands.discovery import _fetch_describe_dataview
+
         assert callable(_fetch_describe_dataview)
 
     def test_fetch_metrics_list(self):
         from cja_auto_sdr.cli.commands.discovery import _fetch_metrics_list
+
         assert callable(_fetch_metrics_list)
 
     def test_fetch_dimensions_list(self):
         from cja_auto_sdr.cli.commands.discovery import _fetch_dimensions_list
+
         assert callable(_fetch_dimensions_list)
 
     def test_fetch_segments_list(self):
         from cja_auto_sdr.cli.commands.discovery import _fetch_segments_list
+
         assert callable(_fetch_segments_list)
 
     def test_fetch_calculated_metrics_list(self):
         from cja_auto_sdr.cli.commands.discovery import _fetch_calculated_metrics_list
+
         assert callable(_fetch_calculated_metrics_list)
 
     def test_fetch_connections(self):
         from cja_auto_sdr.cli.commands.discovery import _fetch_connections
+
         assert callable(_fetch_connections)
 
     def test_fetch_datasets(self):
         from cja_auto_sdr.cli.commands.discovery import _fetch_datasets
+
         assert callable(_fetch_datasets)
 
     def test_extract_dataset_info(self):
         from cja_auto_sdr.cli.commands.discovery import _extract_dataset_info
+
         assert callable(_extract_dataset_info)
 
     def test_extract_connections_list(self):
         from cja_auto_sdr.cli.commands.discovery import _extract_connections_list
+
         assert callable(_extract_connections_list)
 
 
@@ -258,5 +282,6 @@ class TestTqdmBarFormatCentralized:
 
     def test_tqdm_bar_format_in_constants(self):
         from cja_auto_sdr.core.constants import TQDM_BAR_FORMAT
+
         assert isinstance(TQDM_BAR_FORMAT, str)
         assert "{l_bar}" in TQDM_BAR_FORMAT

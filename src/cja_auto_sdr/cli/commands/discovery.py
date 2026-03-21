@@ -1095,7 +1095,9 @@ def _fetch_describe_dataview(
         lines.append(f"    Metrics:             {n_metrics}")
         lines.append(f"    Calculated Metrics:  {n_calc_metrics}")
         lines.append(f"    Segments:            {n_segments}")
-        _separator_width = len("    Calculated Metrics:  ") + len(str(max(n_dimensions, n_metrics, n_calc_metrics, n_segments, total)))
+        _count_vals = [v for v in (n_dimensions, n_metrics, n_calc_metrics, n_segments, total) if isinstance(v, int)]
+        _max_count = max(_count_vals) if _count_vals else 0
+        _separator_width = len("    Calculated Metrics:  ") + max(len(str(_max_count)), len("N/A"))
         lines.append(f"    {'─' * (_separator_width - 4)}")
         lines.append(f"    Total:               {total}")
         lines.append("=" * rule_width)

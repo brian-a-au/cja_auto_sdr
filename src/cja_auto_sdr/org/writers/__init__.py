@@ -66,7 +66,7 @@ def _format_trending_timestamp_short(ts: str) -> str:
     try:
         dt = datetime.fromisoformat(ts)
         return dt.strftime("%b %d")
-    except (ValueError, AttributeError):
+    except ValueError, AttributeError:
         return ts[:10]
 
 

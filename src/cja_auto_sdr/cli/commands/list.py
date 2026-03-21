@@ -135,7 +135,7 @@ def _run_list_command(
             print("  cja_auto_sdr --sample-config")
         return False
 
-    except (KeyboardInterrupt, SystemExit):
+    except KeyboardInterrupt, SystemExit:
         if not is_machine_readable:
             print()
             print(_generator.ConsoleColors.warning("Operation cancelled."))
@@ -411,7 +411,7 @@ def _fetch_describe_dataview(data_view_id: str, output_format: str) -> Callable:
                 f"    Metrics:             {n_metrics}",
                 f"    Calculated Metrics:  {n_calc_metrics}",
                 f"    Segments:            {n_segments}",
-                f"    {'─' * (len('    Calculated Metrics:  ') + len(str(max(n_dimensions, n_metrics, n_calc_metrics, n_segments, total))) - 4)}",
+                f"    {'─' * (len('    Calculated Metrics:  ') + max(len(str(max((v for v in (n_dimensions, n_metrics, n_calc_metrics, n_segments, total) if isinstance(v, int)), default=0))), len('N/A')) - 4)}",
                 f"    Total:               {total}",
                 "=" * term_width,
                 "",

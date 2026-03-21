@@ -7,6 +7,26 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.4.5] - 2026-03-20
+
+### Style
+- Normalize 49 PEP 758 bare-comma `except` clauses to tuple form across 22 files
+
+### Refactor
+- Extract discovery implementation to `cli/commands/discovery.py` — single source of truth
+- Update `cli/commands/list.py` to import from shared discovery module
+- Centralize `TQDM_BAR_FORMAT` in `core/constants.py`
+- Deduplicate dataview listing usage footer width calculation
+
+### Docs
+- Improve CLI help text for `--exit-codes`, `--batch`, `--quiet`, `--format`, `--quality-policy`
+
+### Fix
+- Normalize output-directory error messages for consistency
+- Enumerate supported formats in `--format` fallback warnings
+- Derive `describe_dataview` separator width from rendered layout
+- Gate carriage-return progress updates to interactive console
+
 ## [3.4.4] - 2026-03-20
 
 ### Changed

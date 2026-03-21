@@ -159,7 +159,7 @@ def _confirm_large_batch(args: argparse.Namespace, *, data_views: list[str]) -> 
             print("Cancelled.")
             sys.exit(0)
         print()
-    except (EOFError, KeyboardInterrupt):
+    except EOFError, KeyboardInterrupt:
         print("\nCancelled.")
         sys.exit(0)
 
@@ -288,9 +288,7 @@ def prepare_sdr_execution_context(
     if not output_access_ok:
         if access_reason == "not_directory":
             print(
-                generator.ConsoleColors.error(
-                    f"ERROR: Output directory {resolved_output_dir}: not a directory"
-                ),
+                generator.ConsoleColors.error(f"ERROR: Output directory {resolved_output_dir}: not a directory"),
                 file=sys.stderr,
             )
         elif access_reason == "parent_not_directory" and parent_dir is not None:
