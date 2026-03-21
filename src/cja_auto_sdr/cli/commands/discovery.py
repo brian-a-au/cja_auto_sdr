@@ -13,6 +13,8 @@ import re
 import sys
 from typing import Any
 
+import pandas as pd
+
 from cja_auto_sdr.core.colors import ConsoleColors
 from cja_auto_sdr.core.discovery_normalization import (
     extract_owner_name as _extract_owner_name_normalized,
@@ -106,6 +108,142 @@ def _to_searchable_text(value: Any) -> str:
         return json.dumps(value, ensure_ascii=False, sort_keys=True)
     except TypeError:
         return str(value)
+
+
+# ---------------------------------------------------------------------------
+# Query / filter / sort helpers
+# ---------------------------------------------------------------------------
+
+
+def _to_numeric_sort_value(value: Any) -> float | None:
+    """Convert a sortable value to float when it is numerically representable."""
+    if value is None or isinstance(value, bool):
+        return None
+
+    if isinstance(value, (int, float)):
+        try:
+            if pd.isna(value):
+                return None
+        except (TypeError, ValueError):
+            return None
+        return float(value)
+
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped or not _NUMERIC_SORT_VALUE_RE.fullmatch(stripped):
+            return None
+        try:
+            return float(stripped)
+        except ValueError:  # pragma: no cover — regex guard prevents this
+            return None
+
+    return None
+
+
+def _is_missing_sort_value(value: Any) -> bool:
+    """Return True for values that should be sorted after concrete values."""
+    if value is None:
+        return True
+    if isinstance(value, str) and not value.strip():
+        return True
+    try:
+        return bool(pd.isna(value))
+    except (TypeError, ValueError):
+        return False
+
+
+def _compile_discovery_pattern(pattern: str | None, *, option_name: str) -> re.Pattern[str] | None:
+    """Compile a discovery regex and raise a user-facing validation error on failure."""
+    if not pattern:
+        return None
+    try:
+        return re.compile(pattern, re.IGNORECASE)
+    except re.error as exc:
+        raise DiscoveryArgumentError(f"Invalid {option_name} regex '{pattern}': {exc!s}") from exc
+
+
+def _validate_discovery_query_inputs(
+    filter_pattern: str | None = None,
+    exclude_pattern: str | None = None,
+    limit: int | None = None,
+) -> None:
+    """Validate discovery query flags before executing API calls."""
+    _compile_discovery_pattern(filter_pattern, option_name="--filter")
+    _compile_discovery_pattern(exclude_pattern, option_name="--exclude")
+    if limit is not None and limit < 0:
+        raise DiscoveryArgumentError("--limit cannot be negative")
+
+
+def _apply_discovery_filters_and_sort(
+    rows: list[dict[str, Any]],
+    *,
+    filter_pattern: str | None = None,
+    exclude_pattern: str | None = None,
+    limit: int | None = None,
+    sort_expression: str | None = None,
+    searchable_fields: list[str] | None = None,
+    default_sort_field: str = "name",
+) -> list[dict[str, Any]]:
+    """Apply filter/exclude/sort/limit to discovery rows."""
+    filtered_rows = list(rows)
+    fields = searchable_fields or list(rows[0].keys()) if rows else []
+
+    _validate_discovery_query_inputs(filter_pattern=filter_pattern, exclude_pattern=exclude_pattern, limit=limit)
+    filter_re = _compile_discovery_pattern(filter_pattern, option_name="--filter")
+    exclude_re = _compile_discovery_pattern(exclude_pattern, option_name="--exclude")
+
+    # Compute per-row searchable blobs once when filter/exclude is requested.
+    if filter_re or exclude_re:
+        searchable_rows = [
+            (row, " ".join(_to_searchable_text(row.get(field, "")) for field in fields)) for row in filtered_rows
+        ]
+        if filter_re:
+            searchable_rows = [(row, blob) for row, blob in searchable_rows if filter_re.search(blob)]
+        if exclude_re:
+            searchable_rows = [(row, blob) for row, blob in searchable_rows if not exclude_re.search(blob)]
+        filtered_rows = [row for row, _ in searchable_rows]
+
+    sort_field = default_sort_field
+    reverse = False
+    if sort_expression:
+        sort_expr = sort_expression.strip()
+        if sort_expr.startswith("-"):
+            reverse = True
+            sort_field = sort_expr[1:]
+        else:
+            sort_field = sort_expr
+
+    non_missing_values = [
+        row.get(sort_field) for row in filtered_rows if not _is_missing_sort_value(row.get(sort_field))
+    ]
+    use_numeric_sort = bool(non_missing_values) and all(
+        _to_numeric_sort_value(value) is not None for value in non_missing_values
+    )
+
+    concrete_rows: list[tuple[float | str, dict[str, Any]]] = []
+    missing_rows: list[dict[str, Any]] = []
+    for row in filtered_rows:
+        raw_value = row.get(sort_field)
+        if _is_missing_sort_value(raw_value):
+            missing_rows.append(row)
+            continue
+
+        if use_numeric_sort:
+            numeric_value = _to_numeric_sort_value(raw_value)
+            if numeric_value is None:
+                missing_rows.append(row)
+                continue
+            concrete_rows.append((numeric_value, row))
+        else:
+            concrete_rows.append((_to_searchable_text(raw_value).casefold(), row))
+
+    concrete_rows.sort(key=lambda item: item[0], reverse=reverse)
+    filtered_rows = [row for _, row in concrete_rows] + missing_rows
+
+    if limit is not None:
+        filtered_rows = filtered_rows[:limit]
+
+    return filtered_rows
 
 
 # ---------------------------------------------------------------------------
