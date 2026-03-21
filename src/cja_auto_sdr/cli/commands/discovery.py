@@ -157,7 +157,7 @@ def _to_numeric_sort_value(value: Any) -> float | None:
         try:
             if pd.isna(value):
                 return None
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             return None
         return float(value)
 
@@ -181,7 +181,7 @@ def _is_missing_sort_value(value: Any) -> bool:
         return True
     try:
         return bool(pd.isna(value))
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return False
 
 
@@ -757,6 +757,8 @@ def _build_metric_display_row(item: dict[str, Any]) -> dict[str, Any]:
                 "description": "",
             },
         ),
+        "owner": _extract_owner_name_from_record(item),
+        "precision": _normalize_optional_component_int(item.get("precision"), default=0),
     }
 
 
@@ -772,6 +774,7 @@ def _build_dimension_display_row(item: dict[str, Any]) -> dict[str, Any]:
                 "description": "",
             },
         ),
+        "owner": _extract_owner_name_from_record(item),
     }
 
 

@@ -166,7 +166,7 @@ class SDRConfig:
     quiet: bool = False
 
     @classmethod
-    def from_args(cls, args: argparse.Namespace) -> SDRConfig:
+    def from_args(cls, args: argparse.Namespace) -> "SDRConfig":
         """Create configuration from parsed command-line arguments."""
         return cls(
             retry=RetryConfig(

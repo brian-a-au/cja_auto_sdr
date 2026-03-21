@@ -17,7 +17,7 @@ def _is_na_like(value: Any) -> bool:
     """Return True when pandas recognizes the value as missing."""
     try:
         is_na = pd.isna(value)
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return False
 
     if isinstance(is_na, bool):
@@ -25,7 +25,7 @@ def _is_na_like(value: Any) -> bool:
     if hasattr(is_na, "all"):
         try:
             return bool(is_na.all())
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             return False
     return False
 

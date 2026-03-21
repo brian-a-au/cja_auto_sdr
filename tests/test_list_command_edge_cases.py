@@ -15,6 +15,7 @@ import pytest
 from cja_auto_sdr.cli.commands.list import (
     DiscoveryNotFoundError,
     _approved_display,
+    _build_dimension_display_row,
     _build_metric_display_row,
     _fetch_component_payload,
     _fetch_connections,
@@ -317,6 +318,17 @@ class TestBuildMetricDisplayRow:
         result = _build_metric_display_row({})
         assert result["id"] == "N/A"
         assert result["name"] == "N/A"
+
+
+class TestBuildDimensionDisplayRow:
+    """Test _build_dimension_display_row compatibility fields."""
+
+    def test_builds_display_row_with_owner(self) -> None:
+        item = {"id": "variables/page", "name": "Page", "type": "string", "description": "Page name"}
+        result = _build_dimension_display_row(item)
+        assert result["id"] == "variables/page"
+        assert result["name"] == "Page"
+        assert "owner" in result
 
 
 # ---------------------------------------------------------------------------

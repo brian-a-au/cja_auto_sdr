@@ -191,6 +191,7 @@ def test_fetch_describe_dataview_table_wraps_description_and_handles_na_total() 
     with (
         patch("cja_auto_sdr.generator.shutil.get_terminal_size", return_value=terminal_size),
         patch("cja_auto_sdr.cli.commands.list.shutil.get_terminal_size", return_value=terminal_size),
+        patch("cja_auto_sdr.cli.commands.discovery.shutil.get_terminal_size", return_value=terminal_size),
     ):
         result, _ = _assert_generator_fetcher_matches_extracted(
             generator._fetch_describe_dataview("dv_1", "table"),

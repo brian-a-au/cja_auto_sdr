@@ -1215,13 +1215,13 @@ def _run_optional_inventory_step[T](
 
 def _refetch_git_snapshot_for_commit(
     *,
-    snapshot: DataViewSnapshot,
+    snapshot: "DataViewSnapshot",
     data_view_id: str,
     config_file: str,
     profile: str | None,
     include_calculated_metrics: bool,
     include_segments_inventory: bool,
-) -> DataViewSnapshot:
+) -> "DataViewSnapshot":
     """Best-effort snapshot re-fetch used by optional --git-commit flow."""
     needs_fetch = not snapshot.metrics and not snapshot.dimensions
     needs_inventory = include_calculated_metrics or include_segments_inventory
@@ -2245,7 +2245,7 @@ def build_quality_step_summary(results: list[ProcessingResult]) -> str:
     return "\n".join(lines)
 
 
-def build_diff_step_summary(diff_result: DiffResult) -> str:
+def build_diff_step_summary(diff_result: "DiffResult") -> str:
     """Build markdown summary table for diff output."""
     summary = diff_result.summary
     total_changes = summary.total_changes + summary.calc_metrics_changed + summary.segments_changed
@@ -2583,7 +2583,7 @@ def validate_data_view(cja: cjapy.CJA, data_view_id: str, logger: logging.Logger
 
         return True
 
-    except KeyboardInterrupt, SystemExit:
+    except (KeyboardInterrupt, SystemExit):
         raise
     except RECOVERABLE_CONFIG_API_EXCEPTIONS as e:  # cjapy API/bootstrap calls
         logger.error("=" * BANNER_WIDTH)
@@ -2980,7 +2980,7 @@ def _format_diff_value(val: Any, truncate: bool = True, max_len: int = 30) -> st
     try:
         if pd.isna(val):
             return "(empty)"
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         pass
     result = str(val)
     if truncate and len(result) > max_len:
@@ -6014,7 +6014,7 @@ def run_dry_run(data_views: list[str], config_file: str, logger: logging.Logger,
         else:
             print("  ⚠ API connection returned None - may be unstable")
             available_dvs = []
-    except KeyboardInterrupt, SystemExit:
+    except (KeyboardInterrupt, SystemExit):
         print()
         print(ConsoleColors.warning("Dry-run cancelled."))
         raise
@@ -6106,7 +6106,7 @@ def run_dry_run(data_views: list[str], config_file: str, logger: logging.Logger,
                 )
                 invalid_count += 1
                 all_passed = False
-        except KeyboardInterrupt, SystemExit:
+        except (KeyboardInterrupt, SystemExit):
             print()
             print(ConsoleColors.warning("Validation cancelled."))
             raise
@@ -7593,7 +7593,7 @@ def run_org_report(
         _status_print(ConsoleColors.error(f"ERROR: Configuration file '{config_file}' not found"))
         return False, False
 
-    except KeyboardInterrupt, SystemExit:
+    except (KeyboardInterrupt, SystemExit):
         if not quiet:
             _status_print()
             _status_print(ConsoleColors.warning("Operation cancelled."))
