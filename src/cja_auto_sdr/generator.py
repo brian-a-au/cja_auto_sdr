@@ -145,9 +145,6 @@ from cja_auto_sdr.core.discovery_normalization import (
     pick_first_present_text as _pick_first_present_text,
 )
 from cja_auto_sdr.core.discovery_payloads import (
-    DataViewLookupAssessment as _DataViewLookupAssessment,
-)
-from cja_auto_sdr.core.discovery_payloads import (
     PayloadKind as _PayloadKind,
 )
 from cja_auto_sdr.core.discovery_payloads import (
@@ -6661,6 +6658,8 @@ from cja_auto_sdr.cli.commands.discovery import (
     DiscoveryOutputContractError,
     OutputContractError,
     _apply_discovery_filters_and_sort,
+    _assess_dataview_lookup,
+    _coerce_valid_dataview_lookup_payload,
     _compile_discovery_pattern,
     _emit_discovery_error,
     _emit_json_output,
@@ -6668,10 +6667,14 @@ from cja_auto_sdr.cli.commands.discovery import (
     _extract_owner_name,
     _extract_owner_name_from_record,
     _extract_timestamp_from_record,
+    _fetch_dataview_lookup_payload,
     _format_discovery_json,
     _is_machine_readable_output,
     _is_missing_sort_value,
+    _normalize_describe_dataview_metadata,
     _normalize_optional_text,
+    _require_accessible_dataview,
+    _resolve_dataview_name,
     _resolve_discovery_output_format,
     _to_numeric_sort_value,
     _to_searchable_text,
@@ -6837,34 +6840,6 @@ def _normalize_single_dataview_payload(raw_dv: Any) -> dict[str, Any] | None:
     return raw_dv if isinstance(raw_dv, dict) else None
 
 
-def _assess_dataview_lookup(
-    raw_payload: Any,
-    *,
-    data_view_id: str,
-    require_expected_id: bool = True,
-) -> _DataViewLookupAssessment:
-    """Assess a getDataView payload with a consistent expected-id policy."""
-    expected_data_view_id = data_view_id if require_expected_id else None
-    return _assess_dataview_lookup_payload(raw_payload, expected_data_view_id=expected_data_view_id)
-
-
-def _coerce_valid_dataview_lookup_payload(
-    raw_payload: Any,
-    *,
-    data_view_id: str,
-    require_expected_id: bool = True,
-) -> tuple[dict[str, Any] | None, str, str]:
-    """Return a validated lookup payload or structured failure metadata."""
-    assessment = _assess_dataview_lookup(
-        raw_payload,
-        data_view_id=data_view_id,
-        require_expected_id=require_expected_id,
-    )
-    if assessment.is_valid and assessment.payload is not None:
-        return assessment.payload, assessment.reason, assessment.raw_type
-    return None, assessment.reason, assessment.raw_type
-
-
 def _coerce_http_status_code(value: Any) -> int | None:
     """Compatibility wrapper for centralized HTTP status-code coercion."""
     return _coerce_http_status_code_core(value)
@@ -6885,30 +6860,6 @@ def _is_inaccessible_dataview_lookup_error(error: Exception) -> bool:
     return _is_inaccessible_dataview_lookup_error_core(error)
 
 
-def _fetch_dataview_lookup_payload(cja: Any, data_view_id: str) -> Any:
-    """Call getDataView and normalize inaccessible lookup failures to not_found."""
-    try:
-        return cja.getDataView(data_view_id)
-    except (
-        Exception
-    ) as lookup_error:  # Intentional: wrapped client/transport lookup failures vary; re-raise non-404/403 cases
-        # Classification is centralized in core.discovery_exceptions and supports
-        # nested/wrapped transport errors across diverse exception types.
-        if _is_inaccessible_dataview_lookup_error(lookup_error):
-            raise DiscoveryNotFoundError(f"Data view '{data_view_id}' not found") from lookup_error
-        raise
-
-
-def _require_accessible_dataview(cja: Any, data_view_id: str) -> dict[str, Any]:
-    """Fetch a data view and raise DiscoveryNotFoundError when inaccessible/invalid."""
-    raw_payload = _fetch_dataview_lookup_payload(cja, data_view_id)
-
-    payload, _, _ = _coerce_valid_dataview_lookup_payload(raw_payload, data_view_id=data_view_id)
-    if payload is None:
-        raise DiscoveryNotFoundError(f"Data view '{data_view_id}' not found")
-    return payload
-
-
 def _normalize_component_records_or_raise(
     raw_payload: Any,
     *,
@@ -6924,30 +6875,6 @@ def _normalize_component_records_or_raise(
             f"Unexpected {component_label} payload type for data view '{data_view_id}'",
         )
     return assessment.rows
-
-
-def _normalize_describe_dataview_metadata(raw_dv: dict[str, Any], *, default_id: str) -> dict[str, str]:
-    """Normalize describe_dataview metadata fields for safe display/serialization."""
-    connection_id = _pick_first_present_text(
-        (
-            raw_dv.get("parentDataGroupId"),
-            raw_dv.get("connectionId"),
-            raw_dv.get("connection_id"),
-        ),
-        default="N/A",
-        treat_null_like_strings=True,
-    )
-    created = _extract_timestamp_from_record(raw_dv, "created") or "N/A"
-    modified = _extract_timestamp_from_record(raw_dv, "modified") or "N/A"
-    return {
-        "id": _normalize_optional_text(raw_dv.get("id"), default=default_id),
-        "name": _normalize_optional_text(raw_dv.get("name"), default="N/A"),
-        "owner": _extract_owner_name_from_record(raw_dv),
-        "description": _normalize_optional_text(raw_dv.get("description"), default=""),
-        "connection_id": connection_id,
-        "created": created,
-        "modified": modified,
-    }
 
 
 def _fetch_describe_dataview(
@@ -7103,16 +7030,6 @@ def describe_dataview(
 
 
 # ==================== LIST METRICS ====================
-
-
-def _resolve_dataview_name(cja: Any, data_view_id: str, *, preferred_name: str | None = None) -> str:
-    """Look up a canonical data view display name with safe fallback behavior."""
-    raw_dv = _require_accessible_dataview(cja, data_view_id)
-    normalized_name = _normalize_optional_text(raw_dv.get("name"), default="")
-    if normalized_name:
-        return normalized_name
-    normalized_preferred = _normalize_optional_text(preferred_name, default="")
-    return normalized_preferred or "Unknown"
 
 
 def _format_governance_rows_for_tabular(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:

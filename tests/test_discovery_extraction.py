@@ -37,3 +37,31 @@ class TestDiscoveryQueryHelpers:
     def test_to_numeric_sort_value(self):
         from cja_auto_sdr.cli.commands.discovery import _to_numeric_sort_value
         assert callable(_to_numeric_sort_value)
+
+
+class TestDiscoveryDataviewHelpers:
+    """Verify dataview lookup helpers are importable from discovery module."""
+
+    def test_fetch_dataview_lookup_payload(self):
+        from cja_auto_sdr.cli.commands.discovery import _fetch_dataview_lookup_payload
+        assert callable(_fetch_dataview_lookup_payload)
+
+    def test_require_accessible_dataview(self):
+        from cja_auto_sdr.cli.commands.discovery import _require_accessible_dataview
+        assert callable(_require_accessible_dataview)
+
+    def test_assess_dataview_lookup(self):
+        from cja_auto_sdr.cli.commands.discovery import _assess_dataview_lookup
+        assert callable(_assess_dataview_lookup)
+
+    def test_coerce_valid_dataview_lookup_payload(self):
+        from cja_auto_sdr.cli.commands.discovery import _coerce_valid_dataview_lookup_payload
+        assert callable(_coerce_valid_dataview_lookup_payload)
+
+    def test_normalize_describe_dataview_metadata(self):
+        from cja_auto_sdr.cli.commands.discovery import _normalize_describe_dataview_metadata
+        assert callable(_normalize_describe_dataview_metadata)
+
+    def test_resolve_dataview_name(self):
+        from cja_auto_sdr.cli.commands.discovery import _resolve_dataview_name
+        assert callable(_resolve_dataview_name)
