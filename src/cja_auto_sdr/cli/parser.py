@@ -53,7 +53,7 @@ def _safe_env_number(env_var: str, default: int | float, cast: Callable[[str], i
         return default
     try:
         return cast(raw)
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return default
 
 
