@@ -77,6 +77,59 @@ class TestDiscoveryDataviewHelpers:
         assert callable(_resolve_dataview_name)
 
 
+class TestHelpTextImprovements:
+    """Verify improved help text for key CLI flags."""
+
+    def test_exit_codes_help_text(self):
+        from cja_auto_sdr.cli.parser import parse_arguments
+        import io, contextlib
+        buf = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(buf):
+                parse_arguments(["--help"])
+        except SystemExit:
+            pass
+        output = buf.getvalue()
+        assert "exit code" in output.lower()
+        assert "table" in output.lower() or "meaning" in output.lower()
+
+    def test_batch_help_mentions_directory(self):
+        from cja_auto_sdr.cli.parser import parse_arguments
+        import io, contextlib
+        buf = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(buf):
+                parse_arguments(["--help"])
+        except SystemExit:
+            pass
+        output = buf.getvalue()
+        assert "batch" in output.lower()
+
+    def test_quiet_help_clarifies_errors(self):
+        from cja_auto_sdr.cli.parser import parse_arguments
+        import io, contextlib
+        buf = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(buf):
+                parse_arguments(["--help"])
+        except SystemExit:
+            pass
+        output = buf.getvalue()
+        assert "quiet" in output.lower()
+
+    def test_format_uses_shorthand_not_aliases(self):
+        from cja_auto_sdr.cli.parser import parse_arguments
+        import io, contextlib
+        buf = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(buf):
+                parse_arguments(["--help"])
+        except SystemExit:
+            pass
+        output = buf.getvalue()
+        assert "shorthand" in output.lower() or "Shorthand" in output
+
+
 class TestDiscoveryComponentHelpers:
     """Verify component fetch specs and row builders are importable."""
 

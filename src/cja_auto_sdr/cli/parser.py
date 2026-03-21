@@ -254,7 +254,7 @@ Requirements:
         help="Show program version and exit",
     )
 
-    parser.add_argument("--exit-codes", action="store_true", help="Display exit code reference and exit")
+    parser.add_argument("--exit-codes", action="store_true", help="Display a table of all exit codes and their meaning, then exit")
 
     parser.add_argument(
         "--explain-exit-code",
@@ -280,7 +280,7 @@ Requirements:
         "At least one required unless using --version, --list-dataviews, etc.",
     )
 
-    parser.add_argument("--batch", action="store_true", help="Enable batch processing mode (parallel execution)")
+    parser.add_argument("--batch", action="store_true", help="Enable batch processing mode: process multiple data views in parallel from a batch directory of config files")
 
     parser.add_argument(
         "--workers",
@@ -447,7 +447,7 @@ Requirements:
         type=str,
         default=None,
         choices=["console", "excel", "csv", "json", "html", "markdown", "all", "reports", "data", "ci"],
-        help="Output format: excel, csv, json, html, markdown, all, or aliases (reports=excel+markdown, data=csv+json, ci=json+markdown). Default: excel for SDR, console for diff",
+        help="Output format: excel, csv, json, html, markdown, all, or shorthand (reports=excel+markdown, data=csv+json, ci=json+markdown). Default: excel for SDR, console for diff",
     )
 
     parser.add_argument(
@@ -462,7 +462,7 @@ Requirements:
         "--quiet",
         "-q",
         action="store_true",
-        help="Quiet mode - suppress all output except errors and final summary",
+        help="Quiet mode — suppress progress output and banners. Errors (stderr) and final file paths still print",
     )
 
     discovery_group = parser.add_argument_group(
@@ -602,9 +602,9 @@ Requirements:
         "--quality-policy",
         type=str,
         metavar="PATH",
-        help="Load quality defaults from JSON file (supported keys: fail_on_quality, quality_report, "
-        "max_issues, allow_partial). "
-        "Explicit CLI flags take precedence.",
+        help="Load quality defaults from JSON file (e.g. policy.json). Supported keys: fail_on_quality, quality_report, "
+        "max_issues, allow_partial. "
+        "Explicit CLI flags take precedence over policy values",
     )
 
     # ==================== UX ENHANCEMENT ARGUMENTS ====================

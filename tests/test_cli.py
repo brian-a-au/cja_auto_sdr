@@ -353,7 +353,7 @@ class TestUXImprovements:
         parser = parse_arguments(return_parser=True, enable_autocomplete=False)
         help_text = " ".join(parser.format_help().split())
 
-        assert "supported keys: fail_on_quality, quality_report, max_issues, allow_partial" in help_text
+        assert "fail_on_quality, quality_report, max_issues, allow_partial" in help_text
 
     def test_profile_import_flags(self):
         """Test parsing with --profile-import and --profile-overwrite flags."""
