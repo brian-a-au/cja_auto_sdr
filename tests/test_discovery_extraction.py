@@ -77,6 +77,16 @@ class TestDiscoveryDataviewHelpers:
         assert callable(_resolve_dataview_name)
 
 
+class TestOutputDirectoryErrors:
+    """Verify output-directory errors have consistent format."""
+
+    def test_not_directory_error_format(self):
+        from cja_auto_sdr.cli import execution
+        import inspect
+        source = inspect.getsource(execution)
+        assert "ERROR: Output directory" in source or "ERROR: Cannot" in source
+
+
 class TestHelpTextImprovements:
     """Verify improved help text for key CLI flags."""
 

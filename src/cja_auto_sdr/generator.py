@@ -536,19 +536,23 @@ def _resolve_command_output_format(
 
     resolved_format = supported_formats.get(normalized_format)
     if resolved_format is None:
+        supported_list = ", ".join(sorted(supported_formats.keys()))
         active_logger.warning(
-            "--format %s is not supported for %s; using %s",
+            "--format %s is not supported for %s (supported: %s); using %s",
             raw_format,
             warning_scope,
+            supported_list,
             effective_fallback,
         )
         return effective_fallback
 
     if output_to_stdout and allowed_stdout_formats and resolved_format not in allowed_stdout_formats:
+        supported_list = ", ".join(sorted(supported_formats.keys()))
         active_logger.warning(
-            "--format %s is not supported for %s with --output stdout; using %s",
+            "--format %s is not supported for %s with --output stdout (supported: %s); using %s",
             raw_format,
             warning_scope,
+            supported_list,
             effective_fallback,
         )
         return effective_fallback
