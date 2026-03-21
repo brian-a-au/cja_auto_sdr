@@ -1857,28 +1857,28 @@ class TestRunDryRunAPIValidation:
     def test_dv_validation_missing_component_method_degrades_to_zero(self, capsys):
         """Missing metric/dimension methods should not abort dry-run validation."""
         logger = logging.getLogger("test_dry_run_missing_component_method")
+
+        def _mock_retry_call(*_args, **kwargs):
+            op = kwargs.get("operation_name")
+            if op == "getDataViews (dry-run)":
+                return []
+            if op == "getDataView(dv_partial)":
+                return {"id": "dv_partial", "name": "Partial DV"}
+            if op == "getMetrics(dv_partial)":
+                raise DiscoveryNotFoundError("missing getMetrics")
+            if op == "getDimensions(dv_partial)":
+                return [{"id": "d1"}, {"id": "d2"}]
+            raise AssertionError(f"Unexpected operation: {op}")
+
         with (
             patch("cja_auto_sdr.generator.validate_config_file", return_value=True),
             patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "config", {})),
             patch("cja_auto_sdr.generator.cjapy") as mock_cjapy,
-            patch("cja_auto_sdr.generator.make_api_call_with_retry") as mock_retry,
+            patch("cja_auto_sdr.generator.make_api_call_with_retry", side_effect=_mock_retry_call),
+            patch("cja_auto_sdr.cli.commands.discovery.make_api_call_with_retry", side_effect=_mock_retry_call),
         ):
             mock_cja = MagicMock()
             mock_cjapy.CJA.return_value = mock_cja
-
-            def _mock_retry_call(*_args, **kwargs):
-                op = kwargs.get("operation_name")
-                if op == "getDataViews (dry-run)":
-                    return []
-                if op == "getDataView(dv_partial)":
-                    return {"id": "dv_partial", "name": "Partial DV"}
-                if op == "getMetrics(dv_partial)":
-                    raise DiscoveryNotFoundError("missing getMetrics")
-                if op == "getDimensions(dv_partial)":
-                    return [{"id": "d1"}, {"id": "d2"}]
-                raise AssertionError(f"Unexpected operation: {op}")
-
-            mock_retry.side_effect = _mock_retry_call
 
             result = run_dry_run(["dv_partial"], "config.json", logger)
 

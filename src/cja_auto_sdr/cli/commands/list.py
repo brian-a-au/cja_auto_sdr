@@ -9,6 +9,7 @@ from collections.abc import Callable
 from typing import Any
 
 from cja_auto_sdr import generator as _generator
+from cja_auto_sdr.cli.commands import discovery as _discovery
 
 __all__ = [
     "_run_list_command",
@@ -27,13 +28,13 @@ pd = _generator.pd
 shutil = _generator.shutil
 textwrap = _generator.textwrap
 
-DiscoveryNotFoundError = _generator.DiscoveryNotFoundError
-RECOVERABLE_OPTIONAL_COMPONENT_COUNT_EXCEPTIONS = _generator.RECOVERABLE_OPTIONAL_COMPONENT_COUNT_EXCEPTIONS
+DiscoveryNotFoundError = _discovery.DiscoveryNotFoundError
+RECOVERABLE_OPTIONAL_COMPONENT_COUNT_EXCEPTIONS = _discovery.RECOVERABLE_OPTIONAL_COMPONENT_COUNT_EXCEPTIONS
 
-_METRICS_COMPONENT_FETCH_SPEC = _generator._METRICS_COMPONENT_FETCH_SPEC
-_DIMENSIONS_COMPONENT_FETCH_SPEC = _generator._DIMENSIONS_COMPONENT_FETCH_SPEC
-_SEGMENTS_COMPONENT_FETCH_SPEC = _generator._SEGMENTS_COMPONENT_FETCH_SPEC
-_CALCULATED_METRICS_COMPONENT_FETCH_SPEC = _generator._CALCULATED_METRICS_COMPONENT_FETCH_SPEC
+_METRICS_COMPONENT_FETCH_SPEC = _discovery._METRICS_COMPONENT_FETCH_SPEC
+_DIMENSIONS_COMPONENT_FETCH_SPEC = _discovery._DIMENSIONS_COMPONENT_FETCH_SPEC
+_SEGMENTS_COMPONENT_FETCH_SPEC = _discovery._SEGMENTS_COMPONENT_FETCH_SPEC
+_CALCULATED_METRICS_COMPONENT_FETCH_SPEC = _discovery._CALCULATED_METRICS_COMPONENT_FETCH_SPEC
 
 
 def _run_list_command(
@@ -48,7 +49,7 @@ def _run_list_command(
 ) -> bool:
     """Shared boilerplate for list-* discovery commands."""
     is_stdout = output_file in ("-", "stdout")
-    is_machine_readable = _generator._is_machine_readable_output(output_format, output_file)
+    is_machine_readable = _discovery._is_machine_readable_output(output_format, output_file)
 
     active_profile = _generator.resolve_active_profile(profile)
 
@@ -76,7 +77,7 @@ def _run_list_command(
             logger=logger,
         )
         if not success:
-            _generator._emit_discovery_error(
+            _discovery._emit_discovery_error(
                 f"Configuration error: {source}",
                 is_machine_readable=is_machine_readable,
                 error_type="configuration_error",
@@ -94,8 +95,8 @@ def _run_list_command(
 
         return True
 
-    except _generator.DiscoveryNotFoundError as e:
-        _generator._emit_discovery_error(
+    except _discovery.DiscoveryNotFoundError as e:
+        _discovery._emit_discovery_error(
             str(e),
             is_machine_readable=is_machine_readable,
             error_type="not_found",
@@ -103,8 +104,8 @@ def _run_list_command(
         )
         return False
 
-    except _generator.DiscoveryArgumentError as e:
-        _generator._emit_discovery_error(
+    except _discovery.DiscoveryArgumentError as e:
+        _discovery._emit_discovery_error(
             str(e),
             is_machine_readable=is_machine_readable,
             error_type="invalid_arguments",
@@ -112,8 +113,8 @@ def _run_list_command(
         )
         return False
 
-    except _generator.OutputContractError as e:
-        _generator._emit_output_contract_error(
+    except _discovery.OutputContractError as e:
+        _discovery._emit_output_contract_error(
             str(e),
             is_machine_readable=is_machine_readable,
             human_to_stderr=False,
@@ -121,7 +122,7 @@ def _run_list_command(
         return False
 
     except FileNotFoundError:
-        _generator._emit_discovery_error(
+        _discovery._emit_discovery_error(
             f"Configuration file '{config_file}' not found",
             is_machine_readable=is_machine_readable,
             error_type="configuration_error",
@@ -140,7 +141,7 @@ def _run_list_command(
         raise
 
     except _generator.RECOVERABLE_COMMAND_HANDLER_EXCEPTIONS as e:
-        _generator._emit_discovery_error(
+        _discovery._emit_discovery_error(
             f"Failed to connect to CJA API: {e!s}",
             is_machine_readable=is_machine_readable,
             error_type="connectivity_error",
@@ -174,12 +175,12 @@ def _fetch_dataviews(
         display_data = []
         for dv in available_dvs:
             if isinstance(dv, dict):
-                dv_id = _generator._normalize_optional_text(dv.get("id"), default="N/A")
-                dv_name = _generator._normalize_optional_text(dv.get("name"), default="N/A")
-                owner_name = _generator._extract_owner_name(dv.get("owner"))
+                dv_id = _discovery._normalize_optional_text(dv.get("id"), default="N/A")
+                dv_name = _discovery._normalize_optional_text(dv.get("name"), default="N/A")
+                owner_name = _discovery._extract_owner_name(dv.get("owner"))
                 display_data.append({"id": dv_id, "name": dv_name, "owner": owner_name})
 
-        display_data = _generator._apply_discovery_filters_and_sort(
+        display_data = _discovery._apply_discovery_filters_and_sort(
             display_data,
             filter_pattern=filter_pattern,
             exclude_pattern=exclude_pattern,
@@ -190,7 +191,7 @@ def _fetch_dataviews(
         )
 
         if output_format == "json":
-            return _generator._format_discovery_json({"dataViews": display_data, "count": len(display_data)})
+            return _discovery._format_discovery_json({"dataViews": display_data, "count": len(display_data)})
         if output_format == "csv":
             return _generator._format_as_csv(["id", "name", "owner"], display_data)
         table = _generator._format_as_table(
@@ -228,7 +229,7 @@ def _assess_dataview_lookup(
 ) -> Any:
     """Assess a getDataView payload with a consistent expected-id policy."""
     expected_data_view_id = data_view_id if require_expected_id else None
-    return _generator._assess_dataview_lookup_payload(raw_payload, expected_data_view_id=expected_data_view_id)
+    return _discovery._assess_dataview_lookup_payload(raw_payload, expected_data_view_id=expected_data_view_id)
 
 
 def _coerce_valid_dataview_lookup_payload(
@@ -274,10 +275,10 @@ def _normalize_component_records_or_raise(
     data_view_id: str,
 ) -> list[dict[str, Any]]:
     """Normalize component payloads to dict rows or fail on error-shaped responses."""
-    assessment = _generator._assess_component_payload(raw_payload)
-    if assessment.kind is _generator._PayloadKind.ERROR:
+    assessment = _discovery._assess_component_payload(raw_payload)
+    if assessment.kind is _discovery._PayloadKind.ERROR:
         raise DiscoveryNotFoundError(f"Failed to retrieve {component_label} for data view '{data_view_id}'")
-    if assessment.kind is _generator._PayloadKind.INVALID:
+    if assessment.kind is _discovery._PayloadKind.INVALID:
         raise DiscoveryNotFoundError(
             f"Unexpected {component_label} payload type for data view '{data_view_id}'",
         )
@@ -286,7 +287,7 @@ def _normalize_component_records_or_raise(
 
 def _normalize_describe_dataview_metadata(raw_dv: dict[str, Any], *, default_id: str) -> dict[str, str]:
     """Normalize describe_dataview metadata fields for safe display/serialization."""
-    connection_id = _generator._pick_first_present_text(
+    connection_id = _discovery._pick_first_present_text(
         (
             raw_dv.get("parentDataGroupId"),
             raw_dv.get("connectionId"),
@@ -295,13 +296,13 @@ def _normalize_describe_dataview_metadata(raw_dv: dict[str, Any], *, default_id:
         default="N/A",
         treat_null_like_strings=True,
     )
-    created = _generator._extract_timestamp_from_record(raw_dv, "created") or "N/A"
-    modified = _generator._extract_timestamp_from_record(raw_dv, "modified") or "N/A"
+    created = _discovery._extract_timestamp_from_record(raw_dv, "created") or "N/A"
+    modified = _discovery._extract_timestamp_from_record(raw_dv, "modified") or "N/A"
     return {
-        "id": _generator._normalize_optional_text(raw_dv.get("id"), default=default_id),
-        "name": _generator._normalize_optional_text(raw_dv.get("name"), default="N/A"),
-        "owner": _generator._extract_owner_name_from_record(raw_dv),
-        "description": _generator._normalize_optional_text(raw_dv.get("description"), default=""),
+        "id": _discovery._normalize_optional_text(raw_dv.get("id"), default=default_id),
+        "name": _discovery._normalize_optional_text(raw_dv.get("name"), default="N/A"),
+        "owner": _discovery._extract_owner_name_from_record(raw_dv),
+        "description": _discovery._normalize_optional_text(raw_dv.get("description"), default=""),
         "connection_id": connection_id,
         "created": created,
         "modified": modified,
@@ -316,10 +317,10 @@ def _fetch_describe_dataview(data_view_id: str, output_format: str) -> Callable:
 
         dv_metadata = _normalize_describe_dataview_metadata(raw_dv, default_id=data_view_id)
         counts = [
-            _generator._count_component_items_for_fetch_spec(cja, data_view_id, _METRICS_COMPONENT_FETCH_SPEC),
-            _generator._count_component_items_for_fetch_spec(cja, data_view_id, _DIMENSIONS_COMPONENT_FETCH_SPEC),
-            _generator._count_component_items_for_fetch_spec(cja, data_view_id, _SEGMENTS_COMPONENT_FETCH_SPEC),
-            _generator._count_component_items_for_fetch_spec(
+            _discovery._count_component_items_for_fetch_spec(cja, data_view_id, _METRICS_COMPONENT_FETCH_SPEC),
+            _discovery._count_component_items_for_fetch_spec(cja, data_view_id, _DIMENSIONS_COMPONENT_FETCH_SPEC),
+            _discovery._count_component_items_for_fetch_spec(cja, data_view_id, _SEGMENTS_COMPONENT_FETCH_SPEC),
+            _discovery._count_component_items_for_fetch_spec(
                 cja, data_view_id, _CALCULATED_METRICS_COMPONENT_FETCH_SPEC
             ),
         ]
@@ -328,7 +329,7 @@ def _fetch_describe_dataview(data_view_id: str, output_format: str) -> Callable:
         total = sum(numeric_counts) if len(numeric_counts) == len(counts) else "N/A"
 
         if output_format == "json":
-            return _generator._format_discovery_json(
+            return _discovery._format_discovery_json(
                 {
                     "dataView": {
                         "id": dv_metadata["id"],
@@ -424,10 +425,10 @@ def _fetch_describe_dataview(data_view_id: str, output_format: str) -> Callable:
 def _resolve_dataview_name(cja: Any, data_view_id: str, *, preferred_name: str | None = None) -> str:
     """Look up a canonical data view display name with safe fallback behavior."""
     raw_dv = _require_accessible_dataview(cja, data_view_id)
-    normalized_name = _generator._normalize_optional_text(raw_dv.get("name"), default="")
+    normalized_name = _discovery._normalize_optional_text(raw_dv.get("name"), default="")
     if normalized_name:
         return normalized_name
-    normalized_preferred = _generator._normalize_optional_text(preferred_name, default="")
+    normalized_preferred = _discovery._normalize_optional_text(preferred_name, default="")
     return normalized_preferred or "Unknown"
 
 
@@ -491,14 +492,14 @@ def _build_component_list_fetcher(
         if not raw_components:
             if is_machine_readable:
                 if output_format == "json":
-                    return _generator._format_discovery_json(
+                    return _discovery._format_discovery_json(
                         {component_json_key: [], "count": 0, "dataViewId": data_view_id}
                     )
                 return f"{empty_csv_header}\n"
             return f"\nNo {component_label} found in data view '{dv_name}' ({data_view_id}).\n"
 
         display_rows = [display_row_builder(item) for item in raw_components if isinstance(item, dict)]
-        display_rows = _generator._apply_discovery_filters_and_sort(
+        display_rows = _discovery._apply_discovery_filters_and_sort(
             display_rows,
             filter_pattern=filter_pattern,
             exclude_pattern=exclude_pattern,
@@ -509,7 +510,7 @@ def _build_component_list_fetcher(
         )
 
         if output_format == "json":
-            return _generator._format_discovery_json(
+            return _discovery._format_discovery_json(
                 {
                     component_json_key: display_rows,
                     "count": len(display_rows),
@@ -535,12 +536,12 @@ def _build_component_list_fetcher(
 def _build_metric_display_row(item: dict[str, Any]) -> dict[str, Any]:
     """Normalize one metrics-list row for output."""
     return {
-        **_generator._normalize_component_text_fields(
+        **_discovery._normalize_component_text_fields(
             item,
             defaults={"id": "N/A", "name": "N/A", "description": "", "type": "N/A"},
         ),
-        "owner": _generator._extract_owner_name_from_record(item),
-        "precision": _generator._normalize_optional_component_int(item.get("precision"), default=0),
+        "owner": _discovery._extract_owner_name_from_record(item),
+        "precision": _discovery._normalize_optional_component_int(item.get("precision"), default=0),
     }
 
 
@@ -567,7 +568,7 @@ def _fetch_metrics_list(
         component_json_key="metrics",
         empty_csv_header="id,name,type,description",
         fetch_spec=_METRICS_COMPONENT_FETCH_SPEC,
-        display_row_builder=_generator._build_metric_display_row,
+        display_row_builder=_discovery._build_metric_display_row,
         searchable_fields=["id", "name", "type", "description"],
         csv_columns=["id", "name", "type", "description"],
         table_columns=["id", "name", "type", "description"],
@@ -578,11 +579,11 @@ def _fetch_metrics_list(
 def _build_dimension_display_row(item: dict[str, Any]) -> dict[str, Any]:
     """Normalize one dimensions-list row for output."""
     return {
-        **_generator._normalize_component_text_fields(
+        **_discovery._normalize_component_text_fields(
             item,
             defaults={"id": "N/A", "name": "N/A", "description": "", "type": "N/A"},
         ),
-        "owner": _generator._extract_owner_name_from_record(item),
+        "owner": _discovery._extract_owner_name_from_record(item),
     }
 
 
@@ -635,18 +636,18 @@ def _tags_display(tags: Any) -> str:
 
 def _build_segment_display_row(item: dict[str, Any]) -> dict[str, Any]:
     """Normalize one segments-list row for output."""
-    tags = _generator._extract_tags_normalized(item.get("tags"))
+    tags = _discovery._extract_tags_normalized(item.get("tags"))
     approved_raw = item.get("approved")
     return {
-        **_generator._normalize_component_text_fields(
+        **_discovery._normalize_component_text_fields(
             item,
             defaults={"id": "N/A", "name": "N/A", "description": ""},
         ),
-        "owner": _generator._extract_owner_name_from_record(item),
+        "owner": _discovery._extract_owner_name_from_record(item),
         "approved": approved_raw if isinstance(approved_raw, bool) else None,
         "tags": tags,
-        "created": _generator._extract_timestamp_from_record(item, "created"),
-        "modified": _generator._extract_timestamp_from_record(item, "modified"),
+        "created": _discovery._extract_timestamp_from_record(item, "created"),
+        "modified": _discovery._extract_timestamp_from_record(item, "modified"),
     }
 
 
@@ -684,19 +685,19 @@ def _fetch_segments_list(
 
 def _build_calculated_metric_display_row(item: dict[str, Any]) -> dict[str, Any]:
     """Normalize one calculated-metrics row for output."""
-    tags = _generator._extract_tags_normalized(item.get("tags"))
+    tags = _discovery._extract_tags_normalized(item.get("tags"))
     approved_raw = item.get("approved")
     return {
-        **_generator._normalize_component_text_fields(
+        **_discovery._normalize_component_text_fields(
             item,
             defaults={"id": "N/A", "name": "N/A", "description": "", "type": "", "polarity": ""},
         ),
-        "owner": _generator._extract_owner_name_from_record(item),
-        "precision": _generator._normalize_optional_component_int(item.get("precision"), default=0),
+        "owner": _discovery._extract_owner_name_from_record(item),
+        "precision": _discovery._normalize_optional_component_int(item.get("precision"), default=0),
         "approved": approved_raw if isinstance(approved_raw, bool) else None,
         "tags": tags,
-        "created": _generator._extract_timestamp_from_record(item, "created"),
-        "modified": _generator._extract_timestamp_from_record(item, "modified"),
+        "created": _discovery._extract_timestamp_from_record(item, "created"),
+        "modified": _discovery._extract_timestamp_from_record(item, "modified"),
     }
 
 
@@ -755,7 +756,7 @@ def _fetch_connections(
 
     def _inner(cja: Any, is_machine_readable: bool) -> str | None:
         raw_connections = cja.getConnections(output="raw", expansion="name,ownerFullName,dataSets")
-        connections = _generator._extract_connections_list(raw_connections)
+        connections = _discovery._extract_connections_list(raw_connections)
 
         if not connections:
             available_dvs = cja.getDataViews()
@@ -767,7 +768,7 @@ def _fetch_connections(
                 if not isinstance(dv, dict):
                     continue
                 pid = dv.get("parentDataGroupId")
-                if not _generator._is_missing_discovery_value(
+                if not _discovery._is_missing_discovery_value(
                     pid, treat_blank_string=True, treat_null_like_strings=True
                 ):
                     conn_ids_from_dvs[pid] = conn_ids_from_dvs.get(pid, 0) + 1
@@ -782,7 +783,7 @@ def _fetch_connections(
                     {"id": conn_id, "name": None, "owner": None, "datasets": [], "dataview_count": count}
                     for conn_id, count in sorted(conn_ids_from_dvs.items())
                 ]
-                derived = _generator._apply_discovery_filters_and_sort(
+                derived = _discovery._apply_discovery_filters_and_sort(
                     derived,
                     filter_pattern=filter_pattern,
                     exclude_pattern=exclude_pattern,
@@ -792,7 +793,7 @@ def _fetch_connections(
                     default_sort_field="id",
                 )
                 if output_format == "json":
-                    return _generator._format_discovery_json(
+                    return _discovery._format_discovery_json(
                         {"connections": derived, "count": len(derived), "warning": warning.replace("\n", " ")}
                     )
                 if output_format == "csv":
@@ -817,7 +818,7 @@ def _fetch_connections(
 
             if is_machine_readable:
                 if output_format == "json":
-                    return _generator._format_discovery_json({"connections": [], "count": 0})
+                    return _discovery._format_discovery_json({"connections": [], "count": 0})
                 return "connection_id,connection_name,owner,dataset_id,dataset_name\n"
             return "\nNo connections found or no access to any connections.\n"
 
@@ -830,15 +831,15 @@ def _fetch_connections(
                 raw_datasets = []
             display_data.append(
                 {
-                    "id": _generator._normalize_optional_text(conn.get("id"), default="N/A"),
-                    "name": _generator._normalize_optional_text(conn.get("name"), default="N/A"),
-                    "owner": _generator._normalize_optional_text(conn.get("ownerFullName"), default="")
-                    or _generator._extract_owner_name(conn.get("owner")),
-                    "datasets": [_generator._extract_dataset_info(dataset) for dataset in raw_datasets],
+                    "id": _discovery._normalize_optional_text(conn.get("id"), default="N/A"),
+                    "name": _discovery._normalize_optional_text(conn.get("name"), default="N/A"),
+                    "owner": _discovery._normalize_optional_text(conn.get("ownerFullName"), default="")
+                    or _discovery._extract_owner_name(conn.get("owner")),
+                    "datasets": [_discovery._extract_dataset_info(dataset) for dataset in raw_datasets],
                 }
             )
 
-        display_data = _generator._apply_discovery_filters_and_sort(
+        display_data = _discovery._apply_discovery_filters_and_sort(
             display_data,
             filter_pattern=filter_pattern,
             exclude_pattern=exclude_pattern,
@@ -849,7 +850,7 @@ def _fetch_connections(
         )
 
         if output_format == "json":
-            return _generator._format_discovery_json({"connections": display_data, "count": len(display_data)})
+            return _discovery._format_discovery_json({"connections": display_data, "count": len(display_data)})
         if output_format == "csv":
             flat_rows: list[dict[str, Any]] = []
             for conn in display_data:
@@ -905,15 +906,15 @@ def _fetch_datasets(
     def _inner(cja: Any, is_machine_readable: bool) -> str | None:
         raw_connections = cja.getConnections(output="raw", expansion="name,ownerFullName,dataSets")
         conn_map: dict[str, dict[str, Any]] = {}
-        for conn in _generator._extract_connections_list(raw_connections):
+        for conn in _discovery._extract_connections_list(raw_connections):
             if not isinstance(conn, dict):
                 continue
             raw_datasets = conn.get("dataSets", conn.get("datasets", []))
             if not isinstance(raw_datasets, list):
                 raw_datasets = []
-            conn_map[_generator._normalize_optional_text(conn.get("id"), default="")] = {
-                "name": _generator._normalize_optional_text(conn.get("name"), default="N/A"),
-                "datasets": [_generator._extract_dataset_info(dataset) for dataset in raw_datasets],
+            conn_map[_discovery._normalize_optional_text(conn.get("id"), default="")] = {
+                "name": _discovery._normalize_optional_text(conn.get("name"), default="N/A"),
+                "datasets": [_discovery._extract_dataset_info(dataset) for dataset in raw_datasets],
             }
 
         available_dvs = cja.getDataViews()
@@ -923,7 +924,7 @@ def _fetch_datasets(
         if not available_dvs:
             if is_machine_readable:
                 if output_format == "json":
-                    return _generator._format_discovery_json({"dataViews": [], "count": 0})
+                    return _discovery._format_discovery_json({"dataViews": [], "count": 0})
                 return "dataview_id,dataview_name,connection_id,connection_name,dataset_id,dataset_name\n"
             return "\nNo data views found or no access to any data views.\n"
 
@@ -932,7 +933,7 @@ def _fetch_datasets(
             for dv in available_dvs or []:
                 if not isinstance(dv, dict):
                     continue
-                if not _generator._is_missing_discovery_value(
+                if not _discovery._is_missing_discovery_value(
                     dv.get("parentDataGroupId"),
                     treat_blank_string=True,
                     treat_null_like_strings=True,
@@ -949,19 +950,19 @@ def _fetch_datasets(
                 continue
             if not is_machine_readable:
                 print(
-                    f"  [{index + 1}/{len(available_dvs)}] {_generator._normalize_optional_text(dv.get('name'), default='N/A')}...",
+                    f"  [{index + 1}/{len(available_dvs)}] {_discovery._normalize_optional_text(dv.get('name'), default='N/A')}...",
                     end="\r",
                 )
             parent_conn_id = dv.get("parentDataGroupId")
-            if _generator._is_missing_discovery_value(
+            if _discovery._is_missing_discovery_value(
                 parent_conn_id, treat_blank_string=True, treat_null_like_strings=True
             ):
                 parent_conn_id = None
             conn_info = conn_map.get(parent_conn_id) if parent_conn_id else None
             display_data.append(
                 {
-                    "id": _generator._normalize_optional_text(dv.get("id"), default="N/A"),
-                    "name": _generator._normalize_optional_text(dv.get("name"), default="N/A"),
+                    "id": _discovery._normalize_optional_text(dv.get("id"), default="N/A"),
+                    "name": _discovery._normalize_optional_text(dv.get("name"), default="N/A"),
                     "connection": {
                         "id": parent_conn_id or "N/A",
                         "name": conn_info.get("name") if conn_info else None,
@@ -970,7 +971,7 @@ def _fetch_datasets(
                 }
             )
 
-        display_data = _generator._apply_discovery_filters_and_sort(
+        display_data = _discovery._apply_discovery_filters_and_sort(
             display_data,
             filter_pattern=filter_pattern,
             exclude_pattern=exclude_pattern,
@@ -992,7 +993,7 @@ def _fetch_datasets(
             payload["warning"] = warning.replace("\n", " ")
 
         if output_format == "json":
-            return _generator._format_discovery_json(payload)
+            return _discovery._format_discovery_json(payload)
         if output_format == "csv":
             flat_rows: list[dict[str, Any]] = []
             for entry in display_data:
@@ -1072,7 +1073,7 @@ def list_dataviews(
         output_format=output_format,
         output_file=output_file,
         profile=profile,
-        validate_inputs=lambda: _generator._validate_discovery_query_inputs(
+        validate_inputs=lambda: _discovery._validate_discovery_query_inputs(
             filter_pattern=filter_pattern,
             exclude_pattern=exclude_pattern,
             limit=limit,
@@ -1128,7 +1129,7 @@ def list_metrics(
         output_format=output_format,
         output_file=output_file,
         profile=profile,
-        validate_inputs=lambda: _generator._validate_discovery_query_inputs(
+        validate_inputs=lambda: _discovery._validate_discovery_query_inputs(
             filter_pattern=filter_pattern,
             exclude_pattern=exclude_pattern,
             limit=limit,
@@ -1165,7 +1166,7 @@ def list_dimensions(
         output_format=output_format,
         output_file=output_file,
         profile=profile,
-        validate_inputs=lambda: _generator._validate_discovery_query_inputs(
+        validate_inputs=lambda: _discovery._validate_discovery_query_inputs(
             filter_pattern=filter_pattern,
             exclude_pattern=exclude_pattern,
             limit=limit,
@@ -1202,7 +1203,7 @@ def list_segments(
         output_format=output_format,
         output_file=output_file,
         profile=profile,
-        validate_inputs=lambda: _generator._validate_discovery_query_inputs(
+        validate_inputs=lambda: _discovery._validate_discovery_query_inputs(
             filter_pattern=filter_pattern,
             exclude_pattern=exclude_pattern,
             limit=limit,
@@ -1239,7 +1240,7 @@ def list_calculated_metrics(
         output_format=output_format,
         output_file=output_file,
         profile=profile,
-        validate_inputs=lambda: _generator._validate_discovery_query_inputs(
+        validate_inputs=lambda: _discovery._validate_discovery_query_inputs(
             filter_pattern=filter_pattern,
             exclude_pattern=exclude_pattern,
             limit=limit,
@@ -1272,7 +1273,7 @@ def list_connections(
         output_format=output_format,
         output_file=output_file,
         profile=profile,
-        validate_inputs=lambda: _generator._validate_discovery_query_inputs(
+        validate_inputs=lambda: _discovery._validate_discovery_query_inputs(
             filter_pattern=filter_pattern,
             exclude_pattern=exclude_pattern,
             limit=limit,
@@ -1305,7 +1306,7 @@ def list_datasets(
         output_format=output_format,
         output_file=output_file,
         profile=profile,
-        validate_inputs=lambda: _generator._validate_discovery_query_inputs(
+        validate_inputs=lambda: _discovery._validate_discovery_query_inputs(
             filter_pattern=filter_pattern,
             exclude_pattern=exclude_pattern,
             limit=limit,

@@ -5045,7 +5045,7 @@ class TestListMetrics:
         assert output["metrics"][0]["type"] == "N/A"
         assert output["metrics"][0]["description"] == ""
 
-    @patch("cja_auto_sdr.generator._build_metric_display_row")
+    @patch("cja_auto_sdr.cli.commands.discovery._build_metric_display_row")
     @patch("cja_auto_sdr.generator.cjapy")
     @patch("cja_auto_sdr.generator.configure_cjapy")
     @patch("cja_auto_sdr.generator.resolve_active_profile", return_value=None)
