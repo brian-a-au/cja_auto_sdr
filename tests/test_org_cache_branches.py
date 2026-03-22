@@ -1082,3 +1082,28 @@ def test_prune_org_report_snapshots_skips_empty_duplicate_paths_group(tmp_path: 
 
     # The filepath-less snapshot is silently skipped; only real snapshots are pruned
     assert isinstance(deleted, list)
+
+
+# ---------------------------------------------------------------------------
+# Coverage gap tests (moved from test_small_module_coverage.py)
+# ---------------------------------------------------------------------------
+
+
+class TestIsProcessRunningOSError:
+    """Cover lines 114-115: OSError with errno == EPERM."""
+
+    def test_oserror_with_eperm(self):
+        """Lines 114-115: os.kill raises OSError with EPERM errno."""
+        err = OSError("operation not permitted")
+        err.errno = errno.EPERM
+        with patch("os.kill", side_effect=err):
+            result = OrgReportLock._is_process_running(os.getpid())
+        assert result is True
+
+    def test_oserror_with_other_errno(self):
+        """Lines 114-115: os.kill raises OSError with non-EPERM errno."""
+        err = OSError("some other error")
+        err.errno = errno.ENOENT
+        with patch("os.kill", side_effect=err):
+            result = OrgReportLock._is_process_running(os.getpid())
+        assert result is False

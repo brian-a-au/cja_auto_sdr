@@ -17,19 +17,28 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from cja_auto_sdr.core.logging import (
     _CORE_DEPENDENCIES,
+    _LOG_FORMAT_ERROR,
+    _LOG_REDACTION_ERROR,
     ContextLoggerAdapter,
     JSONFormatter,
     SensitiveDataFilter,
     _cached_startup_dependency_versions,
     _collect_dependency_versions,
+    _format_diagnostic_text_value,
     _infer_run_mode,
     _is_reserved_or_private_record_key,
     _is_sensitive_field,
+    _mark_record_redacted,
     _normalize_field_name,
     _redact_captured_value,
     _redact_message,
     _redact_value,
+    _safe_format_exception,
+    _safe_json_dumps,
     _safe_record_message,
+    _safe_redact_extra_fields,
+    _safe_redact_message,
+    _safe_redact_value,
     _safe_str,
     _unwrap_logger,
     flush_logging_handlers,
@@ -1027,3 +1036,231 @@ class TestSetupLoggingConsoleOnly:
         logger = log_mod.setup_logging(data_view_id=None, batch_mode=True, log_level="INFO")
         assert logger is not None
         assert isinstance(logger, logging.Logger)
+
+
+# ---------------------------------------------------------------------------
+# v3.4.5 coverage gap tests (moved from test_v345_coverage_gaps.py)
+# ---------------------------------------------------------------------------
+
+
+class TestSetupLoggingConsoleOnlyPermissionDenied:
+    """Line 673: 'Console output only' logged when log_dir.mkdir fails."""
+
+    def test_console_only_when_permission_denied(self) -> None:
+        from cja_auto_sdr.core.logging import setup_logging
+
+        with (
+            patch("cja_auto_sdr.core.logging._logging_initialized", False),
+            patch("cja_auto_sdr.core.logging._current_log_file", None),
+            patch("pathlib.Path.mkdir", side_effect=PermissionError("denied")),
+        ):
+            logger = setup_logging(data_view_id="test_dv")
+
+        assert logger is not None
+
+        # Clean up handlers added by setup_logging
+        for handler in logging.root.handlers[:]:
+            handler.close()
+            logging.root.removeHandler(handler)
+
+
+# ---------------------------------------------------------------------------
+# Coverage gap tests (moved from test_small_module_coverage.py)
+# ---------------------------------------------------------------------------
+
+
+class TestSafeFormatException:
+    """Cover lines 132-134: exception handler and unavailable fallback."""
+
+    def test_format_exception_error_returns_error_marker(self):
+        """Line 132-133: formatException raises internally."""
+        bad_exc_info = (ValueError, ValueError("boom"), None)
+        with patch.object(logging.Formatter, "formatException", side_effect=TypeError("fmt error")):
+            result = _safe_format_exception(bad_exc_info)
+        assert result == "<exception-format-error>"
+
+    def test_non_tuple_returns_unavailable(self):
+        """Line 134: not a valid exc_info tuple."""
+        assert _safe_format_exception("not a tuple") == "<exception-unavailable>"
+
+    def test_wrong_length_tuple_returns_unavailable(self):
+        """Line 134: tuple with wrong length."""
+        assert _safe_format_exception((ValueError, ValueError("x"))) == "<exception-unavailable>"
+
+
+class TestIsSensitiveFieldEmptyParts:
+    """Cover line 168: empty parts after normalization."""
+
+    def test_empty_parts_returns_false(self):
+        """Line 168: all parts empty after split."""
+        assert _is_sensitive_field("___") is False
+
+    def test_single_underscore(self):
+        assert _is_sensitive_field("_") is False
+
+
+class TestRedactAuthorizationValueMatch:
+    """Cover line 204: _redact_authorization_value_match via _redact_message."""
+
+    def test_authorization_bare_value_redacted(self):
+        """Line 204: authorization key with a plain value (not scheme+credential)."""
+        msg = "authorization=some_plain_token_value"
+        result = _redact_message(msg)
+        assert "[REDACTED]" in result
+
+
+class TestJSONFormatterExcInfoAlreadyRedacted:
+    """Cover line 314: JSONFormatter formats exc_info on already-redacted record."""
+
+    def test_already_redacted_record_with_exc_info(self):
+        """Line 314: record already redacted, has exc_info but no marked exception text."""
+        formatter = JSONFormatter()
+        record = logging.LogRecord(
+            name="test",
+            level=logging.ERROR,
+            pathname="test.py",
+            lineno=1,
+            msg="error occurred",
+            args=(),
+            exc_info=(ValueError, ValueError("secret=abc123"), None),
+        )
+        _mark_record_redacted(record)
+        result = formatter.format(record)
+        parsed = json.loads(result)
+        assert "exception" in parsed
+        assert "abc123" not in parsed["exception"]
+
+
+class TestWithLogContextUnwrapNone:
+    """Cover line 375: _unwrap_logger returns None."""
+
+    def test_unwrap_returns_none_for_bad_adapter(self):
+        """Line 375: an adapter whose .logger is not a Logger."""
+        adapter = logging.LoggerAdapter(logging.getLogger("test_unwrap"), {})
+        adapter.logger = "not_a_logger"
+        result = with_log_context(adapter, key="value")
+        assert result is adapter
+
+
+class TestFlushLoggingHandlersDuplicate:
+    """Cover line 407: handler_id already in seen set."""
+
+    def test_duplicate_handler_skipped(self):
+        """Line 407: same handler appears twice in handler list."""
+        logger = logging.getLogger("test_flush_dup")
+        logger.handlers.clear()
+        handler = logging.StreamHandler()
+        logger.addHandler(handler)
+        logger.addHandler(handler)
+        logger.propagate = False
+        flush_logging_handlers(logger)
+        logger.handlers.clear()
+
+
+class TestSetupLoggingPermissionError:
+    """Cover lines 449-454, 465, 493, 520: setup_logging edge cases."""
+
+    def test_permission_error_logs_to_console_only(self, capsys):
+        """Lines 449-451, 465, 520: PermissionError creating logs dir."""
+        with patch("cja_auto_sdr.core.logging.Path.mkdir", side_effect=PermissionError("denied")):
+            from cja_auto_sdr.core.logging import setup_logging
+
+            setup_logging(log_level="WARNING")
+        captured = capsys.readouterr()
+        assert "permission denied" in captured.err.lower() or "Console output only" in captured.err
+
+    def test_oserror_logs_to_console_only(self, capsys):
+        """Lines 452-454: OSError creating logs dir."""
+        with patch("cja_auto_sdr.core.logging.Path.mkdir", side_effect=OSError("disk full")):
+            from cja_auto_sdr.core.logging import setup_logging
+
+            setup_logging(log_level="WARNING")
+        captured = capsys.readouterr()
+        assert "disk full" in captured.err
+
+    def test_json_log_format(self, tmp_path, monkeypatch):
+        """Line 493: log_format='json' branch."""
+        monkeypatch.chdir(tmp_path)
+        from cja_auto_sdr.core.logging import setup_logging
+
+        logger = setup_logging(log_format="json", log_level="INFO")
+        assert logger is not None
+        has_json = any(isinstance(h.formatter, JSONFormatter) for h in logging.root.handlers)
+        assert has_json
+
+
+class TestLoggingMiscBranches:
+    """Cover specific uncovered branches in core/logging.py."""
+
+    def test_is_sensitive_field_empty_parts(self):
+        """Line 168: field name that normalizes to empty parts returns False."""
+        assert _is_sensitive_field("___") is False
+
+
+# ---------------------------------------------------------------------------
+# Coverage gap tests (moved from test_small_gap_coverage.py)
+# ---------------------------------------------------------------------------
+
+
+def test_safe_redaction_helpers_return_fallbacks_on_recoverable_errors() -> None:
+    with patch("cja_auto_sdr.core.logging._redact_message", side_effect=RuntimeError("boom")):
+        assert _safe_redact_message("secret=value") == _LOG_REDACTION_ERROR
+
+    with patch("cja_auto_sdr.core.logging._redact_value", side_effect=RuntimeError("boom")):
+        assert _safe_redact_value({"secret": "value"}) == _LOG_REDACTION_ERROR
+        assert _safe_redact_value({"secret": "value"}, fallback={"safe": True}) == {"safe": True}
+
+    with patch("cja_auto_sdr.core.logging._redact_extra_fields", side_effect=RuntimeError("boom")):
+        assert _safe_redact_extra_fields({"api_key": "secret", "endpoint": "/v1"}) == {
+            "api_key": "[REDACTED]",
+            "endpoint": _LOG_REDACTION_ERROR,
+        }
+
+
+def test_safe_json_dumps_falls_back_to_format_error_payload() -> None:
+    calls = {"count": 0}
+
+    def flaky_json_dumps(payload, default=None):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise RuntimeError("boom")
+        return '{"message":"[log-format-error]"}'
+
+    with patch("cja_auto_sdr.core.logging.json.dumps", side_effect=flaky_json_dumps):
+        assert _safe_json_dumps({"value": "boom"}) == '{"message":"[log-format-error]"}'
+
+
+def test_sensitive_data_filter_recovers_from_redaction_failures() -> None:
+    record = logging.LogRecord(
+        name="test.logger",
+        level=logging.INFO,
+        pathname="test.py",
+        lineno=1,
+        msg="password=secret",
+        args=(),
+        exc_info=None,
+    )
+
+    with patch("cja_auto_sdr.core.logging._safe_redact_message", side_effect=RuntimeError("boom")):
+        assert SensitiveDataFilter().filter(record) is True
+
+    assert record.msg == _LOG_REDACTION_ERROR
+    assert record.args == ()
+
+
+def test_format_diagnostic_text_value_falls_back_to_safe_str_for_unserializable_values() -> None:
+    with patch("cja_auto_sdr.core.logging.json.dumps", side_effect=RuntimeError("boom")):
+        assert _format_diagnostic_text_value({"alpha": 1}) == "{'alpha': 1}"
+
+
+def test_safe_json_dumps_fallback_payload_is_valid_json() -> None:
+    calls = {"count": 0}
+
+    def flaky_json_dumps(payload, default=None):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise RuntimeError("boom")
+        return '{"message":"[log-format-error]","level":"ERROR"}'
+
+    with patch("cja_auto_sdr.core.logging.json.dumps", side_effect=flaky_json_dumps):
+        assert _LOG_FORMAT_ERROR in _safe_json_dumps({"value": "boom"})

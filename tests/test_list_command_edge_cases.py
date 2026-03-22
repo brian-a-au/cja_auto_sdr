@@ -7,11 +7,16 @@ Lines targeted: 168, 281, 430-431, 450, 497-498, 537, 623, 626, 632,
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from io import StringIO
+from unittest.mock import MagicMock, patch
 
 import pandas as pd
 import pytest
 
+from cja_auto_sdr.cli.commands.discovery import (
+    _apply_discovery_filters_and_sort,
+    _normalize_optional_component_int,
+)
 from cja_auto_sdr.cli.commands.list import (
     DiscoveryNotFoundError,
     _approved_display,
@@ -604,3 +609,136 @@ class TestFetchDatasetsOutputBranches:
         assert "ds1" in result
         assert "Dataset 1" in result
         assert "dv1" in result
+
+
+# ---------------------------------------------------------------------------
+# _fetch_datasets: carriage-return progress gated to interactive console
+# ---------------------------------------------------------------------------
+
+
+class TestFetchDatasetsCarriageReturnGating:
+    """Verify that \\r progress updates are suppressed when stdout is not a TTY."""
+
+    def _make_cja(self) -> MagicMock:
+        cja = MagicMock()
+        cja.getConnections.return_value = [
+            {"id": "conn1", "name": "Conn 1", "dataSets": [{"id": "ds1", "name": "DS1"}]},
+        ]
+        cja.getDataViews.return_value = [
+            {"id": "dv1", "name": "DV1", "parentDataGroupId": "conn1"},
+            {"id": "dv2", "name": "DV2", "parentDataGroupId": "conn1"},
+        ]
+        return cja
+
+    def test_no_cr_progress_when_stdout_not_tty(self) -> None:
+        """Progress lines with \\r and ANSI erase must not appear when piped."""
+        buf = StringIO()
+        with patch("sys.stdout", new=buf):
+            buf.isatty = lambda: False
+            fetcher = _fetch_datasets(output_format="table")
+            fetcher(self._make_cja(), is_machine_readable=False)
+        output = buf.getvalue()
+        assert "\r" not in output, "CR progress should be suppressed for non-TTY stdout"
+        assert "\033[2K" not in output, "ANSI erase should be suppressed for non-TTY stdout"
+
+    def test_cr_progress_shown_when_stdout_is_tty(self) -> None:
+        """Progress lines with \\r should appear when stdout is a TTY."""
+        buf = StringIO()
+        with patch("sys.stdout", new=buf):
+            buf.isatty = lambda: True
+            fetcher = _fetch_datasets(output_format="table")
+            fetcher(self._make_cja(), is_machine_readable=False)
+        output = buf.getvalue()
+        assert "\r" in output, "CR progress should appear for TTY stdout"
+
+    def test_no_cr_progress_in_machine_readable_mode(self) -> None:
+        """Machine-readable output must never contain progress lines."""
+        buf = StringIO()
+        with patch("sys.stdout", new=buf):
+            buf.isatty = lambda: True
+            fetcher = _fetch_datasets(output_format="json")
+            fetcher(self._make_cja(), is_machine_readable=True)
+        output = buf.getvalue()
+        assert "\r" not in output, "CR progress must not appear in machine-readable mode"
+
+
+# ---------------------------------------------------------------------------
+# _apply_discovery_filters_and_sort: numeric sort with non-numeric values
+# ---------------------------------------------------------------------------
+
+
+class TestDiscoveryFiltersNumericSortMissingValues:
+    """Lines 267-268: non-numeric values in numeric sort go to missing_rows.
+
+    The pre-check (lines 249-254) and the per-row call (line 265) both use
+    _to_numeric_sort_value, so the only way to reach lines 267-268 is when
+    _to_numeric_sort_value returns a different result on the second call for
+    a given value.  We patch it to return None for one specific row to
+    exercise the defensive branch.
+    """
+
+    def test_numeric_sort_none_fallback_to_missing_rows(self) -> None:
+        """When _to_numeric_sort_value returns None mid-loop, row goes to missing_rows."""
+        rows = [
+            {"id": "1", "count": "100"},
+            {"id": "2", "count": "50"},
+            {"id": "3", "count": "999"},
+        ]
+        call_count = {"n": 0}
+        from cja_auto_sdr.cli.commands import discovery as _disc_mod
+
+        _real_to_numeric = _disc_mod._to_numeric_sort_value
+
+        def _patched(value: object) -> float | None:
+            # On the per-row pass (calls 4+), make "999" fail
+            call_count["n"] += 1
+            if call_count["n"] > 3 and value == "999":
+                return None
+            return _real_to_numeric(value)
+
+        with patch.object(_disc_mod, "_to_numeric_sort_value", side_effect=_patched):
+            result = _apply_discovery_filters_and_sort(
+                rows,
+                sort_expression="count",
+                searchable_fields=["id", "count"],
+                default_sort_field="id",
+            )
+        # "999" should be pushed to end as a missing row
+        assert len(result) == 3
+        assert result[-1]["count"] == "999"
+        # The other two should be sorted numerically (ascending)
+        assert result[0]["count"] == "50"
+        assert result[1]["count"] == "100"
+
+
+# ---------------------------------------------------------------------------
+# _normalize_optional_component_int: string edge cases via discovery.py
+# ---------------------------------------------------------------------------
+
+
+class TestNormalizeOptionalComponentIntDiscovery:
+    """Exercise _normalize_optional_component_int through the canonical discovery module."""
+
+    def test_valid_numeric_string(self) -> None:
+        assert _normalize_optional_component_int("42") == 42
+
+    def test_padded_numeric_string(self) -> None:
+        assert _normalize_optional_component_int("  7  ") == 7
+
+    def test_non_numeric_string_returns_default(self) -> None:
+        assert _normalize_optional_component_int("abc") == 0
+
+    def test_non_numeric_string_custom_default(self) -> None:
+        assert _normalize_optional_component_int("abc", default=-1) == -1
+
+    def test_float_value_integer_returns_int(self) -> None:
+        assert _normalize_optional_component_int(3.0) == 3
+
+    def test_float_value_non_integer_returns_default(self) -> None:
+        assert _normalize_optional_component_int(3.5) == 0
+
+    def test_bool_true_returns_one(self) -> None:
+        assert _normalize_optional_component_int(True) == 1
+
+    def test_none_returns_default(self) -> None:
+        assert _normalize_optional_component_int(None) == 0

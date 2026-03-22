@@ -11,7 +11,9 @@ from __future__ import annotations
 
 import logging
 import re
-from unittest.mock import Mock
+import sys
+import types
+from unittest.mock import Mock, patch
 
 import pandas as pd
 import pytest
@@ -21,6 +23,7 @@ from cja_auto_sdr.org.analyzer import OrgComponentAnalyzer
 from cja_auto_sdr.org.models import (
     ComponentDistribution,
     ComponentInfo,
+    DataViewCluster,
     DataViewSummary,
     OrgReportConfig,
     SimilarityPair,
@@ -2922,3 +2925,162 @@ def test_compute_clusters_uses_pairwise_computation_when_precomputed_missing(
         frozenset({"dv_0", "dv_1"}),
         frozenset({"dv_2"}),
     }
+
+
+# ---------------------------------------------------------------------------
+# Coverage gap tests (moved from test_remaining_gap_coverage_pass2.py)
+# ---------------------------------------------------------------------------
+
+
+def _install_fake_scipy(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    labels: list[int],
+    linkage_side_effect: Exception | None = None,
+) -> dict[str, object]:
+    captured: dict[str, object] = {}
+
+    def squareform(matrix):
+        captured["matrix"] = matrix.copy()
+        return "condensed"
+
+    def linkage(condensed_dist, method):
+        captured["condensed_dist"] = condensed_dist
+        captured["method"] = method
+        if linkage_side_effect is not None:
+            raise linkage_side_effect
+        return "linkage-matrix"
+
+    def fcluster(linkage_matrix, t, criterion):
+        captured["linkage_matrix"] = linkage_matrix
+        captured["threshold"] = t
+        captured["criterion"] = criterion
+        return labels
+
+    scipy_module = types.ModuleType("scipy")
+    cluster_module = types.ModuleType("scipy.cluster")
+    hierarchy_module = types.ModuleType("scipy.cluster.hierarchy")
+    spatial_module = types.ModuleType("scipy.spatial")
+    distance_module = types.ModuleType("scipy.spatial.distance")
+
+    hierarchy_module.linkage = linkage
+    hierarchy_module.fcluster = fcluster
+    distance_module.squareform = squareform
+
+    cluster_module.hierarchy = hierarchy_module
+    spatial_module.distance = distance_module
+    scipy_module.cluster = cluster_module
+    scipy_module.spatial = spatial_module
+
+    monkeypatch.setitem(sys.modules, "scipy", scipy_module)
+    monkeypatch.setitem(sys.modules, "scipy.cluster", cluster_module)
+    monkeypatch.setitem(sys.modules, "scipy.cluster.hierarchy", hierarchy_module)
+    monkeypatch.setitem(sys.modules, "scipy.spatial", spatial_module)
+    monkeypatch.setitem(sys.modules, "scipy.spatial.distance", distance_module)
+
+    return captured
+
+
+def test_compute_clusters_with_fake_scipy_covers_cluster_building(
+    logger: logging.Logger,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    analyzer = _make_analyzer(
+        Mock(),
+        logger,
+        config=OrgReportConfig(skip_lock=True, cja_per_thread=False, enable_clustering=True),
+    )
+    captured = _install_fake_scipy(monkeypatch, labels=[1, 1, 2])
+    summaries = [
+        DataViewSummary(data_view_id="dv1", data_view_name="Prod East"),
+        DataViewSummary(data_view_id="dv2", data_view_name="Prod West"),
+        DataViewSummary(data_view_id="dv3", data_view_name="Sandbox"),
+    ]
+    pairwise = {
+        (0, 1): 0.9,
+        (0, 2): 0.1,
+        (1, 2): 0.2,
+    }
+
+    clusters = analyzer._compute_clusters(summaries, precomputed=(summaries, pairwise))
+
+    assert clusters is not None
+    assert [cluster.size for cluster in clusters] == [2, 1]
+    assert clusters[0].cluster_name == "Prod"
+    assert clusters[0].cohesion_score == 0.9
+    assert captured["method"] == "average"
+    matrix = captured["matrix"]
+    assert float(matrix[0, 1]) == pytest.approx(0.1)
+    assert float(matrix[1, 2]) == pytest.approx(0.8)
+    assert captured["criterion"] == "distance"
+
+
+def test_compute_clusters_fake_scipy_handles_small_inputs_and_linkage_errors(
+    logger: logging.Logger,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    analyzer = _make_analyzer(
+        Mock(),
+        logger,
+        config=OrgReportConfig(skip_lock=True, cja_per_thread=False, enable_clustering=True),
+    )
+
+    _install_fake_scipy(monkeypatch, labels=[1])
+    with caplog.at_level(logging.INFO):
+        assert analyzer._compute_clusters([DataViewSummary(data_view_id="dv1", data_view_name="Only")]) is None
+    assert "Not enough data views for clustering" in caplog.text
+
+    _install_fake_scipy(monkeypatch, labels=[1, 1], linkage_side_effect=ValueError("fake linkage failure"))
+    pairwise = {(0, 1): 0.8}
+    summaries = [
+        DataViewSummary(data_view_id="dv1", data_view_name="One"),
+        DataViewSummary(data_view_id="dv2", data_view_name="Two"),
+    ]
+    with caplog.at_level(logging.WARNING):
+        assert analyzer._compute_clusters(summaries, precomputed=(summaries, pairwise)) is None
+    assert "Clustering failed: fake linkage failure" in caplog.text
+
+
+def test_run_analysis_impl_logs_cluster_count_and_exposes_lock_backend(
+    logger: logging.Logger,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    analyzer = _make_analyzer(
+        Mock(),
+        logger,
+        config=OrgReportConfig(skip_lock=True, cja_per_thread=False, enable_clustering=True, skip_similarity=True),
+    )
+    analyzer._lock_runtime_state.backend = "file"
+    summaries = [
+        DataViewSummary(data_view_id="dv1", data_view_name="Prod East"),
+        DataViewSummary(data_view_id="dv2", data_view_name="Prod West"),
+    ]
+    clusters = [
+        DataViewCluster(
+            cluster_id=1,
+            cluster_name="Prod",
+            data_view_ids=["dv1", "dv2"],
+            data_view_names=["Prod East", "Prod West"],
+            cohesion_score=0.9,
+        ),
+    ]
+
+    with (
+        patch.object(analyzer, "_assert_lock_healthy"),
+        patch.object(analyzer, "_list_and_filter_data_views", return_value=([{"id": "dv1"}, {"id": "dv2"}], False, 2)),
+        patch.object(analyzer, "_fetch_all_data_views", return_value=summaries),
+        patch.object(analyzer, "_build_component_index", return_value={}),
+        patch.object(analyzer, "_check_memory_warning"),
+        patch.object(analyzer, "_compute_distribution", return_value=ComponentDistribution()),
+        patch.object(analyzer, "_compute_pairwise_jaccard", return_value=(summaries, {(0, 1): 0.9})),
+        patch.object(analyzer, "_compute_clusters", return_value=clusters) as compute_clusters,
+        patch.object(analyzer, "_generate_recommendations", return_value=[]),
+        caplog.at_level(logging.INFO),
+    ):
+        result = analyzer._run_analysis_impl()
+
+    assert analyzer.last_lock_backend == "file"
+    assert result.clusters == clusters
+    compute_clusters.assert_called_once_with(summaries, precomputed=(summaries, {(0, 1): 0.9}))
+    assert "Found 1 clusters" in caplog.text

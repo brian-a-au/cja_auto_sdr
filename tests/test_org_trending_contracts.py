@@ -1090,3 +1090,18 @@ class TestOrgReportCachePruneSnapshotsContract:
         cache.prune_org_report_snapshots(keep_last=2)
         deleted_second = cache.prune_org_report_snapshots(keep_last=2)
         assert deleted_second == []
+
+
+# ---------------------------------------------------------------------------
+# v3.4.5 coverage gap tests (moved from test_v345_coverage_gaps.py)
+# ---------------------------------------------------------------------------
+
+
+class TestTrendingSkipsDataViewWithNoId:
+    """Line 229: data view row with no ID is skipped via continue."""
+
+    def test_no_id_row_skipped(self) -> None:
+        from cja_auto_sdr.org.trending import org_report_data_view_row_id
+
+        result = org_report_data_view_row_id({})
+        assert not result

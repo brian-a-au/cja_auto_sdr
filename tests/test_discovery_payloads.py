@@ -4,7 +4,15 @@ import pandas as pd
 
 from cja_auto_sdr.core.discovery_payloads import (
     PayloadKind,
+    _assess_expected_lookup_id,
+    _coerce_lookup_scalar_text,
+    _has_minimum_dataview_lookup_metadata,
+    _is_legacy_unknown_lookup_placeholder,
+    _is_truthy_marker,
+    _lookup_value_has_substance,
     _normalize_dataview_lookup_payload,
+    _unknown_lookup_placeholder_reason,
+    _unknown_placeholder_diagnostic_key,
     assess_component_payload,
     assess_dataview_lookup_payload,
     coerce_component_rows_or_none,
@@ -508,3 +516,53 @@ def test_is_component_error_payload_true() -> None:
 
 def test_is_component_error_payload_false() -> None:
     assert is_component_error_payload([{"id": "1", "name": "OK"}]) is False
+
+
+# ---------------------------------------------------------------------------
+# Coverage gap tests (moved from test_remaining_gap_coverage_pass2.py)
+# ---------------------------------------------------------------------------
+
+
+def test_discovery_lookup_helpers_cover_remaining_edge_paths() -> None:
+    recursive_items: list[object] = []
+    recursive_items.append(recursive_items)
+
+    assert _lookup_value_has_substance(()) is False
+    assert _lookup_value_has_substance(recursive_items) is False
+    assert _has_minimum_dataview_lookup_metadata({"id": "dv1", "future_metadata": {"owner": "alice"}}) is True
+    assert _is_truthy_marker(2) is True
+    assert _is_truthy_marker(0) is False
+
+    class _EmptyRecordsFrame(pd.DataFrame):
+        @property
+        def _constructor(self):
+            return _EmptyRecordsFrame
+
+        def to_dict(self, orient="dict", *args, **kwargs):
+            if orient == "records":
+                return []
+            return super().to_dict(orient=orient, *args, **kwargs)
+
+    payload, raw_type, reason = _normalize_dataview_lookup_payload(_EmptyRecordsFrame({"id": ["dv1"]}))
+    assert payload is None
+    assert raw_type == "_EmptyRecordsFrame"
+    assert reason == "empty_dataframe_records"
+
+    class _BadBytes(bytes):
+        def decode(self, *args, **kwargs):
+            raise TypeError("bad decode")
+
+    assert _coerce_lookup_scalar_text(_BadBytes(b"dv1")) is None
+    assert _coerce_lookup_scalar_text(7) == "7"
+    assert _assess_expected_lookup_id({"id": "   "}, expected_data_view_id="dv1") == (None, "missing_expected_id")
+    assert (
+        _is_legacy_unknown_lookup_placeholder(
+            expected_data_view_id="dv1",
+            normalized_items={"id": "dv_other", "name": "Unknown"},
+        )
+        is False
+    )
+    assert _unknown_placeholder_diagnostic_key({"lookup_failed": True}) == "lookup_failed"
+    assert _unknown_placeholder_diagnostic_key({"lookup_failure_reason": "timeout"}) == "lookup_failure_reason"
+    assert _unknown_placeholder_diagnostic_key({"lookup_debug": "detail"}) == "lookup_debug"
+    assert _unknown_lookup_placeholder_reason("dv1", {"id": "dv_other", "name": "Unknown"}) is None

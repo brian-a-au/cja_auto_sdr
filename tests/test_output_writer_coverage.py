@@ -22,6 +22,7 @@ from cja_auto_sdr.generator import (
     write_json_output,
     write_markdown_output,
 )
+from cja_auto_sdr.output.sdr import write_excel_output as sdr_write_excel_output
 
 logger = logging.getLogger("test_output_writer_coverage")
 
@@ -470,3 +471,81 @@ class TestParseEnvCredentialsMissingEquals:
 
         with pytest.raises(ValueError, match="empty key"):
             _parse_env_credentials_content("=value")
+
+
+# ---------------------------------------------------------------------------
+# Coverage gap tests (moved from test_remaining_gap_coverage_pass2.py)
+# ---------------------------------------------------------------------------
+
+
+class _DummyExcelWriter:
+    def __init__(self) -> None:
+        self.book = object()
+
+    def __enter__(self) -> _DummyExcelWriter:
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> bool:
+        return False
+
+
+def test_output_writer_branches_cover_remaining_value_and_attribute_errors(
+    tmp_path: Path,
+) -> None:
+    data = {"Sheet1": pd.DataFrame({"value": [1]})}
+
+    with (
+        patch("cja_auto_sdr.output.sdr.pd.ExcelWriter", return_value=_DummyExcelWriter()),
+        patch("cja_auto_sdr.output.sdr.apply_excel_formatting", side_effect=KeyError("missing column")),
+        pytest.raises(KeyError, match="missing column"),
+    ):
+        sdr_write_excel_output(data, "excel", str(tmp_path), logger)
+
+    with (
+        patch.object(pd.DataFrame, "to_csv", side_effect=ValueError("bad csv")),
+        pytest.raises(ValueError, match="bad csv"),
+    ):
+        write_csv_output(data, "csv", str(tmp_path), logger)
+
+    with (
+        patch.object(pd.DataFrame, "to_dict", side_effect=AttributeError("missing to_dict")),
+        pytest.raises(AttributeError, match="missing to_dict"),
+    ):
+        write_json_output(data, {"Generated At": "2026-03-19"}, "json", str(tmp_path), logger)
+
+    html_table = """
+<table>
+  <thead><tr><th>Issue</th><th>Severity</th></tr></thead>
+  <tbody>
+    <tr class="existing"><td>A</td><td>CRITICAL</td></tr>
+    <tr><td>B</td><td>HIGH</td></tr>
+    <tr><td>extra</td><td>ignored</td></tr>
+  </tbody>
+</table>
+"""
+    quality_df = pd.DataFrame({"Issue": ["A", "B"], "Severity": ["critical", "high"]})
+    with patch.object(pd.DataFrame, "to_html", return_value=html_table):
+        html_path = write_html_output(
+            {"Data Quality": quality_df},
+            {"Generated At": "2026-03-19"},
+            "html",
+            str(tmp_path),
+            logger,
+        )
+    html_content = Path(html_path).read_text(encoding="utf-8")
+    assert 'class="existing severity-CRITICAL"' in html_content
+    assert 'class="severity-HIGH"' in html_content
+
+    with (
+        patch.object(pd.DataFrame, "to_html", side_effect=ValueError("bad html")),
+        pytest.raises(ValueError, match="bad html"),
+    ):
+        write_html_output(
+            {"Data Quality": quality_df}, {"Generated At": "2026-03-19"}, "html_err", str(tmp_path), logger
+        )
+
+    with (
+        patch.object(pd.DataFrame, "apply", side_effect=TypeError("bad markdown")),
+        pytest.raises(TypeError, match="bad markdown"),
+    ):
+        write_markdown_output(data, {"Generated At": "2026-03-19"}, "md", str(tmp_path), logger)

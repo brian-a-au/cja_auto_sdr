@@ -18,7 +18,8 @@ from unittest.mock import patch
 import pandas as pd
 import pytest
 
-from cja_auto_sdr.generator import SharedValidationCache, ValidationCache
+from cja_auto_sdr.api.cache import SharedValidationCache
+from cja_auto_sdr.generator import ValidationCache
 
 
 def _shared_cache_processpool_worker(cache):
@@ -569,4 +570,76 @@ class TestSharedValidationCacheDataIntegrity:
         result, _ = cache.get(sample_metrics_df, "Metrics", ["id"], ["id"])
         assert result[0]["message"] == "Original"
 
+        cache.shutdown()
+
+
+# ---------------------------------------------------------------------------
+# Coverage gap tests (moved from test_small_gap_coverage.py)
+# ---------------------------------------------------------------------------
+
+
+def test_shared_cache_reconcile_access_times_removes_stale_and_backfills_missing() -> None:
+    cache = SharedValidationCache(max_size=2, ttl_seconds=3600)
+
+    try:
+        cache._cache["live"] = ([{"issue": "new"}], 1.0)
+        cache._access_times["stale"] = 0.5
+
+        with cache._lock:
+            cache._reconcile_access_times(now=5.0)
+
+        assert "stale" not in cache._access_times
+        assert cache._access_times["live"] == 5.0
+    finally:
+        cache.shutdown()
+
+
+def test_shared_cache_capacity_fallback_removes_entry_when_evict_lru_stalls() -> None:
+    cache = SharedValidationCache(max_size=1, ttl_seconds=3600)
+
+    try:
+        cache._cache["old"] = ([{"issue": "old"}], 1.0)
+        cache._access_times["old"] = 1.0
+
+        with patch.object(cache, "_evict_lru", return_value=False):
+            with cache._lock:
+                cache._ensure_capacity_for_new_entry(now=2.0)
+
+        assert dict(cache._cache) == {}
+        assert cache.get_statistics()["evictions"] == 1
+    finally:
+        cache.shutdown()
+
+
+def test_shared_cache_evict_lru_uses_cache_iteration_when_access_times_missing() -> None:
+    cache = SharedValidationCache(max_size=1, ttl_seconds=3600)
+
+    try:
+        cache._cache["real"] = ([{"issue": "kept"}], 1.0)
+
+        with cache._lock:
+            removed = cache._evict_lru(now=2.0, access_times_reconciled=True)
+
+        assert removed is True
+        assert dict(cache._cache) == {}
+        assert cache.get_statistics()["evictions"] == 1
+    finally:
+        cache.shutdown()
+
+
+def test_shared_cache_evict_lru_falls_back_after_stale_access_metadata() -> None:
+    cache = SharedValidationCache(max_size=1, ttl_seconds=3600)
+
+    try:
+        cache._cache["real"] = ([{"issue": "kept"}], 1.0)
+        cache._access_times["ghost"] = 0.0
+
+        with cache._lock:
+            removed = cache._evict_lru(now=2.0, access_times_reconciled=True)
+
+        assert removed is True
+        assert dict(cache._cache) == {}
+        assert "ghost" not in cache._access_times
+        assert cache.get_statistics()["evictions"] == 1
+    finally:
         cache.shutdown()

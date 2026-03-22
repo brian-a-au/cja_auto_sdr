@@ -19,6 +19,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from cja_auto_sdr.cli.mode_scoped_options import (
+    ORG_REPORT_MODE_SCOPED_OPTION_SPECS,
+    org_report_mode_scoped_option_names,
+)
 from cja_auto_sdr.core.exceptions import APIError, CJASDRError
 from cja_auto_sdr.generator import (
     DiffConfig,
@@ -3022,3 +3026,78 @@ class TestDescribeDataviewIgnoresFilterSortLimit:
                 limit=10,
                 sort_expression="-name",
             )
+
+
+# ---------------------------------------------------------------------------
+# v3.4.5 coverage gap tests (moved from test_v345_coverage_gaps.py)
+# ---------------------------------------------------------------------------
+
+
+class TestCollectStatsRowInvalidDataview:
+    """Line 323: dv_info is None -> ValueError raised."""
+
+    def test_raises_on_failed_dataview_lookup(self) -> None:
+        from cja_auto_sdr.cli.commands.stats import _collect_stats_row
+
+        cja = MagicMock()
+        with patch("cja_auto_sdr.cli.commands.stats._generator_module") as mock_gen:
+            gen = mock_gen.return_value
+            gen._fetch_dataview_lookup_payload.return_value = {}
+            gen._coerce_valid_dataview_lookup_payload.return_value = (None, "not_found", None)
+
+            with pytest.raises(ValueError, match=r"Data view validation failed.*not_found"):
+                _collect_stats_row(cja, "dv_bad")
+
+
+class TestShowStatsProfileHeader:
+    """Line 379: profile name printed when provided."""
+
+    def test_profile_name_printed_in_header(self, capsys: pytest.CaptureFixture[str]) -> None:
+        from cja_auto_sdr.cli.commands.stats import show_stats
+
+        with patch("cja_auto_sdr.cli.commands.stats._generator_module") as mock_gen:
+            gen = mock_gen.return_value
+            gen.BANNER_WIDTH = 80
+            gen._is_machine_readable_output.return_value = False
+            gen.configure_cjapy.return_value = (False, "test error", None)
+            gen._emit_discovery_error = MagicMock()
+
+            show_stats(data_views=["dv1"], profile="my_profile", quiet=False)
+
+        captured = capsys.readouterr()
+        assert "Using profile: my_profile" in captured.out
+
+
+class TestShowStatsKeyboardInterrupt:
+    """Lines 469-472: KeyboardInterrupt prints cancellation and re-raises."""
+
+    def test_keyboard_interrupt_reraises(self, capsys: pytest.CaptureFixture[str]) -> None:
+        from cja_auto_sdr.cli.commands.stats import show_stats
+
+        with patch("cja_auto_sdr.cli.commands.stats._generator_module") as mock_gen:
+            gen = mock_gen.return_value
+            gen.BANNER_WIDTH = 80
+            gen._is_machine_readable_output.return_value = False
+            gen.configure_cjapy.return_value = (True, "ok", None)
+            gen.ConsoleColors.warning = lambda msg: msg  # Return string, not MagicMock
+            gen.cjapy = MagicMock()
+            gen.cjapy.CJA.side_effect = KeyboardInterrupt
+
+            with pytest.raises(KeyboardInterrupt):
+                show_stats(data_views=["dv1"], quiet=False)
+
+        captured = capsys.readouterr()
+        assert "cancelled" in captured.out.lower()
+
+
+# ---------------------------------------------------------------------------
+# Coverage gap tests (moved from test_small_gap_coverage.py)
+# ---------------------------------------------------------------------------
+
+
+def test_org_report_mode_scoped_option_names_returns_option_strings() -> None:
+    option_names = org_report_mode_scoped_option_names()
+
+    assert option_names == tuple(spec.option_name for spec in ORG_REPORT_MODE_SCOPED_OPTION_SPECS)
+    assert "--trending-window" in option_names
+    assert "--lock-stale-threshold" in option_names

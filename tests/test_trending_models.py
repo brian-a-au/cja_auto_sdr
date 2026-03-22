@@ -1,12 +1,27 @@
 """Tests for org-report trending dataclasses (v3.4.0)."""
 
+from types import SimpleNamespace
+
 from cja_auto_sdr.org.models import (
     OrgReportComparison,
+    OrgReportComparisonInput,
     OrgReportTrending,
     TrendingDelta,
     TrendingSnapshot,
+    _has_complete_data_view_ids,
+    _has_complete_high_similarity_pairs,
+    _normalized_similarity_pairs,
     _safe_non_negative_int,
     _snapshot_comparison_input,
+    _snapshot_count_declares_zero,
+    _snapshot_data_view_ids,
+    _snapshot_data_view_ids_cover_snapshot,
+    _snapshot_data_view_names,
+    _snapshot_declares_data_view_total,
+    _snapshot_declares_zero_data_views,
+    _snapshot_effective_data_view_total,
+    _snapshot_has_ambiguous_data_view_identifiers,
+    _snapshot_reported_data_view_total,
 )
 
 
@@ -687,3 +702,74 @@ class TestSafeNonNegativeInt:
 
     def test_dict_returns_zero(self):
         assert _safe_non_negative_int({"count": 5}) == 0
+
+
+# ---------------------------------------------------------------------------
+# Coverage gap tests (moved from test_remaining_gap_coverage_pass2.py)
+# ---------------------------------------------------------------------------
+
+
+def test_org_model_helpers_cover_manual_snapshot_fallbacks() -> None:
+    assert (
+        _has_complete_data_view_ids(
+            OrgReportComparisonInput(timestamp="now", has_data_view_ids=True, complete_data_view_ids=None),
+        )
+        is True
+    )
+    assert (
+        _has_complete_data_view_ids(
+            OrgReportComparisonInput(timestamp="now", has_data_view_ids=True, complete_data_view_ids=False),
+        )
+        is False
+    )
+    assert _has_complete_high_similarity_pairs(OrgReportComparisonInput(timestamp="now")) is False
+    assert _normalized_similarity_pairs(
+        {
+            (" dv1 ", "dv2"),
+            ("", "dv3"),
+            ("dv1", " "),
+            ("dv1",),
+            ("dv1", "dv2", "dv3"),
+        },
+    ) == {("dv1", "dv2")}
+
+    named_snapshot = TrendingSnapshot(
+        timestamp="2026-03-19T00:00:00Z",
+        dv_names={" dv1 ": "Primary", " ": "Ignored", "dv2": "Secondary"},
+    )
+    assert _snapshot_data_view_ids(named_snapshot) == {"dv1", "dv2"}
+    assert _snapshot_data_view_names(
+        named_snapshot,
+        authoritative_ids={"dv1"},
+        restrict_to_authoritative_ids=True,
+    ) == {"dv1": "Primary"}
+
+    ambiguous_snapshot = TrendingSnapshot(
+        timestamp="2026-03-19T00:00:00Z",
+        dv_names={"dv1": "A", " dv1 ": "B"},
+    )
+    assert _snapshot_has_ambiguous_data_view_identifiers(ambiguous_snapshot) is True
+
+    raw_total_snapshot = SimpleNamespace(data_view_count="3")
+    raw_zero_snapshot = SimpleNamespace(data_view_count="0")
+    assert _snapshot_declares_data_view_total(raw_total_snapshot) is True
+    assert _snapshot_declares_zero_data_views(raw_zero_snapshot) is True
+    assert _snapshot_reported_data_view_total(raw_total_snapshot) == 3
+    assert _snapshot_count_declares_zero(False) is False
+    assert _snapshot_count_declares_zero("0") is True
+
+    incomplete_snapshot = TrendingSnapshot(
+        timestamp="2026-03-19T00:00:00Z",
+        data_view_count=3,
+        dv_ids={"dv1", "dv2"},
+    )
+    assert _snapshot_data_view_ids_cover_snapshot(incomplete_snapshot, {"dv1", "dv2"}) is False
+    assert (
+        _snapshot_effective_data_view_total(
+            incomplete_snapshot,
+            {"dv1", "dv2"},
+            ambiguous_identifiers=False,
+            complete_data_view_ids=None,
+        )
+        == 3
+    )

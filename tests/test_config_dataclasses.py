@@ -510,3 +510,18 @@ class TestSchemasAndMappings:
     def test_env_var_mapping_covers_all_credential_fields(self):
         for field_name in CREDENTIAL_FIELDS["all"]:
             assert field_name in ENV_VAR_MAPPING
+
+
+# ---------------------------------------------------------------------------
+# Coverage gap tests (moved from test_small_module_coverage.py)
+# ---------------------------------------------------------------------------
+
+
+class TestAutoDetectWorkersException:
+    """Cover lines 152-153: os.cpu_count() raises exception."""
+
+    def test_cpu_count_raises_uses_default(self):
+        """Lines 152-153: os.cpu_count raises, defaults to 4."""
+        with patch("cja_auto_sdr.core.constants.os.cpu_count", side_effect=RuntimeError("no cpu")):
+            result = auto_detect_workers(num_data_views=1)
+        assert result >= 1

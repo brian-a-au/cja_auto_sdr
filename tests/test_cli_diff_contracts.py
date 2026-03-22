@@ -775,3 +775,56 @@ class TestRunListCommandContract:
                 fetch_and_format=dummy_callable,
             )
         assert result is False
+
+
+# ---------------------------------------------------------------------------
+# Coverage gap tests (moved from test_small_gap_coverage.py)
+# ---------------------------------------------------------------------------
+
+
+def test_dispatch_snapshot_cli_modes_prune_stdout_forces_json_output() -> None:
+    args = argparse.Namespace(
+        list_snapshots=False,
+        prune_snapshots=True,
+        format="table",
+        output="-",
+        snapshot_dir="./snapshots",
+        keep_last=1,
+        keep_since=None,
+        auto_prune=False,
+    )
+    run_state: dict[str, object] = {}
+    snapshot_manager = MagicMock()
+    snapshot_manager.list_snapshots.return_value = [{"data_view_id": "dv_1"}]
+    snapshot_manager.apply_retention_policy.return_value = ["/tmp/a.json"]
+    snapshot_manager.apply_date_retention_policy.return_value = []
+
+    with (
+        patch("cja_auto_sdr.diff.cli._generator_module") as mock_generator_module,
+        pytest.raises(SystemExit) as exc_info,
+    ):
+        generator_mod = mock_generator_module.return_value
+        generator_mod.is_data_view_id.return_value = True
+        generator_mod.SnapshotManager.return_value = snapshot_manager
+        generator_mod.resolve_auto_prune_retention.return_value = (1, None)
+        generator_mod._emit_json_output = MagicMock()
+        generator_mod._emit_output = MagicMock()
+
+        from cja_auto_sdr.diff.cli import dispatch_snapshot_cli_modes
+
+        dispatch_snapshot_cli_modes(
+            args,
+            data_view_inputs=[],
+            output_to_stdout=True,
+            ignore_fields=None,
+            labels=None,
+            show_only=None,
+            keep_last_specified=True,
+            keep_since_specified=False,
+            run_state=run_state,
+        )
+
+    assert exc_info.value.code == 0
+    generator_mod._emit_json_output.assert_called_once()
+    generator_mod._emit_output.assert_not_called()
+    assert run_state["output_format"] == "json"

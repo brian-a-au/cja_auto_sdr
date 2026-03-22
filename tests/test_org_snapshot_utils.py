@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from datetime import UTC
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
+from cja_auto_sdr.org.identifiers import normalize_org_report_data_view_id
 from cja_auto_sdr.org.snapshot_utils import (
     chronological_snapshot_sort_fields,
     coerce_snapshot_bool,
@@ -1785,3 +1787,44 @@ def test_org_report_snapshot_metadata_include_data_views_truncates_long_list():
     assert metadata is not None
     assert metadata["data_view_names_truncated"] is True
     assert len(metadata["data_view_names_preview"]) == 10
+
+
+# ---------------------------------------------------------------------------
+# v3.4.5 coverage gap tests (moved from test_v345_coverage_gaps.py)
+# ---------------------------------------------------------------------------
+
+
+class TestStateComponentIdsOnDemand:
+    """Line 1109: fallback to _snapshot_component_ids when not preloaded."""
+
+    def test_loads_from_raw_component_index(self) -> None:
+        from cja_auto_sdr.org.snapshot_utils import _state_component_ids
+
+        state = SimpleNamespace(
+            component_ids_loaded=False,
+            component_ids=None,
+            raw_component_index={"metric/1": {}, "dim/2": {}},
+        )
+        result = _state_component_ids(state)
+        assert result == frozenset({"metric/1", "dim/2"})
+
+    def test_returns_none_for_non_dict_index(self) -> None:
+        from cja_auto_sdr.org.snapshot_utils import _state_component_ids
+
+        state = SimpleNamespace(
+            component_ids_loaded=False,
+            component_ids=None,
+            raw_component_index=None,
+        )
+        result = _state_component_ids(state)
+        assert result is None
+
+
+# ---------------------------------------------------------------------------
+# Coverage gap tests (moved from test_small_gap_coverage.py)
+# ---------------------------------------------------------------------------
+
+
+def test_normalize_org_report_data_view_id_none_returns_empty_string() -> None:
+    assert normalize_org_report_data_view_id(None) == ""
+    assert normalize_org_report_data_view_id("  dv_1  ") == "dv_1"

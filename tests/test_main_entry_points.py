@@ -7,13 +7,26 @@ handle exit codes, track run_state, and emit run summary JSON.
 import json
 import logging
 import os
+import runpy
 import sys
+import warnings
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
 
+from cja_auto_sdr.__main__ import (
+    _COMPLETION_OPTION,
+    _fast_path_allowed_option_dests,
+    _fast_path_options_fit_policy,
+    _OptionScanResult,
+    _OptionSpec,
+    _primary_fast_path_option_dest,
+    _resolve_non_version_fast_path_request,
+    _scan_option_tokens,
+)
 from cja_auto_sdr.generator import RunMode, _main_impl, _resolve_semantic_validation_args, main, parse_arguments
 
 
@@ -522,3 +535,67 @@ class TestMainImplNoDataViews:
 
         # Should exit with error code
         assert exc_info.value.code != 0
+
+
+# ---------------------------------------------------------------------------
+# Coverage gap tests (moved from test_remaining_gap_coverage_pass2.py)
+# ---------------------------------------------------------------------------
+
+
+def test_main_fast_path_helpers_cover_remaining_scanner_and_policy_edges(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "cja_auto_sdr.__main__._fast_path_option_spec",
+        lambda: (
+            frozenset({"--version"}),
+            {
+                "-q": _OptionSpec(dest="quiet", min_arity=0, accepts_inline_value=False),
+                "-p": _OptionSpec(dest="profile", min_arity=1, accepts_inline_value=True),
+            },
+        ),
+    )
+
+    with patch(
+        "cja_auto_sdr.__main__._resolve_long_option_token",
+        return_value=SimpleNamespace(is_ambiguous=False, canonical_option="--version"),
+    ):
+        assert _scan_option_tokens(["--ver"]) == _OptionScanResult(options=(), has_parse_error=False)
+
+    assert _scan_option_tokens(["-qx"]) == _OptionScanResult(options=("-q",), has_parse_error=False)
+    assert _scan_option_tokens(["-pVALUE"]) == _OptionScanResult(options=("-p",), has_parse_error=False)
+    assert _scan_option_tokens(["-q=value"]).has_parse_error is True
+
+    with patch("cja_auto_sdr.__main__._fast_path_option_spec", return_value=(frozenset(), {})):
+        assert _primary_fast_path_option_dest("--missing") is None
+
+    with patch(
+        "cja_auto_sdr.__main__._fast_path_option_spec",
+        return_value=(frozenset(), {"--version": _OptionSpec(dest="version", min_arity=0, accepts_inline_value=False)}),
+    ):
+        assert _fast_path_allowed_option_dests("--version") == frozenset({"version"})
+
+    with patch("cja_auto_sdr.__main__._fast_path_allowed_option_dests", return_value=frozenset()):
+        assert _fast_path_options_fit_policy(("--exit-codes",), "--exit-codes") is False
+
+    scan = _OptionScanResult(options=(_COMPLETION_OPTION,), has_parse_error=False)
+    assert _resolve_non_version_fast_path_request(scan, None) is None
+
+    namespace = SimpleNamespace(explain_exit_code=None, exit_codes=False, completion="bash", data_views=[])
+    with patch("cja_auto_sdr.__main__._fast_path_options_fit_policy", return_value=False):
+        assert _resolve_non_version_fast_path_request(scan, namespace) is None
+
+
+def test_main_module_invocation_executes_main_guard(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["cja_auto_sdr", "--version"])
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        with pytest.raises(SystemExit) as exc_info:
+            runpy.run_module("cja_auto_sdr.__main__", run_name="__main__")
+
+    assert exc_info.value.code == 0
+    assert "cja_auto_sdr" in capsys.readouterr().out

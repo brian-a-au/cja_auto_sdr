@@ -8,6 +8,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+import cja_auto_sdr.pipeline.dry_run as pipeline_dry_run
+
 # Import the functions we're testing
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from cja_auto_sdr.core.exceptions import APIError, ConfigurationError
@@ -223,3 +225,18 @@ class TestValidateConfigFile:
         # Should fail when required fields are missing
         result = validate_config_file(str(config_path), logger)
         assert result is False
+
+
+# ---------------------------------------------------------------------------
+# Coverage gap tests (moved from test_small_gap_coverage.py)
+# ---------------------------------------------------------------------------
+
+
+def test_pipeline_dry_run_wrapper_uses_real_generator_module() -> None:
+    logger = logging.getLogger("test_pipeline_dry_run_wrapper")
+
+    with patch("cja_auto_sdr.generator.run_dry_run", return_value=True) as mock_run:
+        result = pipeline_dry_run.run_dry_run(["dv_1"], "config.json", logger, profile="team-a")
+
+    assert result is True
+    mock_run.assert_called_once_with(["dv_1"], "config.json", logger, profile="team-a")

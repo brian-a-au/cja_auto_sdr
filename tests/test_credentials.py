@@ -866,3 +866,30 @@ class TestValidateEnvCredentialsLegacy:
         }
         logger = MagicMock()
         assert validate_env_credentials(creds, logger) is False
+
+
+# ---------------------------------------------------------------------------
+# v3.4.5 coverage gap tests (moved from test_v345_coverage_gaps.py)
+# ---------------------------------------------------------------------------
+
+
+class TestNormalizeScopeTokensNonStringNonIterable:
+    """Lines 63-64: non-string, non-iterable value falls through to normalize."""
+
+    def test_integer_normalizes_to_token(self) -> None:
+        from cja_auto_sdr.core.credentials import _normalize_scope_tokens
+
+        result = _normalize_scope_tokens(42)
+        assert result == ["42"]
+
+    def test_zero_normalizes_to_token(self) -> None:
+        from cja_auto_sdr.core.credentials import _normalize_scope_tokens
+
+        result = _normalize_scope_tokens(0)
+        assert result == ["0"]
+
+    def test_false_normalizes_to_token(self) -> None:
+        from cja_auto_sdr.core.credentials import _normalize_scope_tokens
+
+        result = _normalize_scope_tokens(False)
+        assert result == ["False"]
