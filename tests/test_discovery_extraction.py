@@ -14,6 +14,156 @@ class TestDiscoveryModuleExists:
         assert hasattr(discovery, "_resolve_discovery_output_format")
 
 
+class TestListModuleBackwardsCompat:
+    """Verify list.py still re-exports the extracted discovery internals."""
+
+    def test_list_module_retains_legacy_module_aliases(self):
+        import json
+        import shutil
+        import textwrap
+
+        import pandas as pd
+
+        from cja_auto_sdr.cli.commands import list as list_commands
+
+        assert list_commands.json is json
+        assert list_commands.pd is pd
+        assert list_commands.shutil is shutil
+        assert list_commands.textwrap is textwrap
+
+    def test_explicit_list_imports_remain_available(self):
+        from cja_auto_sdr.cli.commands import discovery
+        from cja_auto_sdr.cli.commands.list import (
+            DiscoveryNotFoundError,
+            _approved_display,
+            _fetch_describe_dataview,
+            _resolve_dataview_name,
+        )
+
+        assert DiscoveryNotFoundError is discovery.DiscoveryNotFoundError
+        assert _fetch_describe_dataview is discovery._fetch_describe_dataview
+        assert _resolve_dataview_name is discovery._resolve_dataview_name
+        assert _approved_display is discovery._approved_display
+
+    def test_list_module_re_exports_legacy_discovery_surface(self):
+        from cja_auto_sdr.cli.commands import discovery
+        from cja_auto_sdr.cli.commands import list as list_commands
+
+        compat_names = (
+            "DiscoveryArgumentError",
+            "DiscoveryNotFoundError",
+            "DiscoveryOutputContractError",
+            "OutputContractError",
+            "_ComponentFetchSpec",
+            "_METRICS_COMPONENT_FETCH_SPEC",
+            "_DIMENSIONS_COMPONENT_FETCH_SPEC",
+            "_SEGMENTS_COMPONENT_FETCH_SPEC",
+            "_CALCULATED_METRICS_COMPONENT_FETCH_SPEC",
+            "_compile_discovery_pattern",
+            "_validate_discovery_query_inputs",
+            "_apply_discovery_filters_and_sort",
+            "_fetch_dataview_lookup_payload",
+            "_require_accessible_dataview",
+            "_assess_dataview_lookup",
+            "_coerce_valid_dataview_lookup_payload",
+            "_normalize_describe_dataview_metadata",
+            "_resolve_dataview_name",
+            "_fetch_component_payload",
+            "_build_component_list_fetcher",
+            "_build_metric_display_row",
+            "_build_dimension_display_row",
+            "_build_segment_display_row",
+            "_build_calculated_metric_display_row",
+            "_normalize_component_records_or_raise",
+            "_normalize_component_text_fields",
+            "_normalize_optional_component_int",
+            "_approved_display",
+            "_tags_display",
+            "_format_governance_rows_for_tabular",
+            "_fetch_dataviews",
+            "_fetch_describe_dataview",
+            "_fetch_metrics_list",
+            "_fetch_dimensions_list",
+            "_fetch_segments_list",
+            "_fetch_calculated_metrics_list",
+            "_fetch_connections",
+            "_fetch_datasets",
+            "_extract_dataset_info",
+            "_extract_connections_list",
+            "_extract_owner_name",
+            "_extract_owner_name_from_record",
+            "_extract_timestamp_from_record",
+            "_emit_discovery_error",
+            "_emit_output_contract_error",
+            "_emit_json_output",
+            "_format_discovery_json",
+            "_resolve_discovery_output_format",
+        )
+
+        for name in compat_names:
+            assert getattr(list_commands, name) is getattr(discovery, name), name
+
+    def test_list_wrappers_route_through_module_level_fetcher_aliases(self):
+        from unittest.mock import patch
+
+        from cja_auto_sdr.cli.commands import list as list_commands
+
+        cases = (
+            ("list_dataviews", "_fetch_dataviews", {"output_format": "json"}),
+            ("describe_dataview", "_fetch_describe_dataview", {"data_view_id": "dv_1", "output_format": "json"}),
+            ("list_metrics", "_fetch_metrics_list", {"data_view_id": "dv_1", "output_format": "json"}),
+            ("list_dimensions", "_fetch_dimensions_list", {"data_view_id": "dv_1", "output_format": "json"}),
+            ("list_segments", "_fetch_segments_list", {"data_view_id": "dv_1", "output_format": "json"}),
+            (
+                "list_calculated_metrics",
+                "_fetch_calculated_metrics_list",
+                {"data_view_id": "dv_1", "output_format": "json"},
+            ),
+            ("list_connections", "_fetch_connections", {"output_format": "json"}),
+            ("list_datasets", "_fetch_datasets", {"output_format": "json"}),
+        )
+
+        for wrapper_name, fetcher_name, kwargs in cases:
+            sentinel = object()
+            with (
+                patch.object(list_commands, fetcher_name, return_value=sentinel) as mock_fetcher,
+                patch.object(list_commands, "_run_list_command", return_value=True) as mock_run,
+            ):
+                assert getattr(list_commands, wrapper_name)(**kwargs) is True
+            assert mock_fetcher.called, wrapper_name
+            assert mock_run.call_args.kwargs["fetch_and_format"] is sentinel, wrapper_name
+
+    def test_list_dataviews_uses_module_level_validation_alias(self):
+        from unittest.mock import patch
+
+        from cja_auto_sdr.cli.commands import list as list_commands
+
+        def _run_with_validation(**kwargs):
+            kwargs["validate_inputs"]()
+            return True
+
+        with (
+            patch.object(list_commands, "_fetch_dataviews", return_value=object()),
+            patch.object(list_commands, "_validate_discovery_query_inputs") as mock_validate,
+            patch.object(
+                list_commands,
+                "_run_list_command",
+                side_effect=_run_with_validation,
+            ),
+        ):
+            assert (
+                list_commands.list_dataviews(
+                    output_format="json",
+                    filter_pattern="alpha",
+                    exclude_pattern="beta",
+                    limit=3,
+                )
+                is True
+            )
+
+        mock_validate.assert_called_once_with(filter_pattern="alpha", exclude_pattern="beta", limit=3)
+
+
 class TestDiscoveryQueryHelpers:
     """Verify query/filter helpers are importable from discovery module."""
 

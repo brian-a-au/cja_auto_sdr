@@ -14,21 +14,21 @@ import pandas as pd
 import pytest
 
 from cja_auto_sdr.cli.commands.discovery import (
-    _apply_discovery_filters_and_sort,
-    _normalize_optional_component_int,
-)
-from cja_auto_sdr.cli.commands.list import (
     DiscoveryNotFoundError,
+    _apply_discovery_filters_and_sort,
     _approved_display,
     _build_dimension_display_row,
     _build_metric_display_row,
     _fetch_component_payload,
+    _normalize_component_records_or_raise,
+    _normalize_optional_component_int,
+    _resolve_dataview_name,
+    _tags_display,
+)
+from cja_auto_sdr.cli.commands.list import (
     _fetch_connections,
     _fetch_datasets,
     _fetch_dataviews,
-    _normalize_component_records_or_raise,
-    _resolve_dataview_name,
-    _tags_display,
 )
 
 # ---------------------------------------------------------------------------

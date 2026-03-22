@@ -218,10 +218,12 @@ def _apply_discovery_filters_and_sort(
     default_sort_field: str = "name",
 ) -> list[dict[str, Any]]:
     """Apply filter/exclude/sort/limit to discovery rows."""
+    if limit is not None and limit < 0:
+        raise DiscoveryArgumentError("--limit cannot be negative")
+
     filtered_rows = list(rows)
     fields = searchable_fields or list(rows[0].keys()) if rows else []
 
-    _validate_discovery_query_inputs(filter_pattern=filter_pattern, exclude_pattern=exclude_pattern, limit=limit)
     filter_re = _compile_discovery_pattern(filter_pattern, option_name="--filter")
     exclude_re = _compile_discovery_pattern(exclude_pattern, option_name="--exclude")
 
