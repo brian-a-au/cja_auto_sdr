@@ -19,7 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### CI
 - Enable `setup-uv` dependency caching in eligible GitHub Actions workflows for faster installs
-- Keep the duplicate version-sync check in `test-unit` pending branch-protection review; no workflow consolidation in this release
+- Remove the duplicate version-sync check from `test-unit`; the standalone `Version Sync` workflow remains the single source of truth
 
 ## [3.4.5] - 2026-03-20
 
