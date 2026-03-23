@@ -23,6 +23,7 @@ from cja_auto_sdr.diff.models import (
 # explicit 'enabled' parameter so callers can toggle color per-call.
 # ---------------------------------------------------------------------------
 
+
 class ANSIColors:
     """ANSI escape codes for colored terminal output.
 
@@ -70,6 +71,7 @@ class ANSIColors:
 # Value formatting
 # ---------------------------------------------------------------------------
 
+
 def _format_diff_value(val: Any, truncate: bool = True, max_len: int = 30) -> str:
     """Format a value for diff display, handling None and NaN."""
     if val is None:
@@ -88,6 +90,7 @@ def _format_diff_value(val: Any, truncate: bool = True, max_len: int = 30) -> st
 # ---------------------------------------------------------------------------
 # Change symbols / emoji
 # ---------------------------------------------------------------------------
+
 
 def _get_change_symbol(change_type: ChangeType) -> str:
     """Get symbol for change type"""
@@ -119,6 +122,7 @@ def _get_change_emoji(change_type: ChangeType) -> str:
 # Change detail formatters
 # ---------------------------------------------------------------------------
 
+
 def _get_change_detail(diff: ComponentDiff, truncate: bool = True) -> str:
     """Get detail string for a component diff"""
     if diff.change_type == ChangeType.MODIFIED and diff.changed_fields:
@@ -146,6 +150,7 @@ def _get_inventory_change_detail(diff: InventoryItemDiff, truncate: bool = True)
 # ---------------------------------------------------------------------------
 # Breaking change detection
 # ---------------------------------------------------------------------------
+
 
 def detect_breaking_changes(diff_result: DiffResult) -> list[dict[str, Any]]:
     """

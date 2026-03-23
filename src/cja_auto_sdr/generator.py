@@ -2673,6 +2673,7 @@ from cja_auto_sdr.output.sdr import (
 # - write_diff_output -> output.diff.__init__
 # (imported above from cja_auto_sdr.output.diff)
 
+
 def process_inventory_summary(
     data_view_id: str,
     config_file: str = "config.json",

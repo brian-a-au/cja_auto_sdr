@@ -11,6 +11,7 @@ from __future__ import annotations
 # output.diff top-level imports
 # ---------------------------------------------------------------------------
 
+
 def test_output_diff_text_renderers_importable():
     """Public text-oriented diff renderers are importable from output.diff."""
     from cja_auto_sdr.output.diff import (
@@ -32,6 +33,7 @@ def test_output_diff_text_renderers_importable():
 # output.diff.console sub-module
 # ---------------------------------------------------------------------------
 
+
 def test_output_diff_console_importable():
     """Console diff renderer and helpers are importable from output.diff.console."""
     from cja_auto_sdr.output.diff.console import (
@@ -49,6 +51,7 @@ def test_output_diff_console_importable():
 # output.diff.markdown sub-module
 # ---------------------------------------------------------------------------
 
+
 def test_output_diff_markdown_importable():
     """Markdown diff renderer and helpers are importable from output.diff.markdown."""
     from cja_auto_sdr.output.diff.markdown import (
@@ -63,6 +66,7 @@ def test_output_diff_markdown_importable():
 # ---------------------------------------------------------------------------
 # output.diff.common sub-module
 # ---------------------------------------------------------------------------
+
 
 def test_output_diff_common_importable():
     """Shared diff helpers are importable from output.diff.common."""
@@ -87,6 +91,7 @@ def test_output_diff_common_importable():
 # output.diff.grouped sub-module
 # ---------------------------------------------------------------------------
 
+
 def test_output_diff_grouped_importable():
     """Grouped-by-field diff renderer is importable from output.diff.grouped."""
     from cja_auto_sdr.output.diff.grouped import write_diff_grouped_by_field_output
@@ -98,6 +103,7 @@ def test_output_diff_grouped_importable():
 # output.diff.pr_comment sub-module
 # ---------------------------------------------------------------------------
 
+
 def test_output_diff_pr_comment_importable():
     """PR comment diff renderer is importable from output.diff.pr_comment."""
     from cja_auto_sdr.output.diff.pr_comment import write_diff_pr_comment_output
@@ -108,6 +114,7 @@ def test_output_diff_pr_comment_importable():
 # ---------------------------------------------------------------------------
 # output.diff file-based writers
 # ---------------------------------------------------------------------------
+
 
 def test_output_diff_file_writers_importable():
     """File-based diff writers are importable from output.diff."""
@@ -130,6 +137,7 @@ def test_output_diff_file_writers_importable():
 # output.diff.json sub-module
 # ---------------------------------------------------------------------------
 
+
 def test_output_diff_json_importable():
     """JSON diff writer is importable from output.diff.json."""
     from cja_auto_sdr.output.diff.json import write_diff_json_output
@@ -140,6 +148,7 @@ def test_output_diff_json_importable():
 # ---------------------------------------------------------------------------
 # output.diff.html sub-module
 # ---------------------------------------------------------------------------
+
 
 def test_output_diff_html_importable():
     """HTML diff writer is importable from output.diff.html."""
@@ -152,6 +161,7 @@ def test_output_diff_html_importable():
 # output.diff.excel sub-module
 # ---------------------------------------------------------------------------
 
+
 def test_output_diff_excel_importable():
     """Excel diff writer is importable from output.diff.excel."""
     from cja_auto_sdr.output.diff.excel import write_diff_excel_output
@@ -162,6 +172,7 @@ def test_output_diff_excel_importable():
 # ---------------------------------------------------------------------------
 # output.diff.csv sub-module
 # ---------------------------------------------------------------------------
+
 
 def test_output_diff_csv_importable():
     """CSV diff writer is importable from output.diff.csv."""
@@ -174,6 +185,7 @@ def test_output_diff_csv_importable():
 # diff.writers wrapper routing
 # ---------------------------------------------------------------------------
 
+
 def test_diff_writers_wrapper_resolves_to_output_diff():
     from cja_auto_sdr.diff.writers import write_diff_output
 
@@ -183,6 +195,7 @@ def test_diff_writers_wrapper_resolves_to_output_diff():
 # ---------------------------------------------------------------------------
 # output.inventory top-level imports
 # ---------------------------------------------------------------------------
+
 
 def test_output_inventory_summary_importable():
     """display_inventory_summary is importable from output.inventory."""
@@ -195,6 +208,7 @@ def test_output_inventory_summary_importable():
 # output.inventory.summary sub-module
 # ---------------------------------------------------------------------------
 
+
 def test_output_inventory_summary_submodule_importable():
     """display_inventory_summary is importable from output.inventory.summary."""
     from cja_auto_sdr.output.inventory.summary import display_inventory_summary
@@ -205,6 +219,7 @@ def test_output_inventory_summary_submodule_importable():
 # ---------------------------------------------------------------------------
 # inventory.summary wrapper routing
 # ---------------------------------------------------------------------------
+
 
 def test_inventory_summary_wrapper_resolves_to_output_inventory():
     from cja_auto_sdr.inventory.summary import display_inventory_summary

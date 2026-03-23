@@ -44,7 +44,8 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: ${{ matrix.python-version }}
-          cache: true
+          enable-cache: true
+          cache-dependency-glob: uv.lock
       - name: Sync dependencies
         run: uv sync --dev
       - name: Run focused release-gate contract tests
@@ -61,7 +62,8 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: ${{ matrix.python-version }}
-          cache: true
+          enable-cache: true
+          cache-dependency-glob: uv.lock
       - name: Sync dependencies
         run: uv sync --dev --extra clustering
       - name: Verify version strings are in sync
@@ -92,7 +94,8 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: ${{ matrix.python-version }}
-          cache: true
+          enable-cache: true
+          cache-dependency-glob: uv.lock
       - name: Sync dependencies
         run: uv sync --dev --extra clustering
       - name: Run integration, end-to-end, and slow test slices
@@ -118,7 +121,8 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: ${{ matrix.python-version }}
-          cache: true
+          enable-cache: true
+          cache-dependency-glob: uv.lock
       - name: Sync dependencies
         run: uv sync --dev
       - name: Run run-summary JSON contract tests
@@ -138,7 +142,8 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: ${{ matrix.python-version }}
-          cache: true
+          enable-cache: true
+          cache-dependency-glob: uv.lock
       - name: Sync dependencies
         run: uv sync --dev
       - name: Smoke test - version, help, exit-codes
@@ -157,7 +162,8 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.14"
-          cache: true
+          enable-cache: true
+          cache-dependency-glob: uv.lock
       - name: Clean build artifacts
         run: rm -f dist/*.whl dist/*.tar.gz
       - name: Build package
