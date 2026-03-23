@@ -10,16 +10,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [3.4.6] - 2026-03-23
 
 ### Refactor
-- Extract diff text renderers and file writers to `output/diff.py`; `generator.py` delegates via thin wrappers
-- Extract inventory summary display logic to `output/inventory.py`; `process_inventory_summary()` intentionally remains in `generator.py`
+- Extract diff text renderers and file writers into the `output.diff` package; `generator.py` delegates via thin wrappers
+- Extract inventory summary display logic into the `output.inventory` package; `process_inventory_summary()` intentionally remains in `generator.py`
 
 ### Tests
 - Add `tests/test_output_extraction_contracts.py` with extraction contract tests for `output.diff` and `output.inventory`
 - Opt unit-heavy test slice into `pytest-xdist` parallel execution (`-n auto`) in CI; no global `pytest.ini` xdist rollout
 
 ### CI
-- Cache `uv` and pip downloads in GitHub Actions workflows for faster installs
-- Clean up workflow matrix and consolidate redundant steps
+- Enable `setup-uv` dependency caching in eligible GitHub Actions workflows for faster installs
+- Keep the duplicate version-sync check in `test-unit` pending branch-protection review; no workflow consolidation in this release
 
 ## [3.4.5] - 2026-03-20
 
