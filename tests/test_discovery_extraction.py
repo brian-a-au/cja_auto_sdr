@@ -105,6 +105,26 @@ class TestListModuleBackwardsCompat:
         for name in compat_names:
             assert getattr(list_commands, name) is getattr(discovery, name), name
 
+        explicit_aliases = {
+            "DiscoveryArgumentError",
+            "DiscoveryNotFoundError",
+            "DiscoveryOutputContractError",
+            "OutputContractError",
+            "_emit_discovery_error",
+            "_emit_output_contract_error",
+            "_fetch_calculated_metrics_list",
+            "_fetch_connections",
+            "_fetch_datasets",
+            "_fetch_dataviews",
+            "_fetch_describe_dataview",
+            "_fetch_dimensions_list",
+            "_fetch_metrics_list",
+            "_fetch_segments_list",
+            "_is_machine_readable_output",
+            "_validate_discovery_query_inputs",
+        }
+        assert explicit_aliases <= set(list_commands._BACKWARD_COMPAT_DISCOVERY_EXPORTS)
+
     def test_list_wrappers_route_through_module_level_fetcher_aliases(self):
         from unittest.mock import patch
 

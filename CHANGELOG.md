@@ -11,21 +11,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Style
 - Normalize 49 PEP 758 bare-comma `except` clauses to tuple form across 22 files
+- Bump `BANNER_WIDTH` from 60 to 80 for wider terminal output
 
 ### Refactor
-- Extract discovery implementation to `cli/commands/discovery.py` — single source of truth
-- Update `cli/commands/list.py` to import from shared discovery module
+- Extract discovery implementation to `cli/commands/discovery.py` as the canonical source for discovery helpers, query/filter logic, data-view lookup helpers, fetch specs, fetchers, row builders, and dataset extractors
+- Update `cli/commands/list.py` and `generator.py` to import from the shared discovery module while preserving backwards compatibility through re-exports, lazy forwarding, and compatibility aliases
+- Preserve discovery list compatibility exports in `cli/commands/list.py` for downstream consumers
 - Centralize `TQDM_BAR_FORMAT` in `core/constants.py`
 - Deduplicate dataview listing usage footer width calculation
 
 ### Docs
-- Improve CLI help text for `--exit-codes`, `--batch`, `--quiet`, `--format`, `--quality-policy`
+- Improve CLI help text for `--exit-codes`, `--batch`, `--quiet`, `--format`, and `--quality-policy`
+- Polish discovery CLI help descriptions and compatibility aliases
+- Note the temporary Ruff `target-version = "py313"` pin for tooling compatibility while the project runtime requirement remains Python 3.14+
+
+### Tests
+- Consolidate coverage suites by folding three gap-oriented files into focused module suites
+- Expand discovery extraction and backwards-compatibility coverage, including generator re-export parity and `list.py` compatibility-shim contracts
+- Sync version references and test inventory/count documentation for the patch release
 
 ### Fix
-- Normalize output-directory error messages for consistency
-- Enumerate supported formats in `--format` fallback warnings
-- Derive `describe_dataview` separator width from rendered layout
-- Gate carriage-return progress updates to interactive console
+- Normalize output-directory error messages to `ERROR: Output directory <path>: <reason>`
+- Clarify inventory-only wording and enumerate supported formats in `--format` fallback warnings
+- Derive `describe_dataview` separator width from rendered layout and fix the `TypeError` path when component counts contain `N/A`
+- Gate carriage-return progress updates to interactive consoles so piped and redirected output stays clean
+- Preserve discovery JSON metadata for empty component lists
+- Restore discovery row-builder compatibility fields (`owner`, `precision`) after extraction dedupe
+- Improve `--list-datasets` console messaging when connection details are unavailable because the connections API is not accessible
 
 ## [3.4.4] - 2026-03-20
 
