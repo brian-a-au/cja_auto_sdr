@@ -9,7 +9,8 @@ Tests cover:
 - DataFrame output
 """
 
-from unittest.mock import Mock
+import json
+from unittest.mock import Mock, patch
 
 import pandas as pd
 import pytest
@@ -19,6 +20,7 @@ from cja_auto_sdr.inventory.calculated_metrics import (
     CalculatedMetricsInventoryBuilder,
     CalculatedMetricSummary,
 )
+from cja_auto_sdr.inventory.utils import BatchProcessingStats
 
 # ==================== FIXTURES ====================
 
@@ -3315,3 +3317,912 @@ class TestFormulaSummaryFallbacks:
             }
         )
         assert "SQRT" in result
+
+
+# ---------------------------------------------------------------------------
+# Coverage gap tests (moved from test_small_module_coverage.py)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def cm_builder():
+    """Create a CalculatedMetricsInventoryBuilder for testing."""
+    return CalculatedMetricsInventoryBuilder()
+
+
+class TestProcessMetricEmptyFormula:
+    """Cover lines 482, 488, 499-502: empty/missing formula branches."""
+
+    def test_empty_string_formula_skipped(self, cm_builder):
+        """Line 488: empty string formula."""
+        metric_data = {
+            "id": "cm_test",
+            "name": "Test",
+            "definition": {"formula": "   "},
+        }
+        stats = BatchProcessingStats()
+        result = cm_builder._process_metric(metric_data, stats)
+        assert result is None
+        assert stats.skipped == 1
+
+    def test_empty_dict_formula_skipped(self, cm_builder):
+        """Lines 499-502: empty dict formula."""
+        metric_data = {
+            "id": "cm_test2",
+            "name": "Test2",
+            "definition": {"formula": {}},
+        }
+        stats = BatchProcessingStats()
+        result = cm_builder._process_metric(metric_data, stats)
+        assert result is None
+
+    def test_empty_list_formula_skipped(self, cm_builder):
+        """Line 499-502: empty list formula."""
+        metric_data = {
+            "id": "cm_test3",
+            "name": "Test3",
+            "definition": {"formula": []},
+        }
+        stats = BatchProcessingStats()
+        result = cm_builder._process_metric(metric_data, stats)
+        assert result is None
+
+
+class TestProcessMetricJsonSerializationFallback:
+    """Cover lines 540-541: json.dumps TypeError/ValueError fallback."""
+
+    def test_unserializable_definition_fallback(self, cm_builder):
+        """Lines 540-541: definition contains non-serializable value."""
+        metric_data = {
+            "id": "cm_serial",
+            "name": "Serial Test",
+            "definition": {
+                "formula": {"func": "metric", "name": "metrics/revenue"},
+            },
+        }
+        original_dumps = json.dumps
+        call_count = {"n": 0}
+
+        def patched_dumps(*args, **kwargs):
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                raise TypeError("bad type")
+            return original_dumps(*args, **kwargs)
+
+        with patch("cja_auto_sdr.inventory.calculated_metrics.json.dumps", side_effect=patched_dumps):
+            result = cm_builder._process_metric(metric_data)
+        assert result is not None
+        assert result.definition_json
+
+
+class TestNormalizeReferenceValueList:
+    """Cover line 579: _normalize_reference_value for list/tuple input."""
+
+    def test_list_input_extracts_first_valid(self, cm_builder):
+        """Line 589-594: list/tuple traversal."""
+        result = cm_builder._normalize_reference_value([None, "", "metrics/revenue"])
+        assert result == "revenue"
+
+    def test_tuple_input_extracts_first_valid(self, cm_builder):
+        result = cm_builder._normalize_reference_value((None, "metrics/orders"))
+        assert result == "orders"
+
+    def test_empty_list_returns_empty(self, cm_builder):
+        assert cm_builder._normalize_reference_value([]) == ""
+
+    def test_dict_input_with_segment_id(self, cm_builder):
+        """Line 595-601: dict input with segment_id key."""
+        result = cm_builder._normalize_reference_value({"segment_id": "s_abc"})
+        assert result == "s_abc"
+
+
+class TestParseFormulaOperandsList:
+    """Cover line 630: traverse operands list branch."""
+
+    def test_formula_with_operands_list(self, cm_builder):
+        """Line 695-699: formula node with 'operands' list."""
+        formula = {
+            "func": "add",
+            "operands": [
+                {"func": "metric", "name": "metrics/revenue"},
+                {"func": "metric", "name": "metrics/orders"},
+            ],
+        }
+        parsed = cm_builder._parse_formula(formula)
+        assert "revenue" in parsed["metric_references"]
+        assert "orders" in parsed["metric_references"]
+
+
+class TestGenerateFormulaSummaryBranches:
+    """Cover formula summary branches for various func types."""
+
+    def _make_parsed(self, functions=None, metrics=None, segments=None):
+        return {
+            "functions_internal": functions or [],
+            "functions_display": [],
+            "metric_references": metrics or [],
+            "segment_references": segments or [],
+            "operator_count": 0,
+            "nesting_depth": 0,
+            "conditional_count": 0,
+            "complexity_score": 0.0,
+        }
+
+    def test_non_normalized_string_formula(self, cm_builder):
+        """Lines 771-772: formula is a bare string."""
+        parsed = self._make_parsed()
+        result = cm_builder._generate_formula_summary("custom_formula", parsed)
+        assert "custom_formula" in result or "Custom" in result
+
+    def test_multiply_with_refs(self, cm_builder):
+        """Line 822: multiply summary with resolved references."""
+        formula = {
+            "func": "multiply",
+            "col1": {"func": "metric", "name": "metrics/price"},
+            "col2": {"func": "metric", "name": "metrics/quantity"},
+        }
+        parsed = cm_builder._parse_formula(formula)
+        result = cm_builder._generate_formula_summary(formula, parsed)
+        assert "x" in result or "price" in result
+
+    def test_multiply_no_refs(self, cm_builder):
+        """Line 823: multiply summary without resolvable references."""
+        formula = {"func": "multiply", "col1": {}, "col2": {}}
+        parsed = cm_builder._parse_formula(formula)
+        result = cm_builder._generate_formula_summary(formula, parsed)
+        assert "Multiplication" in result or "multiply" in result.lower() or "Custom" in result
+
+    def test_add_more_than_three_operands(self, cm_builder):
+        """Lines 828-830: add with more than 3 operands."""
+        formula = {
+            "func": "add",
+            "col1": {"func": "metric", "name": "metrics/a"},
+            "col2": {"func": "metric", "name": "metrics/b"},
+            "operands": [
+                {"func": "metric", "name": "metrics/c"},
+                {"func": "metric", "name": "metrics/d"},
+            ],
+        }
+        parsed = cm_builder._parse_formula(formula)
+        result = cm_builder._generate_formula_summary(formula, parsed)
+        assert "more" in result or "+" in result
+
+    def test_subtract_summary(self, cm_builder):
+        """Line 839: subtract with resolved refs."""
+        formula = {
+            "func": "subtract",
+            "col1": {"func": "metric", "name": "metrics/gross"},
+            "col2": {"func": "metric", "name": "metrics/returns"},
+        }
+        parsed = cm_builder._parse_formula(formula)
+        result = cm_builder._generate_formula_summary(formula, parsed)
+        assert "-" in result or "gross" in result
+
+    def test_subtract_no_refs(self, cm_builder):
+        """Line 840: subtract without refs."""
+        formula = {"func": "subtract", "col1": {}, "col2": {}}
+        parsed = cm_builder._parse_formula(formula)
+        result = cm_builder._generate_formula_summary(formula, parsed)
+        assert "Difference" in result or "Custom" in result
+
+    def test_if_with_condition_desc(self, cm_builder):
+        """Lines 843-845: if formula with describable condition."""
+        formula = {
+            "func": "if",
+            "condition": {
+                "func": "gt",
+                "col1": {"func": "metric", "name": "metrics/revenue"},
+                "col2": {"func": "number", "val": 100},
+            },
+            "then": {"func": "metric", "name": "metrics/revenue"},
+            "else": {"func": "number", "val": 0},
+        }
+        parsed = cm_builder._parse_formula(formula)
+        result = cm_builder._generate_formula_summary(formula, parsed)
+        assert "If" in result or "revenue" in result
+
+    def test_if_without_condition_desc(self, cm_builder):
+        """Line 846: if formula without describable condition."""
+        formula = {
+            "func": "if",
+            "condition": {},
+            "then": {"func": "number", "val": 1},
+            "else": {"func": "number", "val": 0},
+        }
+        parsed = cm_builder._parse_formula(formula)
+        result = cm_builder._generate_formula_summary(formula, parsed)
+        assert "Conditional" in result or "IF" in result
+
+    def test_segment_with_metric_and_segment(self, cm_builder):
+        """Line 853: segment with inner metric and segment_id."""
+        formula = {
+            "func": "segment",
+            "segment_id": "s300000000_12345678abcdef",
+            "metric": {"func": "metric", "name": "metrics/visits"},
+        }
+        parsed = cm_builder._parse_formula(formula)
+        result = cm_builder._generate_formula_summary(formula, parsed)
+        assert "filtered" in result or "visits" in result
+
+    def test_segment_metric_only(self, cm_builder):
+        """Line 855: segment with metric but no segment_id."""
+        formula = {
+            "func": "segment",
+            "metric": {"func": "metric", "name": "metrics/visits"},
+        }
+        parsed = cm_builder._parse_formula(formula)
+        result = cm_builder._generate_formula_summary(formula, parsed)
+        assert "filtered" in result or "visits" in result
+
+    def test_segment_no_metric(self, cm_builder):
+        """Line 856: segment with no metric."""
+        formula = {"func": "segment", "segment_id": "s_test"}
+        parsed = cm_builder._parse_formula(formula)
+        result = cm_builder._generate_formula_summary(formula, parsed)
+        assert "Segmented" in result or "metric" in result.lower()
+
+    def test_metric_reference_summary(self, cm_builder):
+        """Line 861: func=metric returns '= name'."""
+        formula = {"func": "metric", "name": "metrics/revenue"}
+        parsed = cm_builder._parse_formula(formula)
+        result = cm_builder._generate_formula_summary(formula, parsed)
+        assert "revenue" in result
+
+    def test_col_sum_summary(self, cm_builder):
+        """Line 868: col-sum with inner metric."""
+        formula = {
+            "func": "col-sum",
+            "col": {"func": "metric", "name": "metrics/revenue"},
+        }
+        parsed = cm_builder._parse_formula(formula)
+        result = cm_builder._generate_formula_summary(formula, parsed)
+        assert "SUM" in result or "revenue" in result
+
+    def test_col_sum_no_inner(self, cm_builder):
+        """Line 869: col-sum without inner metric."""
+        formula = {"func": "col-sum"}
+        parsed = cm_builder._parse_formula(formula)
+        result = cm_builder._generate_formula_summary(formula, parsed)
+        assert "Sum" in result or "aggregation" in result.lower() or "Custom" in result
+
+    def test_row_sum_summary(self, cm_builder):
+        """Line 873: row-sum summary."""
+        formula = {"func": "row-sum"}
+        parsed = cm_builder._parse_formula(formula)
+        result = cm_builder._generate_formula_summary(formula, parsed)
+        assert "Row" in result or "SUM" in result or "Custom" in result
+
+    def test_cumulative_summary(self, cm_builder):
+        """Line 878: cumulative with inner metric."""
+        formula = {
+            "func": "cumulative",
+            "col": {"func": "metric", "name": "metrics/orders"},
+        }
+        parsed = cm_builder._parse_formula(formula)
+        result = cm_builder._generate_formula_summary(formula, parsed)
+        assert "Cumulative" in result or "orders" in result
+
+    def test_cumulative_no_inner(self, cm_builder):
+        """Line 879: cumulative without inner."""
+        formula = {"func": "cumulative"}
+        parsed = cm_builder._parse_formula(formula)
+        result = cm_builder._generate_formula_summary(formula, parsed)
+        assert "Cumulative" in result or "Custom" in result
+
+    def test_rolling_with_window(self, cm_builder):
+        """Lines 885-886: rolling with window and inner metric."""
+        formula = {
+            "func": "rolling",
+            "col": {"func": "metric", "name": "metrics/revenue"},
+            "window": 7,
+        }
+        parsed = cm_builder._parse_formula(formula)
+        result = cm_builder._generate_formula_summary(formula, parsed)
+        assert "Rolling" in result or "7" in result
+
+    def test_rolling_no_window(self, cm_builder):
+        """Line 887: rolling without window."""
+        formula = {
+            "func": "rolling",
+            "col": {"func": "metric", "name": "metrics/revenue"},
+        }
+        parsed = cm_builder._parse_formula(formula)
+        result = cm_builder._generate_formula_summary(formula, parsed)
+        assert "Rolling" in result
+
+    def test_rolling_no_inner(self, cm_builder):
+        """Line 888: rolling without inner metric."""
+        formula = {"func": "rolling"}
+        parsed = cm_builder._parse_formula(formula)
+        result = cm_builder._generate_formula_summary(formula, parsed)
+        assert "Rolling" in result or "Custom" in result
+
+    def test_abs_summary(self, cm_builder):
+        """Line 904: abs with inner metric."""
+        formula = {
+            "func": "abs",
+            "col": {"func": "metric", "name": "metrics/delta"},
+        }
+        parsed = cm_builder._parse_formula(formula)
+        result = cm_builder._generate_formula_summary(formula, parsed)
+        assert "ABS" in result or "delta" in result
+
+    def test_abs_no_inner(self, cm_builder):
+        """Line 905: abs without inner."""
+        formula = {"func": "abs"}
+        parsed = cm_builder._parse_formula(formula)
+        result = cm_builder._generate_formula_summary(formula, parsed)
+        assert "Absolute" in result or "Custom" in result
+
+    def test_sqrt_summary(self, cm_builder):
+        """Line 911: sqrt with inner metric."""
+        formula = {
+            "func": "sqrt",
+            "col": {"func": "metric", "name": "metrics/variance"},
+        }
+        parsed = cm_builder._parse_formula(formula)
+        result = cm_builder._generate_formula_summary(formula, parsed)
+        assert "SQRT" in result or "variance" in result
+
+    def test_sqrt_no_inner(self, cm_builder):
+        """Line 912: sqrt without inner."""
+        formula = {"func": "sqrt"}
+        parsed = cm_builder._parse_formula(formula)
+        result = cm_builder._generate_formula_summary(formula, parsed)
+        assert "SQRT" in result or "Custom" in result
+
+    def test_pow_summary(self, cm_builder):
+        """Lines 917-918: pow with base and exp."""
+        formula = {
+            "func": "pow",
+            "col1": {"func": "metric", "name": "metrics/value"},
+            "col2": {"func": "number", "val": 2},
+        }
+        parsed = cm_builder._parse_formula(formula)
+        result = cm_builder._generate_formula_summary(formula, parsed)
+        assert "^" in result or "value" in result
+
+    def test_pow_no_refs(self, cm_builder):
+        """Line 919: pow without resolvable refs."""
+        formula = {"func": "pow", "col1": {}, "col2": {}}
+        parsed = cm_builder._parse_formula(formula)
+        result = cm_builder._generate_formula_summary(formula, parsed)
+        assert "Power" in result or "Custom" in result
+
+    def test_percentile_summary(self, cm_builder):
+        """Lines 894-897: percentile with inner metric and value."""
+        formula = {
+            "func": "percentile",
+            "col": {"func": "metric", "name": "metrics/load_time"},
+            "percentile": 95,
+        }
+        parsed = cm_builder._parse_formula(formula)
+        result = cm_builder._generate_formula_summary(formula, parsed)
+        assert "P95" in result or "load_time" in result
+
+    def test_median_summary(self, cm_builder):
+        """Line 898: median with inner metric."""
+        formula = {
+            "func": "median",
+            "col": {"func": "metric", "name": "metrics/duration"},
+        }
+        parsed = cm_builder._parse_formula(formula)
+        result = cm_builder._generate_formula_summary(formula, parsed)
+        assert "Median" in result or "duration" in result
+
+    def test_statistical_no_inner(self, cm_builder):
+        """Line 899: statistical function without inner."""
+        formula = {"func": "variance"}
+        parsed = cm_builder._parse_formula(formula)
+        result = cm_builder._generate_formula_summary(formula, parsed)
+        assert "Variance" in result or "Custom" in result
+
+
+class TestGenericFallbackSummaries:
+    """Cover lines 923-925, 928, 931-933, 939."""
+
+    def _make_parsed(self, functions=None, metrics=None, segments=None):
+        return {
+            "functions_internal": functions or [],
+            "functions_display": [],
+            "metric_references": metrics or [],
+            "segment_references": segments or [],
+            "operator_count": 0,
+            "nesting_depth": 0,
+            "conditional_count": 0,
+            "complexity_score": 0.0,
+        }
+
+    def test_segment_with_metric_and_segment_refs(self, cm_builder):
+        """Lines 923-924: segment in functions with metric refs and segment refs."""
+        formula = {"func": "coalesce"}
+        parsed = self._make_parsed(
+            functions=["segment", "coalesce"],
+            metrics=["revenue"],
+            segments=["s_mobile"],
+        )
+        result = cm_builder._generate_formula_summary(formula, parsed)
+        assert "filtered" in result or "revenue" in result
+
+    def test_segment_with_metric_no_segment_refs(self, cm_builder):
+        """Line 925: segment in functions with metric refs but no segment refs."""
+        formula = {"func": "coalesce"}
+        parsed = self._make_parsed(
+            functions=["segment", "coalesce"],
+            metrics=["revenue"],
+            segments=[],
+        )
+        result = cm_builder._generate_formula_summary(formula, parsed)
+        assert "Filtered" in result or "revenue" in result
+
+    def test_divide_in_functions_with_two_metrics(self, cm_builder):
+        """Line 928: divide in functions with 2+ metric refs."""
+        formula = {"func": "coalesce"}
+        parsed = self._make_parsed(
+            functions=["divide", "coalesce"],
+            metrics=["revenue", "orders"],
+        )
+        result = cm_builder._generate_formula_summary(formula, parsed)
+        assert "Ratio" in result
+
+    def test_if_in_functions_with_metrics(self, cm_builder):
+        """Lines 931-932: if in functions with metric refs."""
+        formula = {"func": "coalesce"}
+        parsed = self._make_parsed(
+            functions=["if", "coalesce"],
+            metrics=["revenue"],
+        )
+        result = cm_builder._generate_formula_summary(formula, parsed)
+        assert "Conditional" in result
+
+    def test_if_in_functions_no_metrics(self, cm_builder):
+        """Line 933: if in functions without metric refs."""
+        formula = {"func": "coalesce"}
+        parsed = self._make_parsed(functions=["if", "coalesce"])
+        result = cm_builder._generate_formula_summary(formula, parsed)
+        assert "Conditional" in result
+
+    def test_two_metric_refs(self, cm_builder):
+        """Line 939: exactly 2 metric refs, no special functions."""
+        formula = {"func": "coalesce"}
+        parsed = self._make_parsed(metrics=["revenue", "orders"])
+        result = cm_builder._generate_formula_summary(formula, parsed)
+        assert "Combines" in result
+
+    def test_three_or_more_metric_refs(self, cm_builder):
+        """Line 940: 3+ metric refs."""
+        formula = {"func": "coalesce"}
+        parsed = self._make_parsed(metrics=["a", "b", "c"])
+        result = cm_builder._generate_formula_summary(formula, parsed)
+        assert "3 metrics" in result or "Combines" in result
+
+    def test_one_metric_ref(self, cm_builder):
+        """Line 937: exactly 1 metric ref."""
+        formula = {"func": "coalesce"}
+        parsed = self._make_parsed(metrics=["revenue"])
+        result = cm_builder._generate_formula_summary(formula, parsed)
+        assert "Based on" in result or "revenue" in result
+
+
+class TestBuildFormulaExpressionVisualizationGroup:
+    """Cover visualization-group transparent wrapper in _build_formula_expression."""
+
+    def test_visualization_group_wrapper(self, cm_builder):
+        """Line 1037-1049: visualization-group passes through to inner formula."""
+        node = {
+            "func": "visualization-group",
+            "formula": {
+                "func": "divide",
+                "col1": {"func": "metric", "name": "metrics/a"},
+                "col2": {"func": "metric", "name": "metrics/b"},
+            },
+        }
+        result = cm_builder._build_formula_expression(node)
+        assert "a" in result and "b" in result
+
+    def test_visualization_group_formulas_array(self, cm_builder):
+        """Line 1045-1049: visualization-group with formulas array."""
+        node = {
+            "func": "visualization-group",
+            "formulas": [
+                {
+                    "func": "metric",
+                    "name": "metrics/revenue",
+                },
+            ],
+        }
+        result = cm_builder._build_formula_expression(node)
+        assert "revenue" in result
+
+
+class TestDescribeConditionBranches:
+    """Cover additional condition description branches."""
+
+    def test_gte_condition(self, cm_builder):
+        formula = {
+            "func": "if",
+            "condition": {
+                "func": "gte",
+                "col1": {"func": "metric", "name": "metrics/a"},
+                "col2": {"func": "number", "val": 10},
+            },
+            "then": {"func": "number", "val": 1},
+        }
+        result = cm_builder._describe_condition(formula)
+        assert ">=" in result
+
+    def test_lt_condition(self, cm_builder):
+        formula = {
+            "func": "if",
+            "condition": {
+                "func": "lt",
+                "col1": {"func": "metric", "name": "metrics/a"},
+                "col2": {"func": "number", "val": 5},
+            },
+            "then": {"func": "number", "val": 1},
+        }
+        result = cm_builder._describe_condition(formula)
+        assert "<" in result
+
+    def test_lte_condition(self, cm_builder):
+        formula = {
+            "func": "if",
+            "condition": {
+                "func": "lte",
+                "col1": {"func": "metric", "name": "metrics/a"},
+                "col2": {"func": "number", "val": 5},
+            },
+            "then": {"func": "number", "val": 1},
+        }
+        result = cm_builder._describe_condition(formula)
+        assert "<=" in result
+
+    def test_eq_condition(self, cm_builder):
+        formula = {
+            "func": "if",
+            "condition": {
+                "func": "eq",
+                "col1": {"func": "metric", "name": "metrics/a"},
+                "col2": {"func": "number", "val": 0},
+            },
+            "then": {"func": "number", "val": 1},
+        }
+        result = cm_builder._describe_condition(formula)
+        assert "=" in result
+
+    def test_ne_condition(self, cm_builder):
+        formula = {
+            "func": "if",
+            "condition": {
+                "func": "ne",
+                "col1": {"func": "metric", "name": "metrics/a"},
+                "col2": {"func": "number", "val": 0},
+            },
+            "then": {"func": "number", "val": 1},
+        }
+        result = cm_builder._describe_condition(formula)
+        # ne produces the unicode not-equal sign
+        assert result  # Non-empty means condition was described
+
+
+class TestNormalizeFormulaNodeEdgeCases:
+    """Cover edge cases in _normalize_formula_node."""
+
+    def test_bool_input(self, cm_builder):
+        """Line 1186-1187: bool input returns literal node."""
+        result = cm_builder._normalize_formula_node(True)
+        assert result == {"func": "literal", "val": True}
+
+    def test_float_input(self, cm_builder):
+        """Line 1189-1190: float input returns number node."""
+        result = cm_builder._normalize_formula_node(3.14)
+        assert result == {"func": "number", "val": 3.14}
+
+    def test_string_with_slash(self, cm_builder):
+        """Line 1196-1197: string with / returns metric node."""
+        result = cm_builder._normalize_formula_node("metrics/revenue")
+        assert result == {"func": "metric", "name": "metrics/revenue"}
+
+    def test_string_without_slash(self, cm_builder):
+        """Line 1198: string without / returns literal node."""
+        result = cm_builder._normalize_formula_node("some_literal")
+        assert result == {"func": "literal", "val": "some_literal"}
+
+    def test_empty_string_returns_none(self, cm_builder):
+        """Line 1194-1195: empty string returns None."""
+        assert cm_builder._normalize_formula_node("  ") is None
+
+    def test_none_returns_none(self, cm_builder):
+        """Line 1200: unrecognized type returns None."""
+        assert cm_builder._normalize_formula_node(None) is None
+
+
+class TestProcessMetricNoneFormulaNormalization:
+    """Cover lines 482 (stats.record_skip with no formula) and 499-502 (unsupported formula)."""
+
+    def test_none_formula_with_stats(self, cm_builder):
+        """Line 482: formula is None, stats records the skip."""
+        metric_data = {
+            "id": "cm_none_formula",
+            "name": "NoneFormula",
+            "definition": {"formula": None},
+        }
+        stats = BatchProcessingStats()
+        result = cm_builder._process_metric(metric_data, stats)
+        assert result is None
+        assert stats.skipped == 1
+
+    def test_unsupported_formula_format_with_stats(self, cm_builder):
+        """Lines 499-502: _normalize_formula_node returns None for list of Nones."""
+        metric_data = {
+            "id": "cm_unsupported",
+            "name": "Unsupported",
+            "definition": {"formula": [None, None]},
+        }
+        stats = BatchProcessingStats()
+        result = cm_builder._process_metric(metric_data, stats)
+        assert result is None
+        assert stats.skipped == 1
+
+
+class TestCoerceScalarTextOnBuilder:
+    """Cover line 579: _coerce_scalar_text called on the builder instance."""
+
+    def test_coerce_scalar_text_passthrough(self, cm_builder):
+        """Line 579: builder method delegates to module-level coerce_scalar_text."""
+        assert cm_builder._coerce_scalar_text("hello") == "hello"
+        assert cm_builder._coerce_scalar_text(None) == ""
+        assert cm_builder._coerce_scalar_text(42) == "42"
+
+
+class TestParseFormulaTraverseNonDict:
+    """Cover line 630: traverse called with a non-dict node."""
+
+    def test_non_dict_operand_in_operands_list(self, cm_builder):
+        """Line 630: non-dict items in operands list are silently skipped."""
+        formula = {
+            "func": "add",
+            "operands": [
+                "not_a_dict",
+                42,
+                {"func": "metric", "name": "metrics/revenue"},
+            ],
+        }
+        parsed = cm_builder._parse_formula(formula)
+        assert "revenue" in parsed["metric_references"]
+
+
+class TestFormulaSummaryNumericFallback:
+    """Cover lines 769-773: formula that doesn't normalize but is numeric or string."""
+
+    def _make_parsed(self):
+        return {
+            "functions_internal": [],
+            "functions_display": [],
+            "metric_references": [],
+            "segment_references": [],
+            "operator_count": 0,
+            "nesting_depth": 0,
+            "conditional_count": 0,
+            "complexity_score": 0.0,
+        }
+
+    def test_numeric_formula_returns_string_of_number(self, cm_builder):
+        """Lines 769-770: formula is a raw number (int/float)."""
+        parsed = self._make_parsed()
+        with patch.object(cm_builder, "_normalize_formula_node", return_value=None):
+            result = cm_builder._generate_formula_summary(42, parsed)
+        assert result == "42"
+
+    def test_float_formula_returns_string_of_number(self, cm_builder):
+        """Lines 769-770: formula is a raw float."""
+        parsed = self._make_parsed()
+        with patch.object(cm_builder, "_normalize_formula_node", return_value=None):
+            result = cm_builder._generate_formula_summary(3.14, parsed)
+        assert result == "3.14"
+
+    def test_string_formula_fallback(self, cm_builder):
+        """Lines 771-772: formula is a non-empty string that doesn't normalize."""
+        parsed = self._make_parsed()
+        with patch.object(cm_builder, "_normalize_formula_node", return_value=None):
+            result = cm_builder._generate_formula_summary("custom_expr", parsed)
+        assert result == "custom_expr"
+
+    def test_empty_formula_fallback(self, cm_builder):
+        """Line 773: formula doesn't normalize and isn't numeric or string."""
+        parsed = self._make_parsed()
+        with patch.object(cm_builder, "_normalize_formula_node", return_value=None):
+            result = cm_builder._generate_formula_summary(None, parsed)
+        assert result == "Custom calculated metric"
+
+
+class TestFormulaSummaryDivideNoRefs:
+    """Cover line 814: divide with unresolvable references."""
+
+    def test_divide_returns_ratio_calculation(self, cm_builder):
+        """Line 814: divide where neither operand resolves to a name."""
+        formula = {"func": "divide", "col1": {}, "col2": {}}
+        parsed = cm_builder._parse_formula(formula)
+        result = cm_builder._generate_formula_summary(formula, parsed)
+        assert "Ratio" in result
+
+
+class TestFormulaSummaryAddOperands:
+    """Cover lines 828-830: add with exactly 2-3 operands and >3 operands."""
+
+    def test_add_two_operands_joined(self, cm_builder):
+        """Lines 828-829: add with exactly 2 operands joined by +."""
+        formula = {
+            "func": "add",
+            "col1": {"func": "metric", "name": "metrics/revenue"},
+            "col2": {"func": "metric", "name": "metrics/tax"},
+        }
+        parsed = cm_builder._parse_formula(formula)
+        result = cm_builder._generate_formula_summary(formula, parsed)
+        assert "+" in result
+
+    def test_add_three_operands_joined(self, cm_builder):
+        """Lines 828-829: add with exactly 3 operands."""
+        formula = {
+            "func": "add",
+            "col1": {"func": "metric", "name": "metrics/a"},
+            "col2": {"func": "metric", "name": "metrics/b"},
+            "operands": [{"func": "metric", "name": "metrics/c"}],
+        }
+        parsed = cm_builder._parse_formula(formula)
+        result = cm_builder._generate_formula_summary(formula, parsed)
+        assert "+" in result
+
+
+class TestFormulaSummarySubtractWithRefs:
+    """Cover line 839: subtract with resolved refs."""
+
+    def test_subtract_shows_minus_sign(self, cm_builder):
+        """Line 839: subtract with two resolvable metric refs."""
+        formula = {
+            "func": "subtract",
+            "col1": {"func": "metric", "name": "metrics/total"},
+            "col2": {"func": "metric", "name": "metrics/refunds"},
+        }
+        parsed = cm_builder._parse_formula(formula)
+        result = cm_builder._generate_formula_summary(formula, parsed)
+        assert "total" in result and "-" in result and "refunds" in result
+
+
+class TestFormulaSummaryIfCondition:
+    """Cover lines 843-846: if formula with and without condition desc."""
+
+    def test_if_with_condition(self, cm_builder):
+        """Lines 843-845: if with resolvable condition."""
+        formula = {
+            "func": "if",
+            "condition": {
+                "func": "gt",
+                "col1": {"func": "metric", "name": "metrics/x"},
+                "col2": {"func": "number", "val": 0},
+            },
+            "then": {"func": "number", "val": 1},
+            "else": {"func": "number", "val": 0},
+        }
+        parsed = cm_builder._parse_formula(formula)
+        result = cm_builder._generate_formula_summary(formula, parsed)
+        assert "IF" in result or "If" in result
+
+    def test_if_no_condition(self, cm_builder):
+        """Line 846: if with empty condition dict."""
+        formula = {"func": "if", "condition": {}, "then": {}, "else": {}}
+        parsed = cm_builder._parse_formula(formula)
+        result = cm_builder._generate_formula_summary(formula, parsed)
+        assert "Conditional" in result
+
+
+class TestFormulaSummarySegmentBranches:
+    """Cover lines 853, 855: segment with metric+id and metric only."""
+
+    def test_segment_with_both(self, cm_builder):
+        """Line 853: segment with inner metric and segment_id."""
+        formula = {
+            "func": "segment",
+            "segment_id": "s300000000_abcdef",
+            "metric": {"func": "metric", "name": "metrics/pageviews"},
+        }
+        parsed = cm_builder._parse_formula(formula)
+        result = cm_builder._generate_formula_summary(formula, parsed)
+        assert "pageviews" in result
+
+    def test_segment_metric_only_no_id(self, cm_builder):
+        """Line 855: segment with metric but no segment_id."""
+        formula = {
+            "func": "segment",
+            "metric": {"func": "metric", "name": "metrics/pageviews"},
+        }
+        parsed = cm_builder._parse_formula(formula)
+        result = cm_builder._generate_formula_summary(formula, parsed)
+        assert "filtered" in result
+
+
+class TestFormulaSummaryMetricRef:
+    """Cover line 861: metric func returns '= name'."""
+
+    def test_metric_named(self, cm_builder):
+        """Line 861: func=metric with a clean name."""
+        formula = {"func": "metric", "name": "metrics/orders"}
+        parsed = cm_builder._parse_formula(formula)
+        result = cm_builder._generate_formula_summary(formula, parsed)
+        assert "orders" in result
+
+
+class TestFormulaSummaryColAggregation:
+    """Cover line 868: col-sum/col-max/etc with inner metric."""
+
+    def test_col_max_with_inner(self, cm_builder):
+        """Line 868: col-max with inner metric ref."""
+        formula = {
+            "func": "col-max",
+            "col": {"func": "metric", "name": "metrics/revenue"},
+        }
+        parsed = cm_builder._parse_formula(formula)
+        result = cm_builder._generate_formula_summary(formula, parsed)
+        assert "MAX" in result and "revenue" in result
+
+
+class TestFormulaSummaryCumulativeWithInner:
+    """Cover line 878: cumulative with inner metric."""
+
+    def test_cumulative_with_metric(self, cm_builder):
+        """Line 878: cumulative with inner metric ref."""
+        formula = {
+            "func": "cumulative",
+            "metric": {"func": "metric", "name": "metrics/visits"},
+        }
+        parsed = cm_builder._parse_formula(formula)
+        result = cm_builder._generate_formula_summary(formula, parsed)
+        assert "Cumulative" in result or "CUM" in result
+
+
+class TestFormulaSummaryAbsAndMath:
+    """Cover lines 904, 911: abs and sqrt/log etc with inner metric."""
+
+    def test_abs_with_col1(self, cm_builder):
+        """Line 904: abs using col1 key."""
+        formula = {
+            "func": "abs",
+            "col1": {"func": "metric", "name": "metrics/delta"},
+        }
+        parsed = cm_builder._parse_formula(formula)
+        result = cm_builder._generate_formula_summary(formula, parsed)
+        assert "ABS" in result and "delta" in result
+
+    def test_log_with_inner(self, cm_builder):
+        """Line 911: log with inner metric."""
+        formula = {
+            "func": "log",
+            "col": {"func": "metric", "name": "metrics/value"},
+        }
+        parsed = cm_builder._parse_formula(formula)
+        result = cm_builder._generate_formula_summary(formula, parsed)
+        assert "LOG" in result and "value" in result
+
+
+class TestBuildFormulaExpressionComplexDivide:
+    """Cover lines 969-972: divide with complex operands needing parenthesization."""
+
+    def test_complex_operands_get_parenthesized(self, cm_builder):
+        """Lines 969-972: divide where operands contain spaces -> wrapped in parens."""
+        formula = {
+            "func": "divide",
+            "col1": {
+                "func": "add",
+                "col1": {"func": "metric", "name": "metrics/a"},
+                "col2": {"func": "metric", "name": "metrics/b"},
+            },
+            "col2": {
+                "func": "subtract",
+                "col1": {"func": "metric", "name": "metrics/c"},
+                "col2": {"func": "metric", "name": "metrics/d"},
+            },
+        }
+        result = cm_builder._build_formula_expression(formula)
+        # The add sub-expression "a + b" should be wrapped as "(a + b)"
+        assert "(" in result and ")" in result
+        assert "/" in result

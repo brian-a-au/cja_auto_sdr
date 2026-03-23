@@ -47,7 +47,7 @@ def format_iso_date(iso_date: Any) -> str:
             dt = datetime.fromisoformat(value)
             return dt.strftime("%Y-%m-%d %H:%M")
         return value[:10]  # Just the date part
-    except ValueError, TypeError:
+    except (ValueError, TypeError):
         return value[:19] if len(value) > 19 else value
 
 
@@ -155,7 +155,7 @@ def extract_short_name(full_id: Any, separator: str = "/") -> str:
                 return ""
         elif hasattr(is_na, "all") and bool(is_na.all()):
             return ""
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         pass
 
     full_id = str(full_id).strip()
@@ -190,7 +190,7 @@ def coerce_scalar_text(value: Any) -> str:
         is_na = pd.isna(value)
         if isinstance(is_na, bool) and is_na:
             return ""
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         pass
 
     if hasattr(value, "isoformat"):
@@ -199,7 +199,7 @@ def coerce_scalar_text(value: Any) -> str:
             if iso_value is None:
                 return ""
             return str(iso_value).strip()
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             pass
 
     if pd.api.types.is_scalar(value):
@@ -350,7 +350,7 @@ def validate_required_id(
             missing_id = is_na
         elif hasattr(is_na, "all"):
             missing_id = bool(is_na.all())
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         missing_id = False
 
     item_id = "" if missing_id else str(raw_item_id).strip()

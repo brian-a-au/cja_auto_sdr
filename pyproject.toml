@@ -75,7 +75,10 @@ dev = [
 ]
 
 [tool.ruff]
-target-version = "py314"
+# Keep Ruff one minor behind the runtime floor for now: Python 3.14 remains
+# required at runtime, but a few forward-annotation sites still trigger
+# py314-only UP037 rewrites that are outside this patch release's scope.
+target-version = "py313"
 line-length = 120
 src = ["src", "tests"]
 

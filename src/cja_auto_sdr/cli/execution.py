@@ -159,7 +159,7 @@ def _confirm_large_batch(args: argparse.Namespace, *, data_views: list[str]) -> 
             print("Cancelled.")
             sys.exit(0)
         print()
-    except EOFError, KeyboardInterrupt:
+    except (EOFError, KeyboardInterrupt):
         print("\nCancelled.")
         sys.exit(0)
 
@@ -288,27 +288,30 @@ def prepare_sdr_execution_context(
     if not output_access_ok:
         if access_reason == "not_directory":
             print(
-                generator.ConsoleColors.error(f"ERROR: Output path is not a directory: {resolved_output_dir}"),
+                generator.ConsoleColors.error(f"ERROR: Output directory {resolved_output_dir}: not a directory"),
                 file=sys.stderr,
             )
         elif access_reason == "parent_not_directory" and parent_dir is not None:
             print(
-                generator.ConsoleColors.error(f"ERROR: Cannot create output directory: {resolved_output_dir}"),
+                generator.ConsoleColors.error(
+                    f"ERROR: Output directory {resolved_output_dir}: cannot create — parent {parent_dir} is not a directory"
+                ),
                 file=sys.stderr,
             )
-            print(f"Path component is not a directory: {parent_dir}", file=sys.stderr)
         elif access_reason == "parent_not_writable" and parent_dir is not None:
             print(
-                generator.ConsoleColors.error(f"ERROR: Cannot create output directory: {resolved_output_dir}"),
+                generator.ConsoleColors.error(
+                    f"ERROR: Output directory {resolved_output_dir}: cannot create — parent {parent_dir} is not writable"
+                ),
                 file=sys.stderr,
             )
-            print(f"Parent directory {parent_dir} is not writable.", file=sys.stderr)
         else:
             print(
-                generator.ConsoleColors.error(f"ERROR: Cannot write to output directory: {resolved_output_dir}"),
+                generator.ConsoleColors.error(
+                    f"ERROR: Output directory {resolved_output_dir}: not writable. Check permissions and try again"
+                ),
                 file=sys.stderr,
             )
-            print("Check permissions and try again.", file=sys.stderr)
         sys.exit(1)
 
     processing_start_time = time.time()

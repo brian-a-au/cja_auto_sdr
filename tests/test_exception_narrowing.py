@@ -293,7 +293,7 @@ class TestComponentCountRetryExceptionBoundary:
 
     def _run_count_with_retry_side_effect(self, exc):
         """Run component count helper with a patched retry call that raises *exc*."""
-        with patch("cja_auto_sdr.generator.make_api_call_with_retry", side_effect=exc):
+        with patch("cja_auto_sdr.cli.commands.discovery.make_api_call_with_retry", side_effect=exc):
             return generator._count_component_items_for_fetch_spec_with_retry(
                 MagicMock(),
                 "dv_test",

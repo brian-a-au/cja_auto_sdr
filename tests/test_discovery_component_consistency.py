@@ -155,7 +155,7 @@ def test_show_stats_error_shaped_component_payload_falls_back_to_error_row(
 @patch("cja_auto_sdr.generator.validate_config_file", return_value=True)
 @patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "config", {}))
 @patch("cja_auto_sdr.generator.cjapy")
-@patch("cja_auto_sdr.generator.make_api_call_with_retry")
+@patch("cja_auto_sdr.cli.commands.discovery.make_api_call_with_retry")
 def test_run_dry_run_uses_hidden_inclusive_component_fetch_contract(
     mock_retry,
     mock_cjapy,

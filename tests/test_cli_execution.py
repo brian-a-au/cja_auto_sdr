@@ -230,7 +230,8 @@ class TestPrepareSdrExecutionContext:
 
         assert exc_info.value.code == 1
         err = capsys.readouterr().err
-        assert "Output path is not a directory" in err
+        assert "ERROR: Output directory" in err
+        assert "not a directory" in err
 
     def test_output_dir_parent_not_directory_exits_1(self, capsys):
         """When access_reason is parent_not_directory, exit(1) with message about component."""
@@ -250,7 +251,8 @@ class TestPrepareSdrExecutionContext:
 
         assert exc_info.value.code == 1
         err = capsys.readouterr().err
-        assert "Cannot create output directory" in err
+        assert "ERROR: Output directory" in err
+        assert "cannot create" in err
         assert str(parent) in err
 
     def test_output_dir_parent_not_writable_exits_1(self, capsys):
@@ -271,7 +273,8 @@ class TestPrepareSdrExecutionContext:
 
         assert exc_info.value.code == 1
         err = capsys.readouterr().err
-        assert "Cannot create output directory" in err
+        assert "ERROR: Output directory" in err
+        assert "cannot create" in err
         assert "not writable" in err
 
     def test_output_dir_default_permission_failure_exits_1(self, capsys):
@@ -291,7 +294,8 @@ class TestPrepareSdrExecutionContext:
 
         assert exc_info.value.code == 1
         err = capsys.readouterr().err
-        assert "Cannot write to output directory" in err
+        assert "ERROR: Output directory" in err
+        assert "not writable" in err
         assert "Check permissions" in err
 
 

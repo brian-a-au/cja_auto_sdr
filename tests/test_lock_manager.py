@@ -7,6 +7,8 @@ ensure_held, and _acquire_with_result.
 import logging
 import os
 import sys
+import threading
+import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -833,3 +835,109 @@ class TestLockManagerDiagnostics:
         failed_calls = [call for call in mock_diag.call_args_list if call[0][1] == "lock_acquire_failed"]
         assert len(failed_calls) == 1
         assert failed_calls[0][1]["reason"] == "contended"
+
+
+# ---------------------------------------------------------------------------
+# Coverage gap tests (moved from test_small_module_coverage.py)
+# ---------------------------------------------------------------------------
+
+
+class TestLockManagerHeartbeatEdgeCases:
+    """Cover lines 180, 202, 210."""
+
+    def test_heartbeat_thread_already_alive(self, tmp_path):
+        """Line 180: _start_heartbeat_if_needed when thread is already alive."""
+        lock_path = tmp_path / "test.lock"
+        manager = LockManager(
+            lock_path=lock_path,
+            owner="test",
+            stale_threshold_seconds=30,
+            backend_name="lease",
+        )
+        manager._heartbeat_thread = threading.Thread(target=lambda: time.sleep(10), daemon=True)
+        manager._heartbeat_thread.start()
+
+        mock_handle = MagicMock()
+        mock_info = MagicMock()
+        manager._handle = mock_handle
+        manager._lock_info = mock_info
+
+        manager._start_heartbeat_if_needed()
+
+        manager._heartbeat_stop.set()
+        manager._heartbeat_thread.join(timeout=1)
+
+    def test_heartbeat_loop_handle_none(self, tmp_path):
+        """Line 202: _heartbeat_loop returns when handle becomes None."""
+        lock_path = tmp_path / "test.lock"
+        manager = LockManager(
+            lock_path=lock_path,
+            owner="test",
+            stale_threshold_seconds=3,
+            backend_name="lease",
+        )
+        manager._handle = None
+        manager._lock_info = None
+        manager._heartbeat_stop.clear()
+
+        done = threading.Event()
+
+        def run_loop():
+            manager._heartbeat_loop(0.01)
+            done.set()
+
+        t = threading.Thread(target=run_loop, daemon=True)
+        t.start()
+        assert done.wait(timeout=2), "Heartbeat loop did not exit"
+
+    def test_heartbeat_loop_oserror_after_stop(self, tmp_path):
+        """Line 210: OSError during heartbeat but _heartbeat_stop is already set."""
+        lock_path = tmp_path / "test.lock"
+        manager = LockManager(
+            lock_path=lock_path,
+            owner="test",
+            stale_threshold_seconds=3,
+            backend_name="lease",
+        )
+
+        from cja_auto_sdr.core.locks.backends import LockInfo
+
+        mock_handle = MagicMock()
+        mock_info = LockInfo(
+            lock_id="test",
+            pid=os.getpid(),
+            host="localhost",
+            owner="test",
+            started_at="2026-01-01T00:00:00",
+            updated_at="2026-01-01T00:00:00",
+            backend="lease",
+            version=1,
+        )
+        manager._handle = mock_handle
+        manager._lock_info = mock_info
+
+        manager.backend.write_info = MagicMock(side_effect=OSError("disk error"))
+
+        done = threading.Event()
+
+        def run_loop():
+            manager._heartbeat_stop.clear()
+
+            call_count = {"n": 0}
+
+            def mock_wait(timeout):
+                call_count["n"] += 1
+                if call_count["n"] == 1:
+                    time.sleep(0.01)
+                    return False
+                return True
+
+            manager._heartbeat_stop.wait = mock_wait
+            manager._heartbeat_stop.set()
+
+            manager._heartbeat_loop(0.01)
+            done.set()
+
+        t = threading.Thread(target=run_loop, daemon=True)
+        t.start()
+        assert done.wait(timeout=5), "Heartbeat loop did not exit"

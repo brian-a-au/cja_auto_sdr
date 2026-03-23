@@ -10,8 +10,7 @@ from tqdm import tqdm
 
 from cja_auto_sdr.api.cache import ValidationCache
 from cja_auto_sdr.core.colors import _format_error_msg
-
-TQDM_BAR_FORMAT = "{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}]"
+from cja_auto_sdr.core.constants import TQDM_BAR_FORMAT
 
 
 class DataQualityChecker:

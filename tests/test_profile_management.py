@@ -823,3 +823,73 @@ class TestShowProfileExtended:
         # Should NOT mention config.json in sources
         # (It may mention it elsewhere as "Sources: .env")
         assert "Env@AdobeOrg" in captured.out
+
+
+# ---------------------------------------------------------------------------
+# v3.4.5 coverage gap tests (moved from test_v345_coverage_gaps.py)
+# ---------------------------------------------------------------------------
+
+
+class TestLoadProfileConfigJsonMalformed:
+    """Line 98: JSONDecodeError in config.json -> returns None."""
+
+    def test_malformed_json_returns_none(self, tmp_path: Path) -> None:
+        from cja_auto_sdr.core.profiles import load_profile_config_json
+
+        config_file = tmp_path / "config.json"
+        config_file.write_text("{invalid json", encoding="utf-8")
+
+        result = load_profile_config_json(tmp_path)
+        assert result is None
+
+
+class TestListProfilesOrgIdException:
+    """Lines 259-260: exception reading org_id -> org_id set to None."""
+
+    def test_org_id_exception_yields_none(self, tmp_path: Path) -> None:
+        from cja_auto_sdr.core.profiles import list_profiles
+
+        # Create a fake profile directory with config.json
+        profile_dir = tmp_path / "test_profile"
+        profile_dir.mkdir()
+        (profile_dir / "config.json").write_text("{}", encoding="utf-8")
+
+        with patch("cja_auto_sdr.core.profiles._generator_module") as mock_gen:
+            gen = mock_gen.return_value
+            gen.get_profiles_dir.return_value = tmp_path
+            gen._read_profile_org_id.side_effect = RuntimeError("boom")
+
+            # list_profiles prints output; capture it and check return value
+            result = list_profiles(output_format="json")
+
+        assert result is True  # function returns True on success
+
+
+class TestImportProfileImportSourceErrors:
+    """Lines 519-524: JSONDecodeError and ValueError during profile import."""
+
+    def _run_import(self, exc: Exception, capsys: pytest.CaptureFixture[str]) -> bool:
+        from cja_auto_sdr.core.profiles import import_profile_non_interactive
+
+        mock_path = MagicMock(spec=Path)
+        mock_path.exists.return_value = False
+
+        with (
+            patch("cja_auto_sdr.core.profiles._generator_module") as mock_gen,
+            patch("cja_auto_sdr.core.profiles.load_profile_import_source", side_effect=exc),
+        ):
+            gen = mock_gen.return_value
+            gen.validate_profile_name.return_value = (True, None)
+            gen.get_profile_path.return_value = mock_path
+
+            return import_profile_non_interactive("test", "/tmp/source.json")
+
+    def test_json_decode_error_returns_false(self, capsys: pytest.CaptureFixture[str]) -> None:
+        result = self._run_import(json.JSONDecodeError("bad", "", 0), capsys)
+        assert result is False
+        assert "Error loading profile import source" in capsys.readouterr().err
+
+    def test_value_error_returns_false(self, capsys: pytest.CaptureFixture[str]) -> None:
+        result = self._run_import(ValueError("no credentials"), capsys)
+        assert result is False
+        assert "Error loading profile import source" in capsys.readouterr().err

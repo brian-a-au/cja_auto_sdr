@@ -399,7 +399,7 @@ def _coerce_lookup_scalar_text(value: Any) -> str | None:
     if isinstance(value, bytes):
         try:
             return value.decode("utf-8", errors="ignore")
-        except AttributeError, TypeError, ValueError:  # PEP 758 (Python 3.14+)
+        except (AttributeError, TypeError, ValueError):
             return None
     if isinstance(value, (int, float)) and not isinstance(value, bool):
         return str(value)

@@ -353,7 +353,31 @@ class TestUXImprovements:
         parser = parse_arguments(return_parser=True, enable_autocomplete=False)
         help_text = " ".join(parser.format_help().split())
 
-        assert "supported keys: fail_on_quality, quality_report, max_issues, allow_partial" in help_text
+        assert "fail_on_quality, quality_report, max_issues, allow_partial" in help_text
+
+    def test_discovery_help_clarifies_availability_and_ignored_options(self):
+        """Discovery help should set expectations for availability and ignored flags."""
+        parser = parse_arguments(return_parser=True, enable_autocomplete=False)
+        help_text = " ".join(parser.format_help().split())
+
+        assert "List all accessible connections, including dataset details when available, and exit" in help_text
+        assert (
+            "List all data views with backing connection and dataset information when available, then exit" in help_text
+        )
+        assert "Ignores --filter, --exclude, --sort, and --limit." in help_text
+        assert (
+            "For discovery commands and --org-report: include only data views whose name matches this regex pattern"
+            in help_text
+        )
+        assert (
+            "For discovery commands and --org-report: exclude data views whose name matches this regex pattern"
+            in help_text
+        )
+        assert "For discovery commands and --org-report: limit the number of data views to analyze" in help_text
+        assert "Sort discovery list/inspection output by field" in help_text
+        assert "--sort=-dataview_count" in help_text
+        assert "cja_auto_sdr dv_12345 --stats --format json --output -" in help_text
+        assert "cja_auto_sdr --list-dataviews --format json --output -" in help_text
 
     def test_profile_import_flags(self):
         """Test parsing with --profile-import and --profile-overwrite flags."""
@@ -4976,6 +5000,49 @@ def test_list_inspection_commands_use_canonical_dataview_name_over_preferred_que
     assert len(payload[component_key]) == 1
 
 
+@pytest.mark.parametrize(
+    ("command", "component_method", "component_key"),
+    [
+        (list_metrics, "getMetrics", "metrics"),
+        (list_dimensions, "getDimensions", "dimensions"),
+        (list_segments, "getFilters", "segments"),
+        (list_calculated_metrics, "getCalculatedMetrics", "calculatedMetrics"),
+    ],
+)
+@patch("cja_auto_sdr.generator.cjapy")
+@patch("cja_auto_sdr.generator.configure_cjapy")
+@patch("cja_auto_sdr.generator.resolve_active_profile", return_value=None)
+def test_list_inspection_commands_preserve_dataview_metadata_for_empty_json_payloads(
+    mock_profile,
+    mock_configure,
+    mock_cjapy,
+    command,
+    component_method,
+    component_key,
+):
+    """Empty inspection payloads should keep the same dataview metadata contract as non-empty ones."""
+    mock_configure.return_value = (True, "config", None)
+    cja = mock_cjapy.CJA.return_value
+    cja.getDataView.return_value = {"id": "dv_1", "name": "Production Web"}
+    getattr(cja, component_method).return_value = []
+
+    import io
+    from contextlib import redirect_stdout
+
+    out = io.StringIO()
+    with redirect_stdout(out):
+        result = command("dv_1", output_format="json", data_view_name="Prod Web")
+
+    assert result is True
+    payload = json.loads(out.getvalue())
+    assert payload == {
+        "dataViewId": "dv_1",
+        "dataViewName": "Production Web",
+        component_key: [],
+        "count": 0,
+    }
+
+
 class TestListMetrics:
     """Tests for --list-metrics command."""
 
@@ -5045,7 +5112,7 @@ class TestListMetrics:
         assert output["metrics"][0]["type"] == "N/A"
         assert output["metrics"][0]["description"] == ""
 
-    @patch("cja_auto_sdr.generator._build_metric_display_row")
+    @patch("cja_auto_sdr.cli.commands.discovery._build_metric_display_row")
     @patch("cja_auto_sdr.generator.cjapy")
     @patch("cja_auto_sdr.generator.configure_cjapy")
     @patch("cja_auto_sdr.generator.resolve_active_profile", return_value=None)

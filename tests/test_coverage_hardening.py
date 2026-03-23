@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import pandas as pd
 import pytest
@@ -826,3 +827,20 @@ class TestAcceptsInlineOptionValue:
         assert _accepts_inline_option_value(1) is True
         assert _accepts_inline_option_value(None) is True
         assert _accepts_inline_option_value("?") is True
+
+
+# ---------------------------------------------------------------------------
+# v3.4.5 coverage gap tests (moved from test_v345_coverage_gaps.py)
+# ---------------------------------------------------------------------------
+
+
+class TestPromptForSelectionKeyboardInterrupt:
+    """Lines 58-60: KeyboardInterrupt during input returns None."""
+
+    def test_keyboard_interrupt_returns_none(self) -> None:
+        from cja_auto_sdr.cli.interactive import prompt_for_selection
+
+        options = [("id1", "Option 1"), ("id2", "Option 2")]
+        with patch("builtins.input", side_effect=KeyboardInterrupt):
+            result = prompt_for_selection(options, "Pick one:")
+        assert result is None

@@ -18,7 +18,7 @@ import pandas as pd
 import pytest
 
 import cja_auto_sdr.generator as generator
-from cja_auto_sdr.cli.commands import list as list_commands
+from cja_auto_sdr.cli.commands import discovery as discovery_commands
 from cja_auto_sdr.generator import DiscoveryNotFoundError
 
 
@@ -77,7 +77,7 @@ def test_fetch_dataviews_empty_outputs_match_extracted_module(
 
     result, _ = _assert_generator_fetcher_matches_extracted(
         generator._fetch_dataviews(output_format=output_format),
-        list_commands._fetch_dataviews(output_format=output_format),
+        discovery_commands._fetch_dataviews(output_format=output_format),
         cja_factory,
         is_machine_readable=is_machine_readable,
     )
@@ -112,7 +112,7 @@ def test_fetch_dataviews_non_empty_outputs_match_extracted_module(
 
     result, _ = _assert_generator_fetcher_matches_extracted(
         generator._fetch_dataviews(output_format=output_format, sort_expression="name"),
-        list_commands._fetch_dataviews(output_format=output_format, sort_expression="name"),
+        discovery_commands._fetch_dataviews(output_format=output_format, sort_expression="name"),
         cja_factory,
         is_machine_readable=is_machine_readable,
     )
@@ -154,7 +154,7 @@ def test_fetch_describe_dataview_machine_readable_outputs_match_extracted_module
 
     result, _ = _assert_generator_fetcher_matches_extracted(
         generator._fetch_describe_dataview("dv_1", output_format),
-        list_commands._fetch_describe_dataview("dv_1", output_format),
+        discovery_commands._fetch_describe_dataview("dv_1", output_format),
         cja_factory,
         is_machine_readable=is_machine_readable,
     )
@@ -190,11 +190,11 @@ def test_fetch_describe_dataview_table_wraps_description_and_handles_na_total() 
 
     with (
         patch("cja_auto_sdr.generator.shutil.get_terminal_size", return_value=terminal_size),
-        patch("cja_auto_sdr.cli.commands.list.shutil.get_terminal_size", return_value=terminal_size),
+        patch("cja_auto_sdr.cli.commands.discovery.shutil.get_terminal_size", return_value=terminal_size),
     ):
         result, _ = _assert_generator_fetcher_matches_extracted(
             generator._fetch_describe_dataview("dv_1", "table"),
-            list_commands._fetch_describe_dataview("dv_1", "table"),
+            discovery_commands._fetch_describe_dataview("dv_1", "table"),
             cja_factory,
             is_machine_readable=False,
         )
@@ -237,7 +237,7 @@ def test_fetch_metrics_list_outputs_match_extracted_module(
     )
 
     if output_format == "json":
-        extracted_fetcher = list_commands._fetch_metrics_list(
+        extracted_fetcher = discovery_commands._fetch_metrics_list(
             "dv_1",
             output_format=output_format,
             data_view_name="Metrics View",
@@ -253,7 +253,7 @@ def test_fetch_metrics_list_outputs_match_extracted_module(
     elif output_format == "csv":
         result, _ = _assert_generator_fetcher_matches_extracted(
             generator_fetcher,
-            list_commands._fetch_metrics_list(
+            discovery_commands._fetch_metrics_list(
                 "dv_1",
                 output_format=output_format,
                 data_view_name="Metrics View",
@@ -300,7 +300,7 @@ def test_fetch_metrics_list_empty_outputs_match_extracted_module(
     generator_fetcher = generator._fetch_metrics_list("dv_1", output_format=output_format)
 
     if output_format == "json":
-        extracted_fetcher = list_commands._fetch_metrics_list("dv_1", output_format=output_format)
+        extracted_fetcher = discovery_commands._fetch_metrics_list("dv_1", output_format=output_format)
         generator_result, _ = _run_fetcher(generator_fetcher, cja_factory(), is_machine_readable=is_machine_readable)
         extracted_result, _ = _run_fetcher(extracted_fetcher, cja_factory(), is_machine_readable=is_machine_readable)
         result = generator_result
@@ -312,7 +312,7 @@ def test_fetch_metrics_list_empty_outputs_match_extracted_module(
     elif output_format == "csv":
         result, _ = _assert_generator_fetcher_matches_extracted(
             generator_fetcher,
-            list_commands._fetch_metrics_list("dv_1", output_format=output_format),
+            discovery_commands._fetch_metrics_list("dv_1", output_format=output_format),
             cja_factory,
             is_machine_readable=is_machine_readable,
         )
@@ -354,7 +354,7 @@ def test_fetch_calculated_metrics_list_matches_extracted_module() -> None:
         is_machine_readable=True,
     )
     extracted_result, _ = _run_fetcher(
-        list_commands._fetch_calculated_metrics_list("dv_1", output_format="json"),
+        discovery_commands._fetch_calculated_metrics_list("dv_1", output_format="json"),
         cja_factory(),
         is_machine_readable=True,
     )
@@ -387,7 +387,7 @@ def test_fetch_connections_with_permission_fallback_matches_extracted_module(
 
     result, _ = _assert_generator_fetcher_matches_extracted(
         generator._fetch_connections(output_format=output_format),
-        list_commands._fetch_connections(output_format=output_format),
+        discovery_commands._fetch_connections(output_format=output_format),
         cja_factory,
         is_machine_readable=is_machine_readable,
     )
@@ -425,7 +425,7 @@ def test_fetch_connections_empty_outputs_match_extracted_module(
 
     result, _ = _assert_generator_fetcher_matches_extracted(
         generator._fetch_connections(output_format=output_format),
-        list_commands._fetch_connections(output_format=output_format),
+        discovery_commands._fetch_connections(output_format=output_format),
         cja_factory,
         is_machine_readable=is_machine_readable,
     )
@@ -462,7 +462,7 @@ def test_fetch_connections_accessible_outputs_match_extracted_module(
 
     result, _ = _assert_generator_fetcher_matches_extracted(
         generator._fetch_connections(output_format=output_format),
-        list_commands._fetch_connections(output_format=output_format),
+        discovery_commands._fetch_connections(output_format=output_format),
         cja_factory,
         is_machine_readable=is_machine_readable,
     )
@@ -501,7 +501,7 @@ def test_fetch_datasets_empty_outputs_match_extracted_module(
 
     result, stdout = _assert_generator_fetcher_matches_extracted(
         generator._fetch_datasets(output_format=output_format),
-        list_commands._fetch_datasets(output_format=output_format),
+        discovery_commands._fetch_datasets(output_format=output_format),
         cja_factory,
         is_machine_readable=is_machine_readable,
         capture_stdout=capture_stdout,
@@ -532,7 +532,7 @@ def test_fetch_datasets_without_connection_details_matches_extracted_module(
 
     result, stdout = _assert_generator_fetcher_matches_extracted(
         generator._fetch_datasets(output_format=output_format),
-        list_commands._fetch_datasets(output_format=output_format),
+        discovery_commands._fetch_datasets(output_format=output_format),
         cja_factory,
         is_machine_readable=is_machine_readable,
         capture_stdout=not is_machine_readable,
@@ -545,7 +545,7 @@ def test_fetch_datasets_without_connection_details_matches_extracted_module(
     elif output_format == "csv":
         assert "dv_1,Alpha,conn_a" in result
     else:
-        assert "Found 2 data view(s) with dataset information:" in result
+        assert "Found 2 data view(s) with backing connection information:" in result
         assert "Connection: conn_a" in result
         assert "Processing 2 data view(s)..." in stdout
 
@@ -570,7 +570,7 @@ def test_fetch_datasets_with_connection_details_matches_extracted_module(
 
     result, stdout = _assert_generator_fetcher_matches_extracted(
         generator._fetch_datasets(output_format=output_format),
-        list_commands._fetch_datasets(output_format=output_format),
+        discovery_commands._fetch_datasets(output_format=output_format),
         cja_factory,
         is_machine_readable=is_machine_readable,
         capture_stdout=not is_machine_readable,
@@ -616,7 +616,7 @@ def test_resolve_dataview_name_fallbacks_match_extracted_module(preferred_name: 
     }
 
     assert generator._resolve_dataview_name(cja_generator, "dv_1", preferred_name=preferred_name) == expected
-    assert list_commands._resolve_dataview_name(cja_extracted, "dv_1", preferred_name=preferred_name) == expected
+    assert discovery_commands._resolve_dataview_name(cja_extracted, "dv_1", preferred_name=preferred_name) == expected
 
 
 def test_require_accessible_dataview_rejects_invalid_lookup_payload() -> None:
@@ -655,6 +655,16 @@ def test_apply_discovery_filters_and_sort_handles_non_numeric_values_in_numeric_
     assert [row["name"] for row in result] == ["Charlie", "Bravo", "Alpha"]
 
 
+def test_fetch_dataviews_direct_helper_rejects_negative_limit() -> None:
+    cja = MagicMock()
+    cja.getDataViews.return_value = [{"id": "dv_1", "name": "Alpha", "owner": {"name": "Alice"}}]
+
+    fetcher = generator._fetch_dataviews(output_format="json", limit=-1)
+
+    with pytest.raises(generator.DiscoveryArgumentError, match="--limit cannot be negative"):
+        fetcher(cja, True)
+
+
 def test_segment_and_calculated_metric_display_rows_match_extracted_module() -> None:
     item = {
         "id": "item_1",
@@ -670,7 +680,7 @@ def test_segment_and_calculated_metric_display_rows_match_extracted_module() -> 
         "modifiedDate": "2025-01-02",
     }
 
-    assert generator._build_segment_display_row(item) == list_commands._build_segment_display_row(item)
-    assert generator._build_calculated_metric_display_row(item) == list_commands._build_calculated_metric_display_row(
+    assert generator._build_segment_display_row(item) == discovery_commands._build_segment_display_row(item)
+    assert generator._build_calculated_metric_display_row(
         item
-    )
+    ) == discovery_commands._build_calculated_metric_display_row(item)

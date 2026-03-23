@@ -59,7 +59,7 @@ def _signal_name(signal_number: int) -> str | None:
 
     try:
         return _signal_module.Signals(signal_number).name
-    except ValueError, AttributeError:
+    except (ValueError, AttributeError):
         return None
 
 

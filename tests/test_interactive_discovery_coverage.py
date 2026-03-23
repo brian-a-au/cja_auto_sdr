@@ -251,7 +251,7 @@ class TestToNumericSortValue:
         """Lines 8569-8570: float() ValueError after regex match.
         The regex should prevent this, but we cover the except block anyway.
         We patch the regex guard to force a non-numeric string into float()."""
-        with patch("cja_auto_sdr.generator._NUMERIC_SORT_VALUE_RE") as mock_re:
+        with patch("cja_auto_sdr.cli.commands.discovery._NUMERIC_SORT_VALUE_RE") as mock_re:
             mock_re.fullmatch.return_value = True
             result = _to_numeric_sort_value("not-a-number")
 

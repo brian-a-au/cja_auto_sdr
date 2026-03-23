@@ -222,3 +222,28 @@ def test_lazy_forward_rejects_unknown(module_path):
     mod = importlib.import_module(module_path)
     with pytest.raises(AttributeError):
         getattr(mod, "__nonexistent_test_attr_xyz__")
+
+
+# ---------------------------------------------------------------------------
+# Coverage gap tests (moved from test_small_module_coverage.py)
+# ---------------------------------------------------------------------------
+
+
+class TestMakeGetattrLazyTargetMissing:
+    """Cover line 36: name in export_set but not in mapping."""
+
+    def test_name_in_export_set_not_in_mapping(self):
+        """Line 36: export name exists but has no mapping target."""
+        getattr_fn = make_getattr(
+            "test_module",
+            ["foo", "bar"],
+            mapping={"foo": "os"},
+        )
+        with pytest.raises(AttributeError, match="lazy target missing"):
+            getattr_fn("bar")
+
+    def test_name_not_in_export_set(self):
+        """Line 37: name not in export_set at all."""
+        getattr_fn = make_getattr("test_module", ["foo"], target_module="os")
+        with pytest.raises(AttributeError, match="has no attribute"):
+            getattr_fn("nonexistent")
