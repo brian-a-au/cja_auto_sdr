@@ -178,3 +178,35 @@ def test_diff_writers_wrapper_resolves_to_output_diff():
     from cja_auto_sdr.diff.writers import write_diff_output
 
     assert write_diff_output.__module__ == "cja_auto_sdr.output.diff"
+
+
+# ---------------------------------------------------------------------------
+# output.inventory top-level imports
+# ---------------------------------------------------------------------------
+
+def test_output_inventory_summary_importable():
+    """display_inventory_summary is importable from output.inventory."""
+    from cja_auto_sdr.output.inventory import display_inventory_summary
+
+    assert callable(display_inventory_summary)
+
+
+# ---------------------------------------------------------------------------
+# output.inventory.summary sub-module
+# ---------------------------------------------------------------------------
+
+def test_output_inventory_summary_submodule_importable():
+    """display_inventory_summary is importable from output.inventory.summary."""
+    from cja_auto_sdr.output.inventory.summary import display_inventory_summary
+
+    assert callable(display_inventory_summary)
+
+
+# ---------------------------------------------------------------------------
+# inventory.summary wrapper routing
+# ---------------------------------------------------------------------------
+
+def test_inventory_summary_wrapper_resolves_to_output_inventory():
+    from cja_auto_sdr.inventory.summary import display_inventory_summary
+
+    assert display_inventory_summary.__module__ == "cja_auto_sdr.output.inventory.summary"
