@@ -103,3 +103,78 @@ def test_output_diff_pr_comment_importable():
     from cja_auto_sdr.output.diff.pr_comment import write_diff_pr_comment_output
 
     assert callable(write_diff_pr_comment_output)
+
+
+# ---------------------------------------------------------------------------
+# output.diff file-based writers
+# ---------------------------------------------------------------------------
+
+def test_output_diff_file_writers_importable():
+    """File-based diff writers are importable from output.diff."""
+    from cja_auto_sdr.output.diff import (
+        write_diff_csv_output,
+        write_diff_excel_output,
+        write_diff_html_output,
+        write_diff_json_output,
+        write_diff_output,
+    )
+
+    assert callable(write_diff_json_output)
+    assert callable(write_diff_html_output)
+    assert callable(write_diff_excel_output)
+    assert callable(write_diff_csv_output)
+    assert callable(write_diff_output)
+
+
+# ---------------------------------------------------------------------------
+# output.diff.json sub-module
+# ---------------------------------------------------------------------------
+
+def test_output_diff_json_importable():
+    """JSON diff writer is importable from output.diff.json."""
+    from cja_auto_sdr.output.diff.json import write_diff_json_output
+
+    assert callable(write_diff_json_output)
+
+
+# ---------------------------------------------------------------------------
+# output.diff.html sub-module
+# ---------------------------------------------------------------------------
+
+def test_output_diff_html_importable():
+    """HTML diff writer is importable from output.diff.html."""
+    from cja_auto_sdr.output.diff.html import write_diff_html_output
+
+    assert callable(write_diff_html_output)
+
+
+# ---------------------------------------------------------------------------
+# output.diff.excel sub-module
+# ---------------------------------------------------------------------------
+
+def test_output_diff_excel_importable():
+    """Excel diff writer is importable from output.diff.excel."""
+    from cja_auto_sdr.output.diff.excel import write_diff_excel_output
+
+    assert callable(write_diff_excel_output)
+
+
+# ---------------------------------------------------------------------------
+# output.diff.csv sub-module
+# ---------------------------------------------------------------------------
+
+def test_output_diff_csv_importable():
+    """CSV diff writer is importable from output.diff.csv."""
+    from cja_auto_sdr.output.diff.csv import write_diff_csv_output
+
+    assert callable(write_diff_csv_output)
+
+
+# ---------------------------------------------------------------------------
+# diff.writers wrapper routing
+# ---------------------------------------------------------------------------
+
+def test_diff_writers_wrapper_resolves_to_output_diff():
+    from cja_auto_sdr.diff.writers import write_diff_output
+
+    assert write_diff_output.__module__ == "cja_auto_sdr.output.diff"
