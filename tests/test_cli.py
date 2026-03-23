@@ -355,6 +355,30 @@ class TestUXImprovements:
 
         assert "fail_on_quality, quality_report, max_issues, allow_partial" in help_text
 
+    def test_discovery_help_clarifies_availability_and_ignored_options(self):
+        """Discovery help should set expectations for availability and ignored flags."""
+        parser = parse_arguments(return_parser=True, enable_autocomplete=False)
+        help_text = " ".join(parser.format_help().split())
+
+        assert "List all accessible connections, including dataset details when available, and exit" in help_text
+        assert (
+            "List all data views with backing connection and dataset information when available, then exit" in help_text
+        )
+        assert "Ignores --filter, --exclude, --sort, and --limit." in help_text
+        assert (
+            "For discovery commands and --org-report: include only data views whose name matches this regex pattern"
+            in help_text
+        )
+        assert (
+            "For discovery commands and --org-report: exclude data views whose name matches this regex pattern"
+            in help_text
+        )
+        assert "For discovery commands and --org-report: limit the number of data views to analyze" in help_text
+        assert "Sort discovery list/inspection output by field" in help_text
+        assert "--sort=-dataview_count" in help_text
+        assert "cja_auto_sdr dv_12345 --stats --format json --output -" in help_text
+        assert "cja_auto_sdr --list-dataviews --format json --output -" in help_text
+
     def test_profile_import_flags(self):
         """Test parsing with --profile-import and --profile-overwrite flags."""
         test_args = [

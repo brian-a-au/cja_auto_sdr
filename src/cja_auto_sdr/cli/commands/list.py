@@ -96,6 +96,7 @@ globals().update({name: getattr(_discovery, name) for name in _BACKWARD_COMPAT_D
 # Keep direct module references explicit for linting and runtime clarity.
 DiscoveryArgumentError = _discovery.DiscoveryArgumentError
 DiscoveryNotFoundError = _discovery.DiscoveryNotFoundError
+DiscoveryOutputContractError = _discovery.DiscoveryOutputContractError
 OutputContractError = _discovery.OutputContractError
 _emit_discovery_error = _discovery._emit_discovery_error
 _emit_output_contract_error = _discovery._emit_output_contract_error

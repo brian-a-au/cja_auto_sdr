@@ -35,12 +35,14 @@ class TestListModuleBackwardsCompat:
         from cja_auto_sdr.cli.commands import discovery
         from cja_auto_sdr.cli.commands.list import (
             DiscoveryNotFoundError,
+            DiscoveryOutputContractError,
             _approved_display,
             _fetch_describe_dataview,
             _resolve_dataview_name,
         )
 
         assert DiscoveryNotFoundError is discovery.DiscoveryNotFoundError
+        assert DiscoveryOutputContractError is discovery.DiscoveryOutputContractError
         assert _fetch_describe_dataview is discovery._fetch_describe_dataview
         assert _resolve_dataview_name is discovery._resolve_dataview_name
         assert _approved_display is discovery._approved_display

@@ -186,21 +186,21 @@ Examples:
 
   # Stats in JSON format for scripting
   cja_auto_sdr dv_12345 --stats --format json
-  cja_auto_sdr dv_12345 --stats --output -    # Output to stdout
+  cja_auto_sdr dv_12345 --stats --format json --output -    # JSON to stdout
 
   # Open file after generation
   cja_auto_sdr dv_12345 --open
 
   # List data views in JSON format (for scripting/piping)
   cja_auto_sdr --list-dataviews --format json
-  cja_auto_sdr --list-dataviews --output -    # JSON to stdout
+  cja_auto_sdr --list-dataviews --format json --output -    # JSON to stdout
 
-  # List connections with their datasets
+  # List connections with dataset details when available
   cja_auto_sdr --list-connections
   cja_auto_sdr --list-connections --format json
   cja_auto_sdr --list-connections --format csv --output connections.csv
 
-  # List data views with their backing connections and datasets
+  # List data views with backing connection and dataset information when available
   cja_auto_sdr --list-datasets
   cja_auto_sdr --list-datasets --format json
   cja_auto_sdr --list-datasets --format csv --output datasets.csv
@@ -486,20 +486,20 @@ Requirements:
     discovery_mx.add_argument(
         "--list-connections",
         action="store_true",
-        help="List all accessible connections with their datasets and exit",
+        help="List all accessible connections, including dataset details when available, and exit",
     )
 
     discovery_mx.add_argument(
         "--list-datasets",
         action="store_true",
-        help="List all data views with their backing connections and datasets, then exit",
+        help="List all data views with backing connection and dataset information when available, then exit",
     )
 
     discovery_mx.add_argument(
         "--describe-dataview",
         type=str,
         metavar="DATA_VIEW_ID_OR_NAME",
-        help="Show detailed metadata and component counts for a single data view. Accepts a data view ID (dv_...) or name. Honors --name-match.",
+        help="Show detailed metadata and component counts for a single data view. Accepts a data view ID (dv_...) or name. Honors --name-match. Ignores --filter, --exclude, --sort, and --limit.",
     )
 
     discovery_mx.add_argument(
@@ -535,7 +535,8 @@ Requirements:
         type=str,
         dest="discovery_sort",
         metavar="FIELD",
-        help='Sort discovery output by field (prefix "-" for descending), e.g. --sort name or --sort=-id',
+        help='Sort discovery list/inspection output by field (supported fields vary by command; prefix "-" for descending), '
+        "e.g. --sort name, --sort=-id, or --sort=-dataview_count",
     )
 
     parser.add_argument(
@@ -1061,7 +1062,7 @@ Requirements:
         type=str,
         metavar="PATTERN",
         dest="org_filter",
-        help="Include only data views whose name matches this regex pattern "
+        help="For discovery commands and --org-report: include only data views whose name matches this regex pattern "
         '(e.g., "Prod.*" or "prod|production"). Avoid complex nested quantifiers',
     )
 
@@ -1070,7 +1071,7 @@ Requirements:
         type=str,
         metavar="PATTERN",
         dest="org_exclude",
-        help="Exclude data views whose name matches this regex pattern "
+        help="For discovery commands and --org-report: exclude data views whose name matches this regex pattern "
         '(e.g., "Test.*|Dev.*|sandbox"). Avoid complex nested quantifiers',
     )
 
@@ -1079,7 +1080,7 @@ Requirements:
         type=int,
         metavar="N",
         dest="org_limit",
-        help="Limit the number of data views to analyze (useful for testing or large orgs)",
+        help="For discovery commands and --org-report: limit the number of data views to analyze (useful for testing or large orgs)",
     )
 
     org_group.add_argument(

@@ -1573,7 +1573,10 @@ def _fetch_datasets(
         if _no_conn_details:
             lines.append(_CONN_PERM_WARNING)
             lines.append("")
-        lines.append(f"Found {len(display_data)} data view(s) with dataset information:")
+        if _no_conn_details:
+            lines.append(f"Found {len(display_data)} data view(s) with backing connection information:")
+        else:
+            lines.append(f"Found {len(display_data)} data view(s) with connection and dataset information:")
         lines.append("")
         for entry in display_data:
             lines.append(f"Data View: {entry['name']} ({entry['id']})")

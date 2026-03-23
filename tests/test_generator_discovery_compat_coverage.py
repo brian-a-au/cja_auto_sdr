@@ -545,7 +545,7 @@ def test_fetch_datasets_without_connection_details_matches_extracted_module(
     elif output_format == "csv":
         assert "dv_1,Alpha,conn_a" in result
     else:
-        assert "Found 2 data view(s) with dataset information:" in result
+        assert "Found 2 data view(s) with backing connection information:" in result
         assert "Connection: conn_a" in result
         assert "Processing 2 data view(s)..." in stdout
 
