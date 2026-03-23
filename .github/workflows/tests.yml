@@ -69,7 +69,7 @@ jobs:
         run: |
           set -o pipefail
           uv run pytest tests/ -v --tb=short \
-            -m "unit and not slow" \
+            -m "unit and not slow" -n auto \
             --cov=cja_auto_sdr --cov-report=term --cov-fail-under=95 \
             --durations=25 | tee /tmp/test-unit.log
           {
