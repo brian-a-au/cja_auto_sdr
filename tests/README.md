@@ -8,6 +8,7 @@ This directory contains automated tests for the CJA SDR Generator.
 tests/
 ├── __init__.py                      # Test package initialization
 ├── conftest.py                      # Pytest fixtures and configuration
+├── category_rules.py                # Shared file-based marker/category rules
 ├── test_api_tuning.py               # API worker auto-tuning tests
 ├── test_backwards_compat.py         # Backwards compatibility tests
 ├── test_batch_processor.py          # Batch processor tests

@@ -347,40 +347,61 @@ cja_auto_sdr "Production Analytics"
 
 ## Project Structure
 
+High-level overview of the current repository layout (representative, not exhaustive):
+
 ```
 cja_auto_sdr/
+├── .github/
+│   └── workflows/             # CI, lint, version-sync, and release checks
 ├── src/
 │   └── cja_auto_sdr/          # Main package (src-layout)
 │       ├── __init__.py        # Package init with version
-│       ├── generator.py       # Main SDR generator (CLI entry point)
+│       ├── __main__.py        # Installed CLI entry point (`cja_auto_sdr`, `cja-auto-sdr`)
+│       ├── generator.py       # Main SDR generation flow and legacy full CLI path
 │       ├── api/               # API communication layer
 │       │   ├── cache.py       # Validation result caching
 │       │   ├── client.py      # CJA client initialization
 │       │   ├── fetch.py       # Parallel API data fetching
 │       │   ├── quality.py     # Data quality validation
+│       │   ├── quality_policy.py # Quality gates and policy helpers
 │       │   ├── resilience.py  # Retry, circuit breaker
 │       │   ├── tuning.py      # API worker auto-tuning
 │       │   └── validation.py  # Config & input validation
 │       ├── cli/               # CLI parsing and interactive mode
 │       │   ├── commands/      # Subcommand handlers
+│       │   ├── execution.py   # Execution-context resolution
 │       │   ├── interactive.py # Interactive data view selection
 │       │   ├── main.py        # CLI entry orchestration
-│       │   └── parser.py      # Argument parser definitions
+│       │   ├── mode_scoped_options.py # Option validation by command mode
+│       │   ├── option_resolution.py # Shared option normalization
+│       │   ├── parser.py      # Argument parser definitions
+│       │   └── standalone_policy.py # Standalone command policy rules
 │       ├── core/              # Shared core utilities
 │       │   ├── colors.py      # ANSI color helpers
 │       │   ├── config.py      # Configuration dataclasses
+│       │   ├── config_validation.py # Config validation helpers
 │       │   ├── constants.py   # Global constants
 │       │   ├── credentials.py # Credential loading
+│       │   ├── discovery_*.py # Discovery normalization/payload helpers
+│       │   ├── error_policies.py # Error-handling policy helpers
 │       │   ├── exceptions.py  # Custom exception hierarchy
+│       │   ├── exit_codes.py  # Stable exit-code definitions
+│       │   ├── json_io.py     # JSON read/write helpers
+│       │   ├── lazy.py        # Lazy-loading helpers
 │       │   ├── logging.py     # Log setup and formatting
+│       │   ├── perf.py        # Lightweight performance helpers
 │       │   ├── profiles.py    # Multi-org profile management
 │       │   └── version.py     # Single-source version string
+│       ├── data/              # Shared data package hooks
 │       ├── diff/              # Data view comparison
+│       │   ├── cli.py         # Diff CLI dispatch helpers
+│       │   ├── commands.py    # Diff command orchestration
 │       │   ├── comparator.py  # Diff logic and change detection
 │       │   ├── git.py         # Git snapshot integration
 │       │   ├── models.py      # Snapshot and diff data models
 │       │   ├── snapshot.py    # Snapshot save/load/prune
 │       │   └── writers.py     # Diff output formatters
+│       ├── git/               # Git package compatibility surface
 │       ├── inventory/         # Component inventory modules
 │       │   ├── calculated_metrics.py
 │       │   ├── derived_fields.py
@@ -390,11 +411,18 @@ cja_auto_sdr/
 │       ├── org/               # Org-wide analysis
 │       │   ├── analyzer.py    # OrgComponentAnalyzer
 │       │   ├── cache.py       # Report caching
-│       │   └── models.py      # Data classes for org analysis
+│       │   ├── identifiers.py # Org/data-view identifier helpers
+│       │   ├── models.py      # Data classes for org analysis
+│       │   ├── snapshot_utils.py # Org snapshot helpers
+│       │   ├── trending.py    # Historical trend analysis
+│       │   └── writers/       # Org-report writers
 │       ├── output/            # Output generation
+│       │   ├── diff/          # Diff output implementations
 │       │   ├── excel.py       # Excel formatting
+│       │   ├── inventory/     # Inventory summary output helpers
 │       │   ├── protocols.py   # OutputWriter protocol
 │       │   ├── registry.py    # Format registry
+│       │   ├── sdr/           # SDR output assembly
 │       │   └── writers/       # CSV, HTML, JSON, Markdown writers
 │       └── pipeline/          # Processing pipeline
 │           ├── batch.py       # Batch processor
@@ -402,14 +430,6 @@ cja_auto_sdr/
 │           ├── models.py      # Pipeline data models
 │           ├── single.py      # Single data view processing
 │           └── workers.py     # Worker coordination
-├── scripts/                   # Utility scripts
-├── pyproject.toml             # Project configuration and dependencies
-├── uv.lock                   # Dependency lock file for reproducible builds
-├── README.md                  # This file
-├── CHANGELOG.md               # Version history and release notes
-├── LICENSE                    # License file
-├── config.json.example        # Config file template
-├── .env.example               # Environment variable template
 ├── docs/                      # Documentation (20+ guides)
 │   ├── QUICKSTART_GUIDE.md    # Getting started guide
 │   ├── CONFIGURATION.md       # Profiles, config.json & env vars
@@ -419,7 +439,13 @@ cja_auto_sdr/
 │   ├── GIT_INTEGRATION.md     # Git integration guide
 │   ├── ORG_WIDE_ANALYSIS.md   # Org-wide report guide
 │   └── ...                    # Additional guides
+├── examples/                  # Automation and GitHub Actions examples
+├── scripts/                   # Utility scripts
 ├── tests/                     # Test suite (6,730+ tests)
+│   ├── category_rules.py      # File-based test-category rules
+│   ├── conftest.py            # Pytest fixtures and auto-marking
+│   ├── README.md              # Test inventory and execution guide
+│   └── test_*.py              # 114 collected test modules
 ├── sample_outputs/            # Example output files
 │   ├── excel/                 # Sample Excel SDR
 │   ├── csv/                   # Sample CSV output
@@ -428,8 +454,16 @@ cja_auto_sdr/
 │   ├── markdown/              # Sample Markdown output
 │   ├── diff/                  # Sample diff comparison outputs
 │   └── git-snapshots/         # Sample Git integration snapshots
-├── snapshots/                 # Saved Data View snapshots
 ├── logs/                      # Generated log files
+├── snapshots/                 # Saved Data View snapshots
+├── sdr-snapshots/             # Additional SDR snapshot artifacts
+├── pyproject.toml             # Project configuration and dependencies
+├── uv.lock                    # Dependency lock file for reproducible builds
+├── README.md                  # This file
+├── CHANGELOG.md               # Version history and release notes
+├── LICENSE                    # License file
+├── config.json.example        # Config file template
+├── .env.example               # Environment variable template
 └── *.xlsx                     # Generated SDR files
 ```
 
