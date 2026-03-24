@@ -22,5 +22,7 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.14"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
       - name: Verify version strings are in sync
         run: uv run python scripts/check_version_sync.py

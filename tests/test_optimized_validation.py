@@ -12,6 +12,7 @@ import time
 from collections.abc import Callable
 
 import pandas as pd
+import pytest
 
 # Import the class we're testing
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -361,8 +362,13 @@ class TestOptimizedVsOriginalValidation:
         assert original_issues.iloc[0]["Severity"] == optimized_issues.iloc[0]["Severity"]
 
 
+@pytest.mark.slow
 class TestOptimizedValidationPerformance:
-    """Test performance improvements of optimized validation"""
+    """Test performance improvements of optimized validation.
+
+    These assertions compare short wall-clock timings and are more stable in
+    the serial slow slice than in the xdist-driven unit gate.
+    """
 
     def test_optimized_is_faster_than_original(self):
         """Test that optimized validation is faster than original with realistic dataset"""

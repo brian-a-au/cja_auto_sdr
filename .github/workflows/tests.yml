@@ -44,6 +44,8 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: ${{ matrix.python-version }}
+          enable-cache: true
+          cache-dependency-glob: uv.lock
       - name: Sync dependencies
         run: uv sync --dev
       - name: Run focused release-gate contract tests
@@ -60,16 +62,16 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: ${{ matrix.python-version }}
+          enable-cache: true
+          cache-dependency-glob: uv.lock
       - name: Sync dependencies
         run: uv sync --dev --extra clustering
-      - name: Verify version strings are in sync
-        run: uv run python scripts/check_version_sync.py
       - name: Run unit tests with coverage (95% gate applies to this slice)
         shell: bash
         run: |
           set -o pipefail
           uv run pytest tests/ -v --tb=short \
-            -m "unit and not slow" \
+            -m "unit and not slow" -n auto \
             --cov=cja_auto_sdr --cov-report=term --cov-fail-under=95 \
             --durations=25 | tee /tmp/test-unit.log
           {
@@ -90,6 +92,8 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: ${{ matrix.python-version }}
+          enable-cache: true
+          cache-dependency-glob: uv.lock
       - name: Sync dependencies
         run: uv sync --dev --extra clustering
       - name: Run integration, end-to-end, and slow test slices
@@ -115,6 +119,8 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: ${{ matrix.python-version }}
+          enable-cache: true
+          cache-dependency-glob: uv.lock
       - name: Sync dependencies
         run: uv sync --dev
       - name: Run run-summary JSON contract tests
@@ -134,6 +140,8 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: ${{ matrix.python-version }}
+          enable-cache: true
+          cache-dependency-glob: uv.lock
       - name: Sync dependencies
         run: uv sync --dev
       - name: Smoke test - version, help, exit-codes
@@ -152,6 +160,8 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.14"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
       - name: Clean build artifacts
         run: rm -f dist/*.whl dist/*.tar.gz
       - name: Build package

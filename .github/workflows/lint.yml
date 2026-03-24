@@ -22,6 +22,8 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.14"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
       - name: Sync dependencies
         run: uv sync --dev
       - name: Ruff check
@@ -56,5 +58,7 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.14"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
       - name: Verify lockfile is in sync
         run: uv lock --check

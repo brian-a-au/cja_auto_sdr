@@ -7,10 +7,13 @@ display functions.
 
 from __future__ import annotations
 
+import inspect
 import json
 import logging
 import os
 from unittest.mock import MagicMock
+
+import pytest
 
 from cja_auto_sdr.diff.models import (
     ChangeType,
@@ -562,6 +565,21 @@ class TestMarkdownOutputWithInventory:
         # Side-by-side should show modified metrics detail
         assert "Modified Metrics - Side by Side" in content
 
+    def test_markdown_side_by_side_escapes_pipe_and_empty_values(self):
+        from cja_auto_sdr.output.diff.markdown import _format_markdown_side_by_side
+
+        diff = ComponentDiff(
+            id="m1",
+            name="Escaping Test",
+            change_type=ChangeType.MODIFIED,
+            changed_fields={"description": (None, "new | value")},
+        )
+
+        content = "\n".join(_format_markdown_side_by_side(diff, "Before", "After"))
+
+        assert "*(empty)*" in content
+        assert "new \\| value" in content
+
 
 # ==================== HTML output with inventory ====================
 
@@ -658,6 +676,65 @@ class TestHtmlOutputWithInventory:
             content = f.read()
 
         assert "No changes" in content
+
+    def test_html_output_escapes_metadata_and_diff_details(self, tmp_path):
+        logger = _make_logger()
+        result = DiffResult(
+            summary=DiffSummary(
+                source_metrics_count=1,
+                target_metrics_count=1,
+                source_dimensions_count=0,
+                target_dimensions_count=0,
+                metrics_modified=1,
+                source_calc_metrics_count=1,
+                target_calc_metrics_count=1,
+                calc_metrics_modified=1,
+            ),
+            metadata_diff=_make_metadata(
+                source_name="Source <script>",
+                target_name="Target & Co",
+                source_id="<src>",
+                target_id="t&1",
+            ),
+            metric_diffs=[
+                ComponentDiff(
+                    id="m<script>",
+                    name="Metric <unsafe>",
+                    change_type=ChangeType.MODIFIED,
+                    changed_fields={"description": ("old <b>", "new & better")},
+                ),
+            ],
+            dimension_diffs=[],
+            generated_at="2025-01-15 12:00:00",
+            tool_version="3.2.8",
+            calc_metrics_diffs=[
+                InventoryItemDiff(
+                    id="cm&1",
+                    name="Calc <unsafe>",
+                    change_type=ChangeType.MODIFIED,
+                    inventory_type="calculated_metric",
+                    changed_fields={"formula": ("old <expr>", "new & expr")},
+                ),
+            ],
+            segments_diffs=None,
+        )
+
+        html_file = write_diff_html_output(result, "test_diff", str(tmp_path), logger)
+
+        with open(html_file, encoding="utf-8") as f:
+            content = f.read()
+
+        assert "Source &lt;script&gt;" in content
+        assert "Target &amp; Co" in content
+        assert "<code>&lt;src&gt;</code>" in content
+        assert "Metric &lt;unsafe&gt;" in content
+        assert "Calc &lt;unsafe&gt;" in content
+        assert "&lt;b&gt;" in content
+        assert "new &amp; better" in content
+        assert "old &lt;expr&gt;" in content
+        assert "new &amp; expr" in content
+        assert "Metric <unsafe>" not in content
+        assert "Calc <unsafe>" not in content
 
 
 # ==================== Excel output with inventory ====================
@@ -872,6 +949,29 @@ class TestPrCommentOutputWithInventory:
         output = write_diff_pr_comment_output(result)
 
         assert "CJA SDR Generator" in output
+
+    def test_pr_comment_accepts_public_changes_only_keyword(self):
+        result = _make_diff_result_with_inventory()
+        output = write_diff_pr_comment_output(result, changes_only=True)
+
+        assert "Data View Comparison" in output
+
+    def test_pr_comment_signature_exposes_public_changes_only_keyword(self):
+        signature = inspect.signature(write_diff_pr_comment_output)
+
+        assert list(signature.parameters) == ["diff_result", "changes_only"]
+
+    def test_pr_comment_rejects_private_changes_only_keyword(self):
+        result = _make_diff_result_with_inventory()
+
+        with pytest.raises(TypeError, match="unexpected keyword argument '_changes_only'"):
+            write_diff_pr_comment_output(result, _changes_only=True)
+
+    def test_pr_comment_rejects_unexpected_keyword(self):
+        result = _make_diff_result_with_inventory()
+
+        with pytest.raises(TypeError, match="unexpected keyword argument 'unexpected'"):
+            write_diff_pr_comment_output(result, unexpected=True)
 
 
 # ==================== _get_inventory_change_detail ====================
@@ -1180,6 +1280,38 @@ class TestDisplayInventorySummary:
         scores = [item["complexity"] for item in result["high_complexity_items"]]
         assert scores == sorted(scores, reverse=True)
 
+    def test_display_high_complexity_item_summary_is_truncated(self):
+        calc_inv = MagicMock()
+        calc_inv.metrics = [
+            MagicMock(
+                metric_name="Very Complex Metric",
+                complexity_score=88,
+                formula_summary="very long formula " * 8,
+            ),
+        ]
+        calc_inv.get_summary.return_value = {
+            "total_calculated_metrics": 1,
+            "governance": {"approved_count": 0, "shared_count": 0, "tagged_count": 0},
+            "complexity": {
+                "average": 88.0,
+                "max": 88.0,
+                "high_complexity_count": 1,
+                "elevated_complexity_count": 0,
+            },
+        }
+
+        result = display_inventory_summary(
+            data_view_id="dv_test",
+            data_view_name="Test DV",
+            calculated_inventory=calc_inv,
+            output_format="console",
+            quiet=True,
+        )
+
+        item = result["high_complexity_items"][0]
+        assert item["summary"].endswith("...")
+        assert len(item["summary"]) == 63
+
     def test_display_quiet_mode_suppresses_output(self, capsys):
         seg_inv = self._make_segments_inventory()
 
@@ -1212,6 +1344,28 @@ class TestDisplayInventorySummary:
         # Should have created a JSON file
         json_files = [f for f in os.listdir(str(tmp_path)) if f.endswith(".json")]
         assert len(json_files) == 1
+
+    def test_display_json_output_sanitizes_and_truncates_filename(self, tmp_path):
+        import re
+
+        seg_inv = self._make_segments_inventory()
+        long_name = "Prod / Main: Segments? <Unsafe> " + ("x" * 80)
+
+        display_inventory_summary(
+            data_view_id="dv_test",
+            data_view_name=long_name,
+            segments_inventory=seg_inv,
+            output_format="json",
+            output_dir=str(tmp_path),
+            quiet=True,
+        )
+
+        json_files = list(tmp_path.glob("*_inventory_summary.json"))
+        assert len(json_files) == 1
+
+        safe_name = json_files[0].name.removesuffix("_inventory_summary.json")
+        assert len(safe_name) <= 50
+        assert re.fullmatch(r"[\w-]+", safe_name)
 
     def test_display_all_format_creates_json_and_console(self, tmp_path, capsys):
         seg_inv = self._make_segments_inventory()

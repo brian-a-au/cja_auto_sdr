@@ -385,6 +385,7 @@ class TestValidationCache:
         assert stats["hit_rate"] == pytest.approx(50.0)
         assert stats["size"] == 1
 
+    @pytest.mark.slow
     def test_performance_improvement(self, sample_metrics_df):
         """Cache should provide significant performance improvement"""
         logger = logging.getLogger("test")

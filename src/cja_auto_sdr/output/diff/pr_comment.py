@@ -1,0 +1,124 @@
+"""PR comment diff output renderer — GitHub/GitLab optimized markdown.
+
+Extracted from generator.py. Provides:
+- write_diff_pr_comment_output: Markdown formatted for PR comments with collapsible details
+"""
+
+from __future__ import annotations
+
+from cja_auto_sdr.diff.models import ChangeType, DiffResult
+from cja_auto_sdr.output.diff.common import (
+    _format_diff_value,
+    detect_breaking_changes,
+)
+
+
+def write_diff_pr_comment_output(
+    diff_result: DiffResult,
+    changes_only: bool = False,
+) -> str:
+    """
+    Write diff output in GitHub/GitLab PR comment format with collapsible details.
+
+    Args:
+        diff_result: The DiffResult to output
+        changes_only: Only include changed items
+
+    Returns:
+        Markdown formatted string optimized for PR comments
+    """
+    # PR comments currently summarize changed items only; keep this flag for
+    # API parity with the other diff writers and future extensibility.
+    _ = changes_only
+
+    lines: list[str] = []
+    summary = diff_result.summary
+
+    # Header
+    lines.append("### 📊 Data View Comparison")
+    lines.append("")
+    lines.append(f"**{diff_result.source_label}** → **{diff_result.target_label}**")
+    lines.append("")
+
+    # Summary table
+    lines.append("| Component | Source | Target | Added | Removed | Modified | Unchanged | Changed |")
+    lines.append("|-----------|-------:|-------:|------:|--------:|---------:|----------:|--------:|")
+    lines.append(
+        f"| Metrics | {summary.source_metrics_count} | {summary.target_metrics_count} | "
+        f"+{summary.metrics_added} | -{summary.metrics_removed} | ~{summary.metrics_modified} | "
+        f"{summary.metrics_unchanged} | {summary.metrics_change_percent:.1f}% |",
+    )
+    lines.append(
+        f"| Dimensions | {summary.source_dimensions_count} | {summary.target_dimensions_count} | "
+        f"+{summary.dimensions_added} | -{summary.dimensions_removed} | ~{summary.dimensions_modified} | "
+        f"{summary.dimensions_unchanged} | {summary.dimensions_change_percent:.1f}% |",
+    )
+    lines.append("")
+
+    # Use shared detect_breaking_changes for breaking change detection
+    breaking = detect_breaking_changes(diff_result)
+    # Filter to only type/schema changes for the table display
+    breaking_field_changes = [b for b in breaking if b["change_type"] in ("type_changed", "schema_changed")]
+
+    if breaking_field_changes:
+        lines.append("#### ⚠ Breaking Changes Detected")
+        lines.append("")
+        lines.append("| Component | Field | Before | After |")
+        lines.append("|-----------|-------|--------|-------|")
+        for bc in breaking_field_changes[:10]:
+            lines.append(
+                f"| `{bc['component_id']}` | {bc['field']} | `{_format_diff_value(bc['old_value'], truncate=False)}` | `{_format_diff_value(bc['new_value'], truncate=False)}` |",
+            )
+        if len(breaking_field_changes) > 10:
+            lines.append(f"| ... | | | +{len(breaking_field_changes) - 10} more |")
+        lines.append("")
+
+    # Natural language summary
+    lines.append(f"**Summary:** {summary.natural_language_summary}")
+    lines.append("")
+
+    # Collapsible details
+    metric_changes = [d for d in diff_result.metric_diffs if d.change_type != ChangeType.UNCHANGED]
+    dim_changes = [d for d in diff_result.dimension_diffs if d.change_type != ChangeType.UNCHANGED]
+
+    if metric_changes:
+        lines.append("<details>")
+        lines.append(f"<summary>📈 Metrics Changes ({len(metric_changes)})</summary>")
+        lines.append("")
+        lines.append("| Change | ID | Name |")
+        lines.append("|--------|----|----- |")
+        for diff in metric_changes[:25]:
+            symbol = {ChangeType.ADDED: "➕", ChangeType.REMOVED: "➖", ChangeType.MODIFIED: "✏️"}.get(
+                diff.change_type,
+                "",
+            )
+            lines.append(f"| {symbol} | `{diff.id}` | {diff.name} |")
+        if len(metric_changes) > 25:
+            lines.append(f"| ... | | +{len(metric_changes) - 25} more |")
+        lines.append("")
+        lines.append("</details>")
+        lines.append("")
+
+    if dim_changes:
+        lines.append("<details>")
+        lines.append(f"<summary>📏 Dimensions Changes ({len(dim_changes)})</summary>")
+        lines.append("")
+        lines.append("| Change | ID | Name |")
+        lines.append("|--------|----|----- |")
+        for diff in dim_changes[:25]:
+            symbol = {ChangeType.ADDED: "➕", ChangeType.REMOVED: "➖", ChangeType.MODIFIED: "✏️"}.get(
+                diff.change_type,
+                "",
+            )
+            lines.append(f"| {symbol} | `{diff.id}` | {diff.name} |")
+        if len(dim_changes) > 25:
+            lines.append(f"| ... | | +{len(dim_changes) - 25} more |")
+        lines.append("")
+        lines.append("</details>")
+        lines.append("")
+
+    # Footer
+    lines.append("---")
+    lines.append(f"*Generated by CJA SDR Generator v{diff_result.tool_version}*")
+
+    return "\n".join(lines)
