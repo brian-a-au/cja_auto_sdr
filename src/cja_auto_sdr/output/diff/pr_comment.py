@@ -13,17 +13,24 @@ from cja_auto_sdr.output.diff.common import (
 )
 
 
-def write_diff_pr_comment_output(diff_result: DiffResult, _changes_only: bool = False) -> str:
+def write_diff_pr_comment_output(
+    diff_result: DiffResult,
+    changes_only: bool = False,
+) -> str:
     """
     Write diff output in GitHub/GitLab PR comment format with collapsible details.
 
     Args:
         diff_result: The DiffResult to output
-        _changes_only: Only include changed items
+        changes_only: Only include changed items
 
     Returns:
         Markdown formatted string optimized for PR comments
     """
+    # PR comments currently summarize changed items only; keep this flag for
+    # API parity with the other diff writers and future extensibility.
+    _ = changes_only
+
     lines: list[str] = []
     summary = diff_result.summary
 

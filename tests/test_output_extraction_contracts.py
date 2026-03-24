@@ -7,6 +7,36 @@ and remain callable with the expected signatures.
 
 from __future__ import annotations
 
+import importlib
+from inspect import signature
+
+import pytest
+
+
+def _make_diff_result():
+    from cja_auto_sdr.diff.models import ChangeType, ComponentDiff, DiffResult, DiffSummary, MetadataDiff
+
+    return DiffResult(
+        summary=DiffSummary(
+            source_metrics_count=1,
+            target_metrics_count=2,
+            metrics_added=1,
+        ),
+        metadata_diff=MetadataDiff(
+            source_name="Before",
+            target_name="After",
+            source_id="dv_before",
+            target_id="dv_after",
+        ),
+        metric_diffs=[ComponentDiff(id="metric_1", name="Metric 1", change_type=ChangeType.ADDED)],
+        dimension_diffs=[],
+        source_label="Before",
+        target_label="After",
+        generated_at="2025-01-15 12:00:00",
+        tool_version="3.2.8",
+    )
+
+
 # ---------------------------------------------------------------------------
 # output.diff top-level imports
 # ---------------------------------------------------------------------------
@@ -111,6 +141,44 @@ def test_output_diff_pr_comment_importable():
     assert callable(write_diff_pr_comment_output)
 
 
+def test_output_diff_pr_comment_signature_preserves_public_keyword():
+    """PR comment renderer should expose `changes_only`, not `_changes_only`."""
+    from cja_auto_sdr.output.diff.pr_comment import write_diff_pr_comment_output
+
+    assert list(signature(write_diff_pr_comment_output).parameters) == ["diff_result", "changes_only"]
+
+
+@pytest.mark.parametrize(
+    "module_name",
+    [
+        "cja_auto_sdr.generator",
+        "cja_auto_sdr.output.diff",
+        "cja_auto_sdr.diff.writers",
+    ],
+)
+def test_pr_comment_accepts_public_keyword_across_export_surfaces(module_name):
+    write_diff_pr_comment_output = getattr(importlib.import_module(module_name), "write_diff_pr_comment_output")
+
+    output = write_diff_pr_comment_output(_make_diff_result(), changes_only=True)
+
+    assert "Data View Comparison" in output
+
+
+@pytest.mark.parametrize(
+    "module_name",
+    [
+        "cja_auto_sdr.generator",
+        "cja_auto_sdr.output.diff",
+        "cja_auto_sdr.diff.writers",
+    ],
+)
+def test_pr_comment_rejects_private_keyword_across_export_surfaces(module_name):
+    write_diff_pr_comment_output = getattr(importlib.import_module(module_name), "write_diff_pr_comment_output")
+
+    with pytest.raises(TypeError, match="unexpected keyword argument '_changes_only'"):
+        write_diff_pr_comment_output(_make_diff_result(), _changes_only=True)
+
+
 # ---------------------------------------------------------------------------
 # output.diff file-based writers
 # ---------------------------------------------------------------------------
@@ -190,6 +258,12 @@ def test_diff_writers_wrapper_resolves_to_output_diff():
     from cja_auto_sdr.diff.writers import write_diff_output
 
     assert write_diff_output.__module__ == "cja_auto_sdr.output.diff"
+
+
+def test_diff_writers_pr_comment_signature_preserves_public_keyword():
+    from cja_auto_sdr.diff.writers import write_diff_pr_comment_output
+
+    assert list(signature(write_diff_pr_comment_output).parameters) == ["diff_result", "changes_only"]
 
 
 # ---------------------------------------------------------------------------

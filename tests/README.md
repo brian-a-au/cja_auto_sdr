@@ -125,7 +125,7 @@ tests/
 └── README.md                        # This file
 ```
 
-**Total: 6,718 comprehensive tests**
+**Total: 6,730 comprehensive tests**
 
 ### Test Count Breakdown
 
@@ -134,16 +134,16 @@ tests/
 
 | Category | Tests | Files | Notes |
 |----------|-------|-------|-------|
-| `unit` | 6,612 | 108 | Default primary category for files without explicit integration/e2e/smoke scope |
+| `unit` | 6,624 | 108 | Default primary category for files without explicit integration/e2e/smoke scope |
 | `integration` | 73 | 3 | Cross-module integration suites |
 | `e2e` | 23 | 2 | End-to-end suites with a mocked external boundary |
 | `smoke` | 10 | 1 | Lightweight command-mode coverage |
 | `slow` | 7 | 1 | Overlay marker; these tests are also counted in a primary category |
-| **Primary Total** | **6,718** | **114** | **unit + integration + e2e + smoke** |
+| **Primary Total** | **6,730** | **114** | **unit + integration + e2e + smoke** |
 
 | CI Slice | Tests | Files | Selector |
 |----------|-------|-------|----------|
-| `test-unit` | 6,605 | 107 | `-m "unit and not slow"` |
+| `test-unit` | 6,617 | 107 | `-m "unit and not slow"` |
 | `test-integration` | 103 | 6 | `-m "integration or e2e or slow"` |
 | `smoke-test` | 10 | 1 | `-m smoke` |
 
@@ -194,7 +194,7 @@ tests/
 | `test_discovery_extraction.py` | 46 | Discovery module extraction and backwards-compat contracts |
 | `test_diagnostic_events.py` | 23 | Structured diagnostic event vocabulary, logger adapters, and redaction |
 | `test_output_content_validation.py` | 29 | Output format content validation (CSV, JSON, HTML, Excel, Markdown roundtrip) |
-| `test_output_extraction_contracts.py` | 15 | Extraction contracts for output.diff and output.inventory |
+| `test_output_extraction_contracts.py` | 23 | Extraction contracts for output.diff and output.inventory |
 | `test_malformed_api_responses.py` | 20 | Negative tests for malformed/unexpected API responses |
 | `test_main_entry_points.py` | 43 | main() and _main_impl() entry points, dispatch, run_state, run summary |
 | `test_quality_policy_and_run_summary.py` | 160 | Quality policy functions and run summary/status inference |
@@ -218,7 +218,7 @@ tests/
 | `test_generator_coverage.py` | 143 | Generator utility functions — coercion, normalization, diff formatting |
 | `test_generator_discovery_compat_coverage.py` | 42 | Generator discovery helper parity with extracted list-command implementations |
 | `test_segments_coverage.py` | 78 | Segment comparison operators, container types, sequence variants |
-| `test_diff_inventory_output.py` | 92 | Inventory diff output across all formats (console, JSON, HTML, Excel, MD, CSV) |
+| `test_diff_inventory_output.py` | 96 | Inventory diff output across all formats (console, JSON, HTML, Excel, MD, CSV) |
 | `test_cli_command_handlers.py` | 150 | CLI dispatch for --stats, --org-report, --list-snapshots, discovery inspection, diff config unpacking |
 | `test_profile_management.py` | 51 | Interactive profile creation, import, test, show |
 | `test_snapshot_commands.py` | 59 | Snapshot creation, comparison, name resolution |
@@ -267,7 +267,7 @@ tests/
 | `test_exit_codes.py` | 11 | Exit code helpers and signal detection tests |
 | `test_json_io.py` | 5 | JSON I/O atomic write and read tests |
 | `test_lock_info_normalization.py` | 54 | Lock-info normalization classmethod direct unit tests |
-| **Total** | **6,718** | **Collected via pytest --collect-only** |
+| **Total** | **6,730** | **Collected via pytest --collect-only** |
 
 ## Running Tests
 
@@ -725,7 +725,7 @@ the `tests/README.md` inventory tree or count table.
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (6,718 tests total)
+- [x] Comprehensive test coverage (6,730 tests total)
 - [x] Org-wide analysis tests (test_org_report.py) - 209 tests (including large org scaling, output path aliases, memory warnings, smart cache invalidation)
 - [x] Org-wide analysis integration tests (test_org_report_integration.py) - 17 tests (end-to-end flows, caching, filtering, governance thresholds)
 - [x] Profile management tests (test_profiles.py) - 77 tests

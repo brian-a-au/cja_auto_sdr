@@ -7,10 +7,13 @@ display functions.
 
 from __future__ import annotations
 
+import inspect
 import json
 import logging
 import os
 from unittest.mock import MagicMock
+
+import pytest
 
 from cja_auto_sdr.diff.models import (
     ChangeType,
@@ -946,6 +949,29 @@ class TestPrCommentOutputWithInventory:
         output = write_diff_pr_comment_output(result)
 
         assert "CJA SDR Generator" in output
+
+    def test_pr_comment_accepts_public_changes_only_keyword(self):
+        result = _make_diff_result_with_inventory()
+        output = write_diff_pr_comment_output(result, changes_only=True)
+
+        assert "Data View Comparison" in output
+
+    def test_pr_comment_signature_exposes_public_changes_only_keyword(self):
+        signature = inspect.signature(write_diff_pr_comment_output)
+
+        assert list(signature.parameters) == ["diff_result", "changes_only"]
+
+    def test_pr_comment_rejects_private_changes_only_keyword(self):
+        result = _make_diff_result_with_inventory()
+
+        with pytest.raises(TypeError, match="unexpected keyword argument '_changes_only'"):
+            write_diff_pr_comment_output(result, _changes_only=True)
+
+    def test_pr_comment_rejects_unexpected_keyword(self):
+        result = _make_diff_result_with_inventory()
+
+        with pytest.raises(TypeError, match="unexpected keyword argument 'unexpected'"):
+            write_diff_pr_comment_output(result, unexpected=True)
 
 
 # ==================== _get_inventory_change_detail ====================
