@@ -299,3 +299,105 @@ def test_inventory_summary_wrapper_resolves_to_output_inventory():
     from cja_auto_sdr.inventory.summary import display_inventory_summary
 
     assert display_inventory_summary.__module__ == "cja_auto_sdr.output.inventory.summary"
+
+
+# ---------------------------------------------------------------------------
+# output.run_summary direct imports
+# ---------------------------------------------------------------------------
+
+
+def test_output_run_summary_aggregate_quality_issues_importable():
+    """aggregate_quality_issues is importable from output.run_summary."""
+    from cja_auto_sdr.output.run_summary import aggregate_quality_issues
+
+    assert callable(aggregate_quality_issues)
+
+
+def test_output_run_summary_write_run_summary_output_importable():
+    """write_run_summary_output is importable from output.run_summary."""
+    from cja_auto_sdr.output.run_summary import write_run_summary_output
+
+    assert callable(write_run_summary_output)
+
+
+def test_output_run_summary_append_github_step_summary_importable():
+    """append_github_step_summary is importable from output.run_summary."""
+    from cja_auto_sdr.output.run_summary import append_github_step_summary
+
+    assert callable(append_github_step_summary)
+
+
+def test_output_run_summary_build_quality_step_summary_importable():
+    """build_quality_step_summary is importable from output.run_summary."""
+    from cja_auto_sdr.output.run_summary import build_quality_step_summary
+
+    assert callable(build_quality_step_summary)
+
+
+def test_output_run_summary_build_diff_step_summary_importable():
+    """build_diff_step_summary is importable from output.run_summary."""
+    from cja_auto_sdr.output.run_summary import build_diff_step_summary
+
+    assert callable(build_diff_step_summary)
+
+
+def test_output_run_summary_build_org_step_summary_importable():
+    """build_org_step_summary is importable from output.run_summary."""
+    from cja_auto_sdr.output.run_summary import build_org_step_summary
+
+    assert callable(build_org_step_summary)
+
+
+# ---------------------------------------------------------------------------
+# output.run_summary signature contracts
+# ---------------------------------------------------------------------------
+
+
+_RUN_SUMMARY_SIGNATURES = {
+    "aggregate_quality_issues": ["results"],
+    "write_run_summary_output": ["summary", "output", "output_dir"],
+    "append_github_step_summary": ["markdown", "logger"],
+    "build_quality_step_summary": ["results"],
+    "build_diff_step_summary": ["diff_result"],
+    "build_org_step_summary": ["result"],
+}
+
+
+@pytest.mark.parametrize(
+    ("func_name", "expected_params"),
+    list(_RUN_SUMMARY_SIGNATURES.items()),
+    ids=list(_RUN_SUMMARY_SIGNATURES.keys()),
+)
+def test_output_run_summary_signatures(func_name, expected_params):
+    """Public argument names and ordering must remain unchanged."""
+    mod = importlib.import_module("cja_auto_sdr.output.run_summary")
+    func = getattr(mod, func_name)
+    assert list(signature(func).parameters) == expected_params
+
+
+@pytest.mark.parametrize(
+    ("func_name", "expected_params"),
+    list(_RUN_SUMMARY_SIGNATURES.items()),
+    ids=list(_RUN_SUMMARY_SIGNATURES.keys()),
+)
+def test_generator_run_summary_signatures(func_name, expected_params):
+    """Generator-level names must remain patchable with matching signatures."""
+    mod = importlib.import_module("cja_auto_sdr.generator")
+    func = getattr(mod, func_name)
+    assert list(signature(func).parameters) == expected_params
+
+
+# ---------------------------------------------------------------------------
+# generator-level patch surface compatibility
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "func_name",
+    list(_RUN_SUMMARY_SIGNATURES.keys()),
+    ids=list(_RUN_SUMMARY_SIGNATURES.keys()),
+)
+def test_generator_run_summary_names_are_callable(func_name):
+    """Generator-level run-summary names must remain callable."""
+    mod = importlib.import_module("cja_auto_sdr.generator")
+    assert callable(getattr(mod, func_name))
