@@ -1603,6 +1603,21 @@ class TestBuildQualityStepSummary:
         assert "| Severity | Count |" not in summary
         assert "| Clean View | `dv_clean` | 0 | NONE |" in summary
 
+    def test_generator_wrapper_respects_generator_level_aggregate_patch(self):
+        from cja_auto_sdr import generator
+
+        clean = self._make_result("dv_clean", "Clean View", dq_issues=[])
+
+        with patch(
+            "cja_auto_sdr.generator.aggregate_quality_issues",
+            return_value=[{"Severity": "HIGH", "Message": "patched"}],
+        ) as aggregate_mock:
+            summary = generator.build_quality_step_summary([clean])
+
+        aggregate_mock.assert_called_once_with([clean])
+        assert "- Total quality issues: 1" in summary
+        assert "| HIGH | 1 |" in summary
+
 
 # ==================== load_quality_policy ====================
 

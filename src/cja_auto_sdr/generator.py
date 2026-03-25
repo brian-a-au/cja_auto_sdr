@@ -2206,16 +2206,58 @@ from cja_auto_sdr.diff.models import (
 )
 from cja_auto_sdr.diff.snapshot import SnapshotManager, parse_retention_period
 
-# write_run_summary_output, append_github_step_summary, build_quality_step_summary,
+# write_run_summary_output, append_github_step_summary,
 # build_diff_step_summary, build_org_step_summary -> output/run_summary.py
 # (re-imported here for patch compatibility)
 from cja_auto_sdr.output.run_summary import (
     append_github_step_summary,
     build_diff_step_summary,
     build_org_step_summary,
-    build_quality_step_summary,
     write_run_summary_output,
 )
+
+
+def build_quality_step_summary(results: list[ProcessingResult]) -> str:
+    """Build markdown summary table for quality issues.
+
+    This wrapper intentionally resolves ``aggregate_quality_issues`` from
+    ``generator.py`` so generator-level monkeypatches keep affecting both
+    quality-summary call paths after the run-summary extraction.
+    """
+    total_views = len(results)
+    successful_views = sum(1 for r in results if r.success)
+    all_issues = aggregate_quality_issues(results)
+    severity_counts = count_quality_issues_by_severity(all_issues)
+
+    lines = [
+        "### Data Quality Summary",
+        "",
+        f"- Data views processed: {successful_views}/{total_views}",
+        f"- Total quality issues: {len(all_issues)}",
+        "",
+    ]
+
+    if severity_counts:
+        lines.extend(["| Severity | Count |", "|---|---:|"])
+        for severity in QUALITY_SEVERITY_ORDER:
+            count = severity_counts.get(severity, 0)
+            if count > 0:
+                lines.append(f"| {severity} | {count} |")
+        lines.append("")
+
+    lines.extend(["| Data View | ID | Issues | Highest Severity |", "|---|---|---:|---|"])
+    for result in results:
+        highest = "NONE"
+        for severity in QUALITY_SEVERITY_ORDER:
+            if result.dq_severity_counts.get(severity, 0) > 0:
+                highest = severity
+                break
+        lines.append(
+            f"| {result.data_view_name or '-'} | `{result.data_view_id}` | {result.dq_issues_count} | {highest} |",
+        )
+
+    return "\n".join(lines)
+
 
 # ==================== PROFILE MANAGEMENT ====================
 
