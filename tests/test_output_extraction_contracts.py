@@ -633,7 +633,14 @@ def test_org_writers_file_writer_package_root_continuity(name):
 _DIFF_WRITER_SIGNATURES = {
     "write_diff_console_output": ["diff_result", "changes_only", "summary_only", "side_by_side", "use_color"],
     "write_diff_grouped_by_field_output": ["diff_result", "use_color", "limit"],
-    "write_diff_markdown_output": ["diff_result", "base_filename", "output_dir", "logger", "changes_only", "side_by_side"],
+    "write_diff_markdown_output": [
+        "diff_result",
+        "base_filename",
+        "output_dir",
+        "logger",
+        "changes_only",
+        "side_by_side",
+    ],
     "write_diff_pr_comment_output": ["diff_result", "changes_only"],
     "write_diff_json_output": ["diff_result", "base_filename", "output_dir", "logger", "changes_only"],
     "write_diff_html_output": ["diff_result", "base_filename", "output_dir", "logger", "changes_only"],
@@ -641,9 +648,17 @@ _DIFF_WRITER_SIGNATURES = {
     "write_diff_csv_output": ["diff_result", "base_filename", "output_dir", "logger", "changes_only"],
     "detect_breaking_changes": ["diff_result"],
     "write_diff_output": [
-        "diff_result", "output_format", "base_filename", "output_dir", "logger",
-        "changes_only", "summary_only", "side_by_side", "use_color",
-        "group_by_field", "group_by_field_limit",
+        "diff_result",
+        "output_format",
+        "base_filename",
+        "output_dir",
+        "logger",
+        "changes_only",
+        "summary_only",
+        "side_by_side",
+        "use_color",
+        "group_by_field",
+        "group_by_field_limit",
     ],
 }
 
