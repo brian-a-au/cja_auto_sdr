@@ -553,3 +553,71 @@ def test_generator_org_writer_helpers_are_callable(name):
     """Generator-level org-writer helper re-exports must remain callable."""
     mod = importlib.import_module("cja_auto_sdr.generator")
     assert callable(getattr(mod, name))
+
+
+# ---------------------------------------------------------------------------
+# org.writers.excel sub-module
+# ---------------------------------------------------------------------------
+
+
+def test_org_writers_excel_importable():
+    """Excel org-report writer is importable from org.writers.excel."""
+    from cja_auto_sdr.org.writers.excel import write_org_report_excel
+
+    assert callable(write_org_report_excel)
+
+
+# ---------------------------------------------------------------------------
+# org.writers.markdown sub-module
+# ---------------------------------------------------------------------------
+
+
+def test_org_writers_markdown_importable():
+    """Markdown org-report writer is importable from org.writers.markdown."""
+    from cja_auto_sdr.org.writers.markdown import write_org_report_markdown
+
+    assert callable(write_org_report_markdown)
+
+
+# ---------------------------------------------------------------------------
+# org.writers.html sub-module
+# ---------------------------------------------------------------------------
+
+
+def test_org_writers_html_importable():
+    """HTML org-report writer is importable from org.writers.html."""
+    from cja_auto_sdr.org.writers.html import write_org_report_html
+
+    assert callable(write_org_report_html)
+
+
+# ---------------------------------------------------------------------------
+# org.writers.csv sub-module
+# ---------------------------------------------------------------------------
+
+
+def test_org_writers_csv_importable():
+    """CSV org-report writer is importable from org.writers.csv."""
+    from cja_auto_sdr.org.writers.csv import write_org_report_csv
+
+    assert callable(write_org_report_csv)
+
+
+# ---------------------------------------------------------------------------
+# org.writers package-root continuity (file writers)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "write_org_report_excel",
+        "write_org_report_markdown",
+        "write_org_report_html",
+        "write_org_report_csv",
+    ],
+)
+def test_org_writers_file_writer_package_root_continuity(name):
+    """File-format writers remain importable from the org.writers package root."""
+    mod = importlib.import_module("cja_auto_sdr.org.writers")
+    assert callable(getattr(mod, name))
