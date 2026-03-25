@@ -1,8 +1,10 @@
 """Contract tests for output subpackage extraction.
 
 These tests verify that symbols extracted from generator.py into the
-output.diff subpackage are importable from their new canonical locations
-and remain callable with the expected signatures.
+output subpackages (output.diff, output.run_summary, output.inventory)
+and org.writers subpackages are importable from their canonical locations,
+remain callable with the expected signatures, and preserve public keyword
+names and argument ordering across all export surfaces.
 """
 
 from __future__ import annotations
@@ -621,3 +623,225 @@ def test_org_writers_file_writer_package_root_continuity(name):
     """File-format writers remain importable from the org.writers package root."""
     mod = importlib.import_module("cja_auto_sdr.org.writers")
     assert callable(getattr(mod, name))
+
+
+# ---------------------------------------------------------------------------
+# output.diff signature contracts
+# ---------------------------------------------------------------------------
+
+
+_DIFF_WRITER_SIGNATURES = {
+    "write_diff_console_output": ["diff_result", "changes_only", "summary_only", "side_by_side", "use_color"],
+    "write_diff_grouped_by_field_output": ["diff_result", "use_color", "limit"],
+    "write_diff_markdown_output": ["diff_result", "base_filename", "output_dir", "logger", "changes_only", "side_by_side"],
+    "write_diff_pr_comment_output": ["diff_result", "changes_only"],
+    "write_diff_json_output": ["diff_result", "base_filename", "output_dir", "logger", "changes_only"],
+    "write_diff_html_output": ["diff_result", "base_filename", "output_dir", "logger", "changes_only"],
+    "write_diff_excel_output": ["diff_result", "base_filename", "output_dir", "logger", "changes_only"],
+    "write_diff_csv_output": ["diff_result", "base_filename", "output_dir", "logger", "changes_only"],
+    "detect_breaking_changes": ["diff_result"],
+    "write_diff_output": [
+        "diff_result", "output_format", "base_filename", "output_dir", "logger",
+        "changes_only", "summary_only", "side_by_side", "use_color",
+        "group_by_field", "group_by_field_limit",
+    ],
+}
+
+
+@pytest.mark.parametrize(
+    ("func_name", "expected_params"),
+    list(_DIFF_WRITER_SIGNATURES.items()),
+    ids=list(_DIFF_WRITER_SIGNATURES.keys()),
+)
+def test_output_diff_writer_signatures(func_name, expected_params):
+    """Diff writer keyword names and argument ordering must remain unchanged."""
+    mod = importlib.import_module("cja_auto_sdr.output.diff")
+    func = getattr(mod, func_name)
+    assert list(signature(func).parameters) == expected_params
+
+
+@pytest.mark.parametrize(
+    ("func_name", "expected_params"),
+    list(_DIFF_WRITER_SIGNATURES.items()),
+    ids=list(_DIFF_WRITER_SIGNATURES.keys()),
+)
+def test_generator_diff_writer_signatures(func_name, expected_params):
+    """Generator-level diff writers must preserve matching signatures."""
+    mod = importlib.import_module("cja_auto_sdr.generator")
+    func = getattr(mod, func_name)
+    assert list(signature(func).parameters) == expected_params
+
+
+# ---------------------------------------------------------------------------
+# output.diff __all__ continuity
+# ---------------------------------------------------------------------------
+
+
+def test_output_diff_all_continuity():
+    """output.diff __all__ must contain all public diff writer names."""
+    mod = importlib.import_module("cja_auto_sdr.output.diff")
+    expected = {
+        "detect_breaking_changes",
+        "write_diff_console_output",
+        "write_diff_csv_output",
+        "write_diff_excel_output",
+        "write_diff_grouped_by_field_output",
+        "write_diff_html_output",
+        "write_diff_json_output",
+        "write_diff_markdown_output",
+        "write_diff_output",
+        "write_diff_pr_comment_output",
+    }
+    assert expected.issubset(set(mod.__all__))
+
+
+# ---------------------------------------------------------------------------
+# org.writers helper signature contracts
+# ---------------------------------------------------------------------------
+
+
+_ORG_WRITER_HELPER_SIGNATURES = {
+    "_render_distribution_bar": ["count", "total", "width"],
+    "_format_recommendation_context_entries": ["rec"],
+    "_normalize_recommendation_for_json": ["raw_rec"],
+    "_flatten_recommendation_for_tabular": ["rec"],
+    "_validate_org_report_output_request": ["output_format", "output_to_stdout", "status_print"],
+}
+
+
+@pytest.mark.parametrize(
+    ("func_name", "expected_params"),
+    list(_ORG_WRITER_HELPER_SIGNATURES.items()),
+    ids=list(_ORG_WRITER_HELPER_SIGNATURES.keys()),
+)
+def test_org_writers_common_helper_signatures(func_name, expected_params):
+    """Org writer helper keyword names and ordering must remain unchanged."""
+    mod = importlib.import_module("cja_auto_sdr.org.writers.common")
+    func = getattr(mod, func_name)
+    assert list(signature(func).parameters) == expected_params
+
+
+@pytest.mark.parametrize(
+    ("func_name", "expected_params"),
+    list(_ORG_WRITER_HELPER_SIGNATURES.items()),
+    ids=list(_ORG_WRITER_HELPER_SIGNATURES.keys()),
+)
+def test_generator_org_writer_helper_signatures(func_name, expected_params):
+    """Generator-level org-writer helpers must preserve matching signatures."""
+    mod = importlib.import_module("cja_auto_sdr.generator")
+    func = getattr(mod, func_name)
+    assert list(signature(func).parameters) == expected_params
+
+
+# ---------------------------------------------------------------------------
+# org.writers format writer signature contracts
+# ---------------------------------------------------------------------------
+
+
+_ORG_FORMAT_WRITER_SIGNATURES = {
+    "write_org_report_console": ["result", "config", "quiet", "trending"],
+    "write_org_report_stats_only": ["result", "quiet", "trending"],
+    "write_org_report_comparison_console": ["comparison", "quiet"],
+    "build_org_report_json_data": ["result", "trending"],
+    "write_org_report_json": ["result", "output_path", "output_dir", "logger", "trending"],
+    "write_org_report_excel": ["result", "output_path", "output_dir", "logger", "trending"],
+    "write_org_report_markdown": ["result", "output_path", "output_dir", "logger", "trending"],
+    "write_org_report_html": ["result", "output_path", "output_dir", "logger", "trending"],
+    "write_org_report_csv": ["result", "output_path", "output_dir", "logger", "trending"],
+}
+
+
+@pytest.mark.parametrize(
+    ("func_name", "expected_params"),
+    list(_ORG_FORMAT_WRITER_SIGNATURES.items()),
+    ids=list(_ORG_FORMAT_WRITER_SIGNATURES.keys()),
+)
+def test_org_format_writer_signatures(func_name, expected_params):
+    """Org format writer keyword names and ordering must remain unchanged."""
+    mod = importlib.import_module("cja_auto_sdr.org.writers")
+    func = getattr(mod, func_name)
+    assert list(signature(func).parameters) == expected_params
+
+
+@pytest.mark.parametrize(
+    ("func_name", "expected_params"),
+    list(_ORG_FORMAT_WRITER_SIGNATURES.items()),
+    ids=list(_ORG_FORMAT_WRITER_SIGNATURES.keys()),
+)
+def test_generator_org_format_writer_signatures(func_name, expected_params):
+    """Generator-level org format writers must preserve matching signatures."""
+    mod = importlib.import_module("cja_auto_sdr.generator")
+    func = getattr(mod, func_name)
+    assert list(signature(func).parameters) == expected_params
+
+
+# ---------------------------------------------------------------------------
+# org.writers __all__ continuity
+# ---------------------------------------------------------------------------
+
+
+def test_org_writers_all_continuity():
+    """org.writers __all__ must contain all public org writer names."""
+    mod = importlib.import_module("cja_auto_sdr.org.writers")
+    expected = {
+        "_flatten_recommendation_for_tabular",
+        "_format_recommendation_context_entries",
+        "_normalize_org_report_output_format",
+        "_normalize_recommendation_for_json",
+        "_normalize_recommendation_severity",
+        "_render_distribution_bar",
+        "_validate_org_report_output_request",
+        "build_org_report_json_data",
+        "write_org_report_comparison_console",
+        "write_org_report_console",
+        "write_org_report_csv",
+        "write_org_report_excel",
+        "write_org_report_html",
+        "write_org_report_json",
+        "write_org_report_markdown",
+        "write_org_report_stats_only",
+    }
+    assert set(mod.__all__) == expected
+
+
+# ---------------------------------------------------------------------------
+# trending helper signature contracts (task-specified subset)
+# ---------------------------------------------------------------------------
+
+
+_TRENDING_SIGNATURE_CONTRACTS = {
+    "_format_trending_timestamp_short": ["ts"],
+    "_render_console_trending_table": ["column_labels", "metric_rows", "value_formatter"],
+    "_render_html_trending_table": ["column_labels", "metric_rows", "value_formatter"],
+    "_render_markdown_trending_table": ["column_labels", "metric_rows", "value_formatter"],
+    "_render_trending_console": ["trending"],
+    "_render_trending_html": ["trending"],
+    "_render_trending_markdown": ["trending"],
+    "_ranked_drift_entries": ["trending", "limit"],
+    "_top_drift_scores": ["drift_scores", "limit"],
+    "_trending_date_range": ["snapshots"],
+}
+
+
+@pytest.mark.parametrize(
+    ("func_name", "expected_params"),
+    list(_TRENDING_SIGNATURE_CONTRACTS.items()),
+    ids=list(_TRENDING_SIGNATURE_CONTRACTS.keys()),
+)
+def test_trending_helper_signatures(func_name, expected_params):
+    """Trending helper keyword names and ordering must remain unchanged."""
+    mod = importlib.import_module("cja_auto_sdr.org.writers.trending")
+    func = getattr(mod, func_name)
+    assert list(signature(func).parameters) == expected_params
+
+
+@pytest.mark.parametrize(
+    ("func_name", "expected_params"),
+    list(_TRENDING_SIGNATURE_CONTRACTS.items()),
+    ids=list(_TRENDING_SIGNATURE_CONTRACTS.keys()),
+)
+def test_trending_helper_signatures_via_package_root(func_name, expected_params):
+    """Trending helpers at org.writers root must preserve matching signatures."""
+    mod = importlib.import_module("cja_auto_sdr.org.writers")
+    func = getattr(mod, func_name)
+    assert list(signature(func).parameters) == expected_params

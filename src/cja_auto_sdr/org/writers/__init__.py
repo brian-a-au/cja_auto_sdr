@@ -1,8 +1,10 @@
 """
 Org report writer functions.
 
-Extracted from generator.py — all functions that render OrgReportResult
-into various output formats (console, JSON, Excel, Markdown, HTML, CSV).
+Renders OrgReportResult into various output formats (console, JSON,
+Excel, Markdown, HTML, CSV).  Shared helpers (common.py), trending
+renderers (trending.py), and per-format writers are split across
+submodules; this package root re-exports everything for compatibility.
 """
 
 from __future__ import annotations
