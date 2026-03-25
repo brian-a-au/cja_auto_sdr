@@ -401,3 +401,155 @@ def test_generator_run_summary_names_are_callable(func_name):
     """Generator-level run-summary names must remain callable."""
     mod = importlib.import_module("cja_auto_sdr.generator")
     assert callable(getattr(mod, func_name))
+
+
+# ---------------------------------------------------------------------------
+# org.writers.common sub-module
+# ---------------------------------------------------------------------------
+
+
+def test_org_writers_common_importable():
+    """Shared normalization/validation helpers are importable from org.writers.common."""
+    from cja_auto_sdr.org.writers.common import (
+        _flatten_recommendation_for_tabular,
+        _format_recommendation_context_entries,
+        _normalize_org_report_output_format,
+        _normalize_recommendation_for_json,
+        _normalize_recommendation_severity,
+        _render_distribution_bar,
+        _validate_org_report_output_request,
+    )
+
+    assert callable(_flatten_recommendation_for_tabular)
+    assert callable(_format_recommendation_context_entries)
+    assert callable(_normalize_org_report_output_format)
+    assert callable(_normalize_recommendation_for_json)
+    assert callable(_normalize_recommendation_severity)
+    assert callable(_render_distribution_bar)
+    assert callable(_validate_org_report_output_request)
+
+
+# ---------------------------------------------------------------------------
+# org.writers.trending sub-module
+# ---------------------------------------------------------------------------
+
+
+_TRENDING_HELPERS = [
+    "_format_trending_timestamp_short",
+    "_build_trending_metric_rows",
+    "_trending_snapshot_metric_rows",
+    "_trending_delta_metric_rows",
+    "_trending_snapshot_column_specs",
+    "_format_trending_period_label",
+    "_trending_delta_column_specs",
+    "_format_signed_trending_value",
+    "_stringify_trending_value",
+    "_sorted_drift_score_items",
+    "_resolve_trending_dv_name",
+    "_format_trending_dv_label",
+    "_ranked_drift_entries",
+    "_top_drift_scores",
+    "_trending_date_range",
+    "_render_console_trending_table",
+    "_render_markdown_trending_table",
+    "_escape_markdown_table_cell",
+    "_render_html_trending_table",
+    "_trending_matrix_rows",
+    "_trending_snapshot_csv_rows",
+    "_trending_delta_csv_rows",
+    "_render_trending_console",
+    "_render_trending_markdown",
+    "_render_trending_html",
+    "_print_trending_console_section",
+    "_trending_snapshots_to_dicts",
+]
+
+
+@pytest.mark.parametrize("name", _TRENDING_HELPERS, ids=_TRENDING_HELPERS)
+def test_org_writers_trending_helpers_importable(name):
+    """Trending helpers are importable from org.writers.trending."""
+    mod = importlib.import_module("cja_auto_sdr.org.writers.trending")
+    assert callable(getattr(mod, name))
+
+
+@pytest.mark.parametrize("name", _TRENDING_HELPERS, ids=_TRENDING_HELPERS)
+def test_org_writers_trending_helpers_reexported_at_package_root(name):
+    """Trending helpers remain importable from the org.writers package root."""
+    mod = importlib.import_module("cja_auto_sdr.org.writers")
+    assert callable(getattr(mod, name))
+
+
+# ---------------------------------------------------------------------------
+# org.writers.console sub-module
+# ---------------------------------------------------------------------------
+
+
+def test_org_writers_console_importable():
+    """Console org-report renderers are importable from org.writers.console."""
+    from cja_auto_sdr.org.writers.console import (
+        write_org_report_comparison_console,
+        write_org_report_console,
+        write_org_report_stats_only,
+    )
+
+    assert callable(write_org_report_console)
+    assert callable(write_org_report_stats_only)
+    assert callable(write_org_report_comparison_console)
+
+
+# ---------------------------------------------------------------------------
+# org.writers.json sub-module
+# ---------------------------------------------------------------------------
+
+
+def test_org_writers_json_importable():
+    """JSON org-report builder/writer are importable from org.writers.json."""
+    from cja_auto_sdr.org.writers.json import (
+        build_org_report_json_data,
+        write_org_report_json,
+    )
+
+    assert callable(build_org_report_json_data)
+    assert callable(write_org_report_json)
+
+
+# ---------------------------------------------------------------------------
+# org.writers package-root continuity (console + JSON)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "write_org_report_console",
+        "write_org_report_stats_only",
+        "write_org_report_comparison_console",
+        "build_org_report_json_data",
+        "write_org_report_json",
+    ],
+)
+def test_org_writers_package_root_continuity(name):
+    """Console/JSON writers remain importable from the org.writers package root."""
+    mod = importlib.import_module("cja_auto_sdr.org.writers")
+    assert callable(getattr(mod, name))
+
+
+# ---------------------------------------------------------------------------
+# generator-level org-writer patch surface
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "_render_distribution_bar",
+        "_format_recommendation_context_entries",
+        "_normalize_recommendation_for_json",
+        "_flatten_recommendation_for_tabular",
+        "_validate_org_report_output_request",
+    ],
+)
+def test_generator_org_writer_helpers_are_callable(name):
+    """Generator-level org-writer helper re-exports must remain callable."""
+    mod = importlib.import_module("cja_auto_sdr.generator")
+    assert callable(getattr(mod, name))

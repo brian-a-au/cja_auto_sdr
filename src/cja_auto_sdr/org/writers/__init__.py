@@ -7,30 +7,85 @@ into various output formats (console, JSON, Excel, Markdown, HTML, CSV).
 
 from __future__ import annotations
 
-import html
-import json
+import html as _html
 import logging
-from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
 
-from cja_auto_sdr.core.colors import ConsoleColors
-from cja_auto_sdr.core.constants import BANNER_WIDTH, FORMAT_ALIASES
 from cja_auto_sdr.core.version import __version__
 from cja_auto_sdr.org.models import (
     ComponentInfo,
-    OrgReportComparison,
-    OrgReportConfig,
     OrgReportResult,
     OrgReportTrending,
-    TrendingDelta,
-    TrendingSnapshot,
-    _snapshot_effective_data_view_count,
 )
 from cja_auto_sdr.org.snapshot_utils import sorted_snapshot_strings
+
+# ---------------------------------------------------------------------------
+# Re-exports from common.py
+# ---------------------------------------------------------------------------
+from cja_auto_sdr.org.writers.common import (
+    _flatten_recommendation_for_tabular,
+    _format_recommendation_context_entries,
+    _normalize_org_report_output_format,
+    _normalize_recommendation_for_json,
+    _normalize_recommendation_severity,
+    _render_distribution_bar,
+    _validate_org_report_output_request,
+)
+
+# ---------------------------------------------------------------------------
+# Re-exports from console.py
+# ---------------------------------------------------------------------------
+from cja_auto_sdr.org.writers.console import (
+    write_org_report_comparison_console,
+    write_org_report_console,
+    write_org_report_stats_only,
+)
+
+# ---------------------------------------------------------------------------
+# Re-exports from json.py
+# ---------------------------------------------------------------------------
+from cja_auto_sdr.org.writers.json import (
+    build_org_report_json_data,
+    write_org_report_json,
+)
+
+# ---------------------------------------------------------------------------
+# Re-exports from trending.py  (private helpers that tests import directly)
+# ---------------------------------------------------------------------------
+from cja_auto_sdr.org.writers.trending import (
+    _TRENDING_METRIC_SPECS,
+    _build_trending_metric_rows,
+    _escape_markdown_table_cell,
+    _format_signed_trending_value,
+    _format_trending_dv_label,
+    _format_trending_period_label,
+    _format_trending_timestamp_short,
+    _print_trending_console_section,
+    _ranked_drift_entries,
+    _render_console_trending_table,
+    _render_html_trending_table,
+    _render_markdown_trending_table,
+    _render_trending_console,
+    _render_trending_html,
+    _render_trending_markdown,
+    _resolve_trending_dv_name,
+    _sorted_drift_score_items,
+    _stringify_trending_value,
+    _top_drift_scores,
+    _trending_date_range,
+    _trending_delta_column_specs,
+    _trending_delta_csv_rows,
+    _trending_delta_metric_rows,
+    _trending_matrix_rows,
+    _trending_snapshot_column_specs,
+    _trending_snapshot_csv_rows,
+    _trending_snapshot_metric_rows,
+    _trending_snapshots_to_dicts,
+)
 
 __all__ = [
     "_flatten_recommendation_for_tabular",
@@ -50,1262 +105,6 @@ __all__ = [
     "write_org_report_markdown",
     "write_org_report_stats_only",
 ]
-
-
-_TRENDING_METRIC_SPECS: tuple[tuple[str, str, str], ...] = (
-    ("Data Views", "data_view_count", "data_view_delta"),
-    ("Components", "component_count", "component_delta"),
-    ("Core", "core_count", "core_delta"),
-    ("Isolated", "isolated_count", "isolated_delta"),
-    ("High-Sim Pairs", "high_sim_pair_count", "high_sim_pair_delta"),
-)
-
-
-def _format_trending_timestamp_short(ts: str) -> str:
-    """Format an ISO timestamp to a short month-day label like 'Jan 12'."""
-    try:
-        dt = datetime.fromisoformat(ts)
-        return dt.strftime("%b %d")
-    except (ValueError, AttributeError):
-        return ts[:10]
-
-
-def _build_trending_metric_rows(
-    records: list[TrendingSnapshot] | list[TrendingDelta],
-    *,
-    delta: bool,
-) -> list[tuple[str, list[int]]]:
-    """Return standard trending metric rows for snapshots or period deltas."""
-    metric_rows: list[tuple[str, list[int]]] = []
-    for label, snapshot_attr, delta_attr in _TRENDING_METRIC_SPECS:
-        if delta:
-            values = [getattr(record, delta_attr) for record in records]
-        elif snapshot_attr == "data_view_count":
-            values = [_snapshot_effective_data_view_count(record) for record in records]
-        else:
-            values = [getattr(record, snapshot_attr) for record in records]
-        metric_rows.append((label, values))
-    return metric_rows
-
-
-def _trending_snapshot_metric_rows(
-    snapshots: list[TrendingSnapshot],
-) -> list[tuple[str, list[int]]]:
-    """Return the standard snapshot metric rows for trending tables."""
-    return _build_trending_metric_rows(snapshots, delta=False)
-
-
-def _trending_delta_metric_rows(
-    deltas: list[TrendingDelta],
-) -> list[tuple[str, list[int]]]:
-    """Return the standard delta metric rows for trending tables."""
-    return _build_trending_metric_rows(deltas, delta=True)
-
-
-def _trending_snapshot_column_specs(
-    snapshots: list[TrendingSnapshot],
-) -> list[tuple[str, str]]:
-    """Return unique worksheet keys paired with display labels for trending snapshots."""
-    return [
-        (f"snapshot_{index + 1}", _format_trending_timestamp_short(snapshot.timestamp))
-        for index, snapshot in enumerate(snapshots)
-    ]
-
-
-def _format_trending_period_label(from_timestamp: str, to_timestamp: str) -> str:
-    """Return a compact human-readable label for one trending period."""
-    return f"{_format_trending_timestamp_short(from_timestamp)} -> {_format_trending_timestamp_short(to_timestamp)}"
-
-
-def _trending_delta_column_specs(
-    deltas: list[TrendingDelta],
-) -> list[tuple[str, str]]:
-    """Return unique worksheet keys paired with display labels for period deltas."""
-    return [
-        (f"period_{index + 1}", _format_trending_period_label(delta.from_timestamp, delta.to_timestamp))
-        for index, delta in enumerate(deltas)
-    ]
-
-
-def _format_signed_trending_value(value: int) -> str:
-    """Return a signed integer string for trend deltas."""
-    if value > 0:
-        return f"+{value}"
-    return str(value)
-
-
-def _stringify_trending_value(value: int) -> str:
-    """Return a plain string representation for trend table cells."""
-    return str(value)
-
-
-def _render_console_trending_table(
-    column_labels: list[str],
-    metric_rows: list[tuple[str, list[int]]],
-    *,
-    value_formatter: Callable[[int], str] | None = None,
-) -> list[str]:
-    """Render one console-friendly trending table."""
-    if not column_labels or not metric_rows:
-        return []
-
-    render_value = value_formatter or _stringify_trending_value
-    label_width = max(20, *(len(label) for label, _values in metric_rows))
-    column_width = max(9, *(len(label) for label in column_labels))
-
-    lines = [f"{'':{label_width}s}" + "".join(f"{label:>{column_width}s}" for label in column_labels)]
-    for label, values in metric_rows:
-        lines.append(
-            f"{label:{label_width}s}" + "".join(f"{render_value(value):>{column_width}s}" for value in values),
-        )
-    return lines
-
-
-def _render_markdown_trending_table(
-    column_labels: list[str],
-    metric_rows: list[tuple[str, list[int]]],
-    *,
-    value_formatter: Callable[[int], str] | None = None,
-) -> list[str]:
-    """Render one Markdown trending table."""
-    if not column_labels or not metric_rows:
-        return []
-
-    render_value = value_formatter or _stringify_trending_value
-    lines = ["| Metric | " + " | ".join(_escape_markdown_table_cell(label) for label in column_labels) + " |"]
-    lines.append("|--------|" + "|".join("---------:" for _ in column_labels) + "|")
-    for label, values in metric_rows:
-        lines.append(
-            f"| {_escape_markdown_table_cell(label)} | "
-            + " | ".join(_escape_markdown_table_cell(render_value(value)) for value in values)
-            + " |"
-        )
-    return lines
-
-
-def _escape_markdown_table_cell(value: Any) -> str:
-    """Escape Markdown table cell content without changing readable text."""
-    return (
-        str(value)
-        .replace("\\", "\\\\")
-        .replace("|", "\\|")
-        .replace("`", "\\`")
-        .replace("\r\n", "<br>")
-        .replace("\n", "<br>")
-        .replace("\r", "<br>")
-    )
-
-
-def _render_html_trending_table(
-    column_labels: list[str],
-    metric_rows: list[tuple[str, list[int]]],
-    *,
-    value_formatter: Callable[[int], str] | None = None,
-) -> str:
-    """Render one HTML trending table."""
-    if not column_labels or not metric_rows:
-        return ""
-
-    render_value = value_formatter or _stringify_trending_value
-    rows = [
-        "                    <tr>"
-        f"<td>{html.escape(label)}</td>"
-        + "".join(f"<td>{html.escape(render_value(value))}</td>" for value in values)
-        + "</tr>"
-        for label, values in metric_rows
-    ]
-    return (
-        '        <div class="card">\n'
-        "            <table>\n"
-        "                <thead>\n"
-        "                    <tr><th>Metric</th>"
-        + "".join(f"<th>{html.escape(label)}</th>" for label in column_labels)
-        + "</tr>\n"
-        "                </thead>\n"
-        "                <tbody>\n" + "\n".join(rows) + "\n                </tbody>\n"
-        "            </table>\n"
-        "        </div>\n"
-    )
-
-
-def _trending_matrix_rows(
-    column_specs: list[tuple[str, str]],
-    metric_rows: list[tuple[str, list[int]]],
-) -> list[dict[str, Any]]:
-    """Return tabular rows for Excel export of a trending metric matrix."""
-    return [
-        {"Metric": label, **{key: value for (key, _), value in zip(column_specs, values, strict=True)}}
-        for label, values in metric_rows
-    ]
-
-
-def _trending_snapshot_csv_rows(
-    snapshots: list[TrendingSnapshot],
-) -> list[dict[str, Any]]:
-    """Return row-oriented CSV records for absolute trending snapshots."""
-    rows: list[dict[str, Any]] = []
-    for snapshot in snapshots:
-        for _label, snapshot_attr, _delta_attr in _TRENDING_METRIC_SPECS:
-            rows.append(
-                {
-                    "Snapshot Timestamp": snapshot.timestamp,
-                    "Metric": snapshot_attr,
-                    "Value": getattr(snapshot, snapshot_attr),
-                }
-            )
-    return rows
-
-
-def _trending_delta_csv_rows(
-    deltas: list[TrendingDelta],
-) -> list[dict[str, Any]]:
-    """Return row-oriented CSV records for period-over-period deltas."""
-    rows: list[dict[str, Any]] = []
-    for delta in deltas:
-        period_label = _format_trending_period_label(delta.from_timestamp, delta.to_timestamp)
-        for label, _snapshot_attr, delta_attr in _TRENDING_METRIC_SPECS:
-            rows.append(
-                {
-                    "From Snapshot Timestamp": delta.from_timestamp,
-                    "To Snapshot Timestamp": delta.to_timestamp,
-                    "Period": period_label,
-                    "Metric": delta_attr,
-                    "Metric Label": label,
-                    "Value": getattr(delta, delta_attr),
-                }
-            )
-    return rows
-
-
-def _sorted_drift_score_items(drift_scores: dict[str, float]) -> list[tuple[str, float]]:
-    """Return drift scores sorted descending with a stable DV-id tie-breaker."""
-    return sorted(drift_scores.items(), key=lambda item: (-item[1], item[0]))
-
-
-def _top_drift_scores(drift_scores: dict[str, float], limit: int = 10) -> list[tuple[str, float]]:
-    """Return drift scores sorted descending, capped at *limit*."""
-    return _sorted_drift_score_items(drift_scores)[:limit]
-
-
-def _resolve_trending_dv_name(trending: OrgReportTrending, dv_id: str) -> str | None:
-    """Return the most recent known display name for a drift-ranked data view."""
-    for snapshot in reversed(trending.snapshots):
-        dv_name = snapshot.dv_names.get(dv_id)
-        if dv_name:
-            return dv_name
-    return None
-
-
-def _format_trending_dv_label(dv_id: str, dv_name: str | None) -> str:
-    """Return a compact human-readable label for one data view."""
-    if not dv_name or dv_name == dv_id:
-        return dv_id
-    return f"{dv_name} ({dv_id})"
-
-
-def _ranked_drift_entries(
-    trending: OrgReportTrending,
-    *,
-    limit: int | None = None,
-) -> list[dict[str, Any]]:
-    """Return ranked drift entries with the best available DV names attached."""
-    ranked_scores = _sorted_drift_score_items(trending.drift_scores)
-    if limit is not None:
-        ranked_scores = ranked_scores[:limit]
-
-    return [
-        {
-            "data_view_id": dv_id,
-            "data_view_name": _resolve_trending_dv_name(trending, dv_id),
-            "drift_score": score,
-        }
-        for dv_id, score in ranked_scores
-    ]
-
-
-def _trending_date_range(snapshots: list[TrendingSnapshot]) -> str:
-    """Return 'first_label -> last_label' for a list of snapshots."""
-    if not snapshots:
-        return ""
-    first = _format_trending_timestamp_short(snapshots[0].timestamp)
-    last = _format_trending_timestamp_short(snapshots[-1].timestamp)
-    return f"{first} \u2192 {last}"
-
-
-def _render_trending_console(trending: OrgReportTrending) -> str:
-    """Render a multi-period trending table and drift list for console output."""
-    lines: list[str] = []
-    snapshots = trending.snapshots
-    if len(snapshots) < 2:
-        return ""
-
-    date_range = _trending_date_range(snapshots)
-    lines.append("")
-    lines.append("\u2550" * 56)
-    lines.append(f"TRENDING ({len(snapshots)} snapshots, {date_range})")
-    lines.append("\u2550" * 56)
-
-    # Column headers
-    col_labels = [_format_trending_timestamp_short(s.timestamp) for s in snapshots]
-    lines.extend(_render_console_trending_table(col_labels, _trending_snapshot_metric_rows(snapshots)))
-
-    if trending.deltas:
-        lines.append("")
-        lines.append("Period Deltas:")
-        delta_labels = [label for _key, label in _trending_delta_column_specs(trending.deltas)]
-        lines.extend(
-            _render_console_trending_table(
-                delta_labels,
-                _trending_delta_metric_rows(trending.deltas),
-                value_formatter=_format_signed_trending_value,
-            )
-        )
-
-    # Drift scores
-    if trending.drift_scores:
-        lines.append("")
-        lines.append("Top Drift:")
-        for entry in _ranked_drift_entries(trending, limit=10):
-            label = _format_trending_dv_label(entry["data_view_id"], entry["data_view_name"])
-            lines.append(f"  \u25b8 {label:<40.40s} {entry['drift_score']:.2f}")
-
-    return "\n".join(lines)
-
-
-def _print_trending_console_section(trending: OrgReportTrending | None) -> None:
-    """Emit the console trending section when a usable window is available."""
-    if trending is None or len(trending.snapshots) < 2:
-        return
-
-    print(_render_trending_console(trending))
-    print()
-
-
-def _trending_snapshots_to_dicts(trending: OrgReportTrending) -> dict[str, Any]:
-    """Convert trending data to a JSON-serializable dict."""
-    return {
-        "window_size": trending.window_size,
-        "snapshots": [
-            {
-                "timestamp": s.timestamp,
-                "data_view_count": _snapshot_effective_data_view_count(s),
-                "component_count": s.component_count,
-                "core_count": s.core_count,
-                "isolated_count": s.isolated_count,
-                "high_sim_pair_count": s.high_sim_pair_count,
-            }
-            for s in trending.snapshots
-        ],
-        "deltas": [
-            {
-                "from_timestamp": d.from_timestamp,
-                "to_timestamp": d.to_timestamp,
-                "data_view_delta": d.data_view_delta,
-                "component_delta": d.component_delta,
-                "core_delta": d.core_delta,
-                "isolated_delta": d.isolated_delta,
-                "high_sim_pair_delta": d.high_sim_pair_delta,
-            }
-            for d in trending.deltas
-        ],
-        "drift_scores": dict(_sorted_drift_score_items(trending.drift_scores)),
-        "drift_details": _ranked_drift_entries(trending),
-    }
-
-
-def _render_trending_markdown(trending: OrgReportTrending) -> str:
-    """Render a trending section for Markdown output."""
-    snapshots = trending.snapshots
-    if len(snapshots) < 2:
-        return ""
-
-    lines: list[str] = []
-    date_range = _trending_date_range(snapshots)
-    lines.append(f"## Trending ({len(snapshots)} snapshots, {date_range})")
-    lines.append("")
-
-    # Table header
-    col_labels = [_format_trending_timestamp_short(s.timestamp) for s in snapshots]
-    lines.extend(_render_markdown_trending_table(col_labels, _trending_snapshot_metric_rows(snapshots)))
-    lines.append("")
-
-    if trending.deltas:
-        lines.append("### Period Deltas")
-        lines.append("")
-        delta_labels = [label for _key, label in _trending_delta_column_specs(trending.deltas)]
-        lines.extend(
-            _render_markdown_trending_table(
-                delta_labels,
-                _trending_delta_metric_rows(trending.deltas),
-                value_formatter=_format_signed_trending_value,
-            )
-        )
-
-    lines.append("")
-
-    if trending.drift_scores:
-        lines.append("### Top Drift Scores")
-        lines.append("")
-        lines.append("| Data View ID | Data View Name | Drift Score |")
-        lines.append("|--------------|----------------|------------:|")
-        for entry in _ranked_drift_entries(trending, limit=10):
-            dv_id = _escape_markdown_table_cell(entry["data_view_id"])
-            dv_name = _escape_markdown_table_cell(entry["data_view_name"] or "")
-            lines.append(f"| {dv_id} | {dv_name} | {entry['drift_score']:.2f} |")
-        lines.append("")
-
-    return "\n".join(lines)
-
-
-def _render_trending_html(trending: OrgReportTrending) -> str:
-    """Render a trending section for HTML output."""
-    snapshots = trending.snapshots
-    if len(snapshots) < 2:
-        return ""
-
-    date_range = _trending_date_range(snapshots)
-    col_labels = [_format_trending_timestamp_short(s.timestamp) for s in snapshots]
-
-    html_out = f"""
-        <h2>Trending ({len(snapshots)} snapshots, {html.escape(date_range)})</h2>
-"""
-    html_out += _render_html_trending_table(col_labels, _trending_snapshot_metric_rows(snapshots))
-
-    if trending.deltas:
-        html_out += """
-        <h3>Period Deltas</h3>
-"""
-        delta_labels = [label for _key, label in _trending_delta_column_specs(trending.deltas)]
-        html_out += _render_html_trending_table(
-            delta_labels,
-            _trending_delta_metric_rows(trending.deltas),
-            value_formatter=_format_signed_trending_value,
-        )
-
-    if trending.drift_scores:
-        html_out += """
-        <h3>Top Drift Scores</h3>
-        <div class="card">
-            <table>
-                <thead>
-                    <tr><th>Data View ID</th><th>Data View Name</th><th>Drift Score</th></tr>
-                </thead>
-                <tbody>
-"""
-        for entry in _ranked_drift_entries(trending, limit=10):
-            html_out += (
-                "                    <tr>"
-                f"<td><code>{html.escape(entry['data_view_id'])}</code></td>"
-                f"<td>{html.escape(entry['data_view_name'] or '')}</td>"
-                f"<td>{entry['drift_score']:.2f}</td>"
-                "</tr>\n"
-            )
-        html_out += """                </tbody>
-            </table>
-        </div>
-"""
-
-    return html_out
-
-
-def _render_distribution_bar(count: int, total: int, width: int = 30) -> str:
-    """Render ASCII progress bar for distribution visualization.
-
-    Args:
-        count: Number of items in this bucket
-        total: Total items across all buckets
-        width: Width of the bar in characters
-
-    Returns:
-        ASCII bar string like "████████░░░░░░░░ 45%"
-    """
-    if total == 0:
-        return "░" * width + "  0%"
-
-    pct = count / total
-    filled = int(pct * width)
-    bar = "█" * filled + "░" * (width - filled)
-    return f"{bar} {pct * 100:>3.0f}%"
-
-
-def write_org_report_console(
-    result: OrgReportResult,
-    config: OrgReportConfig,
-    quiet: bool = False,
-    trending: OrgReportTrending | None = None,
-) -> None:
-    """Write org report to console with ASCII distribution bars.
-
-    Args:
-        result: OrgReportResult from analysis
-        config: OrgReportConfig used for analysis
-        quiet: Suppress decorative output
-        trending: Optional trending data to append
-    """
-    if quiet:
-        return
-
-    total_dvs = result.successful_data_views
-    print()
-    print("=" * 110)
-    title = f"ORG-WIDE COMPONENT ANALYSIS REPORT: {result.org_id}"
-    if result.is_sampled:
-        title += " [SAMPLED]"
-    print(title)
-    print("=" * 110)
-    print(f"Generated: {result.timestamp}")
-    if result.is_sampled:
-        print(
-            f"Data Views Analyzed: {result.successful_data_views} / {result.total_data_views} (sampled from {result.total_available_data_views})",
-        )
-    else:
-        print(f"Data Views Analyzed: {result.successful_data_views} / {result.total_data_views}")
-    print(f"Data View Fetch Failures: {result.failed_data_views}")
-    print(f"Analysis Duration: {result.duration:.2f}s")
-    print()
-
-    # Data Views Summary Table
-    print("-" * 110)
-    print("DATA VIEWS")
-    print("-" * 110)
-    print(f"{'Name':<50} {'ID':<30} {'Metrics':>8} {'Dimensions':>10} {'Status':<8}")
-    print("-" * 110)
-
-    for dv in sorted(result.data_view_summaries, key=lambda x: x.data_view_name):
-        name = dv.data_view_name[:48] + ".." if len(dv.data_view_name) > 50 else dv.data_view_name
-        if dv.error is not None:
-            print(f"{name:<50} {dv.data_view_id:<30} {'ERROR':>8} {'':>10} {dv.status:<8}")
-        else:
-            print(f"{name:<50} {dv.data_view_id:<30} {dv.metric_count:>8} {dv.dimension_count:>10} {dv.status:<8}")
-
-    print()
-
-    # Component Summary
-    print("-" * 110)
-    print("COMPONENT SUMMARY")
-    print("-" * 110)
-
-    total_metrics = result.total_unique_metrics
-    total_dims = result.total_unique_dimensions
-    total_all = result.total_unique_components
-
-    # Calculate total aggregates (non-unique counts across all data views)
-    total_metrics_aggregate = sum(dv.metric_count for dv in result.data_view_summaries if dv.error is None)
-    total_dimensions_aggregate = sum(dv.dimension_count for dv in result.data_view_summaries if dv.error is None)
-    total_components_aggregate = sum(dv.total_components for dv in result.data_view_summaries if dv.error is None)
-    total_derived_metrics = sum(dv.derived_metric_count for dv in result.data_view_summaries if dv.error is None)
-    total_derived_dimensions = sum(dv.derived_dimension_count for dv in result.data_view_summaries if dv.error is None)
-    total_derived_fields = total_derived_metrics + total_derived_dimensions
-
-    dist = result.distribution
-    # Build correct label for core threshold: "50% DVs" for percentage, ">=5 DVs" for absolute count
-    if config.core_min_count is None:
-        core_threshold_label = f"{int(config.core_threshold * 100)}%"
-    else:
-        core_threshold_label = f">={config.core_min_count}"
-
-    print(f"{'':30} {'Metrics':>12} {'Dimensions':>12} {'Total':>10}")
-    print(f"{'Total unique components':<30} {total_metrics:>12} {total_dims:>12} {total_all:>10}")
-    print(
-        f"{'Total (non-unique)':<30} {total_metrics_aggregate:>12} {total_dimensions_aggregate:>12} {total_components_aggregate:>10}",
-    )
-    print(
-        f"{'Derived fields (non-unique)':<30} {total_derived_metrics:>12} {total_derived_dimensions:>12} {total_derived_fields:>10}",
-    )
-    # Add "+" suffix only for percentage labels; absolute labels already have ">="
-    core_label_suffix = " DVs" if config.core_min_count is not None else "+ DVs"
-    print(
-        f"{'Core (in ' + core_threshold_label + core_label_suffix + ')':<30} {len(dist.core_metrics):>12} {len(dist.core_dimensions):>12} {dist.total_core:>10}",
-    )
-    print(
-        f"{'Common (in 25-49% DVs)':<30} {len(dist.common_metrics):>12} {len(dist.common_dimensions):>12} {dist.total_common:>10}",
-    )
-    print(
-        f"{'Limited (in 2+ DVs)':<30} {len(dist.limited_metrics):>12} {len(dist.limited_dimensions):>12} {dist.total_limited:>10}",
-    )
-    print(
-        f"{'Isolated (in 1 DV only)':<30} {len(dist.isolated_metrics):>12} {len(dist.isolated_dimensions):>12} {dist.total_isolated:>10}",
-    )
-    print()
-
-    # Distribution Visualization
-    print("-" * 110)
-    print("DISTRIBUTION")
-    print("-" * 110)
-
-    print("Metrics by data view coverage:")
-    print(f"  Core:     {_render_distribution_bar(len(dist.core_metrics), total_metrics)} ({len(dist.core_metrics)})")
-    print(
-        f"  Common:   {_render_distribution_bar(len(dist.common_metrics), total_metrics)} ({len(dist.common_metrics)})",
-    )
-    print(
-        f"  Limited:  {_render_distribution_bar(len(dist.limited_metrics), total_metrics)} ({len(dist.limited_metrics)})",
-    )
-    print(
-        f"  Isolated: {_render_distribution_bar(len(dist.isolated_metrics), total_metrics)} ({len(dist.isolated_metrics)})",
-    )
-    print()
-
-    print("Dimensions by data view coverage:")
-    print(
-        f"  Core:     {_render_distribution_bar(len(dist.core_dimensions), total_dims)} ({len(dist.core_dimensions)})",
-    )
-    print(
-        f"  Common:   {_render_distribution_bar(len(dist.common_dimensions), total_dims)} ({len(dist.common_dimensions)})",
-    )
-    print(
-        f"  Limited:  {_render_distribution_bar(len(dist.limited_dimensions), total_dims)} ({len(dist.limited_dimensions)})",
-    )
-    print(
-        f"  Isolated: {_render_distribution_bar(len(dist.isolated_dimensions), total_dims)} ({len(dist.isolated_dimensions)})",
-    )
-    print()
-
-    # Core Components (if not summary only)
-    if not config.summary_only and dist.total_core > 0:
-        print("-" * 110)
-        print(f"CORE COMPONENTS (in {core_threshold_label}{core_label_suffix})")
-        print("-" * 110)
-
-        if dist.core_metrics:
-            print("\nCore Metrics:")
-            for comp_id in dist.core_metrics[:15]:  # Limit to 15
-                info = result.component_index.get(comp_id)
-                if info:
-                    if info.name:
-                        display = f"{info.name} ({comp_id})"
-                        display = display[:55] + ".." if len(display) > 57 else display
-                        print(f"  {display:<57} {info.presence_count}/{total_dvs} DVs")
-                    else:
-                        print(f"  {comp_id:<57} {info.presence_count}/{total_dvs} DVs")
-            if len(dist.core_metrics) > 15:
-                print(f"  ... and {len(dist.core_metrics) - 15} more")
-
-        if dist.core_dimensions:
-            print("\nCore Dimensions:")
-            for comp_id in dist.core_dimensions[:15]:
-                info = result.component_index.get(comp_id)
-                if info:
-                    if info.name:
-                        display = f"{info.name} ({comp_id})"
-                        display = display[:55] + ".." if len(display) > 57 else display
-                        print(f"  {display:<57} {info.presence_count}/{total_dvs} DVs")
-                    else:
-                        print(f"  {comp_id:<57} {info.presence_count}/{total_dvs} DVs")
-            if len(dist.core_dimensions) > 15:
-                print(f"  ... and {len(dist.core_dimensions) - 15} more")
-        print()
-
-    # Similarity Matrix (if computed)
-    if result.similarity_pairs:
-        print("-" * 110)
-        print("HIGH OVERLAP PAIRS")
-        print("-" * 110)
-        effective_threshold = min(config.overlap_threshold, 0.9)
-        threshold_note = ""
-        if config.overlap_threshold > 0.9:
-            threshold_note = f" (configured {config.overlap_threshold * 100:.0f}%, capped at 90% for governance checks)"
-        print(f"Pairs with >= {effective_threshold * 100:.0f}% Jaccard similarity{threshold_note}:")
-        print()
-
-        for pair in result.similarity_pairs[:10]:  # Limit to top 10
-            name1 = pair.dv1_name[:25] + ".." if len(pair.dv1_name) > 27 else pair.dv1_name
-            name2 = pair.dv2_name[:25] + ".." if len(pair.dv2_name) > 27 else pair.dv2_name
-            print(f"  {name1:<27} <-> {name2:<27} {pair.jaccard_similarity * 100:>5.1f}%")
-            print(f"  {'':27}     {'':27} ({pair.shared_count} shared)")
-
-        if len(result.similarity_pairs) > 10:
-            print(f"\n  ... and {len(result.similarity_pairs) - 10} more pairs")
-
-        # Show drift details if enabled
-        if config.include_drift:
-            has_drift = any(pair.only_in_dv1 or pair.only_in_dv2 for pair in result.similarity_pairs[:5])
-            if has_drift:
-                print()
-                print("Drift Details (top pairs):")
-                for pair in result.similarity_pairs[:5]:
-                    if pair.only_in_dv1 or pair.only_in_dv2:
-                        print(f"\n  {pair.dv1_name} <-> {pair.dv2_name}:")
-                        if pair.only_in_dv1:
-                            print(f"    Only in {pair.dv1_name[:20]}: {len(pair.only_in_dv1)} components")
-                            for comp_id in pair.only_in_dv1[:3]:
-                                name = pair.only_in_dv1_names.get(comp_id, "") if pair.only_in_dv1_names else ""
-                                display = f"{name} ({comp_id})" if name else comp_id
-                                print(f"      - {display[:50]}")
-                            if len(pair.only_in_dv1) > 3:
-                                print(f"      ... and {len(pair.only_in_dv1) - 3} more")
-                        if pair.only_in_dv2:
-                            print(f"    Only in {pair.dv2_name[:20]}: {len(pair.only_in_dv2)} components")
-                            for comp_id in pair.only_in_dv2[:3]:
-                                name = pair.only_in_dv2_names.get(comp_id, "") if pair.only_in_dv2_names else ""
-                                display = f"{name} ({comp_id})" if name else comp_id
-                                print(f"      - {display[:50]}")
-                            if len(pair.only_in_dv2) > 3:
-                                print(f"      ... and {len(pair.only_in_dv2) - 3} more")
-        print()
-
-    # Component Type Breakdown (if enabled)
-    if config.include_component_types and not config.summary_only:
-        # Aggregate type counts
-        total_standard_metrics = sum(s.standard_metric_count for s in result.data_view_summaries if not s.has_error)
-        total_derived_metrics = sum(s.derived_metric_count for s in result.data_view_summaries if not s.has_error)
-        total_standard_dims = sum(s.standard_dimension_count for s in result.data_view_summaries if not s.has_error)
-        total_derived_dims = sum(s.derived_dimension_count for s in result.data_view_summaries if not s.has_error)
-
-        if total_standard_metrics + total_derived_metrics > 0:
-            print("-" * 110)
-            print("COMPONENT TYPES (aggregate counts across DVs, standard vs derived field breakdown)")
-            print("-" * 110)
-            total_metrics = total_standard_metrics + total_derived_metrics
-            total_dims = total_standard_dims + total_derived_dims
-            # Calculate percentages
-            std_metric_pct = (total_standard_metrics / total_metrics * 100) if total_metrics > 0 else 0
-            der_metric_pct = (total_derived_metrics / total_metrics * 100) if total_metrics > 0 else 0
-            std_dim_pct = (total_standard_dims / total_dims * 100) if total_dims > 0 else 0
-            der_dim_pct = (total_derived_dims / total_dims * 100) if total_dims > 0 else 0
-            print(f"{'':18} {'Total':>10} {'Standard':>12} {'% Total':>8} {'Derived':>10} {'% Total':>8}")
-            print(
-                f"{'Metrics':<18} {total_metrics:>10} {total_standard_metrics:>12} {std_metric_pct:>7.1f}% {total_derived_metrics:>10} {der_metric_pct:>7.1f}%",
-            )
-            print(
-                f"{'Dimensions':<18} {total_dims:>10} {total_standard_dims:>12} {std_dim_pct:>7.1f}% {total_derived_dims:>10} {der_dim_pct:>7.1f}%",
-            )
-            print()
-
-    # Clusters (if enabled)
-    if result.clusters:
-        print("-" * 110)
-        print("DATA VIEW CLUSTERS")
-        print("-" * 110)
-        print(f"Found {len(result.clusters)} clusters:")
-        print()
-        for cluster in result.clusters[:10]:
-            name = cluster.cluster_name or f"Cluster {cluster.cluster_id}"
-            print(f"  [{cluster.cluster_id}] {name} ({cluster.size} DVs, cohesion: {cluster.cohesion_score:.0%})")
-            for dv_name in cluster.data_view_names[:3]:
-                print(f"      - {dv_name[:50]}")
-            if cluster.size > 3:
-                print(f"      ... and {cluster.size - 3} more")
-        if len(result.clusters) > 10:
-            print(f"\n  ... and {len(result.clusters) - 10} more clusters")
-        print()
-
-    # Governance Violations (Feature 1)
-    if result.governance_violations:
-        print("-" * 110)
-        print("GOVERNANCE VIOLATIONS")
-        print("-" * 110)
-        for violation in result.governance_violations:
-            print(f"\n[!] {violation.get('message', '')}")
-            print(f"    Threshold: {violation.get('threshold')}, Actual: {violation.get('actual')}")
-        print()
-
-    # Owner Summary (Feature 5)
-    if result.owner_summary:
-        print("-" * 110)
-        print("OWNER SUMMARY")
-        print("-" * 110)
-        owner_data = result.owner_summary.get("by_owner", {})
-        sorted_owners = result.owner_summary.get("owners_sorted_by_dv_count", [])
-        print(f"{'Owner':<30} {'DVs':>6} {'Metrics':>10} {'Dimensions':>12} {'Avg/DV':>8}")
-        print("-" * 110)
-        for owner in sorted_owners[:15]:
-            stats = owner_data.get(owner, {})
-            print(
-                f"{owner[:30]:<30} {stats.get('data_view_count', 0):>6} "
-                f"{stats.get('total_metrics', 0):>10} {stats.get('total_dimensions', 0):>12} "
-                f"{stats.get('avg_components_per_dv', 0):>8.1f}",
-            )
-        if len(sorted_owners) > 15:
-            print(f"  ... and {len(sorted_owners) - 15} more owners")
-        print()
-
-    # Naming Audit (Feature 3)
-    if result.naming_audit:
-        print("-" * 110)
-        print("NAMING AUDIT")
-        print("-" * 110)
-        audit = result.naming_audit
-        styles = audit.get("case_styles", {})
-        print("Case styles distribution:")
-        for style, count in sorted(styles.items(), key=lambda x: -x[1]):
-            pct = count / audit.get("total_components", 1) * 100
-            print(f"  {style:<15} {count:>6} ({pct:>5.1f}%)")
-        if audit.get("recommendations"):
-            print("\nNaming Recommendations:")
-            for rec in audit["recommendations"]:
-                print(f"  [{rec.get('severity', 'info')}] {rec.get('message', '')}")
-        print()
-
-    # Stale Components (Feature 6)
-    if result.stale_components:
-        print("-" * 110)
-        print("STALE COMPONENTS")
-        print("-" * 110)
-        print(f"Found {len(result.stale_components)} components with stale naming patterns:")
-        print()
-        # Group by pattern type
-        by_pattern: dict[str, list] = {}
-        for comp in result.stale_components:
-            pattern = comp.get("pattern", "unknown")
-            if pattern not in by_pattern:
-                by_pattern[pattern] = []
-            by_pattern[pattern].append(comp)
-        for pattern, comps in by_pattern.items():
-            print(f"  {pattern} ({len(comps)} components):")
-            for comp in comps[:5]:
-                name = comp.get("name", comp.get("component_id", ""))[:50]
-                print(f"    - {name}")
-            if len(comps) > 5:
-                print(f"    ... and {len(comps) - 5} more")
-        print()
-
-    # Recommendations
-    if result.recommendations:
-        print("-" * 110)
-        print("RECOMMENDATIONS")
-        print("-" * 110)
-
-        for _i, rec in enumerate(result.recommendations, 1):
-            severity_icon = {"high": "!", "medium": "?", "low": "i"}.get(rec.get("severity", "low"), "·")
-            print(f"\n[{severity_icon}] {rec.get('reason', 'No details')}")
-
-            if rec.get("data_view"):
-                print(f"    Data View: {rec.get('data_view_name', '')} ({rec.get('data_view')})")
-            if rec.get("data_view_1"):
-                print(f"    Pair: {rec.get('data_view_1_name', '')} <-> {rec.get('data_view_2_name', '')}")
-
-        print()
-
-    # Trending section (v3.4.0)
-    _print_trending_console_section(trending)
-
-
-def write_org_report_stats_only(
-    result: OrgReportResult,
-    quiet: bool = False,
-    trending: OrgReportTrending | None = None,
-) -> None:
-    """Write minimal org-report stats to console (Feature 2: --org-stats mode).
-
-    Args:
-        result: OrgReportResult from analysis
-        quiet: Suppress output
-        trending: Optional trending window to append after the stats summary
-    """
-    if quiet:
-        return
-
-    print()
-    print("=" * BANNER_WIDTH)
-    print(f"ORG STATS: {result.org_id}")
-    print("=" * BANNER_WIDTH)
-    print(f"Data Views: {result.successful_data_views} analyzed")
-    print(f"Fetch Failures: {result.failed_data_views}")
-    print(f"Components: {result.total_unique_components} unique")
-    print(f"  Metrics:    {result.total_unique_metrics}")
-    print(f"  Dimensions: {result.total_unique_dimensions}")
-    print("Distribution:")
-    dist = result.distribution
-    total = result.total_unique_components or 1
-    print(f"  Core:     {dist.total_core:>6} ({dist.total_core / total * 100:>5.1f}%)")
-    print(f"  Common:   {dist.total_common:>6} ({dist.total_common / total * 100:>5.1f}%)")
-    print(f"  Limited:  {dist.total_limited:>6} ({dist.total_limited / total * 100:>5.1f}%)")
-    print(f"  Isolated: {dist.total_isolated:>6} ({dist.total_isolated / total * 100:>5.1f}%)")
-    print(f"Duration: {result.duration:.2f}s")
-    print("=" * BANNER_WIDTH)
-    print()
-
-    _print_trending_console_section(trending)
-
-
-def write_org_report_comparison_console(comparison: OrgReportComparison, quiet: bool = False) -> None:
-    """Write org-report comparison to console with trending arrows (Feature 4).
-
-    Args:
-        comparison: OrgReportComparison from compare_org_reports()
-        quiet: Suppress output
-    """
-    if quiet:
-        return
-
-    def trend_arrow(delta: int) -> str:
-        if delta > 0:
-            return f"↑{delta}"
-        if delta < 0:
-            return f"↓{abs(delta)}"
-        return "→0"
-
-    print()
-    print("=" * 70)
-    print("ORG REPORT COMPARISON (TRENDING)")
-    print("=" * 70)
-    print(f"Previous: {comparison.previous_timestamp}")
-    print(f"Current:  {comparison.current_timestamp}")
-    print()
-
-    summary = comparison.summary
-    print("-" * 70)
-    print("CHANGES")
-    print("-" * 70)
-    print(f"Data Views:  {trend_arrow(summary.get('data_views_delta', 0))}")
-    print(f"Components:  {trend_arrow(summary.get('components_delta', 0))}")
-    print(f"Core:        {trend_arrow(summary.get('core_delta', 0))}")
-    print(f"Isolated:    {trend_arrow(summary.get('isolated_delta', 0))}")
-    print()
-
-    if comparison.data_views_added:
-        print(f"Data Views Added ({len(comparison.data_views_added)}):")
-        for _i, dv_name in enumerate(comparison.data_views_added_names[:5]):
-            print(f"  + {dv_name}")
-        if len(comparison.data_views_added) > 5:
-            print(f"  ... and {len(comparison.data_views_added) - 5} more")
-
-    if comparison.data_views_removed:
-        print(f"Data Views Removed ({len(comparison.data_views_removed)}):")
-        for dv_name in comparison.data_views_removed_names[:5]:
-            print(f"  - {dv_name}")
-        if len(comparison.data_views_removed) > 5:
-            print(f"  ... and {len(comparison.data_views_removed) - 5} more")
-
-    if comparison.new_high_similarity_pairs:
-        print(f"\nNew High-Similarity Pairs ({len(comparison.new_high_similarity_pairs)}):")
-        for pair in comparison.new_high_similarity_pairs[:3]:
-            print(f"  ! {pair.get('dv1_id', '')} <-> {pair.get('dv2_id', '')}")
-
-    if comparison.resolved_pairs:
-        print(f"\nResolved High-Similarity Pairs ({len(comparison.resolved_pairs)}):")
-        for pair in comparison.resolved_pairs[:3]:
-            print(f"  ✓ {pair.get('dv1_id', '')} <-> {pair.get('dv2_id', '')}")
-
-    print()
-    print("=" * 70)
-    print()
-
-
-def _normalize_recommendation_severity(severity: Any) -> str:
-    """Normalize recommendation severity to supported output classes."""
-    value = str(severity or "low").strip().lower()
-    return value if value in {"high", "medium", "low"} else "low"
-
-
-def _format_recommendation_context_entries(rec: dict[str, Any]) -> list[tuple[str, str]]:
-    """Build human-readable recommendation context entries for output renderers."""
-
-    def _fmt_data_view(name: Any, dv_id: Any) -> str:
-        name_text = str(name).strip() if name is not None else ""
-        id_text = str(dv_id).strip() if dv_id is not None else ""
-        if name_text and id_text:
-            return f"{name_text} ({id_text})"
-        return name_text or id_text
-
-    context_entries: list[tuple[str, str]] = []
-
-    data_view_text = _fmt_data_view(rec.get("data_view_name"), rec.get("data_view"))
-    if data_view_text:
-        context_entries.append(("Data View", data_view_text))
-
-    pair_left = _fmt_data_view(rec.get("data_view_1_name"), rec.get("data_view_1"))
-    pair_right = _fmt_data_view(rec.get("data_view_2_name"), rec.get("data_view_2"))
-    if pair_left or pair_right:
-        if pair_left and pair_right:
-            context_entries.append(("Pair", f"{pair_left} ↔ {pair_right}"))
-        else:
-            context_entries.append(("Pair", pair_left or pair_right))
-
-    similarity = rec.get("similarity")
-    if isinstance(similarity, (int, float)) and not isinstance(similarity, bool):
-        context_entries.append(("Similarity", f"{similarity * 100:.1f}%"))
-
-    for label, key in (
-        ("Isolated Count", "isolated_count"),
-        ("Derived Count", "derived_count"),
-        ("Total Count", "total_count"),
-        ("Count", "count"),
-        ("Drift Count", "drift_count"),
-    ):
-        if key in rec and rec.get(key) is not None:
-            context_entries.append((label, str(rec.get(key))))
-
-    ratio = rec.get("ratio")
-    if isinstance(ratio, (int, float)) and not isinstance(ratio, bool):
-        context_entries.append(("Ratio", f"{ratio * 100:.1f}%"))
-
-    modified = rec.get("modified")
-    if modified:
-        context_entries.append(("Last Modified", str(modified)))
-
-    return context_entries
-
-
-def _normalize_recommendation_for_json(raw_rec: Any) -> dict[str, Any]:
-    """Normalize recommendation payload for JSON serialization and output parity."""
-    rec = dict(raw_rec) if isinstance(raw_rec, dict) else {"type": "unknown", "reason": str(raw_rec)}
-    rec["severity"] = _normalize_recommendation_severity(rec.get("severity", "low"))
-    context_entries = _format_recommendation_context_entries(rec)
-    if context_entries:
-        rec["context"] = [{"label": label, "value": value} for label, value in context_entries]
-    # Ensure output is JSON-serializable even if recommendations include odd values.
-    normalized = json.loads(json.dumps(rec, ensure_ascii=False, default=str))
-    return normalized if isinstance(normalized, dict) else {"type": "unknown", "reason": str(normalized)}
-
-
-def _flatten_recommendation_for_tabular(rec: dict[str, Any]) -> dict[str, Any]:
-    """Flatten recommendation fields for CSV/Excel exports with full context columns."""
-    known_keys = {
-        "type",
-        "severity",
-        "reason",
-        "data_view",
-        "data_view_name",
-        "data_view_1",
-        "data_view_1_name",
-        "data_view_2",
-        "data_view_2_name",
-        "similarity",
-        "isolated_count",
-        "derived_count",
-        "total_count",
-        "ratio",
-        "count",
-        "drift_count",
-        "modified",
-        "context",
-    }
-    extra_details = {k: v for k, v in rec.items() if k not in known_keys}
-
-    return {
-        "Type": rec.get("type", ""),
-        "Severity": _normalize_recommendation_severity(rec.get("severity", "low")),
-        "Description": rec.get("reason", ""),
-        "Data View ID": rec.get("data_view", ""),
-        "Data View Name": rec.get("data_view_name", ""),
-        "Data View 1 ID": rec.get("data_view_1", ""),
-        "Data View 1 Name": rec.get("data_view_1_name", ""),
-        "Data View 2 ID": rec.get("data_view_2", ""),
-        "Data View 2 Name": rec.get("data_view_2_name", ""),
-        "Similarity": rec.get("similarity", ""),
-        "Isolated Count": rec.get("isolated_count", ""),
-        "Derived Count": rec.get("derived_count", ""),
-        "Total Count": rec.get("total_count", ""),
-        "Ratio": rec.get("ratio", ""),
-        "Count": rec.get("count", ""),
-        "Drift Count": rec.get("drift_count", ""),
-        "Modified": rec.get("modified", ""),
-        "Extra Details": json.dumps(extra_details, sort_keys=True, default=str) if extra_details else "",
-    }
-
-
-def build_org_report_json_data(
-    result: OrgReportResult,
-    trending: OrgReportTrending | None = None,
-) -> dict[str, Any]:
-    """Build org report JSON payload."""
-    effective_overlap_threshold = min(result.parameters.overlap_threshold, 0.9)
-    similarity_analysis_complete = result.similarity_pairs is not None
-    if result.parameters.org_stats_only:
-        similarity_analysis_mode = "org_stats_only"
-    elif result.parameters.skip_similarity:
-        similarity_analysis_mode = "skip_similarity"
-    elif similarity_analysis_complete:
-        similarity_analysis_mode = "complete"
-    else:
-        similarity_analysis_mode = "runtime_skipped"
-
-    data: dict[str, Any] = {
-        "report_type": "org_analysis",
-        "version": "1.0",
-        "generated_at": result.timestamp,
-        "org_id": result.org_id,
-        "parameters": {
-            "filter_pattern": result.parameters.filter_pattern,
-            "exclude_pattern": result.parameters.exclude_pattern,
-            "limit": result.parameters.limit,
-            "core_threshold": result.parameters.core_threshold,
-            "core_min_count": result.parameters.core_min_count,
-            "overlap_threshold": result.parameters.overlap_threshold,
-            "overlap_threshold_effective": effective_overlap_threshold,
-            "include_component_types": result.parameters.include_component_types,
-            "include_metadata": result.parameters.include_metadata,
-            "include_drift": result.parameters.include_drift,
-            "skip_similarity": result.parameters.skip_similarity,
-            "sample_size": result.parameters.sample_size,
-            "sample_seed": result.parameters.sample_seed,
-            "enable_clustering": result.parameters.enable_clustering,
-            "similarity_max_dvs": result.parameters.similarity_max_dvs,
-            "force_similarity": result.parameters.force_similarity,
-            "org_stats_only": result.parameters.org_stats_only,
-        },
-        "summary": {
-            "data_views_total": result.total_data_views,
-            "data_views_analyzed": result.successful_data_views,
-            "data_views_failed": result.failed_data_views,
-            "total_available_data_views": result.total_available_data_views,
-            "is_sampled": result.is_sampled,
-            "similarity_analysis_complete": similarity_analysis_complete,
-            "similarity_analysis_mode": similarity_analysis_mode,
-            "total_unique_metrics": result.total_unique_metrics,
-            "total_unique_dimensions": result.total_unique_dimensions,
-            "total_unique_components": result.total_unique_components,
-            "total_metrics_non_unique": sum(dv.metric_count for dv in result.data_view_summaries if dv.error is None),
-            "total_dimensions_non_unique": sum(
-                dv.dimension_count for dv in result.data_view_summaries if dv.error is None
-            ),
-            "total_components_non_unique": sum(
-                dv.total_components for dv in result.data_view_summaries if dv.error is None
-            ),
-            "derived_metrics_non_unique": sum(
-                dv.derived_metric_count for dv in result.data_view_summaries if dv.error is None
-            ),
-            "derived_dimensions_non_unique": sum(
-                dv.derived_dimension_count for dv in result.data_view_summaries if dv.error is None
-            ),
-            "total_derived_fields_non_unique": sum(
-                dv.derived_metric_count + dv.derived_dimension_count
-                for dv in result.data_view_summaries
-                if dv.error is None
-            ),
-            "analysis_duration_seconds": round(result.duration, 2),
-        },
-        "data_view_fetch_failures": {
-            "count": result.failed_data_views,
-            "data_view_ids": result.failed_data_view_ids,
-            "failure_reason_counts": result.failed_data_view_reason_counts,
-        },
-        "distribution": {
-            "core": {
-                "metrics_count": len(result.distribution.core_metrics),
-                "dimensions_count": len(result.distribution.core_dimensions),
-                "metrics": sorted(result.distribution.core_metrics),
-                "dimensions": sorted(result.distribution.core_dimensions),
-            },
-            "common": {
-                "metrics_count": len(result.distribution.common_metrics),
-                "dimensions_count": len(result.distribution.common_dimensions),
-                "metrics": sorted(result.distribution.common_metrics),
-                "dimensions": sorted(result.distribution.common_dimensions),
-            },
-            "limited": {
-                "metrics_count": len(result.distribution.limited_metrics),
-                "dimensions_count": len(result.distribution.limited_dimensions),
-                "metrics": sorted(result.distribution.limited_metrics),
-                "dimensions": sorted(result.distribution.limited_dimensions),
-            },
-            "isolated": {
-                "metrics_count": len(result.distribution.isolated_metrics),
-                "dimensions_count": len(result.distribution.isolated_dimensions),
-                "metrics": sorted(result.distribution.isolated_metrics),
-                "dimensions": sorted(result.distribution.isolated_dimensions),
-            },
-        },
-        "data_views": [
-            {
-                "id": dv.data_view_id,
-                "name": dv.data_view_name,
-                "metrics_count": dv.metric_count,
-                "dimensions_count": dv.dimension_count,
-                "total_components": dv.total_components,
-                "status": dv.status,
-                "error": dv.normalized_error_reason if dv.has_error else None,
-                # Component type breakdown
-                "standard_metrics": dv.standard_metric_count,
-                "derived_metrics": dv.derived_metric_count,
-                "standard_dimensions": dv.standard_dimension_count,
-                "derived_dimensions": dv.derived_dimension_count,
-                # Metadata
-                "owner": dv.owner,
-                "owner_id": dv.owner_id,
-                "created": dv.created,
-                "modified": dv.modified,
-                "description": dv.description,
-                "has_description": dv.has_description,
-            }
-            for dv in result.data_view_summaries
-        ],
-        "component_index": {
-            comp_id: {
-                "type": info.component_type,
-                "name": info.name,
-                "data_view_count": info.presence_count,
-                "data_views": sorted_snapshot_strings(info.data_views),
-            }
-            for comp_id, info in sorted(result.component_index.items())
-        },
-        "similarity_pairs": [
-            {
-                "data_view_1": {"id": pair.dv1_id, "name": pair.dv1_name},
-                "data_view_2": {"id": pair.dv2_id, "name": pair.dv2_name},
-                "jaccard_similarity": pair.jaccard_similarity,
-                "shared_components": pair.shared_count,
-                "union_size": pair.union_count,
-                # Drift detection
-                "only_in_dv1": pair.only_in_dv1,
-                "only_in_dv2": pair.only_in_dv2,
-                "only_in_dv1_names": pair.only_in_dv1_names,
-                "only_in_dv2_names": pair.only_in_dv2_names,
-            }
-            for pair in (result.similarity_pairs or [])
-        ],
-        "clusters": [
-            {
-                "cluster_id": cluster.cluster_id,
-                "cluster_name": cluster.cluster_name,
-                "data_view_ids": cluster.data_view_ids,
-                "data_view_names": cluster.data_view_names,
-                "size": cluster.size,
-                "cohesion_score": cluster.cohesion_score,
-            }
-            for cluster in (result.clusters or [])
-        ]
-        if result.clusters
-        else None,
-        "recommendations": [_normalize_recommendation_for_json(rec) for rec in result.recommendations],
-        # New features
-        "governance_violations": result.governance_violations,
-        "thresholds_exceeded": result.thresholds_exceeded,
-        "naming_audit": result.naming_audit,
-        "owner_summary": result.owner_summary,
-        "stale_components": result.stale_components,
-    }
-    if trending is not None and len(trending.snapshots) >= 2:
-        data["trending"] = _trending_snapshots_to_dicts(trending)
-    return data
-
-
-def write_org_report_json(
-    result: OrgReportResult,
-    output_path: Path | None,
-    output_dir: str,
-    logger: logging.Logger,
-    trending: OrgReportTrending | None = None,
-) -> str:
-    """Write org report as structured JSON.
-
-    Args:
-        result: OrgReportResult from analysis
-        output_path: Optional specific output path
-        output_dir: Output directory if no path specified
-        logger: Logger instance
-        trending: Optional trending data to include
-
-    Returns:
-        Path to created JSON file
-    """
-    if output_path:
-        file_path = output_path if str(output_path).endswith(".json") else Path(f"{output_path}.json")
-    else:
-        timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
-        file_path = Path(output_dir) / f"org_report_{result.org_id}_{timestamp}.json"
-
-    json_data = build_org_report_json_data(result, trending=trending)
-
-    # Write JSON
-    file_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(file_path, "w", encoding="utf-8") as f:
-        json.dump(json_data, f, indent=2, ensure_ascii=False)
-
-    logger.info(f"JSON report written to {file_path}")
-    return str(file_path)
 
 
 def write_org_report_excel(
@@ -1976,7 +775,7 @@ def write_org_report_html(
     has_names = any(info.name for info in result.component_index.values())
 
     # Escape org_id for HTML output
-    org_id_escaped = html.escape(result.org_id)
+    org_id_escaped = _html.escape(result.org_id)
 
     # Calculate total aggregates (non-unique counts across all data views)
     total_components_aggregate = sum(dv.total_components for dv in result.data_view_summaries if dv.error is None)
@@ -2169,10 +968,10 @@ def write_org_report_html(
 
     for dv in sorted(result.data_view_summaries, key=lambda x: x.data_view_name):
         # Escape user-sourced strings to prevent HTML injection
-        dv_name_escaped = html.escape(dv.data_view_name)
-        dv_id_escaped = html.escape(dv.data_view_id)
+        dv_name_escaped = _html.escape(dv.data_view_name)
+        dv_id_escaped = _html.escape(dv.data_view_id)
         if dv.error is not None:
-            error_escaped = html.escape(dv.error)
+            error_escaped = _html.escape(dv.error)
             html_out += f'                    <tr><td>{dv_name_escaped}</td><td><code>{dv_id_escaped}</code></td><td colspan="2">ERROR: {error_escaped}</td><td>{dv.status}</td></tr>\n'
         else:
             html_out += f"                    <tr><td>{dv_name_escaped}</td><td><code>{dv_id_escaped}</code></td><td>{dv.metric_count}</td><td>{dv.dimension_count}</td><td>{dv.status}</td></tr>\n"
@@ -2197,8 +996,8 @@ def write_org_report_html(
         for comp_id in (dist.core_metrics + dist.core_dimensions)[:30]:
             info = result.component_index.get(comp_id)
             if info:
-                comp_id_escaped = html.escape(comp_id)
-                name_escaped = html.escape(info.name) if info.name else "-"
+                comp_id_escaped = _html.escape(comp_id)
+                name_escaped = _html.escape(info.name) if info.name else "-"
                 name_col = f"<td>{name_escaped}</td>" if has_names else ""
                 html_out += f"                    <tr><td><code>{comp_id_escaped}</code></td>{name_col}<td>{info.component_type.title()}</td><td>{info.presence_count}</td></tr>\n"
 
@@ -2229,8 +1028,8 @@ def write_org_report_html(
                 <tbody>
 """
         for pair in result.similarity_pairs[:20]:
-            dv1_escaped = html.escape(pair.dv1_name)
-            dv2_escaped = html.escape(pair.dv2_name)
+            dv1_escaped = _html.escape(pair.dv1_name)
+            dv2_escaped = _html.escape(pair.dv2_name)
             html_out += f"                    <tr><td>{dv1_escaped}</td><td>{dv2_escaped}</td><td>{pair.jaccard_similarity * 100:.1f}%</td><td>{pair.shared_count}</td></tr>\n"
 
         if len(result.similarity_pairs) > 20:
@@ -2249,15 +1048,15 @@ def write_org_report_html(
         for raw_rec in result.recommendations:
             rec = _normalize_recommendation_for_json(raw_rec)
             severity = rec.get("severity", "low")
-            rec_type = html.escape(str(rec.get("type", "Unknown")).replace("_", " ").title())
-            rec_reason = html.escape(rec.get("reason", "No details provided."))
+            rec_type = _html.escape(str(rec.get("type", "Unknown")).replace("_", " ").title())
+            rec_reason = _html.escape(rec.get("reason", "No details provided."))
             context_entries = _format_recommendation_context_entries(rec)
             context_html = ""
             if context_entries:
                 context_html = '            <ul class="rec-context">\n'
                 for label, value in context_entries:
-                    label_escaped = html.escape(str(label))
-                    value_escaped = html.escape(str(value))
+                    label_escaped = _html.escape(str(label))
+                    value_escaped = _html.escape(str(value))
                     context_html += f"                <li><strong>{label_escaped}:</strong> {value_escaped}</li>\n"
                 context_html += "            </ul>\n"
             html_out += f"""        <div class="recommendation {severity}">
@@ -2503,35 +1302,3 @@ def write_org_report_csv(
 
     logger.info(f"CSV reports written to {csv_dir}")
     return str(csv_dir)
-
-
-def _normalize_org_report_output_format(output_format: str | None) -> str:
-    """Normalize org-report output format to a canonical lowercase value."""
-    return (output_format or "console").strip().lower()
-
-
-def _validate_org_report_output_request(
-    output_format: str,
-    output_to_stdout: bool,
-    status_print: Callable[..., None],
-) -> bool:
-    """Validate org-report output arguments before expensive analysis starts."""
-    valid_formats = {"console", "json", "excel", "markdown", "html", "csv", "all", *FORMAT_ALIASES}
-    if output_format not in valid_formats:
-        status_print(
-            ConsoleColors.error(
-                f"ERROR: Unknown format '{output_format}'. Valid formats: "
-                "console, json, excel, markdown, html, csv, all, reports, data, ci",
-            ),
-        )
-        return False
-
-    if output_to_stdout and output_format not in {"json", "console"}:
-        status_print(
-            ConsoleColors.error(
-                "ERROR: --output stdout is only supported for --format json or --format console in org-report mode."
-            ),
-        )
-        return False
-
-    return True
