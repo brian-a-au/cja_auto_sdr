@@ -422,6 +422,7 @@ cja_auto_sdr/
 │       │   ├── inventory/     # Inventory summary output helpers
 │       │   ├── protocols.py   # OutputWriter protocol
 │       │   ├── registry.py    # Format registry
+│       │   ├── run_summary.py # Run summary output helpers
 │       │   ├── sdr/           # SDR output assembly
 │       │   └── writers/       # CSV, HTML, JSON, Markdown writers
 │       └── pipeline/          # Processing pipeline

@@ -16,7 +16,7 @@ CJA SDR Generator — a CLI tool for generating Solution Design Reference (SDR) 
 - Build system: **hatchling** (dynamic version from `src/cja_auto_sdr/core/version.py`)
 - Entry points: `cja_auto_sdr` and `cja-auto-sdr` (both via `__main__:main`)
 - Current version: v3.4.7
-- Tests: **6,899** across 114 files at **95% coverage gate**
+- Tests: **6,925** across 114 files at **95% coverage gate**
 - Dependencies: cjapy, numpy, pandas, xlsxwriter, tqdm
 - Optional deps: scipy (clustering), python-dotenv (env), argcomplete (completion)
 
@@ -101,10 +101,20 @@ src/cja_auto_sdr/
 │   ├── trending.py          # Drift detection & window queries
 │   ├── identifiers.py       # Component ID helpers
 │   └── writers/             # Org report renderers
+│       ├── __init__.py      # Re-export layer (backwards compat)
+│       ├── common.py        # Shared writer helpers
+│       ├── trending.py      # Trending/drift renderers
+│       ├── console.py       # Console output writer
+│       ├── json.py          # JSON output writer
+│       ├── excel.py         # Excel output writer
+│       ├── markdown.py      # Markdown output writer
+│       ├── html.py          # HTML output writer
+│       └── csv.py           # CSV output writer
 │
 ├── output/                  # Output generation
 │   ├── protocols.py         # Writer protocol definitions
 │   ├── registry.py          # Format registry
+│   ├── run_summary.py       # Run summary output helpers
 │   ├── writers/             # Format writers (csv, excel, json, html, markdown)
 │   ├── sdr/                 # SDR document generators
 │   ├── diff/                # Diff renderers (console, grouped, csv, json, html, excel, markdown, pr_comment)
