@@ -304,6 +304,74 @@ def test_inventory_summary_wrapper_resolves_to_output_inventory():
 
 
 # ---------------------------------------------------------------------------
+# output.writers canonical imports
+# ---------------------------------------------------------------------------
+
+
+_OUTPUT_WRITER_SIGNATURES = {
+    "write_csv_output": ["data_dict", "base_filename", "output_dir", "logger"],
+    "write_excel_output": ["data_dict", "base_filename", "output_dir", "logger"],
+    "write_html_output": ["data_dict", "metadata_dict", "base_filename", "output_dir", "logger"],
+    "write_json_output": ["data_dict", "metadata_dict", "base_filename", "output_dir", "logger", "inventory_objects"],
+    "write_markdown_output": ["data_dict", "metadata_dict", "base_filename", "output_dir", "logger"],
+}
+
+_OUTPUT_WRITER_MODULE_CASES = [
+    ("cja_auto_sdr.output.writers", "write_csv_output"),
+    ("cja_auto_sdr.output.writers", "write_excel_output"),
+    ("cja_auto_sdr.output.writers", "write_html_output"),
+    ("cja_auto_sdr.output.writers", "write_json_output"),
+    ("cja_auto_sdr.output.writers", "write_markdown_output"),
+    ("cja_auto_sdr.output.writers.csv", "write_csv_output"),
+    ("cja_auto_sdr.output.writers.excel", "write_excel_output"),
+    ("cja_auto_sdr.output.writers.html", "write_html_output"),
+    ("cja_auto_sdr.output.writers.json", "write_json_output"),
+    ("cja_auto_sdr.output.writers.markdown", "write_markdown_output"),
+]
+
+
+def test_output_writers_package_exports_are_importable():
+    """Canonical output.writers exports should resolve as callables."""
+    from cja_auto_sdr.output.writers import (
+        write_csv_output,
+        write_excel_output,
+        write_html_output,
+        write_json_output,
+        write_markdown_output,
+    )
+
+    assert callable(write_csv_output)
+    assert callable(write_excel_output)
+    assert callable(write_html_output)
+    assert callable(write_json_output)
+    assert callable(write_markdown_output)
+
+
+@pytest.mark.parametrize(
+    ("module_name", "func_name"),
+    _OUTPUT_WRITER_MODULE_CASES,
+    ids=[f"{module_name}.{func_name}" for module_name, func_name in _OUTPUT_WRITER_MODULE_CASES],
+)
+def test_output_writers_resolve_to_output_sdr(module_name, func_name):
+    """Canonical output.writers surfaces should forward to output.sdr implementations."""
+    func = getattr(importlib.import_module(module_name), func_name)
+
+    assert func.__module__ == "cja_auto_sdr.output.sdr"
+
+
+@pytest.mark.parametrize(
+    ("module_name", "func_name"),
+    _OUTPUT_WRITER_MODULE_CASES,
+    ids=[f"{module_name}.{func_name}" for module_name, func_name in _OUTPUT_WRITER_MODULE_CASES],
+)
+def test_output_writers_signatures(module_name, func_name):
+    """Canonical output.writers surfaces must preserve public argument names and ordering."""
+    func = getattr(importlib.import_module(module_name), func_name)
+
+    assert list(signature(func).parameters) == _OUTPUT_WRITER_SIGNATURES[func_name]
+
+
+# ---------------------------------------------------------------------------
 # output.run_summary direct imports
 # ---------------------------------------------------------------------------
 

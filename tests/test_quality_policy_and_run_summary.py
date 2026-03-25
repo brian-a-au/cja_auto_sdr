@@ -1542,6 +1542,68 @@ class TestAggregateQualityIssues:
         assert aggregated[0]["Data View ID"] == "original"
 
 
+class TestBuildQualityStepSummary:
+    def _make_result(
+        self,
+        dv_id,
+        dv_name,
+        *,
+        success=True,
+        dq_issues=None,
+        dq_severity_counts=None,
+        dq_issues_count=None,
+    ):
+        issues = dq_issues or []
+        return ProcessingResult(
+            data_view_id=dv_id,
+            data_view_name=dv_name,
+            success=success,
+            duration=1.0,
+            dq_issues=issues,
+            dq_issues_count=len(issues) if dq_issues_count is None else dq_issues_count,
+            dq_severity_counts=dq_severity_counts or {},
+        )
+
+    def test_renders_severity_counts_in_contract_order_and_highest_severity_per_view(self):
+        from cja_auto_sdr.output.run_summary import build_quality_step_summary
+
+        primary = self._make_result(
+            "dv_primary",
+            "Primary View",
+            dq_issues=[{"Severity": "LOW"}, {"Severity": "HIGH"}],
+            dq_severity_counts={"HIGH": 1, "LOW": 1},
+        )
+        secondary = self._make_result(
+            "dv_secondary",
+            "Secondary View",
+            dq_issues=[{"Severity": "CRITICAL"}, {"Severity": "MEDIUM"}],
+            dq_severity_counts={"CRITICAL": 1, "MEDIUM": 1},
+        )
+        failed = self._make_result("dv_failed", "", success=False, dq_issues=[], dq_severity_counts={})
+
+        summary = build_quality_step_summary([primary, secondary, failed])
+
+        assert "### Data Quality Summary" in summary
+        assert "- Data views processed: 2/3" in summary
+        assert "- Total quality issues: 4" in summary
+        assert summary.index("| CRITICAL | 1 |") < summary.index("| HIGH | 1 |")
+        assert summary.index("| HIGH | 1 |") < summary.index("| MEDIUM | 1 |")
+        assert summary.index("| MEDIUM | 1 |") < summary.index("| LOW | 1 |")
+        assert "| Primary View | `dv_primary` | 2 | HIGH |" in summary
+        assert "| Secondary View | `dv_secondary` | 2 | CRITICAL |" in summary
+        assert "| - | `dv_failed` | 0 | NONE |" in summary
+
+    def test_omits_severity_rollup_table_when_no_issues_exist(self):
+        from cja_auto_sdr.output.run_summary import build_quality_step_summary
+
+        summary = build_quality_step_summary([self._make_result("dv_clean", "Clean View", dq_issues=[])])
+
+        assert "- Data views processed: 1/1" in summary
+        assert "- Total quality issues: 0" in summary
+        assert "| Severity | Count |" not in summary
+        assert "| Clean View | `dv_clean` | 0 | NONE |" in summary
+
+
 # ==================== load_quality_policy ====================
 
 
