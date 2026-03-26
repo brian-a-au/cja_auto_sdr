@@ -1771,14 +1771,41 @@ class TestMakeCompatWrapperBehavior:
 
         assert overrides == {"compose": compose_override_mapping}
 
-    def test_collect_legacy_overrides_rejects_tuple_keys(self):
-        """collect_legacy_overrides public surface must reject normalized tuple-key mappings."""
+    def test_collect_legacy_overrides_accepts_exported_writer_mapping(self):
+        """collect_legacy_overrides must accept exported mixed-key writer mappings."""
+        from cja_auto_sdr.org.writers import (
+            _format_recommendation_context_entries,
+            _format_trending_period_label,
+            _render_trending_markdown,
+        )
+        from cja_auto_sdr.org.writers.compat import (
+            MARKDOWN_WRITER_OVERRIDE_MAPPING,
+            collect_legacy_overrides,
+        )
+
+        overrides = collect_legacy_overrides(
+            "cja_auto_sdr.org.writers",
+            MARKDOWN_WRITER_OVERRIDE_MAPPING,
+        )
+
+        assert overrides["_render_trending_markdown"] is _render_trending_markdown
+        assert (
+            overrides[("cja_auto_sdr.org.writers.markdown", "_format_recommendation_context_entries")]
+            is _format_recommendation_context_entries
+        )
+        assert (
+            overrides[("cja_auto_sdr.org.writers.trending", "_format_trending_period_label")]
+            is _format_trending_period_label
+        )
+
+    def test_collect_legacy_overrides_rejects_malformed_tuple_keys(self):
+        """collect_legacy_overrides must reject tuple keys that are not (module, attr) string pairs."""
         from cja_auto_sdr.org.writers.compat import collect_legacy_overrides
 
-        with pytest.raises(TypeError, match="public override_mapping keys must be strings"):
+        with pytest.raises(TypeError, match="tuple keys must be \\(target_module_name, attr_name\\) string pairs"):
             collect_legacy_overrides(
                 "cja_auto_sdr.org.writers.compat",
-                {("test.module", "compose"): "compose_override_mapping"},
+                {("test.module", 1): "compose_override_mapping"},
             )
 
     def test_resolve_override_returns_default_without_scope(self):

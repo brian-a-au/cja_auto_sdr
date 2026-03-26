@@ -67,6 +67,17 @@ def compose_override_mapping(
     return freeze_override_mapping(combined)
 
 
+def _validate_override_destination(destination: _OVERRIDE_DESTINATION) -> None:
+    """Validate a public override destination key before collection or normalization."""
+    if isinstance(destination, str):
+        return
+    if isinstance(destination, tuple):
+        if len(destination) != 2 or not all(isinstance(part, str) for part in destination):
+            raise TypeError("override_mapping tuple keys must be (target_module_name, attr_name) string pairs")
+        return
+    raise TypeError("override_mapping keys must be strings or (module, attr) tuples")
+
+
 def _normalize_override_mapping(
     mapping: Mapping[_OVERRIDE_DESTINATION, str],
     *,
@@ -75,13 +86,10 @@ def _normalize_override_mapping(
     """Normalize mixed override destinations into explicit module/attribute keys."""
     normalized: dict[_OVERRIDE_KEY, str] = {}
     for destination, legacy_attr_name in mapping.items():
+        _validate_override_destination(destination)
         if isinstance(destination, tuple):
-            if len(destination) != 2 or not all(isinstance(part, str) for part in destination):
-                raise TypeError("override_mapping tuple keys must be (target_module_name, attr_name) string pairs")
             normalized[destination] = legacy_attr_name
             continue
-        if not isinstance(destination, str):
-            raise TypeError("override_mapping keys must be strings or (module, attr) tuples")
         normalized[_compat_key(default_target_module_name, destination)] = legacy_attr_name
     return normalized
 
@@ -258,23 +266,21 @@ def _collect_normalized_legacy_overrides(
 
 def collect_legacy_overrides(
     source_module_name: str,
-    override_mapping: Mapping[str, str],
+    override_mapping: Mapping[_OVERRIDE_DESTINATION, str],
     *,
     baselines: Mapping[str, object] | None = None,
-) -> dict[str, object]:
+) -> dict[_OVERRIDE_DESTINATION, object]:
     """Collect override callables from a legacy compatibility module.
 
-    This preserves the 3.4.7 public contract: callers pass a flat
-    ``{"target_attr": "legacy_attr"}`` mapping and receive a flat
-    ``{"target_attr": override}`` result. Internal wrapper routing uses a
-    private normalized helper so extracted writers can still fan out to
-    multiple canonical target modules without changing the exported API.
+    Flat string-key mappings keep the 3.4.7 ``{"target_attr": override}``
+    result contract. Mixed and tuple-key mappings introduced for 3.4.8
+    routing hardening are also accepted and preserve their explicit keys so
+    exported shared mappings remain consumable by callers.
     """
-    public_mapping: dict[str, str] = {}
-    for target_attr_name, legacy_attr_name in override_mapping.items():
-        if not isinstance(target_attr_name, str):
-            raise TypeError("collect_legacy_overrides() public override_mapping keys must be strings")
-        public_mapping[target_attr_name] = legacy_attr_name
+    public_mapping: dict[_OVERRIDE_DESTINATION, str] = {}
+    for target_key, legacy_attr_name in override_mapping.items():
+        _validate_override_destination(target_key)
+        public_mapping[target_key] = legacy_attr_name
     return _collect_source_overrides(
         source_module_name,
         public_mapping,
