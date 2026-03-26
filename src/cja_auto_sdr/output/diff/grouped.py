@@ -13,6 +13,10 @@ from cja_auto_sdr.output.diff.common import (
     detect_breaking_changes,
 )
 
+__all__ = [
+    "write_diff_grouped_by_field_output",
+]
+
 
 def write_diff_grouped_by_field_output(diff_result: DiffResult, use_color: bool = True, limit: int = 10) -> str:
     """

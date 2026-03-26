@@ -13,6 +13,12 @@ from cja_auto_sdr.org.writers.common import _render_distribution_bar as _render_
 from cja_auto_sdr.org.writers.compat import make_override_proxy
 from cja_auto_sdr.org.writers.trending import _print_trending_console_section as _print_trending_console_section_impl
 
+__all__ = [
+    "write_org_report_comparison_console",
+    "write_org_report_console",
+    "write_org_report_stats_only",
+]
+
 _render_distribution_bar = make_override_proxy(
     __name__,
     "_render_distribution_bar",

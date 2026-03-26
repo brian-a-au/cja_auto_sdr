@@ -13,8 +13,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Restore scoped legacy monkeypatch compatibility for nested org-writer recommendation helpers across `cja_auto_sdr.org.writers` and `cja_auto_sdr.generator`
 - Restore scoped package-root timestamp formatter monkeypatch compatibility for extracted trending helper label generation and markdown writer output
 
+### Hardening
+- Add explicit `__all__` declarations to all org/writers format submodules (console, json, csv, excel, html, markdown)
+- Add explicit `__all__` declarations to all output/diff writer submodules (common, console, csv, json, excel, html, markdown, grouped, pr_comment)
+
 ### Tests
 - Add regression coverage for nested recommendation helper overrides and package-root trending timestamp helper overrides
+- Add direct contract tests for `org.writers.compat` module (signature continuity, override mapping completeness, wrapper behavior, freeze/compose semantics)
+- Add `__all__` export consistency tests verifying submodule exports match parent package re-exports for org/writers and output/diff
+
+### Docs
+- Add `compat.py` to org/writers architecture tree in CLAUDE.md
 
 ## [3.4.7] - 2026-03-25
 

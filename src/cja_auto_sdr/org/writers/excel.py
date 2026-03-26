@@ -42,6 +42,10 @@ from cja_auto_sdr.org.writers.trending import (
     _trending_snapshot_metric_rows as _trending_snapshot_metric_rows_impl,
 )
 
+__all__ = [
+    "write_org_report_excel",
+]
+
 _flatten_recommendation_for_tabular = make_override_proxy(
     __name__,
     "_flatten_recommendation_for_tabular",

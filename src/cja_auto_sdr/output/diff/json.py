@@ -19,6 +19,10 @@ from cja_auto_sdr.diff.models import (
     InventoryItemDiff,
 )
 
+__all__ = [
+    "write_diff_json_output",
+]
+
 
 def write_diff_json_output(
     diff_result: DiffResult,

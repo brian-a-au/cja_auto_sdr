@@ -18,6 +18,10 @@ from cja_auto_sdr.output.diff.common import (
     _get_inventory_change_detail,
 )
 
+__all__ = [
+    "write_diff_console_output",
+]
+
 
 def _format_side_by_side(
     diff,

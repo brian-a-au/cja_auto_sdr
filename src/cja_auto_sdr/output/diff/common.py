@@ -18,6 +18,11 @@ from cja_auto_sdr.diff.models import (
     InventoryItemDiff,
 )
 
+__all__ = [
+    "ANSIColors",
+    "detect_breaking_changes",
+]
+
 # ---------------------------------------------------------------------------
 # ANSIColors adapter — delegates to ConsoleColors constants but accepts an
 # explicit 'enabled' parameter so callers can toggle color per-call.

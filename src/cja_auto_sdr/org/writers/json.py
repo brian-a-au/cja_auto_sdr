@@ -22,6 +22,11 @@ from cja_auto_sdr.org.writers.compat import (
 )
 from cja_auto_sdr.org.writers.trending import _trending_snapshots_to_dicts as _trending_snapshots_to_dicts_impl
 
+__all__ = [
+    "build_org_report_json_data",
+    "write_org_report_json",
+]
+
 _normalize_recommendation_for_json = make_override_proxy(
     __name__,
     "_normalize_recommendation_for_json",

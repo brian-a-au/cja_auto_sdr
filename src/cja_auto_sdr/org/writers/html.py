@@ -25,6 +25,10 @@ from cja_auto_sdr.org.writers.trending import (
     _render_trending_html as _render_trending_html_impl,
 )
 
+__all__ = [
+    "write_org_report_html",
+]
+
 _format_recommendation_context_entries = make_override_proxy(
     __name__,
     "_format_recommendation_context_entries",

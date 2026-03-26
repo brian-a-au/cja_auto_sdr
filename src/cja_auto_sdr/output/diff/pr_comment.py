@@ -12,6 +12,10 @@ from cja_auto_sdr.output.diff.common import (
     detect_breaking_changes,
 )
 
+__all__ = [
+    "write_diff_pr_comment_output",
+]
+
 
 def write_diff_pr_comment_output(
     diff_result: DiffResult,

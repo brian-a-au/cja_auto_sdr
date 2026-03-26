@@ -20,6 +20,10 @@ from cja_auto_sdr.output.diff.common import (
     _get_inventory_change_detail,
 )
 
+__all__ = [
+    "write_diff_markdown_output",
+]
+
 
 def _format_markdown_side_by_side(diff: ComponentDiff, source_label: str, target_label: str) -> list[str]:
     """

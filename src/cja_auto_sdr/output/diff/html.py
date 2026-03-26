@@ -24,6 +24,10 @@ from cja_auto_sdr.output.diff.common import (
     _get_inventory_change_detail,
 )
 
+__all__ = [
+    "write_diff_html_output",
+]
+
 
 def write_diff_html_output(
     diff_result: DiffResult,

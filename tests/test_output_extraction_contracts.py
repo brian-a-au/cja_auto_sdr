@@ -1084,6 +1084,93 @@ def test_org_writers_csv_importable():
 
 
 # ---------------------------------------------------------------------------
+# org.writers __all__ export consistency
+# ---------------------------------------------------------------------------
+
+
+_ORG_WRITERS_SUBMODULES = [
+    "cja_auto_sdr.org.writers.console",
+    "cja_auto_sdr.org.writers.json",
+    "cja_auto_sdr.org.writers.csv",
+    "cja_auto_sdr.org.writers.excel",
+    "cja_auto_sdr.org.writers.html",
+    "cja_auto_sdr.org.writers.markdown",
+]
+
+
+class TestOrgWritersAllExportConsistency:
+    """Verify __all__ declarations in org/writers submodules are consistent with parent re-exports."""
+
+    @pytest.mark.parametrize("submodule", _ORG_WRITERS_SUBMODULES, ids=[m.rsplit(".", 1)[-1] for m in _ORG_WRITERS_SUBMODULES])
+    def test_submodule_has_all(self, submodule):
+        """Each org/writers submodule must declare __all__."""
+        mod = importlib.import_module(submodule)
+        assert hasattr(mod, "__all__"), f"{submodule} is missing __all__"
+
+    @pytest.mark.parametrize("submodule", _ORG_WRITERS_SUBMODULES, ids=[m.rsplit(".", 1)[-1] for m in _ORG_WRITERS_SUBMODULES])
+    def test_all_names_exist_on_submodule(self, submodule):
+        """Every name in a submodule's __all__ must exist as an attribute on that submodule."""
+        mod = importlib.import_module(submodule)
+        for name in mod.__all__:
+            assert hasattr(mod, name), f"{submodule}.__all__ declares {name!r} but it is not an attribute"
+
+    @pytest.mark.parametrize("submodule", _ORG_WRITERS_SUBMODULES, ids=[m.rsplit(".", 1)[-1] for m in _ORG_WRITERS_SUBMODULES])
+    def test_all_names_importable_from_parent(self, submodule):
+        """Every name in a submodule's __all__ must be importable from cja_auto_sdr.org.writers."""
+        sub_mod = importlib.import_module(submodule)
+        parent_mod = importlib.import_module("cja_auto_sdr.org.writers")
+        for name in sub_mod.__all__:
+            assert hasattr(parent_mod, name), (
+                f"{submodule}.__all__ declares {name!r} but it is not importable from cja_auto_sdr.org.writers"
+            )
+
+
+# ---------------------------------------------------------------------------
+# output.diff __all__ export consistency
+# ---------------------------------------------------------------------------
+
+
+_OUTPUT_DIFF_SUBMODULES = [
+    "cja_auto_sdr.output.diff.common",
+    "cja_auto_sdr.output.diff.console",
+    "cja_auto_sdr.output.diff.csv",
+    "cja_auto_sdr.output.diff.json",
+    "cja_auto_sdr.output.diff.excel",
+    "cja_auto_sdr.output.diff.html",
+    "cja_auto_sdr.output.diff.markdown",
+    "cja_auto_sdr.output.diff.grouped",
+    "cja_auto_sdr.output.diff.pr_comment",
+]
+
+
+class TestOutputDiffAllExportConsistency:
+    """Verify __all__ declarations in output/diff submodules are consistent with parent re-exports."""
+
+    @pytest.mark.parametrize("submodule", _OUTPUT_DIFF_SUBMODULES, ids=[m.rsplit(".", 1)[-1] for m in _OUTPUT_DIFF_SUBMODULES])
+    def test_submodule_has_all(self, submodule):
+        """Each output/diff submodule must declare __all__."""
+        mod = importlib.import_module(submodule)
+        assert hasattr(mod, "__all__"), f"{submodule} is missing __all__"
+
+    @pytest.mark.parametrize("submodule", _OUTPUT_DIFF_SUBMODULES, ids=[m.rsplit(".", 1)[-1] for m in _OUTPUT_DIFF_SUBMODULES])
+    def test_all_names_exist_on_submodule(self, submodule):
+        """Every name in a submodule's __all__ must exist as an attribute on that submodule."""
+        mod = importlib.import_module(submodule)
+        for name in mod.__all__:
+            assert hasattr(mod, name), f"{submodule}.__all__ declares {name!r} but it is not an attribute"
+
+    @pytest.mark.parametrize("submodule", _OUTPUT_DIFF_SUBMODULES, ids=[m.rsplit(".", 1)[-1] for m in _OUTPUT_DIFF_SUBMODULES])
+    def test_all_names_importable_from_parent(self, submodule):
+        """Every name in a submodule's __all__ must be importable from cja_auto_sdr.output.diff."""
+        sub_mod = importlib.import_module(submodule)
+        parent_mod = importlib.import_module("cja_auto_sdr.output.diff")
+        for name in sub_mod.__all__:
+            assert hasattr(parent_mod, name), (
+                f"{submodule}.__all__ declares {name!r} but it is not importable from cja_auto_sdr.output.diff"
+            )
+
+
+# ---------------------------------------------------------------------------
 # org.writers package-root continuity (file writers)
 # ---------------------------------------------------------------------------
 
@@ -1338,3 +1425,385 @@ def test_trending_helper_signatures_via_package_root(func_name, expected_params)
     mod = importlib.import_module("cja_auto_sdr.org.writers")
     func = getattr(mod, func_name)
     assert list(signature(func).parameters) == expected_params
+
+
+# ---------------------------------------------------------------------------
+# org.writers.compat contract surface
+# ---------------------------------------------------------------------------
+
+
+class TestCompatSignatureContinuity:
+    """Verify function signatures for all public/exported functions in compat.py."""
+
+    _COMPAT_PUBLIC_SIGNATURES = {
+        "freeze_override_mapping": {
+            "params": ["mapping"],
+        },
+        "compose_override_mapping": {
+            "params": ["mappings"],
+        },
+        "resolve_override": {
+            "params": ["target_module_name", "attr_name", "default"],
+        },
+        "call_override": {
+            "params": ["target_module_name", "attr_name", "default", "args", "kwargs"],
+        },
+        "make_override_proxy": {
+            "params": ["target_module_name", "attr_name", "default"],
+        },
+        "collect_legacy_overrides": {
+            "params": ["source_module_name", "override_mapping", "default_target_module_name", "baselines"],
+        },
+        "override_scope": {
+            "params": ["overrides"],
+        },
+        "make_compat_wrapper": {
+            "params": ["source_module_name", "target", "target_module_name", "override_mapping"],
+        },
+    }
+
+    @pytest.mark.parametrize(
+        ("func_name", "contract"),
+        list(_COMPAT_PUBLIC_SIGNATURES.items()),
+        ids=list(_COMPAT_PUBLIC_SIGNATURES.keys()),
+    )
+    def test_compat_function_signatures(self, func_name, contract):
+        """Public compat functions must preserve parameter names and ordering."""
+        mod = importlib.import_module("cja_auto_sdr.org.writers.compat")
+        func = getattr(mod, func_name)
+        assert list(signature(func).parameters) == contract["params"]
+
+    def test_freeze_override_mapping_annotation(self):
+        """freeze_override_mapping must accept and return a Mapping."""
+        from cja_auto_sdr.org.writers.compat import freeze_override_mapping
+
+        sig = signature(freeze_override_mapping)
+        assert sig.return_annotation is not sig.empty
+
+    def test_compose_override_mapping_is_variadic(self):
+        """compose_override_mapping must accept variadic positional mappings."""
+        import inspect
+
+        from cja_auto_sdr.org.writers.compat import compose_override_mapping
+
+        sig = signature(compose_override_mapping)
+        mappings_param = sig.parameters["mappings"]
+        assert mappings_param.kind == inspect.Parameter.VAR_POSITIONAL
+
+    def test_collect_legacy_overrides_has_keyword_only_params(self):
+        """collect_legacy_overrides must have default_target_module_name as keyword-only."""
+        import inspect
+
+        from cja_auto_sdr.org.writers.compat import collect_legacy_overrides
+
+        sig = signature(collect_legacy_overrides)
+        param = sig.parameters["default_target_module_name"]
+        assert param.kind == inspect.Parameter.KEYWORD_ONLY
+
+    def test_collect_legacy_overrides_baselines_defaults_to_none(self):
+        """collect_legacy_overrides baselines parameter must default to None."""
+        from cja_auto_sdr.org.writers.compat import collect_legacy_overrides
+
+        sig = signature(collect_legacy_overrides)
+        param = sig.parameters["baselines"]
+        assert param.default is None
+
+    def test_make_compat_wrapper_has_keyword_only_params(self):
+        """make_compat_wrapper must have target_module_name and override_mapping as keyword-only."""
+        import inspect
+
+        from cja_auto_sdr.org.writers.compat import make_compat_wrapper
+
+        sig = signature(make_compat_wrapper)
+        assert sig.parameters["target_module_name"].kind == inspect.Parameter.KEYWORD_ONLY
+        assert sig.parameters["override_mapping"].kind == inspect.Parameter.KEYWORD_ONLY
+
+
+class TestCompatOverrideMappingCompleteness:
+    """Verify all exported *_OVERRIDE_MAPPING constants exist and are expected types."""
+
+    _EXPECTED_OVERRIDE_MAPPINGS = [
+        "EMPTY_OVERRIDE_MAPPING",
+        "COMMON_RECOMMENDATION_OVERRIDE_MAPPING",
+        "TRENDING_LABEL_OVERRIDE_MAPPING",
+        "CONSOLE_WRITER_OVERRIDE_MAPPING",
+        "CONSOLE_STATS_ONLY_OVERRIDE_MAPPING",
+        "JSON_BUILDER_OVERRIDE_MAPPING",
+        "JSON_WRITER_OVERRIDE_MAPPING",
+        "EXCEL_WRITER_OVERRIDE_MAPPING",
+        "MARKDOWN_WRITER_OVERRIDE_MAPPING",
+        "HTML_WRITER_OVERRIDE_MAPPING",
+        "CSV_WRITER_OVERRIDE_MAPPING",
+    ]
+
+    @pytest.mark.parametrize("name", _EXPECTED_OVERRIDE_MAPPINGS, ids=_EXPECTED_OVERRIDE_MAPPINGS)
+    def test_override_mapping_exists(self, name):
+        """Override mapping constant must be importable from compat module."""
+        mod = importlib.import_module("cja_auto_sdr.org.writers.compat")
+        assert hasattr(mod, name)
+
+    @pytest.mark.parametrize("name", _EXPECTED_OVERRIDE_MAPPINGS, ids=_EXPECTED_OVERRIDE_MAPPINGS)
+    def test_override_mapping_is_mapping(self, name):
+        """Override mapping constant must be a Mapping."""
+        from collections.abc import Mapping
+
+        mod = importlib.import_module("cja_auto_sdr.org.writers.compat")
+        obj = getattr(mod, name)
+        assert isinstance(obj, Mapping)
+
+    @pytest.mark.parametrize("name", _EXPECTED_OVERRIDE_MAPPINGS, ids=_EXPECTED_OVERRIDE_MAPPINGS)
+    def test_override_mapping_is_frozen(self, name):
+        """Override mapping constant must be immutable (MappingProxyType)."""
+        from types import MappingProxyType
+
+        mod = importlib.import_module("cja_auto_sdr.org.writers.compat")
+        obj = getattr(mod, name)
+        assert isinstance(obj, MappingProxyType)
+
+    def test_empty_override_mapping_is_empty(self):
+        """EMPTY_OVERRIDE_MAPPING must have zero entries."""
+        from cja_auto_sdr.org.writers.compat import EMPTY_OVERRIDE_MAPPING
+
+        assert len(EMPTY_OVERRIDE_MAPPING) == 0
+
+    def test_common_recommendation_mapping_targets_common_module(self):
+        """COMMON_RECOMMENDATION_OVERRIDE_MAPPING keys must target the common module."""
+        from cja_auto_sdr.org.writers.compat import COMMON_RECOMMENDATION_OVERRIDE_MAPPING
+
+        for key in COMMON_RECOMMENDATION_OVERRIDE_MAPPING:
+            assert isinstance(key, tuple)
+            module_name, _attr = key
+            assert module_name == "cja_auto_sdr.org.writers.common"
+
+    def test_trending_label_mapping_targets_trending_module(self):
+        """TRENDING_LABEL_OVERRIDE_MAPPING keys must target the trending module."""
+        from cja_auto_sdr.org.writers.compat import TRENDING_LABEL_OVERRIDE_MAPPING
+
+        for key in TRENDING_LABEL_OVERRIDE_MAPPING:
+            assert isinstance(key, tuple)
+            module_name, _attr = key
+            assert module_name == "cja_auto_sdr.org.writers.trending"
+
+    def test_composed_mappings_inherit_base_entries(self):
+        """Composed mappings must contain all entries from their base mappings."""
+        from cja_auto_sdr.org.writers.compat import (
+            COMMON_RECOMMENDATION_OVERRIDE_MAPPING,
+            CONSOLE_WRITER_OVERRIDE_MAPPING,
+            JSON_BUILDER_OVERRIDE_MAPPING,
+            TRENDING_LABEL_OVERRIDE_MAPPING,
+        )
+
+        for base_key in TRENDING_LABEL_OVERRIDE_MAPPING:
+            assert base_key in CONSOLE_WRITER_OVERRIDE_MAPPING
+        for base_key in COMMON_RECOMMENDATION_OVERRIDE_MAPPING:
+            assert base_key in JSON_BUILDER_OVERRIDE_MAPPING
+
+    def test_override_mapping_values_are_strings(self):
+        """All override mapping values must be string attribute names."""
+        mod = importlib.import_module("cja_auto_sdr.org.writers.compat")
+        for name in self._EXPECTED_OVERRIDE_MAPPINGS:
+            mapping = getattr(mod, name)
+            for value in mapping.values():
+                assert isinstance(value, str), f"{name}[...] = {value!r} is not a string"
+
+
+class TestMakeCompatWrapperBehavior:
+    """Test that make_compat_wrapper returns a callable with correct behavior."""
+
+    def test_returns_callable(self):
+        """make_compat_wrapper must return a callable."""
+        from cja_auto_sdr.org.writers.compat import EMPTY_OVERRIDE_MAPPING, make_compat_wrapper
+
+        def dummy_target():
+            return "original"
+
+        wrapper = make_compat_wrapper(
+            "cja_auto_sdr.org.writers.compat",
+            dummy_target,
+            target_module_name="cja_auto_sdr.org.writers.compat",
+            override_mapping=EMPTY_OVERRIDE_MAPPING,
+        )
+        assert callable(wrapper)
+
+    def test_preserves_wrapped_function_name(self):
+        """make_compat_wrapper must preserve the target function's __name__."""
+        from cja_auto_sdr.org.writers.compat import EMPTY_OVERRIDE_MAPPING, make_compat_wrapper
+
+        def my_special_function():
+            return "value"
+
+        wrapper = make_compat_wrapper(
+            "cja_auto_sdr.org.writers.compat",
+            my_special_function,
+            target_module_name="cja_auto_sdr.org.writers.compat",
+            override_mapping=EMPTY_OVERRIDE_MAPPING,
+        )
+        assert wrapper.__name__ == "my_special_function"
+
+    def test_sets_module_to_source(self):
+        """make_compat_wrapper must set __module__ to the source module name."""
+        from cja_auto_sdr.org.writers.compat import EMPTY_OVERRIDE_MAPPING, make_compat_wrapper
+
+        def dummy():
+            pass
+
+        wrapper = make_compat_wrapper(
+            "cja_auto_sdr.org.writers",
+            dummy,
+            target_module_name="cja_auto_sdr.org.writers.compat",
+            override_mapping=EMPTY_OVERRIDE_MAPPING,
+        )
+        assert wrapper.__module__ == "cja_auto_sdr.org.writers"
+
+    def test_override_scope_applies_and_restores(self):
+        """override_scope must apply overrides and restore state afterwards."""
+        from cja_auto_sdr.org.writers.compat import _current_overrides, override_scope
+
+        key = ("test.module", "test_attr")
+        assert key not in _current_overrides()
+
+        with override_scope({key: "patched_value"}):
+            assert _current_overrides()[key] == "patched_value"
+
+        assert key not in _current_overrides()
+
+    def test_resolve_override_returns_default_without_scope(self):
+        """resolve_override must return the default when no override is active."""
+        from cja_auto_sdr.org.writers.compat import resolve_override
+
+        sentinel = object()
+        result = resolve_override("nonexistent.module", "nonexistent_attr", sentinel)
+        assert result is sentinel
+
+    def test_resolve_override_returns_override_within_scope(self):
+        """resolve_override must return the overridden value inside an override_scope."""
+        from cja_auto_sdr.org.writers.compat import override_scope, resolve_override
+
+        sentinel = object()
+        override_val = object()
+        key_module = "test.resolve.module"
+        key_attr = "test_resolve_attr"
+
+        with override_scope({(key_module, key_attr): override_val}):
+            result = resolve_override(key_module, key_attr, sentinel)
+            assert result is override_val
+
+    def test_make_override_proxy_delegates_through_scope(self):
+        """make_override_proxy must call overridden function within an override_scope."""
+        from cja_auto_sdr.org.writers.compat import make_override_proxy, override_scope
+
+        def default_fn(x):
+            return f"default:{x}"
+
+        proxy = make_override_proxy("test.proxy.module", "test_fn", default_fn)
+        assert proxy("hello") == "default:hello"
+
+        def override_fn(x):
+            return f"override:{x}"
+
+        with override_scope({("test.proxy.module", "test_fn"): override_fn}):
+            assert proxy("hello") == "override:hello"
+
+        assert proxy("hello") == "default:hello"
+
+    def test_call_override_invokes_default(self):
+        """call_override must invoke the default callable when no override is active."""
+        from cja_auto_sdr.org.writers.compat import call_override
+
+        def default_fn(a, b):
+            return a + b
+
+        result = call_override("test.call.module", "test_fn", default_fn, 3, 4)
+        assert result == 7
+
+    def test_call_override_invokes_override_within_scope(self):
+        """call_override must invoke the overridden callable inside an override_scope."""
+        from cja_auto_sdr.org.writers.compat import call_override, override_scope
+
+        def default_fn(a, b):
+            return a + b
+
+        def override_fn(a, b):
+            return a * b
+
+        with override_scope({("test.call.module", "test_fn"): override_fn}):
+            result = call_override("test.call.module", "test_fn", default_fn, 3, 4)
+            assert result == 12
+
+
+class TestFreezeAndComposeOverrideMapping:
+    """Test freeze_override_mapping and compose_override_mapping behavior."""
+
+    def test_freeze_produces_immutable_mapping(self):
+        """freeze_override_mapping must return an immutable MappingProxyType."""
+        from types import MappingProxyType
+
+        from cja_auto_sdr.org.writers.compat import freeze_override_mapping
+
+        mutable = {("mod", "attr"): "value"}
+        frozen = freeze_override_mapping(mutable)
+        assert isinstance(frozen, MappingProxyType)
+        with pytest.raises(TypeError):
+            frozen[("mod", "new_attr")] = "new_value"
+
+    def test_freeze_copies_source(self):
+        """freeze_override_mapping must not be affected by mutations to the source dict."""
+        from cja_auto_sdr.org.writers.compat import freeze_override_mapping
+
+        mutable = {("mod", "attr"): "original"}
+        frozen = freeze_override_mapping(mutable)
+        mutable[("mod", "attr")] = "mutated"
+        assert frozen[("mod", "attr")] == "original"
+
+    def test_freeze_preserves_all_entries(self):
+        """freeze_override_mapping must preserve all key-value pairs."""
+        from cja_auto_sdr.org.writers.compat import freeze_override_mapping
+
+        source = {("m1", "a1"): "v1", ("m2", "a2"): "v2"}
+        frozen = freeze_override_mapping(source)
+        assert dict(frozen) == source
+
+    def test_compose_merges_multiple_mappings(self):
+        """compose_override_mapping must merge entries from all provided mappings."""
+        from cja_auto_sdr.org.writers.compat import compose_override_mapping
+
+        m1 = {("mod1", "attr1"): "val1"}
+        m2 = {("mod2", "attr2"): "val2"}
+        composed = compose_override_mapping(m1, m2)
+        assert ("mod1", "attr1") in composed
+        assert ("mod2", "attr2") in composed
+        assert len(composed) == 2
+
+    def test_compose_returns_frozen_mapping(self):
+        """compose_override_mapping must return an immutable MappingProxyType."""
+        from types import MappingProxyType
+
+        from cja_auto_sdr.org.writers.compat import compose_override_mapping
+
+        composed = compose_override_mapping({"key": "val"})
+        assert isinstance(composed, MappingProxyType)
+
+    def test_compose_later_mappings_override_earlier(self):
+        """compose_override_mapping must let later mappings override earlier ones."""
+        from cja_auto_sdr.org.writers.compat import compose_override_mapping
+
+        m1 = {("mod", "attr"): "first"}
+        m2 = {("mod", "attr"): "second"}
+        composed = compose_override_mapping(m1, m2)
+        assert composed[("mod", "attr")] == "second"
+
+    def test_compose_with_no_arguments_returns_empty(self):
+        """compose_override_mapping with no arguments must return an empty frozen mapping."""
+        from cja_auto_sdr.org.writers.compat import compose_override_mapping
+
+        composed = compose_override_mapping()
+        assert len(composed) == 0
+
+    def test_compose_with_string_keys_preserves_them(self):
+        """compose_override_mapping must handle string destination keys."""
+        from cja_auto_sdr.org.writers.compat import compose_override_mapping
+
+        m1 = {"simple_attr": "legacy_name"}
+        composed = compose_override_mapping(m1)
+        assert "simple_attr" in composed
+        assert composed["simple_attr"] == "legacy_name"
