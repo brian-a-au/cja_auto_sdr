@@ -16,11 +16,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Hardening
 - Add explicit `__all__` declarations to all org/writers format submodules (console, json, csv, excel, html, markdown)
 - Add explicit `__all__` declarations to all output/diff writer submodules (common, console, csv, json, excel, html, markdown, grouped, pr_comment)
+- Add explicit `__all__` declarations to `org/writers/compat.py` and `org/writers/trending.py`
+- Centralize recommendation-context override fan-out in `org/writers/compat.py` so legacy package-root and generator patches reach the canonical common, markdown, and html helpers through one shared mapping
+- Remove duplicate bare-string override keys in MARKDOWN and HTML writer mappings that collided with tuple keys from `COMMON_RECOMMENDATION_OVERRIDE_MAPPING`
 
 ### Tests
 - Add regression coverage for nested recommendation helper overrides and package-root trending timestamp helper overrides
+- Add Markdown/HTML file-writer regression coverage for legacy `_format_recommendation_context_entries` patches across both `cja_auto_sdr.org.writers` and `cja_auto_sdr.generator`
 - Add direct contract tests for `org.writers.compat` module (signature continuity, override mapping completeness, wrapper behavior, freeze/compose semantics)
 - Add `__all__` export consistency tests verifying submodule exports match parent package re-exports for org/writers and output/diff
+- Add `override_scope` nesting tests (outer preserved, inner shadows, exit restores)
+- Add direct unit tests for `_normalize_override_mapping` (string, tuple, mixed, empty, tuple-ignores-default)
+- Add composed mapping duplicate key detection contract (string/tuple attr collision)
+- Add package-root monkeypatch propagation tests for `_trending_date_range` and `_trending_delta_csv_rows`
+- Add `call_override` kwargs forwarding test
 
 ### Docs
 - Add `compat.py` to org/writers architecture tree in CLAUDE.md

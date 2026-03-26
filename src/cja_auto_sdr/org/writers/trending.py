@@ -15,6 +15,37 @@ from cja_auto_sdr.org.models import (
 )
 from cja_auto_sdr.org.writers.compat import call_override
 
+__all__ = [
+    "_TRENDING_METRIC_SPECS",
+    "_build_trending_metric_rows",
+    "_escape_markdown_table_cell",
+    "_format_signed_trending_value",
+    "_format_trending_dv_label",
+    "_format_trending_period_label",
+    "_format_trending_timestamp_short",
+    "_print_trending_console_section",
+    "_ranked_drift_entries",
+    "_render_console_trending_table",
+    "_render_html_trending_table",
+    "_render_markdown_trending_table",
+    "_render_trending_console",
+    "_render_trending_html",
+    "_render_trending_markdown",
+    "_resolve_trending_dv_name",
+    "_sorted_drift_score_items",
+    "_stringify_trending_value",
+    "_top_drift_scores",
+    "_trending_date_range",
+    "_trending_delta_column_specs",
+    "_trending_delta_csv_rows",
+    "_trending_delta_metric_rows",
+    "_trending_matrix_rows",
+    "_trending_snapshot_column_specs",
+    "_trending_snapshot_csv_rows",
+    "_trending_snapshot_metric_rows",
+    "_trending_snapshots_to_dicts",
+]
+
 _TRENDING_METRIC_SPECS: tuple[tuple[str, str, str], ...] = (
     ("Data Views", "data_view_count", "data_view_delta"),
     ("Components", "component_count", "component_delta"),

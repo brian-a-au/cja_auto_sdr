@@ -16,8 +16,38 @@ _OVERRIDES: ContextVar[dict[_OVERRIDE_KEY, object] | None] = ContextVar(
     default=None,
 )
 EMPTY_OVERRIDE_MAPPING: Mapping[_OVERRIDE_DESTINATION, str] = MappingProxyType({})
+
+__all__ = [
+    "COMMON_RECOMMENDATION_OVERRIDE_MAPPING",
+    "CONSOLE_STATS_ONLY_OVERRIDE_MAPPING",
+    "CONSOLE_WRITER_OVERRIDE_MAPPING",
+    "CSV_WRITER_OVERRIDE_MAPPING",
+    "EMPTY_OVERRIDE_MAPPING",
+    "EXCEL_WRITER_OVERRIDE_MAPPING",
+    "HTML_WRITER_OVERRIDE_MAPPING",
+    "JSON_BUILDER_OVERRIDE_MAPPING",
+    "JSON_WRITER_OVERRIDE_MAPPING",
+    "MARKDOWN_WRITER_OVERRIDE_MAPPING",
+    "TRENDING_LABEL_OVERRIDE_MAPPING",
+    "call_override",
+    "collect_legacy_overrides",
+    "compose_override_mapping",
+    "freeze_override_mapping",
+    "make_compat_wrapper",
+    "make_override_proxy",
+    "override_scope",
+    "resolve_override",
+]
+
 _COMMON_MODULE = "cja_auto_sdr.org.writers.common"
+_HTML_MODULE = "cja_auto_sdr.org.writers.html"
+_MARKDOWN_MODULE = "cja_auto_sdr.org.writers.markdown"
 _TRENDING_MODULE = "cja_auto_sdr.org.writers.trending"
+_RECOMMENDATION_CONTEXT_PROXY_MODULES = (
+    _COMMON_MODULE,
+    _MARKDOWN_MODULE,
+    _HTML_MODULE,
+)
 
 
 def freeze_override_mapping(
@@ -52,19 +82,33 @@ def _normalize_override_mapping(
     return normalized
 
 
+def _fanout_override_mapping(
+    legacy_attr_name: str,
+    *target_module_names: str,
+) -> Mapping[_OVERRIDE_DESTINATION, str]:
+    """Build tuple-key override mappings for one legacy attr across multiple proxy modules."""
+    return freeze_override_mapping(
+        {
+            (target_module_name, legacy_attr_name): legacy_attr_name
+            for target_module_name in target_module_names
+        }
+    )
+
+
 # Centralized compatibility dependency maps keep legacy re-export wrappers aligned
 # with the canonical writer modules they delegate to.
-COMMON_RECOMMENDATION_OVERRIDE_MAPPING = freeze_override_mapping(
-    {
-        (_COMMON_MODULE, "_format_recommendation_context_entries"): "_format_recommendation_context_entries",
-        (_COMMON_MODULE, "_normalize_recommendation_severity"): "_normalize_recommendation_severity",
-    }
+COMMON_RECOMMENDATION_OVERRIDE_MAPPING = compose_override_mapping(
+    # Context entries are rendered directly by the canonical markdown/html writers
+    # and nested under common.py JSON normalization.
+    _fanout_override_mapping(
+        "_format_recommendation_context_entries",
+        *_RECOMMENDATION_CONTEXT_PROXY_MODULES,
+    ),
+    _fanout_override_mapping("_normalize_recommendation_severity", _COMMON_MODULE),
 )
-TRENDING_LABEL_OVERRIDE_MAPPING = freeze_override_mapping(
-    {
-        (_TRENDING_MODULE, "_format_trending_period_label"): "_format_trending_period_label",
-        (_TRENDING_MODULE, "_format_trending_timestamp_short"): "_format_trending_timestamp_short",
-    }
+TRENDING_LABEL_OVERRIDE_MAPPING = compose_override_mapping(
+    _fanout_override_mapping("_format_trending_period_label", _TRENDING_MODULE),
+    _fanout_override_mapping("_format_trending_timestamp_short", _TRENDING_MODULE),
 )
 CONSOLE_WRITER_OVERRIDE_MAPPING = compose_override_mapping(
     {
@@ -106,7 +150,6 @@ EXCEL_WRITER_OVERRIDE_MAPPING = compose_override_mapping(
 )
 MARKDOWN_WRITER_OVERRIDE_MAPPING = compose_override_mapping(
     {
-        "_format_recommendation_context_entries": "_format_recommendation_context_entries",
         "_normalize_recommendation_for_json": "_normalize_recommendation_for_json",
         "_render_trending_markdown": "_render_trending_markdown",
     },
@@ -115,7 +158,6 @@ MARKDOWN_WRITER_OVERRIDE_MAPPING = compose_override_mapping(
 )
 HTML_WRITER_OVERRIDE_MAPPING = compose_override_mapping(
     {
-        "_format_recommendation_context_entries": "_format_recommendation_context_entries",
         "_normalize_recommendation_for_json": "_normalize_recommendation_for_json",
         "_render_trending_html": "_render_trending_html",
     },

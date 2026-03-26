@@ -930,6 +930,51 @@ def test_org_markdown_writer_respects_legacy_helper_patch(module_name, tmp_path,
     assert normalize_mock.call_count == len(rich_org_report_result.recommendations)
 
 
+@pytest.mark.parametrize(
+    ("writer_name", "suffix"),
+    [
+        ("write_org_report_markdown", ".md"),
+        ("write_org_report_html", ".html"),
+    ],
+    ids=["markdown", "html"],
+)
+@pytest.mark.parametrize(
+    "module_name",
+    ["cja_auto_sdr.org.writers", "cja_auto_sdr.generator"],
+    ids=["org.writers", "generator"],
+)
+def test_org_file_writers_respect_legacy_context_helper_patch(
+    writer_name,
+    suffix,
+    module_name,
+    tmp_path,
+    rich_org_report_result,
+):
+    """Legacy context helper patches must flow into every recommendation-rendering file writer."""
+    mod = importlib.import_module(module_name)
+    logger = logging.getLogger(f"test.{module_name}.{writer_name}.context")
+    patched_label = "Patched Context"
+    patched_value = f"patched context via {module_name}"
+
+    with patch(
+        f"{module_name}._format_recommendation_context_entries",
+        return_value=[(patched_label, patched_value)],
+    ) as context_mock:
+        output_path = Path(
+            getattr(mod, writer_name)(
+                rich_org_report_result,
+                tmp_path / f"org_report{suffix}",
+                str(tmp_path),
+                logger,
+            ),
+        )
+
+    output = output_path.read_text(encoding="utf-8")
+    assert patched_label in output
+    assert patched_value in output
+    assert context_mock.call_count >= len(rich_org_report_result.recommendations)
+
+
 def test_org_markdown_writer_respects_package_root_timestamp_helper_patch(
     tmp_path,
     rich_org_report_result,
@@ -1089,12 +1134,19 @@ def test_org_writers_csv_importable():
 
 
 _ORG_WRITERS_SUBMODULES = [
+    "cja_auto_sdr.org.writers.compat",
     "cja_auto_sdr.org.writers.console",
     "cja_auto_sdr.org.writers.json",
     "cja_auto_sdr.org.writers.csv",
     "cja_auto_sdr.org.writers.excel",
     "cja_auto_sdr.org.writers.html",
     "cja_auto_sdr.org.writers.markdown",
+    "cja_auto_sdr.org.writers.trending",
+]
+
+# compat.py exports are internal plumbing, not re-exported by the parent __init__.py
+_ORG_WRITERS_REEXPORTED_SUBMODULES = [
+    m for m in _ORG_WRITERS_SUBMODULES if m != "cja_auto_sdr.org.writers.compat"
 ]
 
 
@@ -1119,7 +1171,9 @@ class TestOrgWritersAllExportConsistency:
             assert hasattr(mod, name), f"{submodule}.__all__ declares {name!r} but it is not an attribute"
 
     @pytest.mark.parametrize(
-        "submodule", _ORG_WRITERS_SUBMODULES, ids=[m.rsplit(".", 1)[-1] for m in _ORG_WRITERS_SUBMODULES]
+        "submodule",
+        _ORG_WRITERS_REEXPORTED_SUBMODULES,
+        ids=[m.rsplit(".", 1)[-1] for m in _ORG_WRITERS_REEXPORTED_SUBMODULES],
     )
     def test_all_names_importable_from_parent(self, submodule):
         """Every name in a submodule's __all__ must be importable from cja_auto_sdr.org.writers."""
@@ -1578,14 +1632,33 @@ class TestCompatOverrideMappingCompleteness:
 
         assert len(EMPTY_OVERRIDE_MAPPING) == 0
 
-    def test_common_recommendation_mapping_targets_common_module(self):
-        """COMMON_RECOMMENDATION_OVERRIDE_MAPPING keys must target the common module."""
+    def test_common_recommendation_mapping_fans_out_context_helper_to_proxy_modules(self):
+        """Context helper overrides must reach every canonical proxy that renders recommendations."""
         from cja_auto_sdr.org.writers.compat import COMMON_RECOMMENDATION_OVERRIDE_MAPPING
 
-        for key in COMMON_RECOMMENDATION_OVERRIDE_MAPPING:
-            assert isinstance(key, tuple)
-            module_name, _attr = key
-            assert module_name == "cja_auto_sdr.org.writers.common"
+        context_targets = {
+            key
+            for key, legacy_attr in COMMON_RECOMMENDATION_OVERRIDE_MAPPING.items()
+            if legacy_attr == "_format_recommendation_context_entries"
+        }
+        assert context_targets == {
+            ("cja_auto_sdr.org.writers.common", "_format_recommendation_context_entries"),
+            ("cja_auto_sdr.org.writers.markdown", "_format_recommendation_context_entries"),
+            ("cja_auto_sdr.org.writers.html", "_format_recommendation_context_entries"),
+        }
+
+    def test_common_recommendation_mapping_scopes_severity_helper_to_common_module(self):
+        """Severity helper overrides should stay scoped to the common normalizer."""
+        from cja_auto_sdr.org.writers.compat import COMMON_RECOMMENDATION_OVERRIDE_MAPPING
+
+        severity_targets = {
+            key
+            for key, legacy_attr in COMMON_RECOMMENDATION_OVERRIDE_MAPPING.items()
+            if legacy_attr == "_normalize_recommendation_severity"
+        }
+        assert severity_targets == {
+            ("cja_auto_sdr.org.writers.common", "_normalize_recommendation_severity"),
+        }
 
     def test_trending_label_mapping_targets_trending_module(self):
         """TRENDING_LABEL_OVERRIDE_MAPPING keys must target the trending module."""
@@ -1617,6 +1690,18 @@ class TestCompatOverrideMappingCompleteness:
             mapping = getattr(mod, name)
             for value in mapping.values():
                 assert isinstance(value, str), f"{name}[...] = {value!r} is not a string"
+
+    def test_composed_mappings_no_string_tuple_attr_collision(self):
+        """No composed mapping should have a bare string key whose attr duplicates a tuple key's attr."""
+        mod = importlib.import_module("cja_auto_sdr.org.writers.compat")
+        for name in self._EXPECTED_OVERRIDE_MAPPINGS:
+            mapping = getattr(mod, name)
+            tuple_attrs = {attr for key in mapping if isinstance(key, tuple) for _, attr in [key]}
+            string_keys = {key for key in mapping if isinstance(key, str)}
+            collision = string_keys & tuple_attrs
+            assert not collision, (
+                f"{name} has string key(s) {collision} that duplicate tuple key attr names"
+            )
 
 
 class TestMakeCompatWrapperBehavior:
@@ -1742,6 +1827,58 @@ class TestMakeCompatWrapperBehavior:
             result = call_override("test.call.module", "test_fn", default_fn, 3, 4)
             assert result == 12
 
+    def test_call_override_forwards_kwargs(self):
+        """call_override must forward keyword arguments to both default and overridden callables."""
+        from cja_auto_sdr.org.writers.compat import call_override, override_scope
+
+        def default_fn(*, x, y):
+            return f"default:{x},{y}"
+
+        def override_fn(*, x, y):
+            return f"override:{x},{y}"
+
+        assert call_override("test.kw.module", "test_fn", default_fn, x=1, y=2) == "default:1,2"
+
+        with override_scope({("test.kw.module", "test_fn"): override_fn}):
+            assert call_override("test.kw.module", "test_fn", default_fn, x=3, y=4) == "override:3,4"
+
+    def test_override_scope_nesting_preserves_outer_keys(self):
+        """Nested override_scope must not clobber outer scope's unrelated keys."""
+        from cja_auto_sdr.org.writers.compat import _current_overrides, override_scope
+
+        key_a = ("test.nest.module", "attr_a")
+        key_b = ("test.nest.module", "attr_b")
+
+        with override_scope({key_a: "outer_a"}):
+            with override_scope({key_b: "inner_b"}):
+                overrides = _current_overrides()
+                assert overrides[key_a] == "outer_a"
+                assert overrides[key_b] == "inner_b"
+
+    def test_override_scope_nesting_inner_shadows_same_key(self):
+        """Inner override_scope must shadow the outer scope for the same key."""
+        from cja_auto_sdr.org.writers.compat import _current_overrides, override_scope
+
+        key = ("test.shadow.module", "attr")
+
+        with override_scope({key: "outer"}):
+            assert _current_overrides()[key] == "outer"
+            with override_scope({key: "inner"}):
+                assert _current_overrides()[key] == "inner"
+
+    def test_override_scope_nesting_exit_restores_outer(self):
+        """Exiting inner override_scope must restore outer scope's original values."""
+        from cja_auto_sdr.org.writers.compat import _current_overrides, override_scope
+
+        key = ("test.restore.module", "attr")
+
+        with override_scope({key: "outer"}):
+            with override_scope({key: "inner"}):
+                pass
+            assert _current_overrides()[key] == "outer"
+
+        assert key not in _current_overrides()
+
 
 class TestFreezeAndComposeOverrideMapping:
     """Test freeze_override_mapping and compose_override_mapping behavior."""
@@ -1819,3 +1956,95 @@ class TestFreezeAndComposeOverrideMapping:
         composed = compose_override_mapping(m1)
         assert "simple_attr" in composed
         assert composed["simple_attr"] == "legacy_name"
+
+
+class TestNormalizeOverrideMapping:
+    """Direct unit tests for _normalize_override_mapping."""
+
+    def test_string_keys_get_default_module(self):
+        """Pure string keys must be normalized to (default_target_module_name, key)."""
+        from cja_auto_sdr.org.writers.compat import _normalize_override_mapping
+
+        result = _normalize_override_mapping(
+            {"attr_a": "legacy_a", "attr_b": "legacy_b"},
+            default_target_module_name="my.module",
+        )
+        assert result == {
+            ("my.module", "attr_a"): "legacy_a",
+            ("my.module", "attr_b"): "legacy_b",
+        }
+
+    def test_tuple_keys_pass_through(self):
+        """Pure tuple keys must pass through unchanged."""
+        from cja_auto_sdr.org.writers.compat import _normalize_override_mapping
+
+        result = _normalize_override_mapping(
+            {("explicit.mod", "attr_x"): "legacy_x"},
+            default_target_module_name="default.mod",
+        )
+        assert result == {("explicit.mod", "attr_x"): "legacy_x"}
+
+    def test_mixed_keys_normalize_correctly(self):
+        """Mixed string and tuple keys must each normalize independently."""
+        from cja_auto_sdr.org.writers.compat import _normalize_override_mapping
+
+        result = _normalize_override_mapping(
+            {
+                "bare_attr": "legacy_bare",
+                ("other.mod", "explicit_attr"): "legacy_explicit",
+            },
+            default_target_module_name="default.mod",
+        )
+        assert result == {
+            ("default.mod", "bare_attr"): "legacy_bare",
+            ("other.mod", "explicit_attr"): "legacy_explicit",
+        }
+
+    def test_empty_mapping_returns_empty(self):
+        """Empty mapping must return empty dict."""
+        from cja_auto_sdr.org.writers.compat import _normalize_override_mapping
+
+        result = _normalize_override_mapping({}, default_target_module_name="any.mod")
+        assert result == {}
+
+    def test_tuple_key_ignores_default_module(self):
+        """Tuple key's explicit module must take precedence over default_target_module_name."""
+        from cja_auto_sdr.org.writers.compat import _normalize_override_mapping
+
+        result = _normalize_override_mapping(
+            {("specific.mod", "attr"): "legacy"},
+            default_target_module_name="ignored.mod",
+        )
+        assert ("specific.mod", "attr") in result
+        assert ("ignored.mod", "attr") not in result
+
+
+def test_org_writers_trending_date_range_respects_package_root_timestamp_patch():
+    """Package-root timestamp formatter patches must flow into _trending_date_range."""
+    mod = importlib.import_module("cja_auto_sdr.org.writers")
+    trending = _make_trending()
+
+    with patch(
+        "cja_auto_sdr.org.writers._format_trending_timestamp_short",
+        side_effect=lambda ts: f"patched:{ts[5:7]}",
+    ) as timestamp_mock:
+        result = mod._trending_date_range(trending.snapshots)
+
+    assert "patched:01" in result
+    assert "patched:02" in result
+    assert timestamp_mock.call_count == 2
+
+
+def test_org_writers_trending_delta_csv_rows_respects_package_root_period_label_patch():
+    """Package-root period label patches must flow into _trending_delta_csv_rows."""
+    mod = importlib.import_module("cja_auto_sdr.org.writers")
+    trending = _make_trending()
+
+    with patch(
+        "cja_auto_sdr.org.writers._format_trending_period_label",
+        return_value="patched_period",
+    ) as label_mock:
+        rows = mod._trending_delta_csv_rows(trending.deltas)
+
+    assert all(row["Period"] == "patched_period" for row in rows)
+    assert label_mock.call_count == len(trending.deltas)
