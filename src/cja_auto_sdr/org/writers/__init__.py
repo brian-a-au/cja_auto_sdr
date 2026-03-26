@@ -156,17 +156,47 @@ _PACKAGE_ROOT_CSV_WRITER_BRIDGE_ATTRS = frozenset(
 )
 
 
+_format_recommendation_context_entries = _make_compat_wrapper(
+    __name__,
+    _format_recommendation_context_entries,
+    target_module_name=_COMMON_MODULE,
+    override_mapping=_EMPTY_OVERRIDE_MAPPING,
+)
+_normalize_org_report_output_format = _make_compat_wrapper(
+    __name__,
+    _normalize_org_report_output_format,
+    target_module_name=_COMMON_MODULE,
+    override_mapping=_EMPTY_OVERRIDE_MAPPING,
+)
 _normalize_recommendation_for_json = _make_compat_wrapper(
     __name__,
     _normalize_recommendation_for_json,
     target_module_name=_COMMON_MODULE,
     override_mapping=_COMMON_RECOMMENDATION_OVERRIDE_MAPPING,
 )
+_normalize_recommendation_severity = _make_compat_wrapper(
+    __name__,
+    _normalize_recommendation_severity,
+    target_module_name=_COMMON_MODULE,
+    override_mapping=_EMPTY_OVERRIDE_MAPPING,
+)
 _flatten_recommendation_for_tabular = _make_compat_wrapper(
     __name__,
     _flatten_recommendation_for_tabular,
     target_module_name=_COMMON_MODULE,
     override_mapping=_COMMON_RECOMMENDATION_OVERRIDE_MAPPING,
+)
+_render_distribution_bar = _make_compat_wrapper(
+    __name__,
+    _render_distribution_bar,
+    target_module_name=_COMMON_MODULE,
+    override_mapping=_EMPTY_OVERRIDE_MAPPING,
+)
+_validate_org_report_output_request = _make_compat_wrapper(
+    __name__,
+    _validate_org_report_output_request,
+    target_module_name=_COMMON_MODULE,
+    override_mapping=_EMPTY_OVERRIDE_MAPPING,
 )
 for _trending_helper_name in _TRENDING_HELPER_OVERRIDE_MAPPING:
     _wrapped_trending_helper = _make_compat_wrapper_with_options(

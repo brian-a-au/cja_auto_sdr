@@ -15,7 +15,7 @@ import logging
 import threading
 from inspect import signature
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -845,6 +845,28 @@ def test_org_json_builder_respects_package_root_nested_sort_patch(rich_org_repor
     assert sort_mock.call_count >= 2
 
 
+def test_org_json_builder_supports_package_root_override_scope_for_builder_export(rich_org_report_result):
+    """Package-root override_scope must reach direct builder re-exports."""
+    from cja_auto_sdr.org.writers.compat import override_scope
+
+    mod = importlib.import_module("cja_auto_sdr.org.writers")
+    payload = {
+        "report_type": "patched",
+        "version": "test",
+        "org_id": "override-root",
+    }
+
+    with override_scope(
+        "cja_auto_sdr.org.writers",
+        {
+            "build_org_report_json_data": lambda result, trending=None: payload,
+        },
+    ):
+        returned = mod.build_org_report_json_data(rich_org_report_result)
+
+    assert returned == payload
+
+
 def test_org_json_writer_respects_package_root_nested_sort_patch(tmp_path, rich_org_report_result):
     """Nested package-root trending helper patches must flow through the JSON writer bridge."""
     mod = importlib.import_module("cja_auto_sdr.org.writers")
@@ -870,6 +892,128 @@ def test_org_json_writer_respects_package_root_nested_sort_patch(tmp_path, rich_
     assert list(payload["trending"]["drift_scores"].items()) == patched_scores
     assert payload["trending"]["drift_details"][0]["data_view_id"] == "dv_999"
     assert sort_mock.call_count >= 2
+
+
+def test_org_json_writer_supports_package_root_override_scope_for_builder_export(
+    tmp_path,
+    rich_org_report_result,
+):
+    """Package-root override_scope must flow through the JSON writer bridge."""
+    from cja_auto_sdr.org.writers.compat import override_scope
+
+    mod = importlib.import_module("cja_auto_sdr.org.writers")
+    logger = logging.getLogger("test.cja_auto_sdr.org.writers.write_org_report_json.override_scope")
+    payload = {
+        "report_type": "patched",
+        "version": "test",
+        "org_id": "override-root",
+    }
+
+    with override_scope(
+        "cja_auto_sdr.org.writers",
+        {
+            "build_org_report_json_data": lambda result, trending=None: payload,
+        },
+    ):
+        output_path = Path(
+            mod.write_org_report_json(
+                rich_org_report_result,
+                tmp_path / "org_report_override_scope.json",
+                str(tmp_path),
+                logger,
+            ),
+        )
+
+    assert json.loads(output_path.read_text(encoding="utf-8")) == payload
+
+
+def test_generator_json_builder_supports_generator_override_scope_for_builder_export(
+    rich_org_report_result,
+):
+    """Generator override_scope must reach direct builder re-exports."""
+    from cja_auto_sdr.org.writers.compat import override_scope
+
+    mod = importlib.import_module("cja_auto_sdr.generator")
+    payload = {
+        "report_type": "generator-patched",
+        "version": "test",
+        "org_id": "override-generator",
+    }
+
+    with override_scope(
+        "cja_auto_sdr.generator",
+        {
+            "build_org_report_json_data": lambda result, trending=None: payload,
+        },
+    ):
+        returned = mod.build_org_report_json_data(rich_org_report_result)
+
+    assert returned == payload
+
+
+def test_generator_json_writer_supports_generator_override_scope_for_builder_export(
+    tmp_path,
+    rich_org_report_result,
+):
+    """Generator override_scope must flow through the JSON writer bridge."""
+    from cja_auto_sdr.org.writers.compat import override_scope
+
+    mod = importlib.import_module("cja_auto_sdr.generator")
+    logger = logging.getLogger("test.cja_auto_sdr.generator.write_org_report_json.override_scope")
+    payload = {
+        "report_type": "generator-patched",
+        "version": "test",
+        "org_id": "override-generator",
+    }
+
+    with override_scope(
+        "cja_auto_sdr.generator",
+        {
+            "build_org_report_json_data": lambda result, trending=None: payload,
+        },
+    ):
+        output_path = Path(
+            mod.write_org_report_json(
+                rich_org_report_result,
+                tmp_path / "generator_override_scope.json",
+                str(tmp_path),
+                logger,
+            ),
+        )
+
+    assert json.loads(output_path.read_text(encoding="utf-8")) == payload
+
+
+@pytest.mark.parametrize(
+    ("scope_module_name", "legacy_module_name"),
+    [
+        ("cja_auto_sdr.org.writers", "cja_auto_sdr.org.writers"),
+        ("cja_auto_sdr.org.writers.json", "cja_auto_sdr.org.writers"),
+        ("cja_auto_sdr.generator", "cja_auto_sdr.generator"),
+    ],
+    ids=["org.writers", "org.writers.json", "generator"],
+)
+def test_json_builder_reexports_support_wraps_override_scope_on_self_exports(
+    scope_module_name,
+    legacy_module_name,
+    rich_org_report_result,
+):
+    """Scoped wraps spies on direct builder re-exports must still observe compat calls."""
+    from cja_auto_sdr.org.writers.compat import override_scope
+
+    mod = importlib.import_module(legacy_module_name)
+    build_spy = Mock(wraps=mod.build_org_report_json_data)
+
+    with override_scope(
+        scope_module_name,
+        {
+            "build_org_report_json_data": build_spy,
+        },
+    ):
+        payload = mod.build_org_report_json_data(rich_org_report_result)
+
+    assert payload["org_id"] == rich_org_report_result.org_id
+    build_spy.assert_called_once_with(rich_org_report_result)
 
 
 @pytest.mark.parametrize(
@@ -1177,6 +1321,58 @@ def test_org_markdown_writer_preserves_explicit_trending_override_scope(
     assert "custom:02" in output
 
 
+def test_org_writers_package_root_override_scope_routes_trending_helper_to_canonical_module():
+    """Package-root override_scope string keys must route into canonical trending helper calls."""
+    from cja_auto_sdr.org.writers.compat import override_scope
+
+    mod = importlib.import_module("cja_auto_sdr.org.writers")
+
+    with override_scope(
+        "cja_auto_sdr.org.writers",
+        {
+            "_format_trending_timestamp_short": lambda ts: f"pkg:{ts[5:7]}",
+        },
+    ):
+        period_label = mod._format_trending_period_label(
+            "2024-01-01T00:00:00",
+            "2024-02-01T00:00:00",
+        )
+
+    assert period_label == "pkg:01 -> pkg:02"
+
+
+def test_org_markdown_writer_supports_package_root_trending_override_scope(
+    tmp_path,
+    rich_org_report_result,
+):
+    """Package-root override_scope string keys must flow through writer bridge wrappers."""
+    from cja_auto_sdr.org.writers.compat import override_scope
+
+    mod = importlib.import_module("cja_auto_sdr.org.writers")
+    logger = logging.getLogger("test.cja_auto_sdr.org.writers.write_org_report_markdown.package_root_override_scope")
+    trending = _make_trending()
+
+    with override_scope(
+        "cja_auto_sdr.org.writers",
+        {
+            "_format_trending_timestamp_short": lambda ts: f"pkg:{ts[5:7]}",
+        },
+    ):
+        output_path = Path(
+            mod.write_org_report_markdown(
+                rich_org_report_result,
+                tmp_path / "org_report_package_root_override_scope.md",
+                str(tmp_path),
+                logger,
+                trending=trending,
+            ),
+        )
+
+    output = output_path.read_text(encoding="utf-8")
+    assert "pkg:01" in output
+    assert "pkg:02" in output
+
+
 def test_canonical_trending_helpers_accept_package_root_timestamp_helper_patch():
     """Canonical trending helpers must remain interchangeable with package-root helper exports."""
     mod = importlib.import_module("cja_auto_sdr.org.writers")
@@ -1392,6 +1588,163 @@ def test_org_json_builder_reexport_supports_package_root_wraps_patch_on_canonica
 
     assert payload["org_id"] == rich_org_report_result.org_id
     build_mock.assert_called_once_with(rich_org_report_result)
+
+
+def test_org_writers_common_helper_reexports_support_package_root_override_scope_direct_calls():
+    """Package-root common helper re-exports must be direct-call override_scope aware."""
+    from cja_auto_sdr.org.writers.compat import override_scope
+
+    mod = importlib.import_module("cja_auto_sdr.org.writers")
+    validation_marker = object()
+
+    with override_scope(
+        "cja_auto_sdr.org.writers",
+        {
+            "_format_recommendation_context_entries": lambda rec: [("Patched", rec["reason"])],
+            "_normalize_recommendation_severity": lambda severity: f"scope:{severity}",
+            "_render_distribution_bar": lambda count, total, width=30: f"scope:{count}/{total}/{width}",
+            "_normalize_org_report_output_format": lambda output_format: f"scope:{output_format}",
+            "_validate_org_report_output_request": lambda output_format, output_to_stdout, status_print: (
+                validation_marker
+            ),
+        },
+    ):
+        context_entries = mod._format_recommendation_context_entries({"reason": "patched context"})
+        severity = mod._normalize_recommendation_severity("medium")
+        bar = mod._render_distribution_bar(1, 2, width=12)
+        output_format = mod._normalize_org_report_output_format("markdown")
+        validation = mod._validate_org_report_output_request(
+            "json",
+            False,
+            lambda *_args, **_kwargs: None,
+        )
+
+    assert context_entries == [("Patched", "patched context")]
+    assert severity == "scope:medium"
+    assert bar == "scope:1/2/12"
+    assert output_format == "scope:markdown"
+    assert validation is validation_marker
+
+
+def test_org_common_normalizer_supports_package_root_override_scope_for_nested_helpers():
+    """Package-root override_scope string keys must flow through nested recommendation normalization."""
+    from cja_auto_sdr.org.writers.compat import override_scope
+
+    mod = importlib.import_module("cja_auto_sdr.org.writers")
+    raw_rec = {
+        "severity": "medium",
+        "reason": "Two data views are highly similar",
+        "data_view_1": "dv_001",
+        "data_view_1_name": "Primary Business Data View",
+        "data_view_2": "dv_003",
+        "data_view_2_name": "Tertiary Data View",
+    }
+
+    with override_scope(
+        "cja_auto_sdr.org.writers",
+        {
+            "_format_recommendation_context_entries": lambda rec: [("Patched", rec["reason"])],
+            "_normalize_recommendation_severity": lambda severity: "high",
+        },
+    ):
+        normalized = mod._normalize_recommendation_for_json(raw_rec)
+
+    assert normalized["severity"] == "high"
+    assert normalized["context"] == [{"label": "Patched", "value": raw_rec["reason"]}]
+
+
+def test_generator_common_helper_reexports_support_generator_override_scope_direct_calls():
+    """Generator common helper re-exports must be direct-call override_scope aware."""
+    from cja_auto_sdr.org.writers.compat import override_scope
+
+    mod = importlib.import_module("cja_auto_sdr.generator")
+    validation_marker = object()
+
+    with override_scope(
+        "cja_auto_sdr.generator",
+        {
+            "_format_recommendation_context_entries": lambda rec: [("Patched", rec["reason"])],
+            "_normalize_recommendation_severity": lambda severity: f"scope:{severity}",
+            "_render_distribution_bar": lambda count, total, width=30: f"scope:{count}/{total}/{width}",
+            "_normalize_org_report_output_format": lambda output_format: f"scope:{output_format}",
+            "_validate_org_report_output_request": lambda output_format, output_to_stdout, status_print: (
+                validation_marker
+            ),
+        },
+    ):
+        context_entries = mod._format_recommendation_context_entries({"reason": "patched context"})
+        severity = mod._normalize_recommendation_severity("medium")
+        bar = mod._render_distribution_bar(1, 2, width=12)
+        output_format = mod._normalize_org_report_output_format("markdown")
+        validation = mod._validate_org_report_output_request(
+            "json",
+            False,
+            lambda *_args, **_kwargs: None,
+        )
+
+    assert context_entries == [("Patched", "patched context")]
+    assert severity == "scope:medium"
+    assert bar == "scope:1/2/12"
+    assert output_format == "scope:markdown"
+    assert validation is validation_marker
+
+
+def test_generator_common_normalizer_supports_generator_override_scope_for_nested_helpers():
+    """Generator override_scope string keys must flow through nested recommendation normalization."""
+    from cja_auto_sdr.org.writers.compat import override_scope
+
+    mod = importlib.import_module("cja_auto_sdr.generator")
+    raw_rec = {
+        "severity": "medium",
+        "reason": "Two data views are highly similar",
+        "data_view_1": "dv_001",
+        "data_view_1_name": "Primary Business Data View",
+        "data_view_2": "dv_003",
+        "data_view_2_name": "Tertiary Data View",
+    }
+
+    with override_scope(
+        "cja_auto_sdr.generator",
+        {
+            "_format_recommendation_context_entries": lambda rec: [("Patched", rec["reason"])],
+            "_normalize_recommendation_severity": lambda severity: "high",
+        },
+    ):
+        normalized = mod._normalize_recommendation_for_json(raw_rec)
+
+    assert normalized["severity"] == "high"
+    assert normalized["context"] == [{"label": "Patched", "value": raw_rec["reason"]}]
+
+
+@pytest.mark.parametrize(
+    ("scope_module_name", "legacy_module_name"),
+    [
+        ("cja_auto_sdr.org.writers", "cja_auto_sdr.org.writers"),
+        ("cja_auto_sdr.org.writers.common", "cja_auto_sdr.org.writers"),
+        ("cja_auto_sdr.generator", "cja_auto_sdr.generator"),
+    ],
+    ids=["org.writers", "org.writers.common", "generator"],
+)
+def test_common_helper_reexports_support_wraps_override_scope_on_self_exports(
+    scope_module_name,
+    legacy_module_name,
+):
+    """Scoped wraps spies on direct helper re-exports must still observe compat calls."""
+    from cja_auto_sdr.org.writers.compat import override_scope
+
+    mod = importlib.import_module(legacy_module_name)
+    severity_spy = Mock(wraps=mod._normalize_recommendation_severity)
+
+    with override_scope(
+        scope_module_name,
+        {
+            "_normalize_recommendation_severity": severity_spy,
+        },
+    ):
+        normalized = mod._normalize_recommendation_severity("HIGH")
+
+    assert normalized == "high"
+    severity_spy.assert_called_once_with("HIGH")
 
 
 def test_org_markdown_writer_reexport_supports_package_root_wraps_patch_on_canonical_surface(

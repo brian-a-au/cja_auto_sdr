@@ -300,6 +300,23 @@ def _collect_source_overrides[K](
     return collected
 
 
+def _collect_active_source_scope_overrides[K](
+    source_module_name: str,
+    override_mapping: Mapping[K, str],
+) -> dict[K, object]:
+    """Project active source-surface override_scope entries into a target mapping."""
+    current = _current_overrides()
+    if not current:
+        return {}
+
+    projected: dict[K, object] = {}
+    for target_key, legacy_attr_name in override_mapping.items():
+        source_key = _compat_key(source_module_name, legacy_attr_name)
+        if source_key in current:
+            projected[target_key] = current[source_key]
+    return projected
+
+
 def _collect_normalized_legacy_overrides(
     source_module_name: str,
     override_mapping: Mapping[_OVERRIDE_DESTINATION, str],
@@ -431,6 +448,34 @@ def _routes_to_compat_wrapper(
     return False
 
 
+def _resolve_scoped_self_target(
+    current_scoped_overrides: Mapping[_OVERRIDE_KEY, object],
+    *,
+    target_self_key: _OVERRIDE_KEY,
+    source_self_key: _OVERRIDE_KEY,
+) -> object:
+    """Prefer explicit self overrides and let the recursion guard handle safe re-entry."""
+    if target_self_key in current_scoped_overrides:
+        return current_scoped_overrides[target_self_key]
+    if source_self_key in current_scoped_overrides:
+        return current_scoped_overrides[source_self_key]
+    return _MISSING
+
+
+def _resolve_suppressed_compat_target(
+    *,
+    target_module_name: str,
+    target_attr_name: str,
+    default_target: object,
+    reference: object,
+) -> object:
+    """Prefer the live canonical target unless it still routes back into the compat wrapper."""
+    live_target = getattr(importlib.import_module(target_module_name), target_attr_name)
+    if _routes_to_compat_wrapper(live_target, reference):
+        return default_target
+    return live_target
+
+
 @contextmanager
 def override_scope(
     target_module_name: str,
@@ -502,21 +547,37 @@ def _make_compat_wrapper_with_options[**P, R](
         }
     )
     target_attr_name = target.__name__
+    source_self_key = _compat_key(source_module_name, target_attr_name)
+    target_self_key = _compat_key(target_module_name, target_attr_name)
     self_override_key = _compat_key(target_module_name, target_attr_name)
 
     @wraps(target)
     def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+        current_scoped_overrides = _current_overrides()
         if _is_compat_target_suppressed(source_module_name, target_attr_name):
-            current_target = target
+            current_target = _resolve_suppressed_compat_target(
+                target_module_name=target_module_name,
+                target_attr_name=target_attr_name,
+                default_target=target,
+                reference=wrapper,
+            )
         else:
-            current_target = getattr(importlib.import_module(target_module_name), target_attr_name)
-        overrides = _collect_normalized_legacy_overrides(
+            current_target = _resolve_scoped_self_target(
+                current_scoped_overrides,
+                target_self_key=target_self_key,
+                source_self_key=source_self_key,
+            )
+            if current_target is _MISSING:
+                current_target = getattr(importlib.import_module(target_module_name), target_attr_name)
+        monkeypatch_overrides = _collect_normalized_legacy_overrides(
             source_module_name,
             collected,
             default_target_module_name=target_module_name,
             baselines=baseline_source_values,
             always_include_legacy_attrs=always_include_legacy_attrs,
         )
+        overrides = monkeypatch_overrides
+        overrides.update(_collect_active_source_scope_overrides(source_module_name, collected))
         if exclude_self_override:
             overrides.pop(self_override_key, None)
 

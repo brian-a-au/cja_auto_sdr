@@ -309,6 +309,38 @@ def test_run_org_report_stats_only_and_csv_stdout_guard(tmp_path: Path, rich_org
     assert thresholds_exceeded is False
 
 
+def test_run_org_report_honors_generator_override_scope_for_output_validation(tmp_path: Path):
+    from cja_auto_sdr.org.writers.compat import override_scope
+
+    validate_calls: list[tuple[str, bool]] = []
+
+    with (
+        patch("cja_auto_sdr.generator.configure_cjapy") as configure_mock,
+        override_scope(
+            "cja_auto_sdr.generator",
+            {
+                "_normalize_org_report_output_format": lambda output_format: "json",
+                "_validate_org_report_output_request": lambda output_format, output_to_stdout, status_print: (
+                    validate_calls.append((output_format, output_to_stdout)) or False
+                ),
+            },
+        ),
+    ):
+        ok, exceeded = generator.run_org_report(
+            config_file="config.json",
+            output_format="reports",
+            output_path=str(tmp_path / "org_report"),
+            output_dir=str(tmp_path),
+            org_config=OrgReportConfig(),
+            quiet=True,
+        )
+
+    assert ok is False
+    assert exceeded is False
+    assert validate_calls == [("json", False)]
+    configure_mock.assert_not_called()
+
+
 def test_run_org_report_reports_alias_and_individual_format_branches(tmp_path: Path, rich_org_report_result):
     result = rich_org_report_result
     base_output = tmp_path / "org_report_out"

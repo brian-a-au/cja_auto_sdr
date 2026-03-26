@@ -5186,6 +5186,24 @@ _ORG_WRITER_HTML_MODULE = "cja_auto_sdr.org.writers.html"
 _ORG_WRITER_JSON_MODULE = "cja_auto_sdr.org.writers.json"
 _ORG_WRITER_MARKDOWN_MODULE = "cja_auto_sdr.org.writers.markdown"
 
+_format_recommendation_context_entries = _make_org_writer_compat_wrapper(
+    __name__,
+    _format_recommendation_context_entries,
+    target_module_name=_ORG_WRITER_COMMON_MODULE,
+    override_mapping=_ORG_EMPTY_OVERRIDE_MAPPING,
+)
+_normalize_org_report_output_format = _make_org_writer_compat_wrapper(
+    __name__,
+    _normalize_org_report_output_format,
+    target_module_name=_ORG_WRITER_COMMON_MODULE,
+    override_mapping=_ORG_EMPTY_OVERRIDE_MAPPING,
+)
+_normalize_recommendation_severity = _make_org_writer_compat_wrapper(
+    __name__,
+    _normalize_recommendation_severity,
+    target_module_name=_ORG_WRITER_COMMON_MODULE,
+    override_mapping=_ORG_EMPTY_OVERRIDE_MAPPING,
+)
 _normalize_recommendation_for_json = _make_org_writer_compat_wrapper(
     __name__,
     _normalize_recommendation_for_json,
@@ -5197,6 +5215,18 @@ _flatten_recommendation_for_tabular = _make_org_writer_compat_wrapper(
     _flatten_recommendation_for_tabular,
     target_module_name=_ORG_WRITER_COMMON_MODULE,
     override_mapping=_ORG_COMMON_RECOMMENDATION_OVERRIDE_MAPPING,
+)
+_render_distribution_bar = _make_org_writer_compat_wrapper(
+    __name__,
+    _render_distribution_bar,
+    target_module_name=_ORG_WRITER_COMMON_MODULE,
+    override_mapping=_ORG_EMPTY_OVERRIDE_MAPPING,
+)
+_validate_org_report_output_request = _make_org_writer_compat_wrapper(
+    __name__,
+    _validate_org_report_output_request,
+    target_module_name=_ORG_WRITER_COMMON_MODULE,
+    override_mapping=_ORG_EMPTY_OVERRIDE_MAPPING,
 )
 
 write_org_report_console = _make_org_writer_compat_wrapper(
