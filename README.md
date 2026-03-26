@@ -422,6 +422,7 @@ cja_auto_sdr/
 │       │   ├── inventory/     # Inventory summary output helpers
 │       │   ├── protocols.py   # OutputWriter protocol
 │       │   ├── registry.py    # Format registry
+│       │   ├── run_summary.py # Run summary output helpers
 │       │   ├── sdr/           # SDR output assembly
 │       │   └── writers/       # CSV, HTML, JSON, Markdown writers
 │       └── pipeline/          # Processing pipeline
@@ -441,7 +442,7 @@ cja_auto_sdr/
 │   └── ...                    # Additional guides
 ├── examples/                  # Automation and GitHub Actions examples
 ├── scripts/                   # Utility scripts
-├── tests/                     # Test suite (6,730+ tests)
+├── tests/                     # Test suite (6,944+ tests)
 │   ├── category_rules.py      # File-based test-category rules
 │   ├── conftest.py            # Pytest fixtures and auto-marking
 │   ├── README.md              # Test inventory and execution guide

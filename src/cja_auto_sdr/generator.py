@@ -231,16 +231,34 @@ from cja_auto_sdr.org.writers import (
     _normalize_recommendation_severity,
     _render_distribution_bar,
     _validate_org_report_output_request,
-    build_org_report_json_data,
-    write_org_report_comparison_console,
-    write_org_report_console,
-    write_org_report_csv,
-    write_org_report_excel,
-    write_org_report_html,
-    write_org_report_json,
-    write_org_report_markdown,
-    write_org_report_stats_only,
 )
+from cja_auto_sdr.org.writers.compat import (
+    CONSOLE_STATS_ONLY_OVERRIDE_MAPPING as _ORG_CONSOLE_STATS_ONLY_OVERRIDE_MAPPING,
+)
+from cja_auto_sdr.org.writers.compat import (
+    CONSOLE_WRITER_OVERRIDE_MAPPING as _ORG_CONSOLE_WRITER_OVERRIDE_MAPPING,
+)
+from cja_auto_sdr.org.writers.compat import CSV_WRITER_OVERRIDE_MAPPING as _ORG_CSV_WRITER_OVERRIDE_MAPPING
+from cja_auto_sdr.org.writers.compat import EMPTY_OVERRIDE_MAPPING as _ORG_EMPTY_OVERRIDE_MAPPING
+from cja_auto_sdr.org.writers.compat import EXCEL_WRITER_OVERRIDE_MAPPING as _ORG_EXCEL_WRITER_OVERRIDE_MAPPING
+from cja_auto_sdr.org.writers.compat import HTML_WRITER_OVERRIDE_MAPPING as _ORG_HTML_WRITER_OVERRIDE_MAPPING
+from cja_auto_sdr.org.writers.compat import JSON_BUILDER_OVERRIDE_MAPPING as _ORG_JSON_BUILDER_OVERRIDE_MAPPING
+from cja_auto_sdr.org.writers.compat import JSON_WRITER_OVERRIDE_MAPPING as _ORG_JSON_WRITER_OVERRIDE_MAPPING
+from cja_auto_sdr.org.writers.compat import (
+    MARKDOWN_WRITER_OVERRIDE_MAPPING as _ORG_MARKDOWN_WRITER_OVERRIDE_MAPPING,
+)
+from cja_auto_sdr.org.writers.compat import make_compat_wrapper as _make_org_writer_compat_wrapper
+from cja_auto_sdr.org.writers.console import (
+    write_org_report_comparison_console as _write_org_report_comparison_console_impl,
+)
+from cja_auto_sdr.org.writers.console import write_org_report_console as _write_org_report_console_impl
+from cja_auto_sdr.org.writers.console import write_org_report_stats_only as _write_org_report_stats_only_impl
+from cja_auto_sdr.org.writers.csv import write_org_report_csv as _write_org_report_csv_impl
+from cja_auto_sdr.org.writers.excel import write_org_report_excel as _write_org_report_excel_impl
+from cja_auto_sdr.org.writers.html import write_org_report_html as _write_org_report_html_impl
+from cja_auto_sdr.org.writers.json import build_org_report_json_data as _build_org_report_json_data_impl
+from cja_auto_sdr.org.writers.json import write_org_report_json as _write_org_report_json_impl
+from cja_auto_sdr.org.writers.markdown import write_org_report_markdown as _write_org_report_markdown_impl
 
 PARALLEL_INVENTORY_MIN_TASKS = 2
 
@@ -1255,16 +1273,8 @@ def _refetch_git_snapshot_for_commit(
 # has_quality_issues_at_or_above
 
 
-def aggregate_quality_issues(results: list[ProcessingResult]) -> list[dict[str, Any]]:
-    """Flatten quality issues across processing results with data view context."""
-    issues: list[dict[str, Any]] = []
-    for result in results:
-        for issue in result.dq_issues:
-            issue_with_context = dict(issue)
-            issue_with_context.setdefault("Data View ID", result.data_view_id)
-            issue_with_context.setdefault("Data View Name", result.data_view_name)
-            issues.append(issue_with_context)
-    return issues
+# aggregate_quality_issues -> output/run_summary.py (re-imported below for patch compatibility)
+from cja_auto_sdr.output.run_summary import aggregate_quality_issues
 
 
 def resolve_auto_prune_retention(
@@ -2174,138 +2184,6 @@ def _build_run_summary_payload(
     }
 
 
-def write_run_summary_output(summary: dict[str, Any], output: str, output_dir: str | Path = ".") -> str:
-    """Write structured run summary JSON to file or stdout."""
-    output_to_stdout = output in ("-", "stdout")
-    if output_to_stdout:
-        json.dump(summary, sys.stdout, indent=2, ensure_ascii=False)
-        print()
-        return "stdout"
-
-    output_path = Path(output)
-    if not output_path.is_absolute():
-        output_path = Path(output_dir) / output_path
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(summary, f, indent=2, ensure_ascii=False)
-        f.write("\n")
-    return str(output_path)
-
-
-def append_github_step_summary(markdown: str, logger: logging.Logger | None = None) -> bool:
-    """Append markdown to GitHub Actions job summary when available."""
-    summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
-    if not summary_path:
-        return False
-
-    try:
-        with open(summary_path, "a", encoding="utf-8") as f:
-            f.write(markdown.rstrip() + "\n\n")
-        return True
-    except OSError as e:
-        if logger is not None:
-            logger.warning(f"Failed to write GitHub step summary: {e}")
-        return False
-
-
-def build_quality_step_summary(results: list[ProcessingResult]) -> str:
-    """Build markdown summary table for quality issues."""
-    total_views = len(results)
-    successful_views = sum(1 for r in results if r.success)
-    all_issues = aggregate_quality_issues(results)
-    severity_counts = count_quality_issues_by_severity(all_issues)
-
-    lines = [
-        "### Data Quality Summary",
-        "",
-        f"- Data views processed: {successful_views}/{total_views}",
-        f"- Total quality issues: {len(all_issues)}",
-        "",
-    ]
-
-    if severity_counts:
-        lines.extend(["| Severity | Count |", "|---|---:|"])
-        for severity in QUALITY_SEVERITY_ORDER:
-            count = severity_counts.get(severity, 0)
-            if count > 0:
-                lines.append(f"| {severity} | {count} |")
-        lines.append("")
-
-    lines.extend(["| Data View | ID | Issues | Highest Severity |", "|---|---|---:|---|"])
-    for result in results:
-        highest = "NONE"
-        for severity in QUALITY_SEVERITY_ORDER:
-            if result.dq_severity_counts.get(severity, 0) > 0:
-                highest = severity
-                break
-        lines.append(
-            f"| {result.data_view_name or '-'} | `{result.data_view_id}` | {result.dq_issues_count} | {highest} |",
-        )
-
-    return "\n".join(lines)
-
-
-def build_diff_step_summary(diff_result: "DiffResult") -> str:
-    """Build markdown summary table for diff output."""
-    summary = diff_result.summary
-    total_changes = summary.total_changes + summary.calc_metrics_changed + summary.segments_changed
-    lines = [
-        "### Diff Summary",
-        "",
-        f"- Source: `{diff_result.metadata_diff.source_id}` ({diff_result.metadata_diff.source_name})",
-        f"- Target: `{diff_result.metadata_diff.target_id}` ({diff_result.metadata_diff.target_name})",
-        f"- Total changes: {total_changes}",
-        "",
-        "| Type | Source | Target | Added | Removed | Modified | Unchanged |",
-        "|---|---:|---:|---:|---:|---:|---:|",
-        (
-            f"| Metrics | {summary.source_metrics_count} | {summary.target_metrics_count} | "
-            f"{summary.metrics_added} | {summary.metrics_removed} | {summary.metrics_modified} | {summary.metrics_unchanged} |"
-        ),
-        (
-            f"| Dimensions | {summary.source_dimensions_count} | {summary.target_dimensions_count} | "
-            f"{summary.dimensions_added} | {summary.dimensions_removed} | {summary.dimensions_modified} | {summary.dimensions_unchanged} |"
-        ),
-    ]
-
-    if summary.source_calc_metrics_count > 0 or summary.target_calc_metrics_count > 0:
-        lines.append(
-            f"| Calc Metrics | {summary.source_calc_metrics_count} | {summary.target_calc_metrics_count} | "
-            f"{summary.calc_metrics_added} | {summary.calc_metrics_removed} | {summary.calc_metrics_modified} | {summary.calc_metrics_unchanged} |",
-        )
-    if summary.source_segments_count > 0 or summary.target_segments_count > 0:
-        lines.append(
-            f"| Segments | {summary.source_segments_count} | {summary.target_segments_count} | "
-            f"{summary.segments_added} | {summary.segments_removed} | {summary.segments_modified} | {summary.segments_unchanged} |",
-        )
-
-    return "\n".join(lines)
-
-
-def build_org_step_summary(result: OrgReportResult) -> str:
-    """Build markdown summary table for org-report output."""
-    dist = result.distribution
-    lines = [
-        "### Org Report Summary",
-        "",
-        "| Metric | Value |",
-        "|---|---:|",
-        f"| Data Views Analyzed | {result.successful_data_views} / {result.total_data_views} |",
-        f"| Data View Fetch Failures | {result.failed_data_views} |",
-        f"| Total Unique Components | {result.total_unique_components} |",
-        f"| Total Unique Metrics | {result.total_unique_metrics} |",
-        f"| Total Unique Dimensions | {result.total_unique_dimensions} |",
-        f"| Core Components | {dist.total_core} |",
-        f"| Common Components | {dist.total_common} |",
-        f"| Limited Components | {dist.total_limited} |",
-        f"| Isolated Components | {dist.total_isolated} |",
-        f"| Recommendations | {len(result.recommendations)} |",
-        f"| Governance Violations | {len(result.governance_violations or [])} |",
-        f"| Duration (s) | {result.duration:.2f} |",
-    ]
-    return "\n".join(lines)
-
-
 # ==================== DIFF COMPARISON ====================
 
 from cja_auto_sdr.api.cache import SharedValidationCache, ValidationCache
@@ -2345,6 +2223,59 @@ from cja_auto_sdr.diff.models import (
     MetadataDiff,
 )
 from cja_auto_sdr.diff.snapshot import SnapshotManager, parse_retention_period
+
+# write_run_summary_output, append_github_step_summary,
+# build_diff_step_summary, build_org_step_summary -> output/run_summary.py
+# (re-imported here for patch compatibility)
+from cja_auto_sdr.output.run_summary import (
+    append_github_step_summary,
+    build_diff_step_summary,
+    build_org_step_summary,
+    write_run_summary_output,
+)
+
+
+def build_quality_step_summary(results: list[ProcessingResult]) -> str:
+    """Build markdown summary table for quality issues.
+
+    This wrapper intentionally resolves ``aggregate_quality_issues`` from
+    ``generator.py`` so generator-level monkeypatches keep affecting both
+    quality-summary call paths after the run-summary extraction.
+    """
+    total_views = len(results)
+    successful_views = sum(1 for r in results if r.success)
+    all_issues = aggregate_quality_issues(results)
+    severity_counts = count_quality_issues_by_severity(all_issues)
+
+    lines = [
+        "### Data Quality Summary",
+        "",
+        f"- Data views processed: {successful_views}/{total_views}",
+        f"- Total quality issues: {len(all_issues)}",
+        "",
+    ]
+
+    if severity_counts:
+        lines.extend(["| Severity | Count |", "|---|---:|"])
+        for severity in QUALITY_SEVERITY_ORDER:
+            count = severity_counts.get(severity, 0)
+            if count > 0:
+                lines.append(f"| {severity} | {count} |")
+        lines.append("")
+
+    lines.extend(["| Data View | ID | Issues | Highest Severity |", "|---|---|---:|---|"])
+    for result in results:
+        highest = "NONE"
+        for severity in QUALITY_SEVERITY_ORDER:
+            if result.dq_severity_counts.get(severity, 0) > 0:
+                highest = severity
+                break
+        lines.append(
+            f"| {result.data_view_name or '-'} | `{result.data_view_id}` | {result.dq_issues_count} | {highest} |",
+        )
+
+    return "\n".join(lines)
+
 
 # ==================== PROFILE MANAGEMENT ====================
 
@@ -5243,6 +5174,68 @@ def _build_org_report_trending_window(
 # - write_org_report_csv
 # - _normalize_org_report_output_format
 # - _validate_org_report_output_request
+
+_ORG_WRITER_CONSOLE_MODULE = "cja_auto_sdr.org.writers.console"
+_ORG_WRITER_CSV_MODULE = "cja_auto_sdr.org.writers.csv"
+_ORG_WRITER_EXCEL_MODULE = "cja_auto_sdr.org.writers.excel"
+_ORG_WRITER_HTML_MODULE = "cja_auto_sdr.org.writers.html"
+_ORG_WRITER_JSON_MODULE = "cja_auto_sdr.org.writers.json"
+_ORG_WRITER_MARKDOWN_MODULE = "cja_auto_sdr.org.writers.markdown"
+
+write_org_report_console = _make_org_writer_compat_wrapper(
+    __name__,
+    _write_org_report_console_impl,
+    target_module_name=_ORG_WRITER_CONSOLE_MODULE,
+    override_mapping=_ORG_CONSOLE_WRITER_OVERRIDE_MAPPING,
+)
+write_org_report_stats_only = _make_org_writer_compat_wrapper(
+    __name__,
+    _write_org_report_stats_only_impl,
+    target_module_name=_ORG_WRITER_CONSOLE_MODULE,
+    override_mapping=_ORG_CONSOLE_STATS_ONLY_OVERRIDE_MAPPING,
+)
+write_org_report_comparison_console = _make_org_writer_compat_wrapper(
+    __name__,
+    _write_org_report_comparison_console_impl,
+    target_module_name=_ORG_WRITER_CONSOLE_MODULE,
+    override_mapping=_ORG_EMPTY_OVERRIDE_MAPPING,
+)
+build_org_report_json_data = _make_org_writer_compat_wrapper(
+    __name__,
+    _build_org_report_json_data_impl,
+    target_module_name=_ORG_WRITER_JSON_MODULE,
+    override_mapping=_ORG_JSON_BUILDER_OVERRIDE_MAPPING,
+)
+write_org_report_json = _make_org_writer_compat_wrapper(
+    __name__,
+    _write_org_report_json_impl,
+    target_module_name=_ORG_WRITER_JSON_MODULE,
+    override_mapping=_ORG_JSON_WRITER_OVERRIDE_MAPPING,
+)
+write_org_report_excel = _make_org_writer_compat_wrapper(
+    __name__,
+    _write_org_report_excel_impl,
+    target_module_name=_ORG_WRITER_EXCEL_MODULE,
+    override_mapping=_ORG_EXCEL_WRITER_OVERRIDE_MAPPING,
+)
+write_org_report_markdown = _make_org_writer_compat_wrapper(
+    __name__,
+    _write_org_report_markdown_impl,
+    target_module_name=_ORG_WRITER_MARKDOWN_MODULE,
+    override_mapping=_ORG_MARKDOWN_WRITER_OVERRIDE_MAPPING,
+)
+write_org_report_html = _make_org_writer_compat_wrapper(
+    __name__,
+    _write_org_report_html_impl,
+    target_module_name=_ORG_WRITER_HTML_MODULE,
+    override_mapping=_ORG_HTML_WRITER_OVERRIDE_MAPPING,
+)
+write_org_report_csv = _make_org_writer_compat_wrapper(
+    __name__,
+    _write_org_report_csv_impl,
+    target_module_name=_ORG_WRITER_CSV_MODULE,
+    override_mapping=_ORG_CSV_WRITER_OVERRIDE_MAPPING,
+)
 
 
 def run_org_report(

@@ -3,7 +3,7 @@
 import logging
 import os
 import sys
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pandas as pd
 import pytest
@@ -95,6 +95,41 @@ def sample_metadata_df():
     return pd.DataFrame(
         {"Property": ["Generated At", "Data View ID", "Total Metrics"], "Value": ["2024-01-01", "dv_test", "100"]},
     )
+
+
+class _RecordingWorkbook:
+    def __init__(self):
+        self.add_format_calls = []
+
+    def add_format(self, properties):
+        self.add_format_calls.append(dict(properties))
+        return {"properties": dict(properties), "call_index": len(self.add_format_calls)}
+
+
+class TestExcelFormatCache:
+    def test_reuses_identical_properties_even_when_key_order_differs(self):
+        from cja_auto_sdr.output.sdr import ExcelFormatCache
+
+        workbook = _RecordingWorkbook()
+        cache = ExcelFormatCache(workbook)
+
+        first = cache.get_format({"bold": True, "bg_color": "#366092"})
+        second = cache.get_format({"bg_color": "#366092", "bold": True})
+
+        assert first is second
+        assert len(workbook.add_format_calls) == 1
+
+    def test_uses_repr_for_nested_values_to_avoid_cache_key_collisions(self):
+        from cja_auto_sdr.output.sdr import ExcelFormatCache
+
+        workbook = _RecordingWorkbook()
+        cache = ExcelFormatCache(workbook)
+
+        list_format = cache.get_format({"levels": [1, 2]})
+        string_format = cache.get_format({"levels": "[1, 2]"})
+
+        assert list_format is not string_format
+        assert len(workbook.add_format_calls) == 2
 
 
 class TestApplyExcelFormattingIntegration:
@@ -478,3 +513,29 @@ class TestApplyExcelFormattingMultipleSheets:
         # Verify file was created with substantial size (multiple sheets with formatting)
         assert output_file.exists()
         assert output_file.stat().st_size > 5000  # Multiple formatted sheets should be significant
+
+
+class TestWriteExcelOutputFormatCache:
+    def test_reuses_single_format_cache_across_all_sheets(self, mock_logger, tmp_path):
+        import cja_auto_sdr.output.sdr as sdr
+
+        data = {
+            "Metrics": pd.DataFrame([{"name": "Metric 1", "type": "standard", "id": "m1"}]),
+            "Dimensions": pd.DataFrame([{"name": "Dimension 1", "type": "string", "id": "d1"}]),
+            "Empty Sheet": pd.DataFrame(),
+        }
+        seen_caches = []
+        original_apply = sdr.apply_excel_formatting
+
+        def _recording_apply(writer, df, sheet_name, logger, format_cache=None):
+            seen_caches.append((sheet_name, format_cache))
+            return original_apply(writer, df, sheet_name, logger, format_cache)
+
+        with patch("cja_auto_sdr.output.sdr.apply_excel_formatting", side_effect=_recording_apply):
+            output_file = sdr.write_excel_output(data, "multi_sheet_cache", str(tmp_path), mock_logger)
+
+        assert output_file.endswith(".xlsx")
+        assert len(seen_caches) == 3
+        first_cache = seen_caches[0][1]
+        assert first_cache is not None
+        assert all(cache is first_cache for _, cache in seen_caches)

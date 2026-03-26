@@ -7,6 +7,15 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.4.7] - 2026-03-25
+
+### Refactor
+- Extract run-summary output helpers from `generator.py` into the `output.run_summary` module
+- Decompose `org.writers` package into focused submodules (shared helpers, trending, console, JSON, Excel, Markdown, HTML, CSV)
+
+### Tests
+- Harden writer compatibility contracts with signature, export, and `__all__` continuity tests
+
 ## [3.4.6] - 2026-03-23
 
 ### Refactor
