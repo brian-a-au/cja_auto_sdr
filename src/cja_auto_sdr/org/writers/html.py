@@ -15,11 +15,30 @@ from cja_auto_sdr.org.models import (
     OrgReportTrending,
 )
 from cja_auto_sdr.org.writers.common import (
-    _format_recommendation_context_entries,
-    _normalize_recommendation_for_json,
+    _format_recommendation_context_entries as _format_recommendation_context_entries_impl,
 )
+from cja_auto_sdr.org.writers.common import (
+    _normalize_recommendation_for_json as _normalize_recommendation_for_json_impl,
+)
+from cja_auto_sdr.org.writers.compat import make_override_proxy
 from cja_auto_sdr.org.writers.trending import (
-    _render_trending_html,
+    _render_trending_html as _render_trending_html_impl,
+)
+
+_format_recommendation_context_entries = make_override_proxy(
+    __name__,
+    "_format_recommendation_context_entries",
+    _format_recommendation_context_entries_impl,
+)
+_normalize_recommendation_for_json = make_override_proxy(
+    __name__,
+    "_normalize_recommendation_for_json",
+    _normalize_recommendation_for_json_impl,
+)
+_render_trending_html = make_override_proxy(
+    __name__,
+    "_render_trending_html",
+    _render_trending_html_impl,
 )
 
 

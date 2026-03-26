@@ -25,39 +25,55 @@ from cja_auto_sdr.org.writers.common import (
 # ---------------------------------------------------------------------------
 # Re-exports from console.py
 # ---------------------------------------------------------------------------
-from cja_auto_sdr.org.writers.console import (
-    write_org_report_comparison_console,
-    write_org_report_console,
-    write_org_report_stats_only,
+from cja_auto_sdr.org.writers.compat import (
+    CONSOLE_STATS_ONLY_OVERRIDE_MAPPING as _CONSOLE_STATS_ONLY_OVERRIDE_MAPPING,
 )
+from cja_auto_sdr.org.writers.compat import CONSOLE_WRITER_OVERRIDE_MAPPING as _CONSOLE_WRITER_OVERRIDE_MAPPING
+from cja_auto_sdr.org.writers.compat import CSV_WRITER_OVERRIDE_MAPPING as _CSV_WRITER_OVERRIDE_MAPPING
+from cja_auto_sdr.org.writers.compat import EMPTY_OVERRIDE_MAPPING as _EMPTY_OVERRIDE_MAPPING
+from cja_auto_sdr.org.writers.compat import EXCEL_WRITER_OVERRIDE_MAPPING as _EXCEL_WRITER_OVERRIDE_MAPPING
+from cja_auto_sdr.org.writers.compat import HTML_WRITER_OVERRIDE_MAPPING as _HTML_WRITER_OVERRIDE_MAPPING
+from cja_auto_sdr.org.writers.compat import JSON_BUILDER_OVERRIDE_MAPPING as _JSON_BUILDER_OVERRIDE_MAPPING
+from cja_auto_sdr.org.writers.compat import JSON_WRITER_OVERRIDE_MAPPING as _JSON_WRITER_OVERRIDE_MAPPING
+from cja_auto_sdr.org.writers.compat import (
+    MARKDOWN_WRITER_OVERRIDE_MAPPING as _MARKDOWN_WRITER_OVERRIDE_MAPPING,
+)
+from cja_auto_sdr.org.writers.compat import make_compat_wrapper as _make_compat_wrapper
+from cja_auto_sdr.org.writers.console import (
+    write_org_report_comparison_console as _write_org_report_comparison_console_impl,
+)
+from cja_auto_sdr.org.writers.console import write_org_report_console as _write_org_report_console_impl
+from cja_auto_sdr.org.writers.console import write_org_report_stats_only as _write_org_report_stats_only_impl
 
 # ---------------------------------------------------------------------------
 # Re-exports from csv.py
 # ---------------------------------------------------------------------------
-from cja_auto_sdr.org.writers.csv import write_org_report_csv
+from cja_auto_sdr.org.writers.csv import write_org_report_csv as _write_org_report_csv_impl
 
 # ---------------------------------------------------------------------------
 # Re-exports from excel.py
 # ---------------------------------------------------------------------------
-from cja_auto_sdr.org.writers.excel import write_org_report_excel
+from cja_auto_sdr.org.writers.excel import write_org_report_excel as _write_org_report_excel_impl
 
 # ---------------------------------------------------------------------------
 # Re-exports from html.py
 # ---------------------------------------------------------------------------
-from cja_auto_sdr.org.writers.html import write_org_report_html
+from cja_auto_sdr.org.writers.html import write_org_report_html as _write_org_report_html_impl
 
 # ---------------------------------------------------------------------------
 # Re-exports from json.py
 # ---------------------------------------------------------------------------
 from cja_auto_sdr.org.writers.json import (
-    build_org_report_json_data,
-    write_org_report_json,
+    build_org_report_json_data as _build_org_report_json_data_impl,
+)
+from cja_auto_sdr.org.writers.json import (
+    write_org_report_json as _write_org_report_json_impl,
 )
 
 # ---------------------------------------------------------------------------
 # Re-exports from markdown.py
 # ---------------------------------------------------------------------------
-from cja_auto_sdr.org.writers.markdown import write_org_report_markdown
+from cja_auto_sdr.org.writers.markdown import write_org_report_markdown as _write_org_report_markdown_impl
 
 # ---------------------------------------------------------------------------
 # Re-exports from trending.py  (private helpers that tests import directly)
@@ -91,6 +107,68 @@ from cja_auto_sdr.org.writers.trending import (
     _trending_snapshot_csv_rows,
     _trending_snapshot_metric_rows,
     _trending_snapshots_to_dicts,
+)
+
+_CONSOLE_MODULE = "cja_auto_sdr.org.writers.console"
+_CSV_MODULE = "cja_auto_sdr.org.writers.csv"
+_EXCEL_MODULE = "cja_auto_sdr.org.writers.excel"
+_HTML_MODULE = "cja_auto_sdr.org.writers.html"
+_JSON_MODULE = "cja_auto_sdr.org.writers.json"
+_MARKDOWN_MODULE = "cja_auto_sdr.org.writers.markdown"
+
+write_org_report_console = _make_compat_wrapper(
+    __name__,
+    _write_org_report_console_impl,
+    target_module_name=_CONSOLE_MODULE,
+    override_mapping=_CONSOLE_WRITER_OVERRIDE_MAPPING,
+)
+write_org_report_stats_only = _make_compat_wrapper(
+    __name__,
+    _write_org_report_stats_only_impl,
+    target_module_name=_CONSOLE_MODULE,
+    override_mapping=_CONSOLE_STATS_ONLY_OVERRIDE_MAPPING,
+)
+write_org_report_comparison_console = _make_compat_wrapper(
+    __name__,
+    _write_org_report_comparison_console_impl,
+    target_module_name=_CONSOLE_MODULE,
+    override_mapping=_EMPTY_OVERRIDE_MAPPING,
+)
+build_org_report_json_data = _make_compat_wrapper(
+    __name__,
+    _build_org_report_json_data_impl,
+    target_module_name=_JSON_MODULE,
+    override_mapping=_JSON_BUILDER_OVERRIDE_MAPPING,
+)
+write_org_report_json = _make_compat_wrapper(
+    __name__,
+    _write_org_report_json_impl,
+    target_module_name=_JSON_MODULE,
+    override_mapping=_JSON_WRITER_OVERRIDE_MAPPING,
+)
+write_org_report_excel = _make_compat_wrapper(
+    __name__,
+    _write_org_report_excel_impl,
+    target_module_name=_EXCEL_MODULE,
+    override_mapping=_EXCEL_WRITER_OVERRIDE_MAPPING,
+)
+write_org_report_markdown = _make_compat_wrapper(
+    __name__,
+    _write_org_report_markdown_impl,
+    target_module_name=_MARKDOWN_MODULE,
+    override_mapping=_MARKDOWN_WRITER_OVERRIDE_MAPPING,
+)
+write_org_report_html = _make_compat_wrapper(
+    __name__,
+    _write_org_report_html_impl,
+    target_module_name=_HTML_MODULE,
+    override_mapping=_HTML_WRITER_OVERRIDE_MAPPING,
+)
+write_org_report_csv = _make_compat_wrapper(
+    __name__,
+    _write_org_report_csv_impl,
+    target_module_name=_CSV_MODULE,
+    override_mapping=_CSV_WRITER_OVERRIDE_MAPPING,
 )
 
 __all__ = [

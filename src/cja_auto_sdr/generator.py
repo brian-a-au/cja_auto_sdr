@@ -231,16 +231,34 @@ from cja_auto_sdr.org.writers import (
     _normalize_recommendation_severity,
     _render_distribution_bar,
     _validate_org_report_output_request,
-    build_org_report_json_data,
-    write_org_report_comparison_console,
-    write_org_report_console,
-    write_org_report_csv,
-    write_org_report_excel,
-    write_org_report_html,
-    write_org_report_json,
-    write_org_report_markdown,
-    write_org_report_stats_only,
 )
+from cja_auto_sdr.org.writers.compat import (
+    CONSOLE_STATS_ONLY_OVERRIDE_MAPPING as _ORG_CONSOLE_STATS_ONLY_OVERRIDE_MAPPING,
+)
+from cja_auto_sdr.org.writers.compat import (
+    CONSOLE_WRITER_OVERRIDE_MAPPING as _ORG_CONSOLE_WRITER_OVERRIDE_MAPPING,
+)
+from cja_auto_sdr.org.writers.compat import CSV_WRITER_OVERRIDE_MAPPING as _ORG_CSV_WRITER_OVERRIDE_MAPPING
+from cja_auto_sdr.org.writers.compat import EMPTY_OVERRIDE_MAPPING as _ORG_EMPTY_OVERRIDE_MAPPING
+from cja_auto_sdr.org.writers.compat import EXCEL_WRITER_OVERRIDE_MAPPING as _ORG_EXCEL_WRITER_OVERRIDE_MAPPING
+from cja_auto_sdr.org.writers.compat import HTML_WRITER_OVERRIDE_MAPPING as _ORG_HTML_WRITER_OVERRIDE_MAPPING
+from cja_auto_sdr.org.writers.compat import JSON_BUILDER_OVERRIDE_MAPPING as _ORG_JSON_BUILDER_OVERRIDE_MAPPING
+from cja_auto_sdr.org.writers.compat import JSON_WRITER_OVERRIDE_MAPPING as _ORG_JSON_WRITER_OVERRIDE_MAPPING
+from cja_auto_sdr.org.writers.compat import (
+    MARKDOWN_WRITER_OVERRIDE_MAPPING as _ORG_MARKDOWN_WRITER_OVERRIDE_MAPPING,
+)
+from cja_auto_sdr.org.writers.compat import make_compat_wrapper as _make_org_writer_compat_wrapper
+from cja_auto_sdr.org.writers.console import (
+    write_org_report_comparison_console as _write_org_report_comparison_console_impl,
+)
+from cja_auto_sdr.org.writers.console import write_org_report_console as _write_org_report_console_impl
+from cja_auto_sdr.org.writers.console import write_org_report_stats_only as _write_org_report_stats_only_impl
+from cja_auto_sdr.org.writers.csv import write_org_report_csv as _write_org_report_csv_impl
+from cja_auto_sdr.org.writers.excel import write_org_report_excel as _write_org_report_excel_impl
+from cja_auto_sdr.org.writers.html import write_org_report_html as _write_org_report_html_impl
+from cja_auto_sdr.org.writers.json import build_org_report_json_data as _build_org_report_json_data_impl
+from cja_auto_sdr.org.writers.json import write_org_report_json as _write_org_report_json_impl
+from cja_auto_sdr.org.writers.markdown import write_org_report_markdown as _write_org_report_markdown_impl
 
 PARALLEL_INVENTORY_MIN_TASKS = 2
 
@@ -5156,6 +5174,68 @@ def _build_org_report_trending_window(
 # - write_org_report_csv
 # - _normalize_org_report_output_format
 # - _validate_org_report_output_request
+
+_ORG_WRITER_CONSOLE_MODULE = "cja_auto_sdr.org.writers.console"
+_ORG_WRITER_CSV_MODULE = "cja_auto_sdr.org.writers.csv"
+_ORG_WRITER_EXCEL_MODULE = "cja_auto_sdr.org.writers.excel"
+_ORG_WRITER_HTML_MODULE = "cja_auto_sdr.org.writers.html"
+_ORG_WRITER_JSON_MODULE = "cja_auto_sdr.org.writers.json"
+_ORG_WRITER_MARKDOWN_MODULE = "cja_auto_sdr.org.writers.markdown"
+
+write_org_report_console = _make_org_writer_compat_wrapper(
+    __name__,
+    _write_org_report_console_impl,
+    target_module_name=_ORG_WRITER_CONSOLE_MODULE,
+    override_mapping=_ORG_CONSOLE_WRITER_OVERRIDE_MAPPING,
+)
+write_org_report_stats_only = _make_org_writer_compat_wrapper(
+    __name__,
+    _write_org_report_stats_only_impl,
+    target_module_name=_ORG_WRITER_CONSOLE_MODULE,
+    override_mapping=_ORG_CONSOLE_STATS_ONLY_OVERRIDE_MAPPING,
+)
+write_org_report_comparison_console = _make_org_writer_compat_wrapper(
+    __name__,
+    _write_org_report_comparison_console_impl,
+    target_module_name=_ORG_WRITER_CONSOLE_MODULE,
+    override_mapping=_ORG_EMPTY_OVERRIDE_MAPPING,
+)
+build_org_report_json_data = _make_org_writer_compat_wrapper(
+    __name__,
+    _build_org_report_json_data_impl,
+    target_module_name=_ORG_WRITER_JSON_MODULE,
+    override_mapping=_ORG_JSON_BUILDER_OVERRIDE_MAPPING,
+)
+write_org_report_json = _make_org_writer_compat_wrapper(
+    __name__,
+    _write_org_report_json_impl,
+    target_module_name=_ORG_WRITER_JSON_MODULE,
+    override_mapping=_ORG_JSON_WRITER_OVERRIDE_MAPPING,
+)
+write_org_report_excel = _make_org_writer_compat_wrapper(
+    __name__,
+    _write_org_report_excel_impl,
+    target_module_name=_ORG_WRITER_EXCEL_MODULE,
+    override_mapping=_ORG_EXCEL_WRITER_OVERRIDE_MAPPING,
+)
+write_org_report_markdown = _make_org_writer_compat_wrapper(
+    __name__,
+    _write_org_report_markdown_impl,
+    target_module_name=_ORG_WRITER_MARKDOWN_MODULE,
+    override_mapping=_ORG_MARKDOWN_WRITER_OVERRIDE_MAPPING,
+)
+write_org_report_html = _make_org_writer_compat_wrapper(
+    __name__,
+    _write_org_report_html_impl,
+    target_module_name=_ORG_WRITER_HTML_MODULE,
+    override_mapping=_ORG_HTML_WRITER_OVERRIDE_MAPPING,
+)
+write_org_report_csv = _make_org_writer_compat_wrapper(
+    __name__,
+    _write_org_report_csv_impl,
+    target_module_name=_ORG_WRITER_CSV_MODULE,
+    override_mapping=_ORG_CSV_WRITER_OVERRIDE_MAPPING,
+)
 
 
 def run_org_report(

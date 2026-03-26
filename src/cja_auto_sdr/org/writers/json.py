@@ -13,8 +13,25 @@ from cja_auto_sdr.org.models import (
     OrgReportTrending,
 )
 from cja_auto_sdr.org.snapshot_utils import sorted_snapshot_strings
-from cja_auto_sdr.org.writers.common import _normalize_recommendation_for_json
-from cja_auto_sdr.org.writers.trending import _trending_snapshots_to_dicts
+from cja_auto_sdr.org.writers.common import (
+    _normalize_recommendation_for_json as _normalize_recommendation_for_json_impl,
+)
+from cja_auto_sdr.org.writers.compat import (
+    call_override,
+    make_override_proxy,
+)
+from cja_auto_sdr.org.writers.trending import _trending_snapshots_to_dicts as _trending_snapshots_to_dicts_impl
+
+_normalize_recommendation_for_json = make_override_proxy(
+    __name__,
+    "_normalize_recommendation_for_json",
+    _normalize_recommendation_for_json_impl,
+)
+_trending_snapshots_to_dicts = make_override_proxy(
+    __name__,
+    "_trending_snapshots_to_dicts",
+    _trending_snapshots_to_dicts_impl,
+)
 
 
 def build_org_report_json_data(
@@ -218,7 +235,13 @@ def write_org_report_json(
         timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
         file_path = Path(output_dir) / f"org_report_{result.org_id}_{timestamp}.json"
 
-    json_data = build_org_report_json_data(result, trending=trending)
+    json_data = call_override(
+        __name__,
+        "build_org_report_json_data",
+        build_org_report_json_data,
+        result,
+        trending=trending,
+    )
 
     # Write JSON
     file_path.parent.mkdir(parents=True, exist_ok=True)

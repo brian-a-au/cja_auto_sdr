@@ -9,8 +9,20 @@ from cja_auto_sdr.org.models import (
     OrgReportResult,
     OrgReportTrending,
 )
-from cja_auto_sdr.org.writers.common import _render_distribution_bar
-from cja_auto_sdr.org.writers.trending import _print_trending_console_section
+from cja_auto_sdr.org.writers.common import _render_distribution_bar as _render_distribution_bar_impl
+from cja_auto_sdr.org.writers.compat import make_override_proxy
+from cja_auto_sdr.org.writers.trending import _print_trending_console_section as _print_trending_console_section_impl
+
+_render_distribution_bar = make_override_proxy(
+    __name__,
+    "_render_distribution_bar",
+    _render_distribution_bar_impl,
+)
+_print_trending_console_section = make_override_proxy(
+    __name__,
+    "_print_trending_console_section",
+    _print_trending_console_section_impl,
+)
 
 
 def write_org_report_console(

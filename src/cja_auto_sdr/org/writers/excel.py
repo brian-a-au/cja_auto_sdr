@@ -17,16 +17,70 @@ from cja_auto_sdr.org.models import (
     OrgReportTrending,
 )
 from cja_auto_sdr.org.writers.common import (
-    _flatten_recommendation_for_tabular,
-    _normalize_recommendation_for_json,
+    _flatten_recommendation_for_tabular as _flatten_recommendation_for_tabular_impl,
+)
+from cja_auto_sdr.org.writers.common import (
+    _normalize_recommendation_for_json as _normalize_recommendation_for_json_impl,
+)
+from cja_auto_sdr.org.writers.compat import make_override_proxy
+from cja_auto_sdr.org.writers.trending import (
+    _ranked_drift_entries as _ranked_drift_entries_impl,
 )
 from cja_auto_sdr.org.writers.trending import (
-    _ranked_drift_entries,
-    _trending_delta_column_specs,
-    _trending_delta_metric_rows,
-    _trending_matrix_rows,
-    _trending_snapshot_column_specs,
-    _trending_snapshot_metric_rows,
+    _trending_delta_column_specs as _trending_delta_column_specs_impl,
+)
+from cja_auto_sdr.org.writers.trending import (
+    _trending_delta_metric_rows as _trending_delta_metric_rows_impl,
+)
+from cja_auto_sdr.org.writers.trending import (
+    _trending_matrix_rows as _trending_matrix_rows_impl,
+)
+from cja_auto_sdr.org.writers.trending import (
+    _trending_snapshot_column_specs as _trending_snapshot_column_specs_impl,
+)
+from cja_auto_sdr.org.writers.trending import (
+    _trending_snapshot_metric_rows as _trending_snapshot_metric_rows_impl,
+)
+
+_flatten_recommendation_for_tabular = make_override_proxy(
+    __name__,
+    "_flatten_recommendation_for_tabular",
+    _flatten_recommendation_for_tabular_impl,
+)
+_normalize_recommendation_for_json = make_override_proxy(
+    __name__,
+    "_normalize_recommendation_for_json",
+    _normalize_recommendation_for_json_impl,
+)
+_ranked_drift_entries = make_override_proxy(
+    __name__,
+    "_ranked_drift_entries",
+    _ranked_drift_entries_impl,
+)
+_trending_delta_column_specs = make_override_proxy(
+    __name__,
+    "_trending_delta_column_specs",
+    _trending_delta_column_specs_impl,
+)
+_trending_delta_metric_rows = make_override_proxy(
+    __name__,
+    "_trending_delta_metric_rows",
+    _trending_delta_metric_rows_impl,
+)
+_trending_matrix_rows = make_override_proxy(
+    __name__,
+    "_trending_matrix_rows",
+    _trending_matrix_rows_impl,
+)
+_trending_snapshot_column_specs = make_override_proxy(
+    __name__,
+    "_trending_snapshot_column_specs",
+    _trending_snapshot_column_specs_impl,
+)
+_trending_snapshot_metric_rows = make_override_proxy(
+    __name__,
+    "_trending_snapshot_metric_rows",
+    _trending_snapshot_metric_rows_impl,
 )
 
 
