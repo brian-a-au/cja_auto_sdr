@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import importlib
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Collection, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
 from functools import wraps
@@ -15,6 +15,11 @@ _OVERRIDES: ContextVar[dict[_OVERRIDE_KEY, object] | None] = ContextVar(
     "org_writer_compat_overrides",
     default=None,
 )
+_SUPPRESSED_COMPAT_TARGETS: ContextVar[set[_OVERRIDE_KEY] | None] = ContextVar(
+    "org_writer_suppressed_compat_targets",
+    default=None,
+)
+_MISSING = object()
 EMPTY_OVERRIDE_MAPPING: Mapping[_OVERRIDE_DESTINATION, str] = MappingProxyType({})
 
 __all__ = [
@@ -28,6 +33,7 @@ __all__ = [
     "JSON_BUILDER_OVERRIDE_MAPPING",
     "JSON_WRITER_OVERRIDE_MAPPING",
     "MARKDOWN_WRITER_OVERRIDE_MAPPING",
+    "TRENDING_HELPER_OVERRIDE_MAPPING",
     "TRENDING_LABEL_OVERRIDE_MAPPING",
     "call_override",
     "collect_legacy_overrides",
@@ -48,6 +54,35 @@ _RECOMMENDATION_CONTEXT_PROXY_MODULES = (
     _MARKDOWN_MODULE,
     _HTML_MODULE,
 )
+_TRENDING_PACKAGE_ROOT_HELPERS = (
+    "_build_trending_metric_rows",
+    "_escape_markdown_table_cell",
+    "_format_signed_trending_value",
+    "_format_trending_dv_label",
+    "_format_trending_period_label",
+    "_format_trending_timestamp_short",
+    "_print_trending_console_section",
+    "_ranked_drift_entries",
+    "_render_console_trending_table",
+    "_render_html_trending_table",
+    "_render_markdown_trending_table",
+    "_render_trending_console",
+    "_render_trending_html",
+    "_render_trending_markdown",
+    "_resolve_trending_dv_name",
+    "_sorted_drift_score_items",
+    "_stringify_trending_value",
+    "_top_drift_scores",
+    "_trending_date_range",
+    "_trending_delta_column_specs",
+    "_trending_delta_csv_rows",
+    "_trending_delta_metric_rows",
+    "_trending_matrix_rows",
+    "_trending_snapshot_column_specs",
+    "_trending_snapshot_csv_rows",
+    "_trending_snapshot_metric_rows",
+    "_trending_snapshots_to_dicts",
+)
 
 
 def freeze_override_mapping(
@@ -67,15 +102,20 @@ def compose_override_mapping(
     return freeze_override_mapping(combined)
 
 
-def _validate_override_destination(destination: _OVERRIDE_DESTINATION) -> None:
+def _validate_override_destination(
+    destination: _OVERRIDE_DESTINATION,
+    *,
+    tuple_error_message: str = "override_mapping tuple keys must be (target_module_name, attr_name) string pairs",
+    key_error_message: str = "override_mapping keys must be strings or (module, attr) tuples",
+) -> None:
     """Validate a public override destination key before collection or normalization."""
     if isinstance(destination, str):
         return
     if isinstance(destination, tuple):
         if len(destination) != 2 or not all(isinstance(part, str) for part in destination):
-            raise TypeError("override_mapping tuple keys must be (target_module_name, attr_name) string pairs")
+            raise TypeError(tuple_error_message)
         return
-    raise TypeError("override_mapping keys must be strings or (module, attr) tuples")
+    raise TypeError(key_error_message)
 
 
 def _normalize_override_mapping(
@@ -118,6 +158,9 @@ COMMON_RECOMMENDATION_OVERRIDE_MAPPING = compose_override_mapping(
 TRENDING_LABEL_OVERRIDE_MAPPING = compose_override_mapping(
     _fanout_override_mapping("_format_trending_period_label", _TRENDING_MODULE),
     _fanout_override_mapping("_format_trending_timestamp_short", _TRENDING_MODULE),
+)
+TRENDING_HELPER_OVERRIDE_MAPPING = freeze_override_mapping(
+    {helper_name: helper_name for helper_name in _TRENDING_PACKAGE_ROOT_HELPERS},
 )
 CONSOLE_WRITER_OVERRIDE_MAPPING = compose_override_mapping(
     {
@@ -194,6 +237,10 @@ def _current_overrides() -> dict[_OVERRIDE_KEY, object]:
     return _OVERRIDES.get() or {}
 
 
+def _current_suppressed_compat_targets() -> set[_OVERRIDE_KEY]:
+    return _SUPPRESSED_COMPAT_TARGETS.get() or set()
+
+
 def resolve_override(target_module_name: str, attr_name: str, default: object) -> object:
     """Resolve a compatibility override for a target module attribute."""
     return _current_overrides().get(_compat_key(target_module_name, attr_name), default)
@@ -221,7 +268,10 @@ def make_override_proxy[**P, R](
     @wraps(default)
     def proxy(*args: P.args, **kwargs: P.kwargs) -> R:
         active = resolve_override(target_module_name, attr_name, default)
-        return active(*args, **kwargs)
+        if active is default:
+            return default(*args, **kwargs)
+        with _suppress_override(target_module_name, attr_name):
+            return active(*args, **kwargs)
 
     proxy.__module__ = target_module_name
     return proxy
@@ -232,6 +282,7 @@ def _collect_source_overrides[K](
     override_mapping: Mapping[K, str],
     *,
     baselines: Mapping[str, object] | None = None,
+    always_include_legacy_attrs: Collection[str] = (),
 ) -> dict[K, object]:
     """Collect override objects from a source module for a pre-shaped mapping."""
     source_module = importlib.import_module(source_module_name)
@@ -240,6 +291,9 @@ def _collect_source_overrides[K](
         if not hasattr(source_module, legacy_attr_name):
             continue
         override = getattr(source_module, legacy_attr_name)
+        if legacy_attr_name in always_include_legacy_attrs:
+            collected[target_key] = override
+            continue
         if baselines is not None and override is baselines.get(legacy_attr_name):
             continue
         collected[target_key] = override
@@ -252,6 +306,7 @@ def _collect_normalized_legacy_overrides(
     *,
     default_target_module_name: str,
     baselines: Mapping[str, object] | None = None,
+    always_include_legacy_attrs: Collection[str] = (),
 ) -> dict[_OVERRIDE_KEY, object]:
     """Collect normalized tuple-key overrides for internal compat wrapper routing."""
     return _collect_source_overrides(
@@ -261,6 +316,7 @@ def _collect_normalized_legacy_overrides(
             default_target_module_name=default_target_module_name,
         ),
         baselines=baselines,
+        always_include_legacy_attrs=always_include_legacy_attrs,
     )
 
 
@@ -289,16 +345,90 @@ def collect_legacy_overrides(
 
 
 @contextmanager
-def _override_scope_normalized(overrides: Mapping[_OVERRIDE_KEY, object]):
+def _override_scope_normalized(
+    overrides: Mapping[_OVERRIDE_KEY, object],
+    *,
+    preserve_existing: bool = False,
+):
     """Apply normalized tuple-key overrides to the current execution context."""
     current = _current_overrides()
     updated = current.copy()
-    updated.update(overrides)
+    if preserve_existing:
+        for key, override in overrides.items():
+            updated.setdefault(key, override)
+    else:
+        updated.update(overrides)
     token = _OVERRIDES.set(updated)
     try:
         yield
     finally:
         _OVERRIDES.reset(token)
+
+
+@contextmanager
+def _suppress_override(target_module_name: str, attr_name: str):
+    """Temporarily mask one override key while preserving the rest of the current context."""
+    key = _compat_key(target_module_name, attr_name)
+    current = _current_overrides()
+    if key not in current:
+        yield
+        return
+
+    updated = current.copy()
+    updated.pop(key, None)
+    token = _OVERRIDES.set(updated)
+    try:
+        yield
+    finally:
+        _OVERRIDES.reset(token)
+
+
+def _is_compat_target_suppressed(source_module_name: str, attr_name: str) -> bool:
+    return _compat_key(source_module_name, attr_name) in _current_suppressed_compat_targets()
+
+
+@contextmanager
+def _suppress_compat_target(source_module_name: str, attr_name: str):
+    """Temporarily force one compat wrapper to call its baseline target on re-entry."""
+    key = _compat_key(source_module_name, attr_name)
+    current = _current_suppressed_compat_targets()
+    if key in current:
+        yield
+        return
+
+    updated = current.copy()
+    updated.add(key)
+    token = _SUPPRESSED_COMPAT_TARGETS.set(updated)
+    try:
+        yield
+    finally:
+        _SUPPRESSED_COMPAT_TARGETS.reset(token)
+
+
+def _routes_to_compat_wrapper(
+    candidate: object,
+    reference: object,
+    *,
+    seen: set[int] | None = None,
+) -> bool:
+    """Return True when a callable eventually delegates back into one compat wrapper."""
+    if candidate is reference:
+        return True
+
+    if seen is None:
+        seen = set()
+    candidate_id = id(candidate)
+    if candidate_id in seen:
+        return False
+    seen.add(candidate_id)
+
+    for attr_name in ("_mock_wraps", "__wrapped__"):
+        wrapped = getattr(candidate, attr_name, _MISSING)
+        if wrapped is _MISSING:
+            continue
+        if _routes_to_compat_wrapper(wrapped, reference, seen=seen):
+            return True
+    return False
 
 
 @contextmanager
@@ -315,17 +445,15 @@ def override_scope(
     """
     normalized_overrides: dict[_OVERRIDE_KEY, object] = {}
     for destination, override in overrides.items():
+        _validate_override_destination(
+            destination,
+            tuple_error_message="override_scope() tuple override keys must be (target_module_name, attr_name) string pairs",
+            key_error_message="override_scope() override keys must be strings or (target_module_name, attr_name) tuples",
+        )
         if isinstance(destination, str):
             normalized_overrides[_compat_key(target_module_name, destination)] = override
             continue
-        if isinstance(destination, tuple):
-            if len(destination) != 2 or not all(isinstance(part, str) for part in destination):
-                raise TypeError(
-                    "override_scope() tuple override keys must be (target_module_name, attr_name) string pairs"
-                )
-            normalized_overrides[destination] = override
-            continue
-        raise TypeError("override_scope() override keys must be strings or (target_module_name, attr_name) tuples")
+        normalized_overrides[destination] = override
     with _override_scope_normalized(normalized_overrides):
         yield
 
@@ -338,6 +466,25 @@ def make_compat_wrapper[**P, R](
     override_mapping: Mapping[_OVERRIDE_DESTINATION, str],
 ) -> Callable[P, R]:
     """Wrap a legacy export so monkeypatches apply only within that call context."""
+    return _make_compat_wrapper_with_options(
+        source_module_name,
+        target,
+        target_module_name=target_module_name,
+        override_mapping=override_mapping,
+    )
+
+
+def _make_compat_wrapper_with_options[**P, R](
+    source_module_name: str,
+    target: Callable[P, R],
+    *,
+    target_module_name: str,
+    override_mapping: Mapping[_OVERRIDE_DESTINATION, str],
+    baselines: Mapping[str, object] | None = None,
+    exclude_self_override: bool = False,
+    always_include_legacy_attrs: Collection[str] = (),
+) -> Callable[P, R]:
+    """Internal helper for batched wrapper installs that need shared baselines or self-exclusion."""
     collected = dict(
         _normalize_override_mapping(
             override_mapping,
@@ -345,25 +492,44 @@ def make_compat_wrapper[**P, R](
         )
     )
     source_module = importlib.import_module(source_module_name)
-    baseline_source_values = {
-        legacy_attr_name: getattr(source_module, legacy_attr_name)
-        for legacy_attr_name in collected.values()
-        if hasattr(source_module, legacy_attr_name)
-    }
+    baseline_source_values = (
+        baselines
+        if baselines is not None
+        else {
+            legacy_attr_name: getattr(source_module, legacy_attr_name)
+            for legacy_attr_name in collected.values()
+            if hasattr(source_module, legacy_attr_name)
+        }
+    )
     target_attr_name = target.__name__
+    self_override_key = _compat_key(target_module_name, target_attr_name)
 
     @wraps(target)
     def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
-        current_target = getattr(importlib.import_module(target_module_name), target_attr_name)
+        if _is_compat_target_suppressed(source_module_name, target_attr_name):
+            current_target = target
+        else:
+            current_target = getattr(importlib.import_module(target_module_name), target_attr_name)
         overrides = _collect_normalized_legacy_overrides(
             source_module_name,
             collected,
             default_target_module_name=target_module_name,
             baselines=baseline_source_values,
+            always_include_legacy_attrs=always_include_legacy_attrs,
         )
+        if exclude_self_override:
+            overrides.pop(self_override_key, None)
+
+        if _routes_to_compat_wrapper(current_target, wrapper):
+            with _suppress_compat_target(source_module_name, target_attr_name):
+                if not overrides:
+                    return current_target(*args, **kwargs)
+                with _override_scope_normalized(overrides, preserve_existing=True):
+                    return current_target(*args, **kwargs)
+
         if not overrides:
             return current_target(*args, **kwargs)
-        with _override_scope_normalized(overrides):
+        with _override_scope_normalized(overrides, preserve_existing=True):
             return current_target(*args, **kwargs)
 
     wrapper.__module__ = source_module_name

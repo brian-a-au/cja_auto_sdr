@@ -13,7 +13,10 @@ from cja_auto_sdr.org.models import (
     TrendingSnapshot,
     _snapshot_effective_data_view_count,
 )
-from cja_auto_sdr.org.writers.compat import call_override
+from cja_auto_sdr.org.writers.compat import (
+    call_override,
+    make_override_proxy,
+)
 
 __all__ = [
     "_TRENDING_METRIC_SPECS",
@@ -545,3 +548,10 @@ def _render_trending_html(trending: OrgReportTrending) -> str:
 """
 
     return html_out
+
+
+_OVERRIDABLE_HELPERS = tuple(name for name in __all__ if name != "_TRENDING_METRIC_SPECS")
+
+for _helper_name in _OVERRIDABLE_HELPERS:
+    globals()[_helper_name] = make_override_proxy(__name__, _helper_name, globals()[_helper_name])
+del _helper_name

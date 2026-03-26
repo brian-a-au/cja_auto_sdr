@@ -828,6 +828,50 @@ def test_org_json_writer_respects_package_root_trending_helper_patch(tmp_path, r
     trending_mock.assert_called_once_with(trending)
 
 
+def test_org_json_builder_respects_package_root_nested_sort_patch(rich_org_report_result):
+    """Nested package-root trending helper patches must flow through the JSON builder bridge."""
+    mod = importlib.import_module("cja_auto_sdr.org.writers")
+    trending = _make_trending()
+    patched_scores = [("dv_999", 9.9), ("dv_001", 0.8)]
+
+    with patch(
+        "cja_auto_sdr.org.writers._sorted_drift_score_items",
+        return_value=patched_scores,
+    ) as sort_mock:
+        payload = mod.build_org_report_json_data(rich_org_report_result, trending=trending)
+
+    assert list(payload["trending"]["drift_scores"].items()) == patched_scores
+    assert payload["trending"]["drift_details"][0]["data_view_id"] == "dv_999"
+    assert sort_mock.call_count >= 2
+
+
+def test_org_json_writer_respects_package_root_nested_sort_patch(tmp_path, rich_org_report_result):
+    """Nested package-root trending helper patches must flow through the JSON writer bridge."""
+    mod = importlib.import_module("cja_auto_sdr.org.writers")
+    logger = logging.getLogger("test.cja_auto_sdr.org.writers.write_org_report_json.trending.sort")
+    trending = _make_trending()
+    patched_scores = [("dv_999", 9.9), ("dv_001", 0.8)]
+
+    with patch(
+        "cja_auto_sdr.org.writers._sorted_drift_score_items",
+        return_value=patched_scores,
+    ) as sort_mock:
+        output_path = Path(
+            mod.write_org_report_json(
+                rich_org_report_result,
+                tmp_path / "org_report_trending_sort.json",
+                str(tmp_path),
+                logger,
+                trending=trending,
+            ),
+        )
+
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+    assert list(payload["trending"]["drift_scores"].items()) == patched_scores
+    assert payload["trending"]["drift_details"][0]["data_view_id"] == "dv_999"
+    assert sort_mock.call_count >= 2
+
+
 @pytest.mark.parametrize(
     "writer_module_name",
     [
@@ -1004,6 +1048,199 @@ def test_org_markdown_writer_respects_package_root_timestamp_helper_patch(
     assert timestamp_mock.call_count >= 4
 
 
+def test_org_markdown_writer_supports_wraps_spy_on_package_root_timestamp_helper(
+    tmp_path,
+    rich_org_report_result,
+):
+    """Delegating package-root timestamp spies must not recurse through compat wrappers."""
+    mod = importlib.import_module("cja_auto_sdr.org.writers")
+    logger = logging.getLogger("test.cja_auto_sdr.org.writers.write_org_report_markdown.trending.wraps")
+    trending = _make_trending()
+    original = mod._format_trending_timestamp_short
+
+    with patch(
+        "cja_auto_sdr.org.writers._format_trending_timestamp_short",
+        wraps=original,
+    ) as timestamp_mock:
+        output_path = Path(
+            mod.write_org_report_markdown(
+                rich_org_report_result,
+                tmp_path / "org_report_trending_wraps.md",
+                str(tmp_path),
+                logger,
+                trending=trending,
+            ),
+        )
+
+    output = output_path.read_text(encoding="utf-8")
+    assert "Jan 01" in output
+    assert "Feb 01" in output
+    assert timestamp_mock.call_count >= 4
+
+
+def test_org_writers_trending_helper_reexports_accept_canonical_timestamp_helper_patch():
+    """Package-root trending helpers must remain interchangeable with canonical trending exports."""
+    mod = importlib.import_module("cja_auto_sdr.org.writers")
+    trending_mod = importlib.import_module("cja_auto_sdr.org.writers.trending")
+
+    with patch(
+        "cja_auto_sdr.org.writers._format_trending_timestamp_short",
+        new=trending_mod._format_trending_timestamp_short,
+    ):
+        period_label = mod._format_trending_period_label(
+            "2024-01-01T00:00:00",
+            "2024-02-01T00:00:00",
+        )
+
+    assert period_label == "Jan 01 -> Feb 01"
+
+
+def test_org_markdown_writer_supports_canonical_timestamp_wraps_patch(
+    tmp_path,
+    rich_org_report_result,
+):
+    """Writer entrypoints must not recurse when package-root timestamp patches wrap canonical helpers."""
+    mod = importlib.import_module("cja_auto_sdr.org.writers")
+    trending_mod = importlib.import_module("cja_auto_sdr.org.writers.trending")
+    logger = logging.getLogger("test.cja_auto_sdr.org.writers.write_org_report_markdown.trending.canonical_wraps")
+    trending = _make_trending()
+
+    with patch(
+        "cja_auto_sdr.org.writers._format_trending_timestamp_short",
+        wraps=trending_mod._format_trending_timestamp_short,
+    ) as timestamp_mock:
+        output_path = Path(
+            mod.write_org_report_markdown(
+                rich_org_report_result,
+                tmp_path / "org_report_trending_canonical_wraps.md",
+                str(tmp_path),
+                logger,
+                trending=trending,
+            ),
+        )
+
+    output = output_path.read_text(encoding="utf-8")
+    assert "Jan 01" in output
+    assert "Feb 01" in output
+    assert timestamp_mock.call_count >= 4
+
+
+def test_org_writers_trending_helper_reexports_preserve_explicit_override_scope():
+    """Package-root helper wrappers must not overwrite explicit caller override_scope values."""
+    from cja_auto_sdr.org.writers.compat import override_scope
+
+    mod = importlib.import_module("cja_auto_sdr.org.writers")
+
+    with override_scope(
+        "cja_auto_sdr.org.writers.trending",
+        {
+            "_format_trending_timestamp_short": lambda ts: f"custom:{ts[5:7]}",
+        },
+    ):
+        period_label = mod._format_trending_period_label(
+            "2024-01-01T00:00:00",
+            "2024-02-01T00:00:00",
+        )
+
+    assert period_label == "custom:01 -> custom:02"
+
+
+def test_org_markdown_writer_preserves_explicit_trending_override_scope(
+    tmp_path,
+    rich_org_report_result,
+):
+    """Writer bridge wrappers must not clobber explicit caller override_scope values."""
+    from cja_auto_sdr.org.writers.compat import override_scope
+
+    mod = importlib.import_module("cja_auto_sdr.org.writers")
+    logger = logging.getLogger("test.cja_auto_sdr.org.writers.write_org_report_markdown.trending.override_scope")
+    trending = _make_trending()
+
+    with override_scope(
+        "cja_auto_sdr.org.writers.trending",
+        {
+            "_format_trending_timestamp_short": lambda ts: f"custom:{ts[5:7]}",
+        },
+    ):
+        output_path = Path(
+            mod.write_org_report_markdown(
+                rich_org_report_result,
+                tmp_path / "org_report_trending_override_scope.md",
+                str(tmp_path),
+                logger,
+                trending=trending,
+            ),
+        )
+
+    output = output_path.read_text(encoding="utf-8")
+    assert "custom:01" in output
+    assert "custom:02" in output
+
+
+def test_canonical_trending_helpers_accept_package_root_timestamp_helper_patch():
+    """Canonical trending helpers must remain interchangeable with package-root helper exports."""
+    mod = importlib.import_module("cja_auto_sdr.org.writers")
+    trending_mod = importlib.import_module("cja_auto_sdr.org.writers.trending")
+
+    with patch(
+        "cja_auto_sdr.org.writers.trending._format_trending_timestamp_short",
+        new=mod._format_trending_timestamp_short,
+    ):
+        period_label = trending_mod._format_trending_period_label(
+            "2024-01-01T00:00:00",
+            "2024-02-01T00:00:00",
+        )
+
+    assert period_label == "Jan 01 -> Feb 01"
+
+
+def test_canonical_trending_helpers_support_package_root_timestamp_wraps_patch():
+    """Canonical trending helpers must not recurse when wraps spies delegate through package-root helpers."""
+    mod = importlib.import_module("cja_auto_sdr.org.writers")
+    trending_mod = importlib.import_module("cja_auto_sdr.org.writers.trending")
+
+    with patch(
+        "cja_auto_sdr.org.writers.trending._format_trending_timestamp_short",
+        wraps=mod._format_trending_timestamp_short,
+    ) as timestamp_mock:
+        period_label = trending_mod._format_trending_period_label(
+            "2024-01-01T00:00:00",
+            "2024-02-01T00:00:00",
+        )
+
+    assert period_label == "Jan 01 -> Feb 01"
+    assert timestamp_mock.call_count >= 2
+
+
+def test_org_markdown_writer_supports_package_root_timestamp_wraps_patch_on_canonical_surface(
+    tmp_path,
+    rich_org_report_result,
+):
+    """Markdown writer paths must not recurse when canonical helper patches delegate into package-root helpers."""
+    mod = importlib.import_module("cja_auto_sdr.org.writers")
+    logger = logging.getLogger("test.cja_auto_sdr.org.writers.write_org_report_markdown.trending.reverse_wraps")
+    trending = _make_trending()
+
+    with patch(
+        "cja_auto_sdr.org.writers.trending._format_trending_timestamp_short",
+        wraps=mod._format_trending_timestamp_short,
+    ) as timestamp_mock:
+        output_path = Path(
+            mod.write_org_report_markdown(
+                rich_org_report_result,
+                tmp_path / "org_report_trending_reverse_wraps.md",
+                str(tmp_path),
+                logger,
+                trending=trending,
+            ),
+        )
+
+    output = output_path.read_text(encoding="utf-8")
+    assert "Jan 01" in output
+    assert "Feb 01" in output
+    assert timestamp_mock.call_count >= 4
+
+
 def test_org_writers_trending_helper_reexports_respect_package_root_timestamp_patch():
     """Package-root trending helper re-exports must preserve nested timestamp monkeypatches."""
     mod = importlib.import_module("cja_auto_sdr.org.writers")
@@ -1024,6 +1261,164 @@ def test_org_writers_trending_helper_reexports_respect_package_root_timestamp_pa
     assert period_label == "patched:01 -> patched:02"
     assert [label for _key, label in delta_specs] == ["patched:01 -> patched:02"]
     assert timestamp_mock.call_count == 6
+
+
+def test_org_writers_trending_helper_reexports_support_wraps_spy_timestamp_patch():
+    """Delegating package-root helper spies must not recurse on direct helper calls."""
+    mod = importlib.import_module("cja_auto_sdr.org.writers")
+    original = mod._format_trending_timestamp_short
+
+    with patch(
+        "cja_auto_sdr.org.writers._format_trending_timestamp_short",
+        wraps=original,
+    ) as timestamp_mock:
+        result = mod._format_trending_timestamp_short("2024-01-01T00:00:00")
+
+    assert result == "Jan 01"
+    timestamp_mock.assert_called_once_with("2024-01-01T00:00:00")
+
+
+def test_org_writers_render_markdown_trending_table_respects_package_root_escape_patch():
+    """Package-root Markdown cell escape patches must flow into nested trending table rendering."""
+    mod = importlib.import_module("cja_auto_sdr.org.writers")
+
+    with patch(
+        "cja_auto_sdr.org.writers._escape_markdown_table_cell",
+        side_effect=lambda value: f"patched<{value}>",
+    ) as escape_mock:
+        lines = mod._render_markdown_trending_table(["Jan 01"], [("Metric", [1])])
+
+    assert any("patched<Jan 01>" in line for line in lines)
+    assert any("patched<Metric>" in line for line in lines)
+    assert any("patched<1>" in line for line in lines)
+    assert escape_mock.call_count == 3
+
+
+def test_org_writers_render_markdown_trending_table_supports_wraps_spy_on_escape_helper():
+    """Delegating package-root escape spies must not recurse through helper-to-helper compat routing."""
+    mod = importlib.import_module("cja_auto_sdr.org.writers")
+    original = mod._escape_markdown_table_cell
+
+    with patch(
+        "cja_auto_sdr.org.writers._escape_markdown_table_cell",
+        wraps=original,
+    ) as escape_mock:
+        lines = mod._render_markdown_trending_table(["Jan 01"], [("Metric", [1])])
+
+    assert lines == ["| Metric | Jan 01 |", "|--------|---------:|", "| Metric | 1 |"]
+    assert escape_mock.call_count == 3
+
+
+def test_org_writers_render_console_trending_table_respects_package_root_value_patch():
+    """Package-root stringify patches must flow into nested console trending table rendering."""
+    mod = importlib.import_module("cja_auto_sdr.org.writers")
+
+    with patch(
+        "cja_auto_sdr.org.writers._stringify_trending_value",
+        side_effect=lambda value: f"patched<{value}>",
+    ) as stringify_mock:
+        lines = mod._render_console_trending_table(["Jan 01"], [("Metric", [1])])
+
+    assert any("patched<1>" in line for line in lines)
+    assert stringify_mock.call_count == 1
+
+
+def test_org_writers_ranked_drift_entries_respect_package_root_name_resolution_patch():
+    """Package-root drift name patches must flow into ranked drift helper re-exports."""
+    mod = importlib.import_module("cja_auto_sdr.org.writers")
+    trending = _make_trending()
+
+    with patch(
+        "cja_auto_sdr.org.writers._resolve_trending_dv_name",
+        return_value="patched data view",
+    ) as resolve_mock:
+        entries = mod._ranked_drift_entries(trending, limit=1)
+
+    assert entries == [
+        {
+            "data_view_id": "dv_001",
+            "data_view_name": "patched data view",
+            "drift_score": 0.8,
+        },
+    ]
+    assert resolve_mock.call_count == 1
+
+
+def test_org_writers_trending_snapshots_to_dicts_respect_package_root_sort_patch():
+    """Package-root drift-sort patches must flow into top-level trending dict conversion helpers."""
+    mod = importlib.import_module("cja_auto_sdr.org.writers")
+    trending = _make_trending()
+    patched_scores = [("dv_999", 9.9), ("dv_001", 0.8)]
+
+    with patch(
+        "cja_auto_sdr.org.writers._sorted_drift_score_items",
+        return_value=patched_scores,
+    ) as sort_mock:
+        top_scores = mod._top_drift_scores({"dv_001": 0.8}, limit=1)
+        trending_dict = mod._trending_snapshots_to_dicts(trending)
+
+    assert top_scores == patched_scores[:1]
+    assert list(trending_dict["drift_scores"].items()) == patched_scores
+    assert trending_dict["drift_details"][0]["data_view_id"] == "dv_999"
+    assert sort_mock.call_count >= 2
+
+
+def test_org_writers_render_trending_console_respects_package_root_dv_label_patch():
+    """Package-root drift-label patches must flow into console trending rendering."""
+    mod = importlib.import_module("cja_auto_sdr.org.writers")
+    trending = _make_trending()
+
+    with patch(
+        "cja_auto_sdr.org.writers._format_trending_dv_label",
+        return_value="patched drift label",
+    ) as label_mock:
+        output = mod._render_trending_console(trending)
+
+    assert "patched drift label" in output
+    assert label_mock.call_count >= 1
+
+
+def test_org_json_builder_reexport_supports_package_root_wraps_patch_on_canonical_surface(
+    rich_org_report_result,
+):
+    """Direct package-root builder exports must not recurse when canonical wraps spies delegate back."""
+    mod = importlib.import_module("cja_auto_sdr.org.writers")
+
+    with patch(
+        "cja_auto_sdr.org.writers.json.build_org_report_json_data",
+        wraps=mod.build_org_report_json_data,
+    ) as build_mock:
+        payload = mod.build_org_report_json_data(rich_org_report_result)
+
+    assert payload["org_id"] == rich_org_report_result.org_id
+    build_mock.assert_called_once_with(rich_org_report_result)
+
+
+def test_org_markdown_writer_reexport_supports_package_root_wraps_patch_on_canonical_surface(
+    tmp_path,
+    rich_org_report_result,
+):
+    """Direct package-root writer exports must not recurse when canonical wraps spies delegate back."""
+    mod = importlib.import_module("cja_auto_sdr.org.writers")
+    logger = logging.getLogger("test.cja_auto_sdr.org.writers.write_org_report_markdown.reverse_writer_wraps")
+    trending = _make_trending()
+
+    with patch(
+        "cja_auto_sdr.org.writers.markdown.write_org_report_markdown",
+        wraps=mod.write_org_report_markdown,
+    ) as writer_mock:
+        output_path = Path(
+            mod.write_org_report_markdown(
+                rich_org_report_result,
+                tmp_path / "org_report_reverse_writer_wraps.md",
+                str(tmp_path),
+                logger,
+                trending=trending,
+            ),
+        )
+
+    assert output_path.exists()
+    writer_mock.assert_called_once()
 
 
 @pytest.mark.parametrize(
@@ -1589,6 +1984,7 @@ class TestCompatOverrideMappingCompleteness:
     _EXPECTED_OVERRIDE_MAPPINGS = [
         "EMPTY_OVERRIDE_MAPPING",
         "COMMON_RECOMMENDATION_OVERRIDE_MAPPING",
+        "TRENDING_HELPER_OVERRIDE_MAPPING",
         "TRENDING_LABEL_OVERRIDE_MAPPING",
         "CONSOLE_WRITER_OVERRIDE_MAPPING",
         "CONSOLE_STATS_ONLY_OVERRIDE_MAPPING",
@@ -1666,6 +2062,19 @@ class TestCompatOverrideMappingCompleteness:
             assert isinstance(key, tuple)
             module_name, _attr = key
             assert module_name == "cja_auto_sdr.org.writers.trending"
+
+    def test_trending_helper_mapping_uses_flat_package_root_keys(self):
+        """TRENDING_HELPER_OVERRIDE_MAPPING should stay flat for package-root helper wrappers."""
+        from cja_auto_sdr.org.writers.compat import TRENDING_HELPER_OVERRIDE_MAPPING
+
+        assert all(isinstance(key, str) for key in TRENDING_HELPER_OVERRIDE_MAPPING)
+        assert {
+            "_escape_markdown_table_cell",
+            "_format_trending_dv_label",
+            "_resolve_trending_dv_name",
+            "_sorted_drift_score_items",
+            "_stringify_trending_value",
+        } <= set(TRENDING_HELPER_OVERRIDE_MAPPING)
 
     def test_composed_mappings_inherit_base_entries(self):
         """Composed mappings must contain all entries from their base mappings."""
