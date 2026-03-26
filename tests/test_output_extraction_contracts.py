@@ -1101,20 +1101,26 @@ _ORG_WRITERS_SUBMODULES = [
 class TestOrgWritersAllExportConsistency:
     """Verify __all__ declarations in org/writers submodules are consistent with parent re-exports."""
 
-    @pytest.mark.parametrize("submodule", _ORG_WRITERS_SUBMODULES, ids=[m.rsplit(".", 1)[-1] for m in _ORG_WRITERS_SUBMODULES])
+    @pytest.mark.parametrize(
+        "submodule", _ORG_WRITERS_SUBMODULES, ids=[m.rsplit(".", 1)[-1] for m in _ORG_WRITERS_SUBMODULES]
+    )
     def test_submodule_has_all(self, submodule):
         """Each org/writers submodule must declare __all__."""
         mod = importlib.import_module(submodule)
         assert hasattr(mod, "__all__"), f"{submodule} is missing __all__"
 
-    @pytest.mark.parametrize("submodule", _ORG_WRITERS_SUBMODULES, ids=[m.rsplit(".", 1)[-1] for m in _ORG_WRITERS_SUBMODULES])
+    @pytest.mark.parametrize(
+        "submodule", _ORG_WRITERS_SUBMODULES, ids=[m.rsplit(".", 1)[-1] for m in _ORG_WRITERS_SUBMODULES]
+    )
     def test_all_names_exist_on_submodule(self, submodule):
         """Every name in a submodule's __all__ must exist as an attribute on that submodule."""
         mod = importlib.import_module(submodule)
         for name in mod.__all__:
             assert hasattr(mod, name), f"{submodule}.__all__ declares {name!r} but it is not an attribute"
 
-    @pytest.mark.parametrize("submodule", _ORG_WRITERS_SUBMODULES, ids=[m.rsplit(".", 1)[-1] for m in _ORG_WRITERS_SUBMODULES])
+    @pytest.mark.parametrize(
+        "submodule", _ORG_WRITERS_SUBMODULES, ids=[m.rsplit(".", 1)[-1] for m in _ORG_WRITERS_SUBMODULES]
+    )
     def test_all_names_importable_from_parent(self, submodule):
         """Every name in a submodule's __all__ must be importable from cja_auto_sdr.org.writers."""
         sub_mod = importlib.import_module(submodule)
@@ -1146,20 +1152,26 @@ _OUTPUT_DIFF_SUBMODULES = [
 class TestOutputDiffAllExportConsistency:
     """Verify __all__ declarations in output/diff submodules are consistent with parent re-exports."""
 
-    @pytest.mark.parametrize("submodule", _OUTPUT_DIFF_SUBMODULES, ids=[m.rsplit(".", 1)[-1] for m in _OUTPUT_DIFF_SUBMODULES])
+    @pytest.mark.parametrize(
+        "submodule", _OUTPUT_DIFF_SUBMODULES, ids=[m.rsplit(".", 1)[-1] for m in _OUTPUT_DIFF_SUBMODULES]
+    )
     def test_submodule_has_all(self, submodule):
         """Each output/diff submodule must declare __all__."""
         mod = importlib.import_module(submodule)
         assert hasattr(mod, "__all__"), f"{submodule} is missing __all__"
 
-    @pytest.mark.parametrize("submodule", _OUTPUT_DIFF_SUBMODULES, ids=[m.rsplit(".", 1)[-1] for m in _OUTPUT_DIFF_SUBMODULES])
+    @pytest.mark.parametrize(
+        "submodule", _OUTPUT_DIFF_SUBMODULES, ids=[m.rsplit(".", 1)[-1] for m in _OUTPUT_DIFF_SUBMODULES]
+    )
     def test_all_names_exist_on_submodule(self, submodule):
         """Every name in a submodule's __all__ must exist as an attribute on that submodule."""
         mod = importlib.import_module(submodule)
         for name in mod.__all__:
             assert hasattr(mod, name), f"{submodule}.__all__ declares {name!r} but it is not an attribute"
 
-    @pytest.mark.parametrize("submodule", _OUTPUT_DIFF_SUBMODULES, ids=[m.rsplit(".", 1)[-1] for m in _OUTPUT_DIFF_SUBMODULES])
+    @pytest.mark.parametrize(
+        "submodule", _OUTPUT_DIFF_SUBMODULES, ids=[m.rsplit(".", 1)[-1] for m in _OUTPUT_DIFF_SUBMODULES]
+    )
     def test_all_names_importable_from_parent(self, submodule):
         """Every name in a submodule's __all__ must be importable from cja_auto_sdr.output.diff."""
         sub_mod = importlib.import_module(submodule)
