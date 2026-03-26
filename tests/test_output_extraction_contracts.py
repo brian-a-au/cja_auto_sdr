@@ -1516,10 +1516,10 @@ class TestCompatSignatureContinuity:
             "params": ["target_module_name", "attr_name", "default"],
         },
         "collect_legacy_overrides": {
-            "params": ["source_module_name", "override_mapping", "default_target_module_name", "baselines"],
+            "params": ["source_module_name", "override_mapping", "baselines"],
         },
         "override_scope": {
-            "params": ["overrides"],
+            "params": ["target_module_name", "overrides"],
         },
         "make_compat_wrapper": {
             "params": ["source_module_name", "target", "target_module_name", "override_mapping"],
@@ -1554,14 +1554,14 @@ class TestCompatSignatureContinuity:
         mappings_param = sig.parameters["mappings"]
         assert mappings_param.kind == inspect.Parameter.VAR_POSITIONAL
 
-    def test_collect_legacy_overrides_has_keyword_only_params(self):
-        """collect_legacy_overrides must have default_target_module_name as keyword-only."""
+    def test_collect_legacy_overrides_has_keyword_only_baselines(self):
+        """collect_legacy_overrides must keep baselines as a keyword-only parameter."""
         import inspect
 
         from cja_auto_sdr.org.writers.compat import collect_legacy_overrides
 
         sig = signature(collect_legacy_overrides)
-        param = sig.parameters["default_target_module_name"]
+        param = sig.parameters["baselines"]
         assert param.kind == inspect.Parameter.KEYWORD_ONLY
 
     def test_collect_legacy_overrides_baselines_defaults_to_none(self):
@@ -1755,10 +1755,31 @@ class TestMakeCompatWrapperBehavior:
         key = ("test.module", "test_attr")
         assert key not in _current_overrides()
 
-        with override_scope({key: "patched_value"}):
+        with override_scope("test.module", {"test_attr": "patched_value"}):
             assert _current_overrides()[key] == "patched_value"
 
         assert key not in _current_overrides()
+
+    def test_collect_legacy_overrides_preserves_flat_result_contract(self):
+        """collect_legacy_overrides must return the legacy flat attr->override mapping."""
+        from cja_auto_sdr.org.writers.compat import collect_legacy_overrides, compose_override_mapping
+
+        overrides = collect_legacy_overrides(
+            "cja_auto_sdr.org.writers.compat",
+            {"compose": "compose_override_mapping"},
+        )
+
+        assert overrides == {"compose": compose_override_mapping}
+
+    def test_collect_legacy_overrides_rejects_tuple_keys(self):
+        """collect_legacy_overrides public surface must reject normalized tuple-key mappings."""
+        from cja_auto_sdr.org.writers.compat import collect_legacy_overrides
+
+        with pytest.raises(TypeError, match="public override_mapping keys must be strings"):
+            collect_legacy_overrides(
+                "cja_auto_sdr.org.writers.compat",
+                {("test.module", "compose"): "compose_override_mapping"},
+            )
 
     def test_resolve_override_returns_default_without_scope(self):
         """resolve_override must return the default when no override is active."""
@@ -1777,7 +1798,7 @@ class TestMakeCompatWrapperBehavior:
         key_module = "test.resolve.module"
         key_attr = "test_resolve_attr"
 
-        with override_scope({(key_module, key_attr): override_val}):
+        with override_scope(key_module, {key_attr: override_val}):
             result = resolve_override(key_module, key_attr, sentinel)
             assert result is override_val
 
@@ -1794,7 +1815,7 @@ class TestMakeCompatWrapperBehavior:
         def override_fn(x):
             return f"override:{x}"
 
-        with override_scope({("test.proxy.module", "test_fn"): override_fn}):
+        with override_scope("test.proxy.module", {"test_fn": override_fn}):
             assert proxy("hello") == "override:hello"
 
         assert proxy("hello") == "default:hello"
@@ -1819,7 +1840,7 @@ class TestMakeCompatWrapperBehavior:
         def override_fn(a, b):
             return a * b
 
-        with override_scope({("test.call.module", "test_fn"): override_fn}):
+        with override_scope("test.call.module", {"test_fn": override_fn}):
             result = call_override("test.call.module", "test_fn", default_fn, 3, 4)
             assert result == 12
 
@@ -1835,7 +1856,7 @@ class TestMakeCompatWrapperBehavior:
 
         assert call_override("test.kw.module", "test_fn", default_fn, x=1, y=2) == "default:1,2"
 
-        with override_scope({("test.kw.module", "test_fn"): override_fn}):
+        with override_scope("test.kw.module", {"test_fn": override_fn}):
             assert call_override("test.kw.module", "test_fn", default_fn, x=3, y=4) == "override:3,4"
 
     def test_override_scope_nesting_preserves_outer_keys(self):
@@ -1845,8 +1866,8 @@ class TestMakeCompatWrapperBehavior:
         key_a = ("test.nest.module", "attr_a")
         key_b = ("test.nest.module", "attr_b")
 
-        with override_scope({key_a: "outer_a"}):
-            with override_scope({key_b: "inner_b"}):
+        with override_scope("test.nest.module", {"attr_a": "outer_a"}):
+            with override_scope("test.nest.module", {"attr_b": "inner_b"}):
                 overrides = _current_overrides()
                 assert overrides[key_a] == "outer_a"
                 assert overrides[key_b] == "inner_b"
@@ -1857,9 +1878,9 @@ class TestMakeCompatWrapperBehavior:
 
         key = ("test.shadow.module", "attr")
 
-        with override_scope({key: "outer"}):
+        with override_scope("test.shadow.module", {"attr": "outer"}):
             assert _current_overrides()[key] == "outer"
-            with override_scope({key: "inner"}):
+            with override_scope("test.shadow.module", {"attr": "inner"}):
                 assert _current_overrides()[key] == "inner"
 
     def test_override_scope_nesting_exit_restores_outer(self):
@@ -1868,12 +1889,20 @@ class TestMakeCompatWrapperBehavior:
 
         key = ("test.restore.module", "attr")
 
-        with override_scope({key: "outer"}):
-            with override_scope({key: "inner"}):
+        with override_scope("test.restore.module", {"attr": "outer"}):
+            with override_scope("test.restore.module", {"attr": "inner"}):
                 pass
             assert _current_overrides()[key] == "outer"
 
         assert key not in _current_overrides()
+
+    def test_override_scope_rejects_non_string_keys(self):
+        """override_scope public surface must reject normalized tuple-key mappings."""
+        from cja_auto_sdr.org.writers.compat import override_scope
+
+        with pytest.raises(TypeError, match="override keys must be strings"):
+            with override_scope("test.invalid.module", {("test.invalid.module", "attr"): "value"}):
+                pass
 
 
 class TestFreezeAndComposeOverrideMapping:

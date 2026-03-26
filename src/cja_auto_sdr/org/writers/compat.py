@@ -76,9 +76,13 @@ def _normalize_override_mapping(
     normalized: dict[_OVERRIDE_KEY, str] = {}
     for destination, legacy_attr_name in mapping.items():
         if isinstance(destination, tuple):
+            if len(destination) != 2 or not all(isinstance(part, str) for part in destination):
+                raise TypeError("override_mapping tuple keys must be (target_module_name, attr_name) string pairs")
             normalized[destination] = legacy_attr_name
-        else:
-            normalized[_compat_key(default_target_module_name, destination)] = legacy_attr_name
+            continue
+        if not isinstance(destination, str):
+            raise TypeError("override_mapping keys must be strings or (module, attr) tuples")
+        normalized[_compat_key(default_target_module_name, destination)] = legacy_attr_name
     return normalized
 
 
@@ -215,30 +219,72 @@ def make_override_proxy[**P, R](
     return proxy
 
 
-def collect_legacy_overrides(
+def _collect_source_overrides[K](
+    source_module_name: str,
+    override_mapping: Mapping[K, str],
+    *,
+    baselines: Mapping[str, object] | None = None,
+) -> dict[K, object]:
+    """Collect override objects from a source module for a pre-shaped mapping."""
+    source_module = importlib.import_module(source_module_name)
+    collected: dict[K, object] = {}
+    for target_key, legacy_attr_name in override_mapping.items():
+        if not hasattr(source_module, legacy_attr_name):
+            continue
+        override = getattr(source_module, legacy_attr_name)
+        if baselines is not None and override is baselines.get(legacy_attr_name):
+            continue
+        collected[target_key] = override
+    return collected
+
+
+def _collect_normalized_legacy_overrides(
     source_module_name: str,
     override_mapping: Mapping[_OVERRIDE_DESTINATION, str],
     *,
     default_target_module_name: str,
     baselines: Mapping[str, object] | None = None,
 ) -> dict[_OVERRIDE_KEY, object]:
-    """Collect override callables from a legacy compatibility module."""
-    source_module = importlib.import_module(source_module_name)
-    normalized_mapping = _normalize_override_mapping(
-        override_mapping,
-        default_target_module_name=default_target_module_name,
+    """Collect normalized tuple-key overrides for internal compat wrapper routing."""
+    return _collect_source_overrides(
+        source_module_name,
+        _normalize_override_mapping(
+            override_mapping,
+            default_target_module_name=default_target_module_name,
+        ),
+        baselines=baselines,
     )
-    return {
-        target_key: getattr(source_module, legacy_attr_name)
-        for target_key, legacy_attr_name in normalized_mapping.items()
-        if hasattr(source_module, legacy_attr_name)
-        and (baselines is None or getattr(source_module, legacy_attr_name) is not baselines.get(legacy_attr_name))
-    }
+
+
+def collect_legacy_overrides(
+    source_module_name: str,
+    override_mapping: Mapping[str, str],
+    *,
+    baselines: Mapping[str, object] | None = None,
+) -> dict[str, object]:
+    """Collect override callables from a legacy compatibility module.
+
+    This preserves the 3.4.7 public contract: callers pass a flat
+    ``{"target_attr": "legacy_attr"}`` mapping and receive a flat
+    ``{"target_attr": override}`` result. Internal wrapper routing uses a
+    private normalized helper so extracted writers can still fan out to
+    multiple canonical target modules without changing the exported API.
+    """
+    public_mapping: dict[str, str] = {}
+    for target_attr_name, legacy_attr_name in override_mapping.items():
+        if not isinstance(target_attr_name, str):
+            raise TypeError("collect_legacy_overrides() public override_mapping keys must be strings")
+        public_mapping[target_attr_name] = legacy_attr_name
+    return _collect_source_overrides(
+        source_module_name,
+        public_mapping,
+        baselines=baselines,
+    )
 
 
 @contextmanager
-def override_scope(overrides: Mapping[_OVERRIDE_KEY, object]):
-    """Apply compatibility overrides to the current execution context only."""
+def _override_scope_normalized(overrides: Mapping[_OVERRIDE_KEY, object]):
+    """Apply normalized tuple-key overrides to the current execution context."""
     current = _current_overrides()
     updated = current.copy()
     updated.update(overrides)
@@ -247,6 +293,18 @@ def override_scope(overrides: Mapping[_OVERRIDE_KEY, object]):
         yield
     finally:
         _OVERRIDES.reset(token)
+
+
+@contextmanager
+def override_scope(target_module_name: str, overrides: Mapping[str, object]):
+    """Apply compatibility overrides to the current execution context only."""
+    normalized_overrides: dict[_OVERRIDE_KEY, object] = {}
+    for attr_name, override in overrides.items():
+        if not isinstance(attr_name, str):
+            raise TypeError("override_scope() override keys must be strings")
+        normalized_overrides[_compat_key(target_module_name, attr_name)] = override
+    with _override_scope_normalized(normalized_overrides):
+        yield
 
 
 def make_compat_wrapper[**P, R](
@@ -274,7 +332,7 @@ def make_compat_wrapper[**P, R](
     @wraps(target)
     def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
         current_target = getattr(importlib.import_module(target_module_name), target_attr_name)
-        overrides = collect_legacy_overrides(
+        overrides = _collect_normalized_legacy_overrides(
             source_module_name,
             collected,
             default_target_module_name=target_module_name,
@@ -282,7 +340,7 @@ def make_compat_wrapper[**P, R](
         )
         if not overrides:
             return current_target(*args, **kwargs)
-        with override_scope(overrides):
+        with _override_scope_normalized(overrides):
             return current_target(*args, **kwargs)
 
     wrapper.__module__ = source_module_name
