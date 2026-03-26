@@ -302,13 +302,30 @@ def _override_scope_normalized(overrides: Mapping[_OVERRIDE_KEY, object]):
 
 
 @contextmanager
-def override_scope(target_module_name: str, overrides: Mapping[str, object]):
-    """Apply compatibility overrides to the current execution context only."""
+def override_scope(
+    target_module_name: str,
+    overrides: Mapping[_OVERRIDE_DESTINATION, object],
+):
+    """Apply compatibility overrides to the current execution context only.
+
+    String keys are scoped to ``target_module_name`` for the legacy 3.4.7
+    flat override contract. Explicit ``(module, attr)`` tuple keys are also
+    accepted so callers can apply mixed-key mappings collected from the
+    exported 3.4.8 writer override maps without re-normalizing them.
+    """
     normalized_overrides: dict[_OVERRIDE_KEY, object] = {}
-    for attr_name, override in overrides.items():
-        if not isinstance(attr_name, str):
-            raise TypeError("override_scope() override keys must be strings")
-        normalized_overrides[_compat_key(target_module_name, attr_name)] = override
+    for destination, override in overrides.items():
+        if isinstance(destination, str):
+            normalized_overrides[_compat_key(target_module_name, destination)] = override
+            continue
+        if isinstance(destination, tuple):
+            if len(destination) != 2 or not all(isinstance(part, str) for part in destination):
+                raise TypeError(
+                    "override_scope() tuple override keys must be (target_module_name, attr_name) string pairs"
+                )
+            normalized_overrides[destination] = override
+            continue
+        raise TypeError("override_scope() override keys must be strings or (target_module_name, attr_name) tuples")
     with _override_scope_normalized(normalized_overrides):
         yield
 

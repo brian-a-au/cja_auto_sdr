@@ -1923,12 +1923,70 @@ class TestMakeCompatWrapperBehavior:
 
         assert key not in _current_overrides()
 
-    def test_override_scope_rejects_non_string_keys(self):
-        """override_scope public surface must reject normalized tuple-key mappings."""
+    def test_override_scope_accepts_collected_mixed_key_overrides(self):
+        """override_scope must apply mixed-key overrides returned by collect_legacy_overrides."""
+        from cja_auto_sdr.org.writers import (
+            _format_recommendation_context_entries,
+            _format_trending_period_label,
+            _render_trending_markdown,
+        )
+        from cja_auto_sdr.org.writers.compat import (
+            MARKDOWN_WRITER_OVERRIDE_MAPPING,
+            collect_legacy_overrides,
+            override_scope,
+            resolve_override,
+        )
+
+        overrides = collect_legacy_overrides(
+            "cja_auto_sdr.org.writers",
+            MARKDOWN_WRITER_OVERRIDE_MAPPING,
+        )
+        sentinel = object()
+
+        with override_scope("cja_auto_sdr.org.writers.markdown", overrides):
+            assert (
+                resolve_override(
+                    "cja_auto_sdr.org.writers.markdown",
+                    "_render_trending_markdown",
+                    sentinel,
+                )
+                is _render_trending_markdown
+            )
+            assert (
+                resolve_override(
+                    "cja_auto_sdr.org.writers.markdown",
+                    "_format_recommendation_context_entries",
+                    sentinel,
+                )
+                is _format_recommendation_context_entries
+            )
+            assert (
+                resolve_override(
+                    "cja_auto_sdr.org.writers.trending",
+                    "_format_trending_period_label",
+                    sentinel,
+                )
+                is _format_trending_period_label
+            )
+
+        assert (
+            resolve_override(
+                "cja_auto_sdr.org.writers.markdown",
+                "_render_trending_markdown",
+                sentinel,
+            )
+            is sentinel
+        )
+
+    def test_override_scope_rejects_malformed_tuple_keys(self):
+        """override_scope must reject tuple keys that are not (module, attr) string pairs."""
         from cja_auto_sdr.org.writers.compat import override_scope
 
-        with pytest.raises(TypeError, match="override keys must be strings"):
-            with override_scope("test.invalid.module", {("test.invalid.module", "attr"): "value"}):
+        with pytest.raises(
+            TypeError,
+            match="tuple override keys must be \\(target_module_name, attr_name\\) string pairs",
+        ):
+            with override_scope("test.invalid.module", {("test.invalid.module", 1): "value"}):
                 pass
 
 
