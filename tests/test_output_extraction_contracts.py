@@ -1145,9 +1145,7 @@ _ORG_WRITERS_SUBMODULES = [
 ]
 
 # compat.py exports are internal plumbing, not re-exported by the parent __init__.py
-_ORG_WRITERS_REEXPORTED_SUBMODULES = [
-    m for m in _ORG_WRITERS_SUBMODULES if m != "cja_auto_sdr.org.writers.compat"
-]
+_ORG_WRITERS_REEXPORTED_SUBMODULES = [m for m in _ORG_WRITERS_SUBMODULES if m != "cja_auto_sdr.org.writers.compat"]
 
 
 class TestOrgWritersAllExportConsistency:
@@ -1699,9 +1697,7 @@ class TestCompatOverrideMappingCompleteness:
             tuple_attrs = {attr for key in mapping if isinstance(key, tuple) for _, attr in [key]}
             string_keys = {key for key in mapping if isinstance(key, str)}
             collision = string_keys & tuple_attrs
-            assert not collision, (
-                f"{name} has string key(s) {collision} that duplicate tuple key attr names"
-            )
+            assert not collision, f"{name} has string key(s) {collision} that duplicate tuple key attr names"
 
 
 class TestMakeCompatWrapperBehavior:

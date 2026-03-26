@@ -88,10 +88,7 @@ def _fanout_override_mapping(
 ) -> Mapping[_OVERRIDE_DESTINATION, str]:
     """Build tuple-key override mappings for one legacy attr across multiple proxy modules."""
     return freeze_override_mapping(
-        {
-            (target_module_name, legacy_attr_name): legacy_attr_name
-            for target_module_name in target_module_names
-        }
+        {(target_module_name, legacy_attr_name): legacy_attr_name for target_module_name in target_module_names}
     )
 
 
