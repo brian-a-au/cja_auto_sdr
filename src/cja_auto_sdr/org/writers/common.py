@@ -8,6 +8,7 @@ from typing import Any
 
 from cja_auto_sdr.core.colors import ConsoleColors
 from cja_auto_sdr.core.constants import FORMAT_ALIASES
+from cja_auto_sdr.org.writers.compat import call_override
 
 
 def _render_distribution_bar(count: int, total: int, width: int = 30) -> str:
@@ -88,8 +89,18 @@ def _format_recommendation_context_entries(rec: dict[str, Any]) -> list[tuple[st
 def _normalize_recommendation_for_json(raw_rec: Any) -> dict[str, Any]:
     """Normalize recommendation payload for JSON serialization and output parity."""
     rec = dict(raw_rec) if isinstance(raw_rec, dict) else {"type": "unknown", "reason": str(raw_rec)}
-    rec["severity"] = _normalize_recommendation_severity(rec.get("severity", "low"))
-    context_entries = _format_recommendation_context_entries(rec)
+    rec["severity"] = call_override(
+        __name__,
+        "_normalize_recommendation_severity",
+        _normalize_recommendation_severity,
+        rec.get("severity", "low"),
+    )
+    context_entries = call_override(
+        __name__,
+        "_format_recommendation_context_entries",
+        _format_recommendation_context_entries,
+        rec,
+    )
     if context_entries:
         rec["context"] = [{"label": label, "value": value} for label, value in context_entries]
     # Ensure output is JSON-serializable even if recommendations include odd values.
@@ -123,7 +134,12 @@ def _flatten_recommendation_for_tabular(rec: dict[str, Any]) -> dict[str, Any]:
 
     return {
         "Type": rec.get("type", ""),
-        "Severity": _normalize_recommendation_severity(rec.get("severity", "low")),
+        "Severity": call_override(
+            __name__,
+            "_normalize_recommendation_severity",
+            _normalize_recommendation_severity,
+            rec.get("severity", "low"),
+        ),
         "Description": rec.get("reason", ""),
         "Data View ID": rec.get("data_view", ""),
         "Data View Name": rec.get("data_view_name", ""),

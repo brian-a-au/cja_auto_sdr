@@ -26,6 +26,9 @@ from cja_auto_sdr.org.writers.common import (
 # Re-exports from console.py
 # ---------------------------------------------------------------------------
 from cja_auto_sdr.org.writers.compat import (
+    COMMON_RECOMMENDATION_OVERRIDE_MAPPING as _COMMON_RECOMMENDATION_OVERRIDE_MAPPING,
+)
+from cja_auto_sdr.org.writers.compat import (
     CONSOLE_STATS_ONLY_OVERRIDE_MAPPING as _CONSOLE_STATS_ONLY_OVERRIDE_MAPPING,
 )
 from cja_auto_sdr.org.writers.compat import CONSOLE_WRITER_OVERRIDE_MAPPING as _CONSOLE_WRITER_OVERRIDE_MAPPING
@@ -38,6 +41,7 @@ from cja_auto_sdr.org.writers.compat import JSON_WRITER_OVERRIDE_MAPPING as _JSO
 from cja_auto_sdr.org.writers.compat import (
     MARKDOWN_WRITER_OVERRIDE_MAPPING as _MARKDOWN_WRITER_OVERRIDE_MAPPING,
 )
+from cja_auto_sdr.org.writers.compat import TRENDING_LABEL_OVERRIDE_MAPPING as _TRENDING_LABEL_OVERRIDE_MAPPING
 from cja_auto_sdr.org.writers.compat import make_compat_wrapper as _make_compat_wrapper
 from cja_auto_sdr.org.writers.console import (
     write_org_report_comparison_console as _write_org_report_comparison_console_impl,
@@ -109,12 +113,83 @@ from cja_auto_sdr.org.writers.trending import (
     _trending_snapshots_to_dicts,
 )
 
+_COMMON_MODULE = "cja_auto_sdr.org.writers.common"
 _CONSOLE_MODULE = "cja_auto_sdr.org.writers.console"
 _CSV_MODULE = "cja_auto_sdr.org.writers.csv"
 _EXCEL_MODULE = "cja_auto_sdr.org.writers.excel"
 _HTML_MODULE = "cja_auto_sdr.org.writers.html"
 _JSON_MODULE = "cja_auto_sdr.org.writers.json"
 _MARKDOWN_MODULE = "cja_auto_sdr.org.writers.markdown"
+_TRENDING_MODULE = "cja_auto_sdr.org.writers.trending"
+
+_normalize_recommendation_for_json = _make_compat_wrapper(
+    __name__,
+    _normalize_recommendation_for_json,
+    target_module_name=_COMMON_MODULE,
+    override_mapping=_COMMON_RECOMMENDATION_OVERRIDE_MAPPING,
+)
+_flatten_recommendation_for_tabular = _make_compat_wrapper(
+    __name__,
+    _flatten_recommendation_for_tabular,
+    target_module_name=_COMMON_MODULE,
+    override_mapping=_COMMON_RECOMMENDATION_OVERRIDE_MAPPING,
+)
+_format_trending_period_label = _make_compat_wrapper(
+    __name__,
+    _format_trending_period_label,
+    target_module_name=_TRENDING_MODULE,
+    override_mapping={
+        (_TRENDING_MODULE, "_format_trending_timestamp_short"): "_format_trending_timestamp_short",
+    },
+)
+_trending_snapshot_column_specs = _make_compat_wrapper(
+    __name__,
+    _trending_snapshot_column_specs,
+    target_module_name=_TRENDING_MODULE,
+    override_mapping=_TRENDING_LABEL_OVERRIDE_MAPPING,
+)
+_trending_delta_column_specs = _make_compat_wrapper(
+    __name__,
+    _trending_delta_column_specs,
+    target_module_name=_TRENDING_MODULE,
+    override_mapping=_TRENDING_LABEL_OVERRIDE_MAPPING,
+)
+_trending_delta_csv_rows = _make_compat_wrapper(
+    __name__,
+    _trending_delta_csv_rows,
+    target_module_name=_TRENDING_MODULE,
+    override_mapping=_TRENDING_LABEL_OVERRIDE_MAPPING,
+)
+_trending_date_range = _make_compat_wrapper(
+    __name__,
+    _trending_date_range,
+    target_module_name=_TRENDING_MODULE,
+    override_mapping=_TRENDING_LABEL_OVERRIDE_MAPPING,
+)
+_render_trending_console = _make_compat_wrapper(
+    __name__,
+    _render_trending_console,
+    target_module_name=_TRENDING_MODULE,
+    override_mapping=_TRENDING_LABEL_OVERRIDE_MAPPING,
+)
+_render_trending_markdown = _make_compat_wrapper(
+    __name__,
+    _render_trending_markdown,
+    target_module_name=_TRENDING_MODULE,
+    override_mapping=_TRENDING_LABEL_OVERRIDE_MAPPING,
+)
+_render_trending_html = _make_compat_wrapper(
+    __name__,
+    _render_trending_html,
+    target_module_name=_TRENDING_MODULE,
+    override_mapping=_TRENDING_LABEL_OVERRIDE_MAPPING,
+)
+_print_trending_console_section = _make_compat_wrapper(
+    __name__,
+    _print_trending_console_section,
+    target_module_name=_TRENDING_MODULE,
+    override_mapping=_TRENDING_LABEL_OVERRIDE_MAPPING,
+)
 
 write_org_report_console = _make_compat_wrapper(
     __name__,

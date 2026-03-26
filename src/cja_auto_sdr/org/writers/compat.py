@@ -10,50 +10,87 @@ from functools import wraps
 from types import MappingProxyType
 
 _OVERRIDE_KEY = tuple[str, str]
+_OVERRIDE_DESTINATION = str | _OVERRIDE_KEY
 _OVERRIDES: ContextVar[dict[_OVERRIDE_KEY, object] | None] = ContextVar(
     "org_writer_compat_overrides",
     default=None,
 )
-EMPTY_OVERRIDE_MAPPING: Mapping[str, str] = MappingProxyType({})
+EMPTY_OVERRIDE_MAPPING: Mapping[_OVERRIDE_DESTINATION, str] = MappingProxyType({})
+_COMMON_MODULE = "cja_auto_sdr.org.writers.common"
+_TRENDING_MODULE = "cja_auto_sdr.org.writers.trending"
 
 
-def freeze_override_mapping(mapping: Mapping[str, str]) -> Mapping[str, str]:
+def freeze_override_mapping(
+    mapping: Mapping[_OVERRIDE_DESTINATION, str],
+) -> Mapping[_OVERRIDE_DESTINATION, str]:
     """Copy and freeze an override mapping so wrapper definitions stay immutable."""
     return MappingProxyType(dict(mapping))
 
 
-def compose_override_mapping(*mappings: Mapping[str, str]) -> Mapping[str, str]:
+def compose_override_mapping(
+    *mappings: Mapping[_OVERRIDE_DESTINATION, str],
+) -> Mapping[_OVERRIDE_DESTINATION, str]:
     """Merge override mappings so writer wrappers inherit helper dependencies centrally."""
-    combined: dict[str, str] = {}
+    combined: dict[_OVERRIDE_DESTINATION, str] = {}
     for mapping in mappings:
         combined.update(mapping)
     return freeze_override_mapping(combined)
 
 
+def _normalize_override_mapping(
+    mapping: Mapping[_OVERRIDE_DESTINATION, str],
+    *,
+    default_target_module_name: str,
+) -> dict[_OVERRIDE_KEY, str]:
+    """Normalize mixed override destinations into explicit module/attribute keys."""
+    normalized: dict[_OVERRIDE_KEY, str] = {}
+    for destination, legacy_attr_name in mapping.items():
+        if isinstance(destination, tuple):
+            normalized[destination] = legacy_attr_name
+        else:
+            normalized[_compat_key(default_target_module_name, destination)] = legacy_attr_name
+    return normalized
+
+
 # Centralized compatibility dependency maps keep legacy re-export wrappers aligned
 # with the canonical writer modules they delegate to.
-CONSOLE_WRITER_OVERRIDE_MAPPING = freeze_override_mapping(
+COMMON_RECOMMENDATION_OVERRIDE_MAPPING = freeze_override_mapping(
+    {
+        (_COMMON_MODULE, "_format_recommendation_context_entries"): "_format_recommendation_context_entries",
+        (_COMMON_MODULE, "_normalize_recommendation_severity"): "_normalize_recommendation_severity",
+    }
+)
+TRENDING_LABEL_OVERRIDE_MAPPING = freeze_override_mapping(
+    {
+        (_TRENDING_MODULE, "_format_trending_period_label"): "_format_trending_period_label",
+        (_TRENDING_MODULE, "_format_trending_timestamp_short"): "_format_trending_timestamp_short",
+    }
+)
+CONSOLE_WRITER_OVERRIDE_MAPPING = compose_override_mapping(
     {
         "_render_distribution_bar": "_render_distribution_bar",
         "_print_trending_console_section": "_print_trending_console_section",
     },
+    TRENDING_LABEL_OVERRIDE_MAPPING,
 )
-CONSOLE_STATS_ONLY_OVERRIDE_MAPPING = freeze_override_mapping(
+CONSOLE_STATS_ONLY_OVERRIDE_MAPPING = compose_override_mapping(
     {
         "_print_trending_console_section": "_print_trending_console_section",
     },
+    TRENDING_LABEL_OVERRIDE_MAPPING,
 )
-JSON_BUILDER_OVERRIDE_MAPPING = freeze_override_mapping(
+JSON_BUILDER_OVERRIDE_MAPPING = compose_override_mapping(
     {
         "_normalize_recommendation_for_json": "_normalize_recommendation_for_json",
         "_trending_snapshots_to_dicts": "_trending_snapshots_to_dicts",
     },
+    COMMON_RECOMMENDATION_OVERRIDE_MAPPING,
 )
 JSON_WRITER_OVERRIDE_MAPPING = compose_override_mapping(
     {"build_org_report_json_data": "build_org_report_json_data"},
     JSON_BUILDER_OVERRIDE_MAPPING,
 )
-EXCEL_WRITER_OVERRIDE_MAPPING = freeze_override_mapping(
+EXCEL_WRITER_OVERRIDE_MAPPING = compose_override_mapping(
     {
         "_flatten_recommendation_for_tabular": "_flatten_recommendation_for_tabular",
         "_normalize_recommendation_for_json": "_normalize_recommendation_for_json",
@@ -64,22 +101,28 @@ EXCEL_WRITER_OVERRIDE_MAPPING = freeze_override_mapping(
         "_trending_snapshot_column_specs": "_trending_snapshot_column_specs",
         "_trending_snapshot_metric_rows": "_trending_snapshot_metric_rows",
     },
+    COMMON_RECOMMENDATION_OVERRIDE_MAPPING,
+    TRENDING_LABEL_OVERRIDE_MAPPING,
 )
-MARKDOWN_WRITER_OVERRIDE_MAPPING = freeze_override_mapping(
+MARKDOWN_WRITER_OVERRIDE_MAPPING = compose_override_mapping(
     {
         "_format_recommendation_context_entries": "_format_recommendation_context_entries",
         "_normalize_recommendation_for_json": "_normalize_recommendation_for_json",
         "_render_trending_markdown": "_render_trending_markdown",
     },
+    COMMON_RECOMMENDATION_OVERRIDE_MAPPING,
+    TRENDING_LABEL_OVERRIDE_MAPPING,
 )
-HTML_WRITER_OVERRIDE_MAPPING = freeze_override_mapping(
+HTML_WRITER_OVERRIDE_MAPPING = compose_override_mapping(
     {
         "_format_recommendation_context_entries": "_format_recommendation_context_entries",
         "_normalize_recommendation_for_json": "_normalize_recommendation_for_json",
         "_render_trending_html": "_render_trending_html",
     },
+    COMMON_RECOMMENDATION_OVERRIDE_MAPPING,
+    TRENDING_LABEL_OVERRIDE_MAPPING,
 )
-CSV_WRITER_OVERRIDE_MAPPING = freeze_override_mapping(
+CSV_WRITER_OVERRIDE_MAPPING = compose_override_mapping(
     {
         "_flatten_recommendation_for_tabular": "_flatten_recommendation_for_tabular",
         "_normalize_recommendation_for_json": "_normalize_recommendation_for_json",
@@ -87,6 +130,8 @@ CSV_WRITER_OVERRIDE_MAPPING = freeze_override_mapping(
         "_trending_delta_csv_rows": "_trending_delta_csv_rows",
         "_trending_snapshot_csv_rows": "_trending_snapshot_csv_rows",
     },
+    COMMON_RECOMMENDATION_OVERRIDE_MAPPING,
+    TRENDING_LABEL_OVERRIDE_MAPPING,
 )
 
 
@@ -133,27 +178,31 @@ def make_override_proxy[**P, R](
 
 def collect_legacy_overrides(
     source_module_name: str,
-    override_mapping: Mapping[str, str],
+    override_mapping: Mapping[_OVERRIDE_DESTINATION, str],
     *,
+    default_target_module_name: str,
     baselines: Mapping[str, object] | None = None,
-) -> dict[str, object]:
+) -> dict[_OVERRIDE_KEY, object]:
     """Collect override callables from a legacy compatibility module."""
     source_module = importlib.import_module(source_module_name)
+    normalized_mapping = _normalize_override_mapping(
+        override_mapping,
+        default_target_module_name=default_target_module_name,
+    )
     return {
-        target_attr_name: getattr(source_module, legacy_attr_name)
-        for target_attr_name, legacy_attr_name in override_mapping.items()
+        target_key: getattr(source_module, legacy_attr_name)
+        for target_key, legacy_attr_name in normalized_mapping.items()
         if hasattr(source_module, legacy_attr_name)
         and (baselines is None or getattr(source_module, legacy_attr_name) is not baselines.get(legacy_attr_name))
     }
 
 
 @contextmanager
-def override_scope(target_module_name: str, overrides: Mapping[str, object]):
+def override_scope(overrides: Mapping[_OVERRIDE_KEY, object]):
     """Apply compatibility overrides to the current execution context only."""
     current = _current_overrides()
     updated = current.copy()
-    for attr_name, override in overrides.items():
-        updated[_compat_key(target_module_name, attr_name)] = override
+    updated.update(overrides)
     token = _OVERRIDES.set(updated)
     try:
         yield
@@ -166,10 +215,15 @@ def make_compat_wrapper[**P, R](
     target: Callable[P, R],
     *,
     target_module_name: str,
-    override_mapping: Mapping[str, str],
+    override_mapping: Mapping[_OVERRIDE_DESTINATION, str],
 ) -> Callable[P, R]:
     """Wrap a legacy export so monkeypatches apply only within that call context."""
-    collected = dict(override_mapping)
+    collected = dict(
+        _normalize_override_mapping(
+            override_mapping,
+            default_target_module_name=target_module_name,
+        )
+    )
     source_module = importlib.import_module(source_module_name)
     baseline_source_values = {
         legacy_attr_name: getattr(source_module, legacy_attr_name)
@@ -184,11 +238,12 @@ def make_compat_wrapper[**P, R](
         overrides = collect_legacy_overrides(
             source_module_name,
             collected,
+            default_target_module_name=target_module_name,
             baselines=baseline_source_values,
         )
         if not overrides:
             return current_target(*args, **kwargs)
-        with override_scope(target_module_name, overrides):
+        with override_scope(overrides):
             return current_target(*args, **kwargs)
 
     wrapper.__module__ = source_module_name

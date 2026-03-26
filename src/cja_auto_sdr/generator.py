@@ -233,6 +233,9 @@ from cja_auto_sdr.org.writers import (
     _validate_org_report_output_request,
 )
 from cja_auto_sdr.org.writers.compat import (
+    COMMON_RECOMMENDATION_OVERRIDE_MAPPING as _ORG_COMMON_RECOMMENDATION_OVERRIDE_MAPPING,
+)
+from cja_auto_sdr.org.writers.compat import (
     CONSOLE_STATS_ONLY_OVERRIDE_MAPPING as _ORG_CONSOLE_STATS_ONLY_OVERRIDE_MAPPING,
 )
 from cja_auto_sdr.org.writers.compat import (
@@ -5175,12 +5178,26 @@ def _build_org_report_trending_window(
 # - _normalize_org_report_output_format
 # - _validate_org_report_output_request
 
+_ORG_WRITER_COMMON_MODULE = "cja_auto_sdr.org.writers.common"
 _ORG_WRITER_CONSOLE_MODULE = "cja_auto_sdr.org.writers.console"
 _ORG_WRITER_CSV_MODULE = "cja_auto_sdr.org.writers.csv"
 _ORG_WRITER_EXCEL_MODULE = "cja_auto_sdr.org.writers.excel"
 _ORG_WRITER_HTML_MODULE = "cja_auto_sdr.org.writers.html"
 _ORG_WRITER_JSON_MODULE = "cja_auto_sdr.org.writers.json"
 _ORG_WRITER_MARKDOWN_MODULE = "cja_auto_sdr.org.writers.markdown"
+
+_normalize_recommendation_for_json = _make_org_writer_compat_wrapper(
+    __name__,
+    _normalize_recommendation_for_json,
+    target_module_name=_ORG_WRITER_COMMON_MODULE,
+    override_mapping=_ORG_COMMON_RECOMMENDATION_OVERRIDE_MAPPING,
+)
+_flatten_recommendation_for_tabular = _make_org_writer_compat_wrapper(
+    __name__,
+    _flatten_recommendation_for_tabular,
+    target_module_name=_ORG_WRITER_COMMON_MODULE,
+    override_mapping=_ORG_COMMON_RECOMMENDATION_OVERRIDE_MAPPING,
+)
 
 write_org_report_console = _make_org_writer_compat_wrapper(
     __name__,

@@ -7,6 +7,15 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.4.8] - 2026-03-25
+
+### Fix
+- Restore scoped legacy monkeypatch compatibility for nested org-writer recommendation helpers across `cja_auto_sdr.org.writers` and `cja_auto_sdr.generator`
+- Restore scoped package-root timestamp formatter monkeypatch compatibility for extracted trending helper label generation and markdown writer output
+
+### Tests
+- Add regression coverage for nested recommendation helper overrides and package-root trending timestamp helper overrides
+
 ## [3.4.7] - 2026-03-25
 
 ### Refactor

@@ -701,6 +701,45 @@ def test_org_json_builder_respects_legacy_helper_patch(module_name, rich_org_rep
     ["cja_auto_sdr.org.writers", "cja_auto_sdr.generator"],
     ids=["org.writers", "generator"],
 )
+def test_org_json_builder_respects_legacy_severity_helper_patch(module_name, rich_org_report_result):
+    """Legacy severity helper patches must still reach nested recommendation normalization."""
+    mod = importlib.import_module(module_name)
+
+    with patch(f"{module_name}._normalize_recommendation_severity", return_value="high") as severity_mock:
+        data = mod.build_org_report_json_data(rich_org_report_result)
+
+    assert [rec["severity"] for rec in data["recommendations"]] == ["high", "high"]
+    assert severity_mock.call_count == len(rich_org_report_result.recommendations)
+
+
+@pytest.mark.parametrize(
+    "module_name",
+    ["cja_auto_sdr.org.writers", "cja_auto_sdr.generator"],
+    ids=["org.writers", "generator"],
+)
+def test_org_json_builder_respects_legacy_context_helper_patch(module_name, rich_org_report_result):
+    """Legacy context formatter patches must still reach nested recommendation normalization."""
+    mod = importlib.import_module(module_name)
+    patched_value = f"patched context via {module_name}"
+
+    with patch(
+        f"{module_name}._format_recommendation_context_entries",
+        return_value=[("Patched", patched_value)],
+    ) as context_mock:
+        data = mod.build_org_report_json_data(rich_org_report_result)
+
+    assert [rec["context"] for rec in data["recommendations"]] == [
+        [{"label": "Patched", "value": patched_value}],
+        [{"label": "Patched", "value": patched_value}],
+    ]
+    assert context_mock.call_count == len(rich_org_report_result.recommendations)
+
+
+@pytest.mark.parametrize(
+    "module_name",
+    ["cja_auto_sdr.org.writers", "cja_auto_sdr.generator"],
+    ids=["org.writers", "generator"],
+)
 def test_org_json_writer_respects_legacy_builder_patch(module_name, tmp_path, rich_org_report_result):
     """Legacy builder patches must still affect the extracted JSON writer."""
     mod = importlib.import_module(module_name)
@@ -889,6 +928,57 @@ def test_org_markdown_writer_respects_legacy_helper_patch(module_name, tmp_path,
 
     assert patched_reason in output_path.read_text(encoding="utf-8")
     assert normalize_mock.call_count == len(rich_org_report_result.recommendations)
+
+
+def test_org_markdown_writer_respects_package_root_timestamp_helper_patch(
+    tmp_path,
+    rich_org_report_result,
+):
+    """Package-root timestamp formatter patches must still flow into markdown trending output."""
+    mod = importlib.import_module("cja_auto_sdr.org.writers")
+    logger = logging.getLogger("test.cja_auto_sdr.org.writers.write_org_report_markdown.trending")
+    trending = _make_trending()
+
+    with patch(
+        "cja_auto_sdr.org.writers._format_trending_timestamp_short",
+        side_effect=lambda ts: f"patched:{ts[5:7]}",
+    ) as timestamp_mock:
+        output_path = Path(
+            mod.write_org_report_markdown(
+                rich_org_report_result,
+                tmp_path / "org_report_trending.md",
+                str(tmp_path),
+                logger,
+                trending=trending,
+            ),
+        )
+
+    output = output_path.read_text(encoding="utf-8")
+    assert "patched:01" in output
+    assert "patched:02" in output
+    assert timestamp_mock.call_count >= 4
+
+
+def test_org_writers_trending_helper_reexports_respect_package_root_timestamp_patch():
+    """Package-root trending helper re-exports must preserve nested timestamp monkeypatches."""
+    mod = importlib.import_module("cja_auto_sdr.org.writers")
+    trending = _make_trending()
+
+    with patch(
+        "cja_auto_sdr.org.writers._format_trending_timestamp_short",
+        side_effect=lambda ts: f"patched:{ts[5:7]}",
+    ) as timestamp_mock:
+        snapshot_specs = mod._trending_snapshot_column_specs(trending.snapshots)
+        period_label = mod._format_trending_period_label(
+            trending.deltas[0].from_timestamp,
+            trending.deltas[0].to_timestamp,
+        )
+        delta_specs = mod._trending_delta_column_specs(trending.deltas)
+
+    assert [label for _key, label in snapshot_specs] == ["patched:01", "patched:02"]
+    assert period_label == "patched:01 -> patched:02"
+    assert [label for _key, label in delta_specs] == ["patched:01 -> patched:02"]
+    assert timestamp_mock.call_count == 6
 
 
 @pytest.mark.parametrize(

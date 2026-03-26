@@ -13,6 +13,7 @@ from cja_auto_sdr.org.models import (
     TrendingSnapshot,
     _snapshot_effective_data_view_count,
 )
+from cja_auto_sdr.org.writers.compat import call_override
 
 _TRENDING_METRIC_SPECS: tuple[tuple[str, str, str], ...] = (
     ("Data Views", "data_view_count", "data_view_delta"),
@@ -69,14 +70,34 @@ def _trending_snapshot_column_specs(
 ) -> list[tuple[str, str]]:
     """Return unique worksheet keys paired with display labels for trending snapshots."""
     return [
-        (f"snapshot_{index + 1}", _format_trending_timestamp_short(snapshot.timestamp))
+        (
+            f"snapshot_{index + 1}",
+            call_override(
+                __name__,
+                "_format_trending_timestamp_short",
+                _format_trending_timestamp_short,
+                snapshot.timestamp,
+            ),
+        )
         for index, snapshot in enumerate(snapshots)
     ]
 
 
 def _format_trending_period_label(from_timestamp: str, to_timestamp: str) -> str:
     """Return a compact human-readable label for one trending period."""
-    return f"{_format_trending_timestamp_short(from_timestamp)} -> {_format_trending_timestamp_short(to_timestamp)}"
+    from_label = call_override(
+        __name__,
+        "_format_trending_timestamp_short",
+        _format_trending_timestamp_short,
+        from_timestamp,
+    )
+    to_label = call_override(
+        __name__,
+        "_format_trending_timestamp_short",
+        _format_trending_timestamp_short,
+        to_timestamp,
+    )
+    return f"{from_label} -> {to_label}"
 
 
 def _trending_delta_column_specs(
@@ -84,7 +105,16 @@ def _trending_delta_column_specs(
 ) -> list[tuple[str, str]]:
     """Return unique worksheet keys paired with display labels for period deltas."""
     return [
-        (f"period_{index + 1}", _format_trending_period_label(delta.from_timestamp, delta.to_timestamp))
+        (
+            f"period_{index + 1}",
+            call_override(
+                __name__,
+                "_format_trending_period_label",
+                _format_trending_period_label,
+                delta.from_timestamp,
+                delta.to_timestamp,
+            ),
+        )
         for index, delta in enumerate(deltas)
     ]
 
@@ -224,7 +254,13 @@ def _trending_delta_csv_rows(
     """Return row-oriented CSV records for period-over-period deltas."""
     rows: list[dict[str, Any]] = []
     for delta in deltas:
-        period_label = _format_trending_period_label(delta.from_timestamp, delta.to_timestamp)
+        period_label = call_override(
+            __name__,
+            "_format_trending_period_label",
+            _format_trending_period_label,
+            delta.from_timestamp,
+            delta.to_timestamp,
+        )
         for label, _snapshot_attr, delta_attr in _TRENDING_METRIC_SPECS:
             rows.append(
                 {
@@ -289,8 +325,18 @@ def _trending_date_range(snapshots: list[TrendingSnapshot]) -> str:
     """Return 'first_label -> last_label' for a list of snapshots."""
     if not snapshots:
         return ""
-    first = _format_trending_timestamp_short(snapshots[0].timestamp)
-    last = _format_trending_timestamp_short(snapshots[-1].timestamp)
+    first = call_override(
+        __name__,
+        "_format_trending_timestamp_short",
+        _format_trending_timestamp_short,
+        snapshots[0].timestamp,
+    )
+    last = call_override(
+        __name__,
+        "_format_trending_timestamp_short",
+        _format_trending_timestamp_short,
+        snapshots[-1].timestamp,
+    )
     return f"{first} \u2192 {last}"
 
 
@@ -308,7 +354,7 @@ def _render_trending_console(trending: OrgReportTrending) -> str:
     lines.append("\u2550" * 56)
 
     # Column headers
-    col_labels = [_format_trending_timestamp_short(s.timestamp) for s in snapshots]
+    col_labels = [label for _key, label in _trending_snapshot_column_specs(snapshots)]
     lines.extend(_render_console_trending_table(col_labels, _trending_snapshot_metric_rows(snapshots)))
 
     if trending.deltas:
@@ -387,7 +433,7 @@ def _render_trending_markdown(trending: OrgReportTrending) -> str:
     lines.append("")
 
     # Table header
-    col_labels = [_format_trending_timestamp_short(s.timestamp) for s in snapshots]
+    col_labels = [label for _key, label in _trending_snapshot_column_specs(snapshots)]
     lines.extend(_render_markdown_trending_table(col_labels, _trending_snapshot_metric_rows(snapshots)))
     lines.append("")
 
@@ -426,7 +472,7 @@ def _render_trending_html(trending: OrgReportTrending) -> str:
         return ""
 
     date_range = _trending_date_range(snapshots)
-    col_labels = [_format_trending_timestamp_short(s.timestamp) for s in snapshots]
+    col_labels = [label for _key, label in _trending_snapshot_column_specs(snapshots)]
 
     html_out = f"""
         <h2>Trending ({len(snapshots)} snapshots, {html.escape(date_range)})</h2>
