@@ -10,12 +10,7 @@ names and argument ordering across all export surfaces.
 from __future__ import annotations
 
 import importlib
-import json
-import logging
-import threading
 from inspect import signature
-from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
@@ -41,49 +36,6 @@ def _make_diff_result():
         target_label="After",
         generated_at="2025-01-15 12:00:00",
         tool_version="3.2.8",
-    )
-
-
-def _recommendation_reasons(result) -> list[str]:
-    return [str(rec.get("reason", "")) for rec in result.recommendations]
-
-
-def _make_trending():
-    from cja_auto_sdr.org.models import OrgReportTrending, TrendingDelta, TrendingSnapshot
-
-    snapshots = [
-        TrendingSnapshot(
-            timestamp="2025-01-01T00:00:00",
-            data_view_count=3,
-            component_count=10,
-            core_count=5,
-            isolated_count=1,
-            high_sim_pair_count=0,
-        ),
-        TrendingSnapshot(
-            timestamp="2025-02-01T00:00:00",
-            data_view_count=4,
-            component_count=14,
-            core_count=6,
-            isolated_count=2,
-            high_sim_pair_count=1,
-        ),
-    ]
-    return OrgReportTrending(
-        snapshots=snapshots,
-        deltas=[
-            TrendingDelta(
-                from_timestamp=snapshots[0].timestamp,
-                to_timestamp=snapshots[1].timestamp,
-                data_view_delta=1,
-                component_delta=4,
-                core_delta=1,
-                isolated_delta=1,
-                high_sim_pair_delta=1,
-            ),
-        ],
-        drift_scores={"dv_001": 0.8},
-        window_size=2,
     )
 
 
@@ -547,6 +499,27 @@ def test_org_writers_common_importable():
     assert callable(_validate_org_report_output_request)
 
 
+@pytest.mark.parametrize(
+    "name",
+    [
+        "_flatten_recommendation_for_tabular",
+        "_format_recommendation_context_entries",
+        "_normalize_org_report_output_format",
+        "_normalize_recommendation_for_json",
+        "_normalize_recommendation_severity",
+        "_render_distribution_bar",
+        "_validate_org_report_output_request",
+    ],
+)
+def test_org_writers_common_helpers_remain_direct_module_exports(name):
+    """Canonical common helpers must remain direct, non-wrapped module exports."""
+    mod = importlib.import_module("cja_auto_sdr.org.writers.common")
+    value = getattr(mod, name)
+
+    assert value.__module__ == mod.__name__
+    assert not hasattr(value, "__wrapped__")
+
+
 # ---------------------------------------------------------------------------
 # org.writers.trending sub-module
 # ---------------------------------------------------------------------------
@@ -591,10 +564,33 @@ def test_org_writers_trending_helpers_importable(name):
 
 
 @pytest.mark.parametrize("name", _TRENDING_HELPERS, ids=_TRENDING_HELPERS)
+def test_org_writers_trending_helpers_remain_direct_module_exports(name):
+    """Canonical trending helpers must remain direct, non-wrapped module exports."""
+    mod = importlib.import_module("cja_auto_sdr.org.writers.trending")
+    value = getattr(mod, name)
+
+    assert value.__module__ == mod.__name__
+    assert not hasattr(value, "__wrapped__")
+
+
+@pytest.mark.parametrize("name", _TRENDING_HELPERS, ids=_TRENDING_HELPERS)
 def test_org_writers_trending_helpers_reexported_at_package_root(name):
     """Trending helpers remain importable from the org.writers package root."""
     mod = importlib.import_module("cja_auto_sdr.org.writers")
     assert callable(getattr(mod, name))
+
+
+@pytest.mark.parametrize("name", _TRENDING_HELPERS, ids=_TRENDING_HELPERS)
+def test_org_writers_trending_helpers_remain_identity_aliases_at_package_root(name):
+    """Package-root trending helpers must stay as identity aliases of the canonical module."""
+    mod = importlib.import_module("cja_auto_sdr.org.writers")
+    canonical_mod = importlib.import_module("cja_auto_sdr.org.writers.trending")
+    value = getattr(mod, name)
+    canonical = getattr(canonical_mod, name)
+
+    assert value is canonical
+    assert value.__module__ == canonical_mod.__name__
+    assert not hasattr(value, "__wrapped__")
 
 
 # ---------------------------------------------------------------------------
@@ -632,8 +628,68 @@ def test_org_writers_json_importable():
 
 
 # ---------------------------------------------------------------------------
+# org.writers package-root common-helper continuity
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "_render_distribution_bar",
+        "_format_recommendation_context_entries",
+        "_normalize_org_report_output_format",
+        "_normalize_recommendation_for_json",
+        "_normalize_recommendation_severity",
+        "_flatten_recommendation_for_tabular",
+        "_validate_org_report_output_request",
+    ],
+)
+def test_org_writers_common_helpers_reexported_at_package_root(name):
+    """Common org-writer helpers remain importable from the org.writers package root."""
+    mod = importlib.import_module("cja_auto_sdr.org.writers")
+    assert callable(getattr(mod, name))
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "_render_distribution_bar",
+        "_format_recommendation_context_entries",
+        "_normalize_org_report_output_format",
+        "_normalize_recommendation_for_json",
+        "_normalize_recommendation_severity",
+        "_flatten_recommendation_for_tabular",
+        "_validate_org_report_output_request",
+    ],
+)
+def test_org_writers_common_helpers_remain_identity_aliases_at_package_root(name):
+    """Package-root common helpers must stay as identity aliases of common.py."""
+    mod = importlib.import_module("cja_auto_sdr.org.writers")
+    canonical_mod = importlib.import_module("cja_auto_sdr.org.writers.common")
+    value = getattr(mod, name)
+    canonical = getattr(canonical_mod, name)
+
+    assert value is canonical
+    assert value.__module__ == canonical_mod.__name__
+    assert not hasattr(value, "__wrapped__")
+
+
+# ---------------------------------------------------------------------------
 # org.writers package-root continuity (console + JSON)
 # ---------------------------------------------------------------------------
+
+
+_WRAPPED_LEGACY_ORG_WRITER_EXPORTS = (
+    "write_org_report_console",
+    "write_org_report_stats_only",
+    "write_org_report_comparison_console",
+    "build_org_report_json_data",
+    "write_org_report_json",
+    "write_org_report_excel",
+    "write_org_report_markdown",
+    "write_org_report_html",
+    "write_org_report_csv",
+)
 
 
 @pytest.mark.parametrize(
@@ -652,8 +708,18 @@ def test_org_writers_package_root_continuity(name):
     assert callable(getattr(mod, name))
 
 
+@pytest.mark.parametrize("name", _WRAPPED_LEGACY_ORG_WRITER_EXPORTS, ids=_WRAPPED_LEGACY_ORG_WRITER_EXPORTS)
+def test_org_writers_package_root_wrapped_exports_remain_runtime_shims(name):
+    """Package-root writer entrypoints must remain wrapped compat shims."""
+    mod = importlib.import_module("cja_auto_sdr.org.writers")
+    value = getattr(mod, name)
+
+    assert value.__module__ == mod.__name__
+    assert hasattr(value, "__wrapped__")
+
+
 # ---------------------------------------------------------------------------
-# generator-level org-writer patch surface
+# generator-level org-writer continuity
 # ---------------------------------------------------------------------------
 
 
@@ -662,7 +728,9 @@ def test_org_writers_package_root_continuity(name):
     [
         "_render_distribution_bar",
         "_format_recommendation_context_entries",
+        "_normalize_org_report_output_format",
         "_normalize_recommendation_for_json",
+        "_normalize_recommendation_severity",
         "_flatten_recommendation_for_tabular",
         "_validate_org_report_output_request",
     ],
@@ -674,275 +742,37 @@ def test_generator_org_writer_helpers_are_callable(name):
 
 
 @pytest.mark.parametrize(
-    "module_name",
-    ["cja_auto_sdr.org.writers", "cja_auto_sdr.generator"],
-    ids=["org.writers", "generator"],
-)
-def test_org_json_builder_respects_legacy_helper_patch(module_name, rich_org_report_result):
-    """Legacy module helper patches must still affect the extracted JSON builder."""
-    mod = importlib.import_module(module_name)
-    patched_reason = f"patched recommendation via {module_name}"
-
-    with patch(
-        f"{module_name}._normalize_recommendation_for_json",
-        return_value={"severity": "low", "reason": patched_reason},
-    ) as normalize_mock:
-        data = mod.build_org_report_json_data(rich_org_report_result)
-
-    assert [rec["reason"] for rec in data["recommendations"]] == [
-        patched_reason,
-        patched_reason,
-    ]
-    assert normalize_mock.call_count == len(rich_org_report_result.recommendations)
-
-
-@pytest.mark.parametrize(
-    "module_name",
-    ["cja_auto_sdr.org.writers", "cja_auto_sdr.generator"],
-    ids=["org.writers", "generator"],
-)
-def test_org_json_writer_respects_legacy_builder_patch(module_name, tmp_path, rich_org_report_result):
-    """Legacy builder patches must still affect the extracted JSON writer."""
-    mod = importlib.import_module(module_name)
-    logger = logging.getLogger(f"test.{module_name}.write_org_report_json")
-    payload = {
-        "report_type": "patched",
-        "version": "test",
-        "org_id": rich_org_report_result.org_id,
-    }
-
-    with patch(f"{module_name}.build_org_report_json_data", return_value=payload) as build_mock:
-        output_path = Path(
-            mod.write_org_report_json(
-                rich_org_report_result,
-                tmp_path / "org_report.json",
-                str(tmp_path),
-                logger,
-            ),
-        )
-
-    build_mock.assert_called_once_with(rich_org_report_result, trending=None)
-    assert json.loads(output_path.read_text(encoding="utf-8")) == payload
-
-
-@pytest.mark.parametrize(
-    "module_name",
-    ["cja_auto_sdr.org.writers", "cja_auto_sdr.generator"],
-    ids=["org.writers", "generator"],
-)
-def test_org_json_writer_respects_legacy_helper_patch(module_name, tmp_path, rich_org_report_result):
-    """Legacy helper patches must still flow through the JSON writer re-exports."""
-    mod = importlib.import_module(module_name)
-    logger = logging.getLogger(f"test.{module_name}.write_org_report_json.helper")
-    patched_reason = f"patched writer recommendation via {module_name}"
-
-    with patch(
-        f"{module_name}._normalize_recommendation_for_json",
-        return_value={"severity": "low", "reason": patched_reason},
-    ) as normalize_mock:
-        output_path = Path(
-            mod.write_org_report_json(
-                rich_org_report_result,
-                tmp_path / "org_report.json",
-                str(tmp_path),
-                logger,
-            ),
-        )
-
-    payload = json.loads(output_path.read_text(encoding="utf-8"))
-    assert [rec["reason"] for rec in payload["recommendations"]] == [
-        patched_reason,
-        patched_reason,
-    ]
-    assert normalize_mock.call_count == len(rich_org_report_result.recommendations)
-
-
-def test_org_json_writer_respects_package_root_trending_helper_patch(tmp_path, rich_org_report_result):
-    """Package-root trending helper patches must still reach the JSON writer."""
-    mod = importlib.import_module("cja_auto_sdr.org.writers")
-    logger = logging.getLogger("test.cja_auto_sdr.org.writers.write_org_report_json.trending")
-    trending = _make_trending()
-    patched_trending = {
-        "window_size": 99,
-        "snapshots": [{"timestamp": "patched"}],
-        "deltas": [],
-        "drift_scores": {"dv_999": 1.0},
-        "drift_details": [{"data_view_id": "dv_999", "score": 1.0}],
-    }
-
-    with patch(
-        "cja_auto_sdr.org.writers._trending_snapshots_to_dicts",
-        return_value=patched_trending,
-    ) as trending_mock:
-        output_path = Path(
-            mod.write_org_report_json(
-                rich_org_report_result,
-                tmp_path / "org_report_trending.json",
-                str(tmp_path),
-                logger,
-                trending=trending,
-            ),
-        )
-
-    payload = json.loads(output_path.read_text(encoding="utf-8"))
-    assert payload["trending"] == patched_trending
-    trending_mock.assert_called_once_with(trending)
-
-
-@pytest.mark.parametrize(
-    "writer_module_name",
+    "name",
     [
-        "cja_auto_sdr.org.writers.json",
-        "cja_auto_sdr.org.writers",
-        "cja_auto_sdr.generator",
+        "_render_distribution_bar",
+        "_format_recommendation_context_entries",
+        "_normalize_org_report_output_format",
+        "_normalize_recommendation_for_json",
+        "_normalize_recommendation_severity",
+        "_flatten_recommendation_for_tabular",
+        "_validate_org_report_output_request",
     ],
-    ids=["org.writers.json", "org.writers", "generator"],
 )
-def test_canonical_json_builder_patch_flows_through_writer_exports(
-    writer_module_name,
-    tmp_path,
-    rich_org_report_result,
-):
-    """Patching the canonical extracted builder must still affect every writer surface."""
-    writer_mod = importlib.import_module(writer_module_name)
-    logger = logging.getLogger(f"test.{writer_module_name}.canonical_builder_patch")
-    payload = {
-        "report_type": "canonical-patched",
-        "version": "test",
-        "org_id": rich_org_report_result.org_id,
-    }
+def test_generator_org_writer_helpers_remain_identity_aliases(name):
+    """Generator common-helper aliases must stay as identity aliases of common.py."""
+    mod = importlib.import_module("cja_auto_sdr.generator")
+    canonical_mod = importlib.import_module("cja_auto_sdr.org.writers.common")
+    value = getattr(mod, name)
+    canonical = getattr(canonical_mod, name)
 
-    with patch("cja_auto_sdr.org.writers.json.build_org_report_json_data", return_value=payload) as build_mock:
-        output_path = Path(
-            writer_mod.write_org_report_json(
-                rich_org_report_result,
-                tmp_path / "canonical_patched.json",
-                str(tmp_path),
-                logger,
-            ),
-        )
-
-    build_mock.assert_called_once_with(rich_org_report_result, trending=None)
-    assert json.loads(output_path.read_text(encoding="utf-8")) == payload
+    assert value is canonical
+    assert value.__module__ == canonical_mod.__name__
+    assert not hasattr(value, "__wrapped__")
 
 
-@pytest.mark.parametrize(
-    "module_name",
-    ["cja_auto_sdr.org.writers", "cja_auto_sdr.generator"],
-    ids=["org.writers", "generator"],
-)
-def test_canonical_json_builder_patch_flows_through_builder_reexports(module_name, rich_org_report_result):
-    """Legacy builder re-exports must defer to the current canonical builder when unpatched."""
-    mod = importlib.import_module(module_name)
-    payload = {
-        "report_type": "canonical-builder-patched",
-        "org_id": rich_org_report_result.org_id,
-    }
+@pytest.mark.parametrize("name", _WRAPPED_LEGACY_ORG_WRITER_EXPORTS, ids=_WRAPPED_LEGACY_ORG_WRITER_EXPORTS)
+def test_generator_org_writer_wrapped_exports_remain_runtime_shims(name):
+    """Generator writer entrypoints must remain wrapped compat shims."""
+    mod = importlib.import_module("cja_auto_sdr.generator")
+    value = getattr(mod, name)
 
-    with patch("cja_auto_sdr.org.writers.json.build_org_report_json_data", return_value=payload) as build_mock:
-        returned = mod.build_org_report_json_data(rich_org_report_result)
-
-    build_mock.assert_called_once_with(rich_org_report_result)
-    assert returned == payload
-
-
-@pytest.mark.parametrize(
-    "module_name",
-    ["cja_auto_sdr.org.writers", "cja_auto_sdr.generator"],
-    ids=["org.writers", "generator"],
-)
-def test_org_console_writer_respects_legacy_helper_patch(module_name, capsys, rich_org_report_result):
-    """Legacy module helper patches must still affect the extracted console writer."""
-    mod = importlib.import_module(module_name)
-
-    with patch(f"{module_name}._render_distribution_bar", return_value="[patched-bar]") as render_mock:
-        mod.write_org_report_console(rich_org_report_result, rich_org_report_result.parameters, quiet=False)
-
-    output = capsys.readouterr().out
-    assert "[patched-bar]" in output
-    assert render_mock.call_count >= 8
-
-
-@pytest.mark.parametrize(
-    "module_name",
-    ["cja_auto_sdr.org.writers", "cja_auto_sdr.generator"],
-    ids=["org.writers", "generator"],
-)
-def test_org_markdown_writer_respects_legacy_helper_patch(module_name, tmp_path, rich_org_report_result):
-    """Legacy module helper patches must still affect extracted file-format writers."""
-    mod = importlib.import_module(module_name)
-    logger = logging.getLogger(f"test.{module_name}.write_org_report_markdown")
-    patched_reason = f"patched markdown recommendation via {module_name}"
-
-    with patch(
-        f"{module_name}._normalize_recommendation_for_json",
-        return_value={"severity": "low", "reason": patched_reason},
-    ) as normalize_mock:
-        output_path = Path(
-            mod.write_org_report_markdown(
-                rich_org_report_result,
-                tmp_path / "org_report.md",
-                str(tmp_path),
-                logger,
-            ),
-        )
-
-    assert patched_reason in output_path.read_text(encoding="utf-8")
-    assert normalize_mock.call_count == len(rich_org_report_result.recommendations)
-
-
-@pytest.mark.parametrize(
-    "legacy_module_name",
-    ["cja_auto_sdr.org.writers", "cja_auto_sdr.generator"],
-    ids=["org.writers", "generator"],
-)
-def test_legacy_json_patch_context_does_not_leak_to_canonical_submodule(
-    legacy_module_name,
-    rich_org_report_result,
-):
-    """Legacy compatibility patches must stay local to the calling context."""
-    legacy_mod = importlib.import_module(legacy_module_name)
-    canonical_mod = importlib.import_module("cja_auto_sdr.org.writers.json")
-    legacy_thread_ready = threading.Event()
-    release_legacy_thread = threading.Event()
-    legacy_thread_id: dict[str, int] = {}
-    leaked_call_thread_ids: list[int] = []
-    patched_reason = f"patched concurrent recommendation via {legacy_module_name}"
-    legacy_result: dict[str, object] = {}
-
-    def patched_normalize(rec):
-        del rec
-        current_thread_id = threading.get_ident()
-        if current_thread_id == legacy_thread_id.get("value"):
-            legacy_thread_ready.set()
-            assert release_legacy_thread.wait(timeout=5)
-            return {"severity": "low", "reason": patched_reason}
-
-        leaked_call_thread_ids.append(current_thread_id)
-        return {"severity": "low", "reason": "unexpected cross-thread leak"}
-
-    def run_legacy_call():
-        legacy_thread_id["value"] = threading.get_ident()
-        legacy_result["data"] = legacy_mod.build_org_report_json_data(rich_org_report_result)
-
-    with patch(f"{legacy_module_name}._normalize_recommendation_for_json", side_effect=patched_normalize):
-        worker = threading.Thread(target=run_legacy_call)
-        worker.start()
-
-        assert legacy_thread_ready.wait(timeout=5)
-        canonical_data = canonical_mod.build_org_report_json_data(rich_org_report_result)
-        release_legacy_thread.set()
-        worker.join(timeout=5)
-        assert not worker.is_alive()
-
-    assert leaked_call_thread_ids == []
-    assert [rec["reason"] for rec in canonical_data["recommendations"]] == _recommendation_reasons(
-        rich_org_report_result,
-    )
-    assert [rec["reason"] for rec in legacy_result["data"]["recommendations"]] == [
-        patched_reason,
-        patched_reason,
-    ]
+    assert value.__module__ == mod.__name__
+    assert hasattr(value, "__wrapped__")
 
 
 # ---------------------------------------------------------------------------
@@ -1106,10 +936,24 @@ def test_output_diff_all_continuity():
 _ORG_WRITER_HELPER_SIGNATURES = {
     "_render_distribution_bar": ["count", "total", "width"],
     "_format_recommendation_context_entries": ["rec"],
+    "_normalize_org_report_output_format": ["output_format"],
     "_normalize_recommendation_for_json": ["raw_rec"],
+    "_normalize_recommendation_severity": ["severity"],
     "_flatten_recommendation_for_tabular": ["rec"],
     "_validate_org_report_output_request": ["output_format", "output_to_stdout", "status_print"],
 }
+
+
+@pytest.mark.parametrize(
+    ("func_name", "expected_params"),
+    list(_ORG_WRITER_HELPER_SIGNATURES.items()),
+    ids=list(_ORG_WRITER_HELPER_SIGNATURES.keys()),
+)
+def test_org_writers_package_root_common_helper_signatures(func_name, expected_params):
+    """Package-root common-helper aliases must preserve matching signatures."""
+    mod = importlib.import_module("cja_auto_sdr.org.writers")
+    func = getattr(mod, func_name)
+    assert list(signature(func).parameters) == expected_params
 
 
 @pytest.mark.parametrize(
@@ -1136,11 +980,6 @@ def test_generator_org_writer_helper_signatures(func_name, expected_params):
     assert list(signature(func).parameters) == expected_params
 
 
-# ---------------------------------------------------------------------------
-# org.writers format writer signature contracts
-# ---------------------------------------------------------------------------
-
-
 _ORG_FORMAT_WRITER_SIGNATURES = {
     "write_org_report_console": ["result", "config", "quiet", "trending"],
     "write_org_report_stats_only": ["result", "quiet", "trending"],
@@ -1152,6 +991,49 @@ _ORG_FORMAT_WRITER_SIGNATURES = {
     "write_org_report_html": ["result", "output_path", "output_dir", "logger", "trending"],
     "write_org_report_csv": ["result", "output_path", "output_dir", "logger", "trending"],
 }
+
+_ORG_CANONICAL_WRITER_SIGNATURE_MODULES = {
+    "cja_auto_sdr.org.writers.console": (
+        "write_org_report_console",
+        "write_org_report_stats_only",
+        "write_org_report_comparison_console",
+    ),
+    "cja_auto_sdr.org.writers.json": (
+        "build_org_report_json_data",
+        "write_org_report_json",
+    ),
+    "cja_auto_sdr.org.writers.excel": ("write_org_report_excel",),
+    "cja_auto_sdr.org.writers.markdown": ("write_org_report_markdown",),
+    "cja_auto_sdr.org.writers.html": ("write_org_report_html",),
+    "cja_auto_sdr.org.writers.csv": ("write_org_report_csv",),
+}
+
+
+@pytest.mark.parametrize(
+    ("module_name", "func_names"),
+    list(_ORG_CANONICAL_WRITER_SIGNATURE_MODULES.items()),
+    ids=list(_ORG_CANONICAL_WRITER_SIGNATURE_MODULES.keys()),
+)
+def test_canonical_org_writer_exports_remain_direct_module_exports(module_name, func_names):
+    """Canonical org-writer exports must remain direct, non-wrapped module functions."""
+    mod = importlib.import_module(module_name)
+    for func_name in func_names:
+        func = getattr(mod, func_name)
+        assert func.__module__ == module_name
+        assert not hasattr(func, "__wrapped__")
+
+
+@pytest.mark.parametrize(
+    ("module_name", "func_names"),
+    list(_ORG_CANONICAL_WRITER_SIGNATURE_MODULES.items()),
+    ids=list(_ORG_CANONICAL_WRITER_SIGNATURE_MODULES.keys()),
+)
+def test_canonical_org_writer_module_signatures(module_name, func_names):
+    """Canonical org-writer submodules must preserve their declared signatures."""
+    mod = importlib.import_module(module_name)
+    for func_name in func_names:
+        func = getattr(mod, func_name)
+        assert list(signature(func).parameters) == _ORG_FORMAT_WRITER_SIGNATURES[func_name]
 
 
 @pytest.mark.parametrize(
