@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import importlib
 import json
 import logging
@@ -834,6 +835,74 @@ def test_org_markdown_writer_respects_legacy_helper_patch(module_name, tmp_path,
 
     assert patched_reason in output_path.read_text(encoding="utf-8")
     assert normalize_mock.call_count == len(rich_org_report_result.recommendations)
+
+
+@pytest.mark.parametrize(
+    "module_name",
+    ["cja_auto_sdr.org.writers", "cja_auto_sdr.generator"],
+    ids=["org.writers", "generator"],
+)
+def test_org_csv_writer_respects_legacy_flatten_helper_patch(module_name, tmp_path, rich_org_report_result):
+    """Legacy tabular helper patches must still affect the extracted CSV writer."""
+    mod = importlib.import_module(module_name)
+    logger = logging.getLogger(f"test.{module_name}.write_org_report_csv.flatten")
+    patched_reason = f"patched csv recommendation via {module_name}"
+
+    with patch(
+        f"{module_name}._flatten_recommendation_for_tabular",
+        side_effect=lambda rec: {
+            "Severity": rec["severity"],
+            "Reason": patched_reason,
+            "Source": module_name,
+        },
+    ) as flatten_mock:
+        output_dir = Path(
+            mod.write_org_report_csv(
+                rich_org_report_result,
+                tmp_path / "org_report.csv",
+                str(tmp_path),
+                logger,
+            ),
+        )
+
+    recommendations_path = output_dir / "org_report_recommendations.csv"
+    with recommendations_path.open(encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+
+    assert [row["Reason"] for row in rows] == [patched_reason] * len(rich_org_report_result.recommendations)
+    assert [row["Source"] for row in rows] == [module_name] * len(rich_org_report_result.recommendations)
+    assert flatten_mock.call_count == len(rich_org_report_result.recommendations)
+
+
+@pytest.mark.parametrize(
+    "module_name",
+    ["cja_auto_sdr.org.writers", "cja_auto_sdr.generator"],
+    ids=["org.writers", "generator"],
+)
+def test_org_html_writer_respects_legacy_context_helper_patch(module_name, tmp_path, rich_org_report_result):
+    """Legacy context helper patches must still affect the extracted HTML writer."""
+    mod = importlib.import_module(module_name)
+    logger = logging.getLogger(f"test.{module_name}.write_org_report_html.context")
+    patched_label = "Patched Context"
+    patched_value = f"legacy html context via {module_name}"
+
+    with patch(
+        f"{module_name}._format_recommendation_context_entries",
+        return_value=[(patched_label, patched_value)],
+    ) as context_mock:
+        output_path = Path(
+            mod.write_org_report_html(
+                rich_org_report_result,
+                tmp_path / "org_report.html",
+                str(tmp_path),
+                logger,
+            ),
+        )
+
+    html_output = output_path.read_text(encoding="utf-8")
+    assert patched_label in html_output
+    assert patched_value in html_output
+    assert context_mock.call_count == len(rich_org_report_result.recommendations)
 
 
 @pytest.mark.parametrize(
