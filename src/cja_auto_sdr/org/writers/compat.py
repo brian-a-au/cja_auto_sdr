@@ -14,6 +14,7 @@ _OVERRIDES: ContextVar[dict[_OVERRIDE_KEY, object] | None] = ContextVar(
     "org_writer_compat_overrides",
     default=None,
 )
+_MISSING = object()
 EMPTY_OVERRIDE_MAPPING: Mapping[str, str] = MappingProxyType({})
 
 
@@ -98,6 +99,52 @@ def _current_overrides() -> dict[_OVERRIDE_KEY, object]:
     return _OVERRIDES.get() or {}
 
 
+@contextmanager
+def _override_scope_normalized(
+    overrides: Mapping[_OVERRIDE_KEY, object],
+    *,
+    preserve_existing: bool = False,
+):
+    """Apply normalized overrides to the current context."""
+    current = _current_overrides()
+    updated = current.copy()
+    if preserve_existing:
+        for key, override in overrides.items():
+            updated.setdefault(key, override)
+    else:
+        updated.update(overrides)
+    token = _OVERRIDES.set(updated)
+    try:
+        yield
+    finally:
+        _OVERRIDES.reset(token)
+
+
+@contextmanager
+def _suppress_override(target_module_name: str, attr_name: str):
+    """Temporarily mask one override while preserving the rest of the context."""
+    key = _compat_key(target_module_name, attr_name)
+    current = _current_overrides()
+    if key not in current:
+        yield
+        return
+
+    updated = current.copy()
+    updated.pop(key, None)
+    token = _OVERRIDES.set(updated)
+    try:
+        yield
+    finally:
+        _OVERRIDES.reset(token)
+
+
+def _normalize_module_overrides(
+    target_module_name: str,
+    overrides: Mapping[str, object],
+) -> dict[_OVERRIDE_KEY, object]:
+    return {_compat_key(target_module_name, attr_name): override for attr_name, override in overrides.items()}
+
+
 def resolve_override(target_module_name: str, attr_name: str, default: object) -> object:
     """Resolve a compatibility override for a target module attribute."""
     return _current_overrides().get(_compat_key(target_module_name, attr_name), default)
@@ -125,7 +172,10 @@ def make_override_proxy[**P, R](
     @wraps(default)
     def proxy(*args: P.args, **kwargs: P.kwargs) -> R:
         active = resolve_override(target_module_name, attr_name, default)
-        return active(*args, **kwargs)
+        if active is default:
+            return default(*args, **kwargs)
+        with _suppress_override(target_module_name, attr_name):
+            return active(*args, **kwargs)
 
     proxy.__module__ = target_module_name
     return proxy
@@ -147,18 +197,28 @@ def collect_legacy_overrides(
     }
 
 
+def _collect_active_source_scope_overrides(
+    source_module_name: str,
+    override_mapping: Mapping[str, str],
+) -> dict[str, object]:
+    """Project active legacy source-surface overrides into canonical target keys."""
+    current = _current_overrides()
+    if not current:
+        return {}
+
+    projected: dict[str, object] = {}
+    for target_attr_name, legacy_attr_name in override_mapping.items():
+        source_key = _compat_key(source_module_name, legacy_attr_name)
+        if source_key in current:
+            projected[target_attr_name] = current[source_key]
+    return projected
+
+
 @contextmanager
 def override_scope(target_module_name: str, overrides: Mapping[str, object]):
     """Apply compatibility overrides to the current execution context only."""
-    current = _current_overrides()
-    updated = current.copy()
-    for attr_name, override in overrides.items():
-        updated[_compat_key(target_module_name, attr_name)] = override
-    token = _OVERRIDES.set(updated)
-    try:
+    with _override_scope_normalized(_normalize_module_overrides(target_module_name, overrides)):
         yield
-    finally:
-        _OVERRIDES.reset(token)
 
 
 def make_compat_wrapper[**P, R](
@@ -180,15 +240,31 @@ def make_compat_wrapper[**P, R](
 
     @wraps(target)
     def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
-        current_target = getattr(importlib.import_module(target_module_name), target_attr_name)
         overrides = collect_legacy_overrides(
             source_module_name,
             collected,
             baselines=baseline_source_values,
         )
+        overrides.update(_collect_active_source_scope_overrides(source_module_name, collected))
+        source_override = resolve_override(source_module_name, target_attr_name, _MISSING)
+        current_target = getattr(importlib.import_module(target_module_name), target_attr_name)
+
+        if source_override is not _MISSING:
+            with _suppress_override(source_module_name, target_attr_name):
+                if not overrides:
+                    return source_override(*args, **kwargs)
+                with _override_scope_normalized(
+                    _normalize_module_overrides(target_module_name, overrides),
+                    preserve_existing=True,
+                ):
+                    return source_override(*args, **kwargs)
+
         if not overrides:
             return current_target(*args, **kwargs)
-        with override_scope(target_module_name, overrides):
+        with _override_scope_normalized(
+            _normalize_module_overrides(target_module_name, overrides),
+            preserve_existing=True,
+        ):
             return current_target(*args, **kwargs)
 
     wrapper.__module__ = source_module_name
