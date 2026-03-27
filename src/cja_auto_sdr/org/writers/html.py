@@ -384,3 +384,10 @@ def write_org_report_html(
 
     logger.info(f"HTML report written to {file_path}")
     return str(file_path)
+
+
+write_org_report_html = make_override_proxy(
+    __name__,
+    "write_org_report_html",
+    write_org_report_html,
+)

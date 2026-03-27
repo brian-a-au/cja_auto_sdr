@@ -255,3 +255,8 @@ def write_org_report_json(
 
     logger.info(f"JSON report written to {file_path}")
     return str(file_path)
+
+
+for _writer_name in ("build_org_report_json_data", "write_org_report_json"):
+    globals()[_writer_name] = make_override_proxy(__name__, _writer_name, globals()[_writer_name])
+del _writer_name

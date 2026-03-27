@@ -198,6 +198,64 @@ def test_output_diff_pr_comment_signature_preserves_public_keyword():
     assert list(signature(write_diff_pr_comment_output).parameters) == ["diff_result", "changes_only"]
 
 
+def _call_canonical_org_writer_export(mod, attr, *, tmp_path, rich_org_report_result):
+    logger = logging.getLogger(f"test.{mod.__name__}.{attr}.canonical_self_scope")
+    if attr == "build_org_report_json_data":
+        return mod.build_org_report_json_data(rich_org_report_result)
+    if attr == "write_org_report_json":
+        return Path(
+            mod.write_org_report_json(
+                rich_org_report_result,
+                tmp_path / f"{mod.__name__.rsplit('.', 1)[-1]}_canonical_self_scope.json",
+                str(tmp_path),
+                logger,
+            ),
+        )
+    if attr == "write_org_report_markdown":
+        return Path(
+            mod.write_org_report_markdown(
+                rich_org_report_result,
+                tmp_path / f"{mod.__name__.rsplit('.', 1)[-1]}_canonical_self_scope.md",
+                str(tmp_path),
+                logger,
+            ),
+        )
+    if attr == "write_org_report_console":
+        mod.write_org_report_console(rich_org_report_result, rich_org_report_result.parameters, quiet=True)
+        return None
+    if attr == "write_org_report_stats_only":
+        mod.write_org_report_stats_only(rich_org_report_result, quiet=True)
+        return None
+    if attr == "write_org_report_csv":
+        return Path(
+            mod.write_org_report_csv(
+                rich_org_report_result,
+                tmp_path / f"{mod.__name__.rsplit('.', 1)[-1]}_canonical_self_scope.csv",
+                str(tmp_path),
+                logger,
+            ),
+        )
+    if attr == "write_org_report_html":
+        return Path(
+            mod.write_org_report_html(
+                rich_org_report_result,
+                tmp_path / f"{mod.__name__.rsplit('.', 1)[-1]}_canonical_self_scope.html",
+                str(tmp_path),
+                logger,
+            ),
+        )
+    if attr == "write_org_report_excel":
+        return Path(
+            mod.write_org_report_excel(
+                rich_org_report_result,
+                tmp_path / f"{mod.__name__.rsplit('.', 1)[-1]}_canonical_self_scope.xlsx",
+                str(tmp_path),
+                logger,
+            ),
+        )
+    raise AssertionError(f"Unhandled canonical writer export: {mod.__name__}.{attr}")
+
+
 @pytest.mark.parametrize(
     "module_name",
     [
@@ -1745,6 +1803,256 @@ def test_common_helper_reexports_support_wraps_override_scope_on_self_exports(
 
     assert normalized == "high"
     severity_spy.assert_called_once_with("HIGH")
+
+
+@pytest.mark.parametrize(
+    ("attr", "call_args", "expected"),
+    [
+        ("_normalize_recommendation_severity", ("HIGH",), "high"),
+        ("_normalize_org_report_output_format", ("JSON",), "json"),
+    ],
+    ids=["severity", "output-format"],
+)
+def test_canonical_common_helper_exports_support_wraps_override_scope_on_self_exports(
+    attr,
+    call_args,
+    expected,
+):
+    """Direct canonical common helpers must honor scoped wraps spies on self exports."""
+    from cja_auto_sdr.org.writers.compat import override_scope
+
+    mod = importlib.import_module("cja_auto_sdr.org.writers.common")
+    helper_spy = Mock(wraps=getattr(mod, attr))
+
+    with override_scope(
+        mod.__name__,
+        {
+            attr: helper_spy,
+        },
+    ):
+        returned = getattr(mod, attr)(*call_args)
+
+    assert returned == expected
+    helper_spy.assert_called_once_with(*call_args)
+
+
+@pytest.mark.parametrize(
+    ("attr", "call_args", "expected"),
+    [
+        ("_normalize_recommendation_severity", ("HIGH",), "high"),
+        (
+            "_format_recommendation_context_entries",
+            ({"data_view": "dv_1", "data_view_name": "DV 1"},),
+            [("Data View", "DV 1 (dv_1)")],
+        ),
+        ("_normalize_org_report_output_format", ("JSON",), "json"),
+        ("_render_distribution_bar", (1, 4), f"{'█' * 7}{'░' * 23}  25%"),
+    ],
+    ids=["severity", "context", "output-format", "distribution-bar"],
+)
+def test_canonical_common_helper_exports_support_generator_wraps_patches_without_double_count(
+    attr,
+    call_args,
+    expected,
+):
+    """Canonical common helpers must stay interchangeable with generator re-exports under wraps spies."""
+    import cja_auto_sdr.generator as generator_mod
+
+    mod = importlib.import_module("cja_auto_sdr.org.writers.common")
+
+    with patch(f"{mod.__name__}.{attr}", wraps=getattr(generator_mod, attr)) as helper_spy:
+        returned = getattr(mod, attr)(*call_args)
+
+    assert returned == expected
+    helper_spy.assert_called_once_with(*call_args)
+
+
+@pytest.mark.parametrize(
+    ("scope_module_name", "legacy_module_name"),
+    [
+        ("cja_auto_sdr.org.writers", "cja_auto_sdr.org.writers"),
+        ("cja_auto_sdr.org.writers.json", "cja_auto_sdr.org.writers"),
+        ("cja_auto_sdr.generator", "cja_auto_sdr.generator"),
+    ],
+    ids=["org.writers", "org.writers.json", "generator"],
+)
+def test_json_writer_reexports_support_wraps_override_scope_on_self_exports(
+    scope_module_name,
+    legacy_module_name,
+    tmp_path,
+    rich_org_report_result,
+):
+    """Scoped wraps spies on direct JSON writer re-exports must still observe compat calls."""
+    from cja_auto_sdr.org.writers.compat import override_scope
+
+    mod = importlib.import_module(legacy_module_name)
+    logger = logging.getLogger(f"test.{legacy_module_name}.write_org_report_json.override_scope.wraps")
+    writer_spy = Mock(wraps=mod.write_org_report_json)
+
+    with override_scope(
+        scope_module_name,
+        {
+            "write_org_report_json": writer_spy,
+        },
+    ):
+        output_path = Path(
+            mod.write_org_report_json(
+                rich_org_report_result,
+                tmp_path / f"{legacy_module_name.rsplit('.', 1)[-1]}_self_scope.json",
+                str(tmp_path),
+                logger,
+            ),
+        )
+
+    assert output_path.exists()
+    writer_spy.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    ("module_name", "attr"),
+    [
+        ("cja_auto_sdr.org.writers.json", "build_org_report_json_data"),
+        ("cja_auto_sdr.org.writers.json", "write_org_report_json"),
+        ("cja_auto_sdr.org.writers.markdown", "write_org_report_markdown"),
+        ("cja_auto_sdr.org.writers.console", "write_org_report_console"),
+        ("cja_auto_sdr.org.writers.console", "write_org_report_stats_only"),
+        ("cja_auto_sdr.org.writers.csv", "write_org_report_csv"),
+        ("cja_auto_sdr.org.writers.html", "write_org_report_html"),
+        ("cja_auto_sdr.org.writers.excel", "write_org_report_excel"),
+    ],
+    ids=[
+        "json-builder",
+        "json-writer",
+        "markdown-writer",
+        "console-writer",
+        "stats-writer",
+        "csv-writer",
+        "html-writer",
+        "excel-writer",
+    ],
+)
+def test_canonical_org_writer_exports_support_wraps_override_scope_on_self_exports(
+    module_name,
+    attr,
+    tmp_path,
+    rich_org_report_result,
+):
+    """Direct canonical writer exports must honor scoped wraps spies on self exports."""
+    from cja_auto_sdr.org.writers.compat import override_scope
+
+    mod = importlib.import_module(module_name)
+    writer_spy = Mock(wraps=getattr(mod, attr))
+
+    with override_scope(
+        module_name,
+        {
+            attr: writer_spy,
+        },
+    ):
+        returned = _call_canonical_org_writer_export(
+            mod,
+            attr,
+            tmp_path=tmp_path,
+            rich_org_report_result=rich_org_report_result,
+        )
+
+    if isinstance(returned, Path):
+        assert returned.exists()
+    elif attr == "build_org_report_json_data":
+        assert returned["org_id"] == rich_org_report_result.org_id
+    writer_spy.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    ("module_name", "attr"),
+    [
+        ("cja_auto_sdr.org.writers.console", "write_org_report_console"),
+        ("cja_auto_sdr.org.writers.console", "write_org_report_stats_only"),
+        ("cja_auto_sdr.org.writers.json", "build_org_report_json_data"),
+        ("cja_auto_sdr.org.writers.json", "write_org_report_json"),
+        ("cja_auto_sdr.org.writers.markdown", "write_org_report_markdown"),
+        ("cja_auto_sdr.org.writers.csv", "write_org_report_csv"),
+        ("cja_auto_sdr.org.writers.html", "write_org_report_html"),
+        ("cja_auto_sdr.org.writers.excel", "write_org_report_excel"),
+    ],
+    ids=[
+        "console-writer",
+        "stats-writer",
+        "json-builder",
+        "json-writer",
+        "markdown-writer",
+        "csv-writer",
+        "html-writer",
+        "excel-writer",
+    ],
+)
+def test_canonical_org_writer_exports_support_generator_wraps_patches_without_double_count(
+    module_name,
+    attr,
+    tmp_path,
+    rich_org_report_result,
+):
+    """Canonical writer exports must stay interchangeable with generator re-exports under wraps spies."""
+    import cja_auto_sdr.generator as generator_mod
+
+    mod = importlib.import_module(module_name)
+
+    with patch(f"{module_name}.{attr}", wraps=getattr(generator_mod, attr)) as writer_spy:
+        returned = _call_canonical_org_writer_export(
+            mod,
+            attr,
+            tmp_path=tmp_path,
+            rich_org_report_result=rich_org_report_result,
+        )
+
+    if isinstance(returned, Path):
+        assert returned.exists()
+    elif attr == "build_org_report_json_data":
+        assert returned["org_id"] == rich_org_report_result.org_id
+    writer_spy.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    ("scope_module_name", "legacy_module_name"),
+    [
+        ("cja_auto_sdr.org.writers", "cja_auto_sdr.org.writers"),
+        ("cja_auto_sdr.org.writers.markdown", "cja_auto_sdr.org.writers"),
+        ("cja_auto_sdr.generator", "cja_auto_sdr.generator"),
+    ],
+    ids=["org.writers", "org.writers.markdown", "generator"],
+)
+def test_markdown_writer_reexports_support_wraps_override_scope_on_self_exports(
+    scope_module_name,
+    legacy_module_name,
+    tmp_path,
+    rich_org_report_result,
+):
+    """Scoped wraps spies on direct Markdown writer re-exports must still observe compat calls."""
+    from cja_auto_sdr.org.writers.compat import override_scope
+
+    mod = importlib.import_module(legacy_module_name)
+    logger = logging.getLogger(f"test.{legacy_module_name}.write_org_report_markdown.override_scope.wraps")
+    trending = _make_trending()
+    writer_spy = Mock(wraps=mod.write_org_report_markdown)
+
+    with override_scope(
+        scope_module_name,
+        {
+            "write_org_report_markdown": writer_spy,
+        },
+    ):
+        output_path = Path(
+            mod.write_org_report_markdown(
+                rich_org_report_result,
+                tmp_path / f"{legacy_module_name.rsplit('.', 1)[-1]}_self_scope.md",
+                str(tmp_path),
+                logger,
+                trending=trending,
+            ),
+        )
+
+    assert output_path.exists()
+    writer_spy.assert_called_once()
 
 
 def test_org_markdown_writer_reexport_supports_package_root_wraps_patch_on_canonical_surface(

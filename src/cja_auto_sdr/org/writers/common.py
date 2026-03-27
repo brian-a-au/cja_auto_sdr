@@ -8,7 +8,7 @@ from typing import Any
 
 from cja_auto_sdr.core.colors import ConsoleColors
 from cja_auto_sdr.core.constants import FORMAT_ALIASES
-from cja_auto_sdr.org.writers.compat import call_override
+from cja_auto_sdr.org.writers.compat import call_override, make_override_proxy
 
 
 def _render_distribution_bar(count: int, total: int, width: int = 30) -> str:
@@ -189,3 +189,16 @@ def _validate_org_report_output_request(
         return False
 
     return True
+
+
+for _helper_name in (
+    "_render_distribution_bar",
+    "_normalize_recommendation_severity",
+    "_format_recommendation_context_entries",
+    "_normalize_recommendation_for_json",
+    "_flatten_recommendation_for_tabular",
+    "_normalize_org_report_output_format",
+    "_validate_org_report_output_request",
+):
+    globals()[_helper_name] = make_override_proxy(__name__, _helper_name, globals()[_helper_name])
+del _helper_name

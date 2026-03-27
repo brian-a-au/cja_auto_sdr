@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import importlib
+import inspect
 from collections.abc import Callable, Collection, Mapping
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from contextvars import ContextVar
 from functools import wraps
 from types import MappingProxyType
@@ -17,6 +18,10 @@ _OVERRIDES: ContextVar[dict[_OVERRIDE_KEY, object] | None] = ContextVar(
 )
 _SUPPRESSED_COMPAT_TARGETS: ContextVar[set[_OVERRIDE_KEY] | None] = ContextVar(
     "org_writer_suppressed_compat_targets",
+    default=None,
+)
+_ACTIVE_COMPAT_MOCK_CALLERS: ContextVar[set[int] | None] = ContextVar(
+    "org_writer_active_compat_mock_callers",
     default=None,
 )
 _MISSING = object()
@@ -241,6 +246,10 @@ def _current_suppressed_compat_targets() -> set[_OVERRIDE_KEY]:
     return _SUPPRESSED_COMPAT_TARGETS.get() or set()
 
 
+def _current_active_compat_mock_callers() -> set[int]:
+    return _ACTIVE_COMPAT_MOCK_CALLERS.get() or set()
+
+
 def resolve_override(target_module_name: str, attr_name: str, default: object) -> object:
     """Resolve a compatibility override for a target module attribute."""
     return _current_overrides().get(_compat_key(target_module_name, attr_name), default)
@@ -404,6 +413,21 @@ def _is_compat_target_suppressed(source_module_name: str, attr_name: str) -> boo
     return _compat_key(source_module_name, attr_name) in _current_suppressed_compat_targets()
 
 
+def _current_mock_caller() -> object:
+    """Return the active unittest.mock caller when a compat wrapper is entered via wraps=."""
+    frame = inspect.currentframe()
+    wrapper_frame = frame.f_back if frame is not None else None
+    caller = wrapper_frame.f_back if wrapper_frame is not None else None
+    try:
+        if caller is None or caller.f_globals.get("__name__") != "unittest.mock":
+            return _MISSING
+        return caller.f_locals.get("self", _MISSING)
+    finally:
+        del caller
+        del wrapper_frame
+        del frame
+
+
 @contextmanager
 def _suppress_compat_target(source_module_name: str, attr_name: str):
     """Temporarily force one compat wrapper to call its baseline target on re-entry."""
@@ -420,6 +444,24 @@ def _suppress_compat_target(source_module_name: str, attr_name: str):
         yield
     finally:
         _SUPPRESSED_COMPAT_TARGETS.reset(token)
+
+
+@contextmanager
+def _track_active_compat_mock_caller(candidate: object):
+    """Record one mock caller identity across nested compat wrapper re-entry."""
+    candidate_id = id(candidate)
+    current = _current_active_compat_mock_callers()
+    if candidate_id in current:
+        yield
+        return
+
+    updated = current.copy()
+    updated.add(candidate_id)
+    token = _ACTIVE_COMPAT_MOCK_CALLERS.set(updated)
+    try:
+        yield
+    finally:
+        _ACTIVE_COMPAT_MOCK_CALLERS.reset(token)
 
 
 def _routes_to_compat_wrapper(
@@ -446,6 +488,30 @@ def _routes_to_compat_wrapper(
         if _routes_to_compat_wrapper(wrapped, reference, seen=seen):
             return True
     return False
+
+
+def _unwrap_compat_dispatch_target(candidate: object, reference: object) -> object:
+    """Peel mock/wrap layers until the deepest callable still routing to one compat wrapper."""
+    current = candidate
+    seen: set[int] = set()
+    while current is not reference:
+        current_id = id(current)
+        if current_id in seen:
+            return candidate
+        seen.add(current_id)
+
+        next_candidate = _MISSING
+        for attr_name in ("_mock_wraps", "__wrapped__"):
+            wrapped = getattr(current, attr_name, _MISSING)
+            if wrapped is _MISSING or not _routes_to_compat_wrapper(wrapped, reference):
+                continue
+            next_candidate = wrapped
+            break
+
+        if next_candidate is _MISSING:
+            return candidate
+        current = next_candidate
+    return current
 
 
 def _resolve_scoped_self_target(
@@ -554,6 +620,7 @@ def _make_compat_wrapper_with_options[**P, R](
     @wraps(target)
     def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
         current_scoped_overrides = _current_overrides()
+        current_mock_caller = _current_mock_caller()
         if _is_compat_target_suppressed(source_module_name, target_attr_name):
             current_target = _resolve_suppressed_compat_target(
                 target_module_name=target_module_name,
@@ -582,11 +649,20 @@ def _make_compat_wrapper_with_options[**P, R](
             overrides.pop(self_override_key, None)
 
         if _routes_to_compat_wrapper(current_target, wrapper):
-            with _suppress_compat_target(source_module_name, target_attr_name):
+            reentry_target = current_target
+            if current_mock_caller is current_target or id(current_target) in _current_active_compat_mock_callers():
+                reentry_target = _unwrap_compat_dispatch_target(current_target, wrapper)
+            with (
+                _suppress_compat_target(source_module_name, target_attr_name),
+                _suppress_override(target_module_name, target_attr_name),
+                _track_active_compat_mock_caller(current_target)
+                if reentry_target is not current_target
+                else nullcontext(),
+            ):
                 if not overrides:
-                    return current_target(*args, **kwargs)
+                    return reentry_target(*args, **kwargs)
                 with _override_scope_normalized(overrides, preserve_existing=True):
-                    return current_target(*args, **kwargs)
+                    return reentry_target(*args, **kwargs)
 
         if not overrides:
             return current_target(*args, **kwargs)

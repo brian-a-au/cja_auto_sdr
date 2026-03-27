@@ -497,3 +497,10 @@ def write_org_report_excel(
 
     logger.info(f"Excel report written to {file_path}")
     return str(file_path)
+
+
+write_org_report_excel = make_override_proxy(
+    __name__,
+    "write_org_report_excel",
+    write_org_report_excel,
+)

@@ -281,3 +281,10 @@ def write_org_report_csv(
 
     logger.info(f"CSV reports written to {csv_dir}")
     return str(csv_dir)
+
+
+write_org_report_csv = make_override_proxy(
+    __name__,
+    "write_org_report_csv",
+    write_org_report_csv,
+)

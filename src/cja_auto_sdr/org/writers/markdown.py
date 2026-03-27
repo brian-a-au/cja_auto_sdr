@@ -270,3 +270,10 @@ def write_org_report_markdown(
 
     logger.info(f"Markdown report written to {file_path}")
     return str(file_path)
+
+
+write_org_report_markdown = make_override_proxy(
+    __name__,
+    "write_org_report_markdown",
+    write_org_report_markdown,
+)

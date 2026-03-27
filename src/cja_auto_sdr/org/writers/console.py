@@ -484,3 +484,12 @@ def write_org_report_comparison_console(comparison: OrgReportComparison, quiet: 
     print()
     print("=" * 70)
     print()
+
+
+for _writer_name in (
+    "write_org_report_console",
+    "write_org_report_stats_only",
+    "write_org_report_comparison_console",
+):
+    globals()[_writer_name] = make_override_proxy(__name__, _writer_name, globals()[_writer_name])
+del _writer_name
