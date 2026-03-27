@@ -188,6 +188,50 @@ def test_canonical_json_builder_helper_proxy_supports_self_delegating_override_s
     ]
 
 
+def test_canonical_json_builder_helper_proxy_nested_override_scope_layers_compose(
+    rich_org_report_result,
+):
+    """Nested same-symbol canonical helper overrides must reveal outer layers when delegating."""
+    mod = importlib.import_module("cja_auto_sdr.org.writers.json")
+    calls: list[str] = []
+
+    def outer(rec):
+        reason = str(rec.get("reason", ""))
+        calls.append(f"outer:{reason}")
+        return {"severity": "low", "reason": f"outer:{reason}"}
+
+    def inner(rec):
+        reason = str(rec.get("reason", ""))
+        calls.append(f"inner:{reason}")
+        normalized = mod._normalize_recommendation_for_json(rec)
+        return {"severity": normalized["severity"], "reason": f"inner:{normalized['reason']}"}
+
+    with override_scope(
+        mod.__name__,
+        {
+            "_normalize_recommendation_for_json": outer,
+        },
+    ):
+        with override_scope(
+            mod.__name__,
+            {
+                "_normalize_recommendation_for_json": inner,
+            },
+        ):
+            payload = mod.build_org_report_json_data(rich_org_report_result)
+
+    assert _recommendation_reasons(payload) == [
+        "inner:outer:A data view has many isolated components",
+        "inner:outer:Two data views are highly similar",
+    ]
+    assert calls == [
+        "inner:A data view has many isolated components",
+        "outer:A data view has many isolated components",
+        "inner:Two data views are highly similar",
+        "outer:Two data views are highly similar",
+    ]
+
+
 def test_generator_json_builder_supports_self_delegating_override_scope(rich_org_report_result):
     """Generator wrapped writer exports must allow wrapper-style self overrides."""
     mod = importlib.import_module("cja_auto_sdr.generator")
@@ -207,6 +251,46 @@ def test_generator_json_builder_supports_self_delegating_override_scope(rich_org
 
     assert payload["org_id"] == rich_org_report_result.org_id
     assert calls == [rich_org_report_result.org_id]
+
+
+@pytest.mark.parametrize(
+    "module_name",
+    ["cja_auto_sdr.org.writers", "cja_auto_sdr.generator"],
+    ids=["org.writers", "generator"],
+)
+def test_legacy_json_builder_nested_override_scope_layers_compose(module_name, rich_org_report_result):
+    """Nested same-symbol legacy wrapped overrides must reveal outer layers when delegating."""
+    mod = importlib.import_module(module_name)
+    calls: list[str] = []
+
+    def outer(result, trending=None):
+        calls.append("outer")
+        payload = dict(mod.build_org_report_json_data(result, trending=trending))
+        payload["report_type"] = f"outer:{payload['report_type']}"
+        return payload
+
+    def inner(result, trending=None):
+        calls.append("inner")
+        payload = dict(mod.build_org_report_json_data(result, trending=trending))
+        payload["report_type"] = f"inner:{payload['report_type']}"
+        return payload
+
+    with override_scope(
+        mod.__name__,
+        {
+            "build_org_report_json_data": outer,
+        },
+    ):
+        with override_scope(
+            mod.__name__,
+            {
+                "build_org_report_json_data": inner,
+            },
+        ):
+            payload = mod.build_org_report_json_data(rich_org_report_result)
+
+    assert payload["report_type"] == "inner:outer:org_analysis"
+    assert calls == ["inner", "outer"]
 
 
 def test_org_writers_json_builder_supports_self_delegating_override_scope(rich_org_report_result):

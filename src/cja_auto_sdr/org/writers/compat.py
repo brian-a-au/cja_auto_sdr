@@ -10,7 +10,8 @@ from functools import wraps
 from types import MappingProxyType
 
 _OVERRIDE_KEY = tuple[str, str]
-_OVERRIDES: ContextVar[dict[_OVERRIDE_KEY, object] | None] = ContextVar(
+_OVERRIDE_STACK = tuple[object, ...]
+_OVERRIDES: ContextVar[dict[_OVERRIDE_KEY, _OVERRIDE_STACK] | None] = ContextVar(
     "org_writer_compat_overrides",
     default=None,
 )
@@ -95,8 +96,19 @@ def _compat_key(target_module_name: str, attr_name: str) -> _OVERRIDE_KEY:
     return (target_module_name, attr_name)
 
 
-def _current_overrides() -> dict[_OVERRIDE_KEY, object]:
+def _current_overrides() -> dict[_OVERRIDE_KEY, _OVERRIDE_STACK]:
     return _OVERRIDES.get() or {}
+
+
+def _peek_override(
+    overrides: Mapping[_OVERRIDE_KEY, _OVERRIDE_STACK],
+    key: _OVERRIDE_KEY,
+    default: object,
+) -> object:
+    stack = overrides.get(key)
+    if not stack:
+        return default
+    return stack[-1]
 
 
 @contextmanager
@@ -105,14 +117,15 @@ def _override_scope_normalized(
     *,
     preserve_existing: bool = False,
 ):
-    """Apply normalized overrides to the current context."""
+    """Push normalized overrides onto the current context."""
     current = _current_overrides()
     updated = current.copy()
     if preserve_existing:
         for key, override in overrides.items():
-            updated.setdefault(key, override)
+            updated.setdefault(key, (override,))
     else:
-        updated.update(overrides)
+        for key, override in overrides.items():
+            updated[key] = (*updated.get(key, ()), override)
     token = _OVERRIDES.set(updated)
     try:
         yield
@@ -122,15 +135,19 @@ def _override_scope_normalized(
 
 @contextmanager
 def _suppress_override(target_module_name: str, attr_name: str):
-    """Temporarily mask one override while preserving the rest of the context."""
+    """Temporarily hide only the active override layer for one key."""
     key = _compat_key(target_module_name, attr_name)
     current = _current_overrides()
-    if key not in current:
+    stack = current.get(key)
+    if not stack:
         yield
         return
 
     updated = current.copy()
-    updated.pop(key, None)
+    if len(stack) == 1:
+        updated.pop(key, None)
+    else:
+        updated[key] = stack[:-1]
     token = _OVERRIDES.set(updated)
     try:
         yield
@@ -147,7 +164,7 @@ def _normalize_module_overrides(
 
 def resolve_override(target_module_name: str, attr_name: str, default: object) -> object:
     """Resolve a compatibility override for a target module attribute."""
-    return _current_overrides().get(_compat_key(target_module_name, attr_name), default)
+    return _peek_override(_current_overrides(), _compat_key(target_module_name, attr_name), default)
 
 
 def call_override[**P, R](
@@ -209,8 +226,9 @@ def _collect_active_source_scope_overrides(
     projected: dict[str, object] = {}
     for target_attr_name, legacy_attr_name in override_mapping.items():
         source_key = _compat_key(source_module_name, legacy_attr_name)
-        if source_key in current:
-            projected[target_attr_name] = current[source_key]
+        active = _peek_override(current, source_key, _MISSING)
+        if active is not _MISSING:
+            projected[target_attr_name] = active
     return projected
 
 
