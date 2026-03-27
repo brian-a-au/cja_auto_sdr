@@ -13,6 +13,14 @@ from typing import Any
 import pandas as pd
 
 
+def _validate_cache_params(max_size: int, ttl_seconds: int) -> None:
+    """Validate cache initialization parameters."""
+    if max_size < 1:
+        raise ValueError(f"max_size must be >= 1, got {max_size}")
+    if ttl_seconds <= 0:
+        raise ValueError(f"ttl_seconds must be > 0, got {ttl_seconds}")
+
+
 class ValidationCache:
     """
     Thread-safe LRU cache for data quality validation results
@@ -39,10 +47,7 @@ class ValidationCache:
             ttl_seconds: Time-to-live for cache entries in seconds, >= 1 (default: 3600 = 1 hour)
             logger: Logger instance for cache statistics (default: module logger)
         """
-        if max_size < 1:
-            raise ValueError(f"max_size must be >= 1, got {max_size}")
-        if ttl_seconds <= 0:
-            raise ValueError(f"ttl_seconds must be > 0, got {ttl_seconds}")
+        _validate_cache_params(max_size, ttl_seconds)
 
         self.max_size = max_size
         self.ttl_seconds = ttl_seconds
@@ -333,10 +338,7 @@ class SharedValidationCache:
             ttl_seconds: Time-to-live for cache entries in seconds (default: 3600)
             logger: Logger instance for cache statistics (default: module logger)
         """
-        if max_size < 1:
-            raise ValueError(f"max_size must be >= 1, got {max_size}")
-        if ttl_seconds <= 0:
-            raise ValueError(f"ttl_seconds must be > 0, got {ttl_seconds}")
+        _validate_cache_params(max_size, ttl_seconds)
 
         self.max_size = max_size
         self.ttl_seconds = ttl_seconds
