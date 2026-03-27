@@ -7,13 +7,15 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [3.4.8] - 2026-03-26
+## [3.4.8] - 2026-03-27
 
 ### Fixed
-- Fix org writer compat routing: resolve stacked override self-delegation recursion by converting flat overrides to a layered stack with per-key suppression
+- Fix org writer compat routing: resolve stacked override self-delegation recursion by converting flat overrides to a layered stack with per-key suppression and module-attr masking
 
 ### Tests
-- Add dedicated org writer compat contract tests (override stacking, proxy suppression, source-scope projection)
+- Add dedicated org writer compat contract tests (106 tests: override stacking, proxy suppression, source-scope projection, module-attr masking, per-format smoke tests)
+- Harden org writer compatibility contracts with smoke-level coverage for all six output formats
+- Refactor `test_output_extraction_contracts.py` — migrate org-writer helpers to dedicated compat contract file
 
 ## [3.4.7] - 2026-03-25
 
