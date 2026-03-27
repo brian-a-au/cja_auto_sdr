@@ -356,6 +356,165 @@ def test_org_writers_json_builder_supports_source_scope_helper_projection(rich_o
     ]
 
 
+@pytest.mark.parametrize(
+    "module_name",
+    ["cja_auto_sdr.org.writers", "cja_auto_sdr.generator"],
+    ids=["org.writers", "generator"],
+)
+def test_canonical_json_builder_patch_wins_over_projected_legacy_builder_patch_in_writer(
+    module_name,
+    tmp_path,
+    rich_org_report_result,
+):
+    """Explicit canonical builder monkeypatches must win over projected legacy builder patches."""
+    mod = importlib.import_module(module_name)
+    canonical_mod = importlib.import_module("cja_auto_sdr.org.writers.json")
+    logger = logging.getLogger(f"test.{module_name}.write_org_report_json.canonical_builder_patch")
+    source_payload = {
+        "report_type": "source",
+        "org_id": rich_org_report_result.org_id,
+    }
+    canonical_payload = {
+        "report_type": "canonical",
+        "org_id": rich_org_report_result.org_id,
+    }
+
+    with patch.object(mod, "build_org_report_json_data", return_value=source_payload):
+        with patch.object(canonical_mod, "build_org_report_json_data", return_value=canonical_payload) as build_mock:
+            output_path = Path(
+                mod.write_org_report_json(
+                    rich_org_report_result,
+                    tmp_path / "org_report_canonical_patch.json",
+                    str(tmp_path),
+                    logger,
+                ),
+            )
+
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+    assert payload == canonical_payload
+    build_mock.assert_called_once_with(rich_org_report_result, trending=None)
+
+
+@pytest.mark.parametrize(
+    "module_name",
+    ["cja_auto_sdr.org.writers", "cja_auto_sdr.generator"],
+    ids=["org.writers", "generator"],
+)
+def test_legacy_json_writer_nested_builder_monkeypatch_layers_compose(
+    module_name,
+    tmp_path,
+    rich_org_report_result,
+):
+    """Stacked same-symbol legacy builder monkeypatches must reveal outer layers when delegating."""
+    mod = importlib.import_module(module_name)
+    logger = logging.getLogger(f"test.{module_name}.write_org_report_json.nested_builder_monkeypatch")
+    calls: list[str] = []
+
+    def outer(result, trending=None):
+        calls.append("outer")
+        payload = dict(mod.build_org_report_json_data(result, trending=trending))
+        payload["report_type"] = f"outer:{payload['report_type']}"
+        return payload
+
+    def inner(result, trending=None):
+        calls.append("inner")
+        payload = dict(mod.build_org_report_json_data(result, trending=trending))
+        payload["report_type"] = f"inner:{payload['report_type']}"
+        return payload
+
+    with patch.object(mod, "build_org_report_json_data", side_effect=outer):
+        with patch.object(mod, "build_org_report_json_data", side_effect=inner):
+            output_path = Path(
+                mod.write_org_report_json(
+                    rich_org_report_result,
+                    tmp_path / "org_report_nested_patch.json",
+                    str(tmp_path),
+                    logger,
+                ),
+            )
+
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+    assert payload["report_type"] == "inner:outer:org_analysis"
+    assert calls == ["inner", "outer"]
+
+
+@pytest.mark.parametrize(
+    "module_name",
+    ["cja_auto_sdr.org.writers", "cja_auto_sdr.generator"],
+    ids=["org.writers", "generator"],
+)
+def test_legacy_json_writer_self_delegating_builder_monkeypatch_runs_once(
+    module_name,
+    tmp_path,
+    rich_org_report_result,
+):
+    """Self-delegating legacy builder monkeypatches must not recurse through the JSON writer."""
+    mod = importlib.import_module(module_name)
+    logger = logging.getLogger(f"test.{module_name}.write_org_report_json.builder_monkeypatch")
+    calls: list[str] = []
+
+    def custom(result, trending=None):
+        calls.append("custom")
+        payload = dict(mod.build_org_report_json_data(result, trending=trending))
+        payload["report_type"] = f"custom:{payload['report_type']}"
+        return payload
+
+    with patch.object(mod, "build_org_report_json_data", side_effect=custom):
+        output_path = Path(
+            mod.write_org_report_json(
+                rich_org_report_result,
+                tmp_path / "org_report_patched.json",
+                str(tmp_path),
+                logger,
+            ),
+        )
+
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+    assert payload["report_type"] == "custom:org_analysis"
+    assert calls == ["custom"]
+
+
+@pytest.mark.parametrize(
+    "module_name",
+    ["cja_auto_sdr.org.writers", "cja_auto_sdr.generator"],
+    ids=["org.writers", "generator"],
+)
+def test_legacy_json_writer_source_scoped_builder_override_runs_once(
+    module_name,
+    tmp_path,
+    rich_org_report_result,
+):
+    """Projected source-scope builder overrides must not re-apply through the JSON writer."""
+    mod = importlib.import_module(module_name)
+    logger = logging.getLogger(f"test.{module_name}.write_org_report_json.source_builder_scope")
+    calls: list[str] = []
+
+    def custom(result, trending=None):
+        calls.append("custom")
+        payload = dict(mod.build_org_report_json_data(result, trending=trending))
+        payload["report_type"] = f"custom:{payload['report_type']}"
+        return payload
+
+    with override_scope(
+        mod.__name__,
+        {
+            "build_org_report_json_data": custom,
+        },
+    ):
+        output_path = Path(
+            mod.write_org_report_json(
+                rich_org_report_result,
+                tmp_path / "org_report.json",
+                str(tmp_path),
+                logger,
+            ),
+        )
+
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+    assert payload["report_type"] == "custom:org_analysis"
+    assert calls == ["custom"]
+
+
 def test_explicit_canonical_override_scope_wins_over_projected_generator_scope(rich_org_report_result):
     """Projected legacy overrides must not clobber explicit target-module override_scope values."""
     generator_mod = importlib.import_module("cja_auto_sdr.generator")
@@ -384,6 +543,79 @@ def test_explicit_canonical_override_scope_wins_over_projected_generator_scope(r
         "canonical-target recommendation",
         "canonical-target recommendation",
     ]
+
+
+@pytest.mark.parametrize(
+    "module_name",
+    ["cja_auto_sdr.org.writers", "cja_auto_sdr.generator"],
+    ids=["org.writers", "generator"],
+)
+def test_direct_legacy_builder_call_respects_explicit_canonical_override_scope(
+    module_name,
+    rich_org_report_result,
+):
+    """Legacy direct builder calls must forward through explicit canonical override_scope values."""
+    mod = importlib.import_module(module_name)
+    canonical_mod = importlib.import_module("cja_auto_sdr.org.writers.json")
+
+    def canonical(result, trending=None):
+        payload = dict(canonical_mod.build_org_report_json_data(result, trending=trending))
+        payload["report_type"] = f"canonical:{payload['report_type']}"
+        return payload
+
+    with override_scope(
+        canonical_mod.__name__,
+        {
+            "build_org_report_json_data": canonical,
+        },
+    ):
+        payload = mod.build_org_report_json_data(rich_org_report_result)
+
+    assert payload["report_type"] == "canonical:org_analysis"
+
+
+@pytest.mark.parametrize(
+    "module_name",
+    ["cja_auto_sdr.org.writers", "cja_auto_sdr.generator"],
+    ids=["org.writers", "generator"],
+)
+def test_explicit_canonical_json_builder_override_wins_over_projected_legacy_builder_scope(
+    module_name,
+    rich_org_report_result,
+):
+    """Explicit canonical builder overrides must win over projected legacy same-symbol overrides."""
+    mod = importlib.import_module(module_name)
+    canonical_mod = importlib.import_module("cja_auto_sdr.org.writers.json")
+    calls: list[str] = []
+
+    def source(result, trending=None):
+        calls.append("source")
+        payload = dict(mod.build_org_report_json_data(result, trending=trending))
+        payload["report_type"] = f"source:{payload['report_type']}"
+        return payload
+
+    def canonical(result, trending=None):
+        calls.append("canonical")
+        payload = dict(canonical_mod.build_org_report_json_data(result, trending=trending))
+        payload["report_type"] = f"canonical:{payload['report_type']}"
+        return payload
+
+    with override_scope(
+        mod.__name__,
+        {
+            "build_org_report_json_data": source,
+        },
+    ):
+        with override_scope(
+            canonical_mod.__name__,
+            {
+                "build_org_report_json_data": canonical,
+            },
+        ):
+            payload = mod.build_org_report_json_data(rich_org_report_result)
+
+    assert payload["report_type"] == "canonical:org_analysis"
+    assert calls == ["canonical"]
 
 
 @pytest.mark.parametrize(
@@ -654,3 +886,113 @@ def test_legacy_json_patch_context_does_not_leak_to_canonical_submodule(
         patched_reason,
         patched_reason,
     ]
+
+
+@pytest.mark.parametrize(
+    "legacy_module_name",
+    ["cja_auto_sdr.org.writers", "cja_auto_sdr.generator"],
+    ids=["org.writers", "generator"],
+)
+def test_legacy_json_helper_patch_remains_visible_to_concurrent_legacy_calls(
+    legacy_module_name,
+    rich_org_report_result,
+):
+    """Legacy helper patches must stay visible to concurrent legacy compat calls."""
+    legacy_mod = importlib.import_module(legacy_module_name)
+    legacy_thread_ready = threading.Event()
+    release_legacy_thread = threading.Event()
+    legacy_thread_id: dict[str, int] = {}
+    patched_call_thread_ids: list[int] = []
+    patched_reason = f"patched concurrent legacy recommendation via {legacy_module_name}"
+    legacy_results: dict[str, object] = {}
+
+    def patched_normalize(rec):
+        del rec
+        current_thread_id = threading.get_ident()
+        patched_call_thread_ids.append(current_thread_id)
+        if current_thread_id == legacy_thread_id.get("value"):
+            legacy_thread_ready.set()
+            assert release_legacy_thread.wait(timeout=5)
+        return {"severity": "low", "reason": patched_reason}
+
+    def run_legacy_call(slot: str):
+        if slot == "thread":
+            legacy_thread_id["value"] = threading.get_ident()
+        legacy_results[slot] = legacy_mod.build_org_report_json_data(rich_org_report_result)
+
+    with patch(f"{legacy_module_name}._normalize_recommendation_for_json", side_effect=patched_normalize):
+        worker = threading.Thread(target=run_legacy_call, args=("thread",))
+        worker.start()
+
+        assert legacy_thread_ready.wait(timeout=5)
+        run_legacy_call("main")
+        release_legacy_thread.set()
+        worker.join(timeout=5)
+        assert not worker.is_alive()
+
+    assert len(patched_call_thread_ids) == len(rich_org_report_result.recommendations) * 2
+    assert _recommendation_reasons(legacy_results["thread"]) == [
+        patched_reason,
+        patched_reason,
+    ]
+    assert _recommendation_reasons(legacy_results["main"]) == [
+        patched_reason,
+        patched_reason,
+    ]
+
+
+@pytest.mark.parametrize(
+    "legacy_module_name",
+    ["cja_auto_sdr.org.writers", "cja_auto_sdr.generator"],
+    ids=["org.writers", "generator"],
+)
+def test_legacy_json_writer_builder_patch_remains_visible_to_concurrent_legacy_calls(
+    legacy_module_name,
+    tmp_path,
+    rich_org_report_result,
+):
+    """Projected legacy builder patches must remain visible to concurrent writer calls."""
+    legacy_mod = importlib.import_module(legacy_module_name)
+    legacy_thread_ready = threading.Event()
+    release_legacy_thread = threading.Event()
+    legacy_thread_id: dict[str, int] = {}
+    patched_calls: list[int] = []
+    output_paths: dict[str, Path] = {}
+    logger = logging.getLogger(f"test.{legacy_module_name}.write_org_report_json.concurrent_builder_patch")
+
+    def patched_builder(result, trending=None):
+        current_thread_id = threading.get_ident()
+        patched_calls.append(current_thread_id)
+        if current_thread_id == legacy_thread_id.get("value"):
+            legacy_thread_ready.set()
+            assert release_legacy_thread.wait(timeout=5)
+
+        payload = dict(legacy_mod.build_org_report_json_data(result, trending=trending))
+        payload["report_type"] = f"patched:{payload['report_type']}"
+        return payload
+
+    def run_writer(slot: str):
+        if slot == "thread":
+            legacy_thread_id["value"] = threading.get_ident()
+        output_paths[slot] = Path(
+            legacy_mod.write_org_report_json(
+                rich_org_report_result,
+                tmp_path / f"{slot}_org_report.json",
+                str(tmp_path),
+                logger,
+            ),
+        )
+
+    with patch.object(legacy_mod, "build_org_report_json_data", side_effect=patched_builder):
+        worker = threading.Thread(target=run_writer, args=("thread",))
+        worker.start()
+
+        assert legacy_thread_ready.wait(timeout=5)
+        run_writer("main")
+        release_legacy_thread.set()
+        worker.join(timeout=5)
+        assert not worker.is_alive()
+
+    assert len(patched_calls) == 2
+    assert json.loads(output_paths["thread"].read_text(encoding="utf-8"))["report_type"] == "patched:org_analysis"
+    assert json.loads(output_paths["main"].read_text(encoding="utf-8"))["report_type"] == "patched:org_analysis"

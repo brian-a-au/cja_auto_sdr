@@ -499,6 +499,27 @@ def test_org_writers_common_importable():
     assert callable(_validate_org_report_output_request)
 
 
+@pytest.mark.parametrize(
+    "name",
+    [
+        "_flatten_recommendation_for_tabular",
+        "_format_recommendation_context_entries",
+        "_normalize_org_report_output_format",
+        "_normalize_recommendation_for_json",
+        "_normalize_recommendation_severity",
+        "_render_distribution_bar",
+        "_validate_org_report_output_request",
+    ],
+)
+def test_org_writers_common_helpers_remain_direct_module_exports(name):
+    """Canonical common helpers must remain direct, non-wrapped module exports."""
+    mod = importlib.import_module("cja_auto_sdr.org.writers.common")
+    value = getattr(mod, name)
+
+    assert value.__module__ == mod.__name__
+    assert not hasattr(value, "__wrapped__")
+
+
 # ---------------------------------------------------------------------------
 # org.writers.trending sub-module
 # ---------------------------------------------------------------------------
@@ -543,10 +564,33 @@ def test_org_writers_trending_helpers_importable(name):
 
 
 @pytest.mark.parametrize("name", _TRENDING_HELPERS, ids=_TRENDING_HELPERS)
+def test_org_writers_trending_helpers_remain_direct_module_exports(name):
+    """Canonical trending helpers must remain direct, non-wrapped module exports."""
+    mod = importlib.import_module("cja_auto_sdr.org.writers.trending")
+    value = getattr(mod, name)
+
+    assert value.__module__ == mod.__name__
+    assert not hasattr(value, "__wrapped__")
+
+
+@pytest.mark.parametrize("name", _TRENDING_HELPERS, ids=_TRENDING_HELPERS)
 def test_org_writers_trending_helpers_reexported_at_package_root(name):
     """Trending helpers remain importable from the org.writers package root."""
     mod = importlib.import_module("cja_auto_sdr.org.writers")
     assert callable(getattr(mod, name))
+
+
+@pytest.mark.parametrize("name", _TRENDING_HELPERS, ids=_TRENDING_HELPERS)
+def test_org_writers_trending_helpers_remain_identity_aliases_at_package_root(name):
+    """Package-root trending helpers must stay as identity aliases of the canonical module."""
+    mod = importlib.import_module("cja_auto_sdr.org.writers")
+    canonical_mod = importlib.import_module("cja_auto_sdr.org.writers.trending")
+    value = getattr(mod, name)
+    canonical = getattr(canonical_mod, name)
+
+    assert value is canonical
+    assert value.__module__ == canonical_mod.__name__
+    assert not hasattr(value, "__wrapped__")
 
 
 # ---------------------------------------------------------------------------
@@ -584,8 +628,68 @@ def test_org_writers_json_importable():
 
 
 # ---------------------------------------------------------------------------
+# org.writers package-root common-helper continuity
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "_render_distribution_bar",
+        "_format_recommendation_context_entries",
+        "_normalize_org_report_output_format",
+        "_normalize_recommendation_for_json",
+        "_normalize_recommendation_severity",
+        "_flatten_recommendation_for_tabular",
+        "_validate_org_report_output_request",
+    ],
+)
+def test_org_writers_common_helpers_reexported_at_package_root(name):
+    """Common org-writer helpers remain importable from the org.writers package root."""
+    mod = importlib.import_module("cja_auto_sdr.org.writers")
+    assert callable(getattr(mod, name))
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "_render_distribution_bar",
+        "_format_recommendation_context_entries",
+        "_normalize_org_report_output_format",
+        "_normalize_recommendation_for_json",
+        "_normalize_recommendation_severity",
+        "_flatten_recommendation_for_tabular",
+        "_validate_org_report_output_request",
+    ],
+)
+def test_org_writers_common_helpers_remain_identity_aliases_at_package_root(name):
+    """Package-root common helpers must stay as identity aliases of common.py."""
+    mod = importlib.import_module("cja_auto_sdr.org.writers")
+    canonical_mod = importlib.import_module("cja_auto_sdr.org.writers.common")
+    value = getattr(mod, name)
+    canonical = getattr(canonical_mod, name)
+
+    assert value is canonical
+    assert value.__module__ == canonical_mod.__name__
+    assert not hasattr(value, "__wrapped__")
+
+
+# ---------------------------------------------------------------------------
 # org.writers package-root continuity (console + JSON)
 # ---------------------------------------------------------------------------
+
+
+_WRAPPED_LEGACY_ORG_WRITER_EXPORTS = (
+    "write_org_report_console",
+    "write_org_report_stats_only",
+    "write_org_report_comparison_console",
+    "build_org_report_json_data",
+    "write_org_report_json",
+    "write_org_report_excel",
+    "write_org_report_markdown",
+    "write_org_report_html",
+    "write_org_report_csv",
+)
 
 
 @pytest.mark.parametrize(
@@ -604,6 +708,16 @@ def test_org_writers_package_root_continuity(name):
     assert callable(getattr(mod, name))
 
 
+@pytest.mark.parametrize("name", _WRAPPED_LEGACY_ORG_WRITER_EXPORTS, ids=_WRAPPED_LEGACY_ORG_WRITER_EXPORTS)
+def test_org_writers_package_root_wrapped_exports_remain_runtime_shims(name):
+    """Package-root writer entrypoints must remain wrapped compat shims."""
+    mod = importlib.import_module("cja_auto_sdr.org.writers")
+    value = getattr(mod, name)
+
+    assert value.__module__ == mod.__name__
+    assert hasattr(value, "__wrapped__")
+
+
 # ---------------------------------------------------------------------------
 # generator-level org-writer continuity
 # ---------------------------------------------------------------------------
@@ -614,7 +728,9 @@ def test_org_writers_package_root_continuity(name):
     [
         "_render_distribution_bar",
         "_format_recommendation_context_entries",
+        "_normalize_org_report_output_format",
         "_normalize_recommendation_for_json",
+        "_normalize_recommendation_severity",
         "_flatten_recommendation_for_tabular",
         "_validate_org_report_output_request",
     ],
@@ -623,6 +739,40 @@ def test_generator_org_writer_helpers_are_callable(name):
     """Generator-level org-writer helper re-exports must remain callable."""
     mod = importlib.import_module("cja_auto_sdr.generator")
     assert callable(getattr(mod, name))
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "_render_distribution_bar",
+        "_format_recommendation_context_entries",
+        "_normalize_org_report_output_format",
+        "_normalize_recommendation_for_json",
+        "_normalize_recommendation_severity",
+        "_flatten_recommendation_for_tabular",
+        "_validate_org_report_output_request",
+    ],
+)
+def test_generator_org_writer_helpers_remain_identity_aliases(name):
+    """Generator common-helper aliases must stay as identity aliases of common.py."""
+    mod = importlib.import_module("cja_auto_sdr.generator")
+    canonical_mod = importlib.import_module("cja_auto_sdr.org.writers.common")
+    value = getattr(mod, name)
+    canonical = getattr(canonical_mod, name)
+
+    assert value is canonical
+    assert value.__module__ == canonical_mod.__name__
+    assert not hasattr(value, "__wrapped__")
+
+
+@pytest.mark.parametrize("name", _WRAPPED_LEGACY_ORG_WRITER_EXPORTS, ids=_WRAPPED_LEGACY_ORG_WRITER_EXPORTS)
+def test_generator_org_writer_wrapped_exports_remain_runtime_shims(name):
+    """Generator writer entrypoints must remain wrapped compat shims."""
+    mod = importlib.import_module("cja_auto_sdr.generator")
+    value = getattr(mod, name)
+
+    assert value.__module__ == mod.__name__
+    assert hasattr(value, "__wrapped__")
 
 
 # ---------------------------------------------------------------------------
@@ -786,10 +936,24 @@ def test_output_diff_all_continuity():
 _ORG_WRITER_HELPER_SIGNATURES = {
     "_render_distribution_bar": ["count", "total", "width"],
     "_format_recommendation_context_entries": ["rec"],
+    "_normalize_org_report_output_format": ["output_format"],
     "_normalize_recommendation_for_json": ["raw_rec"],
+    "_normalize_recommendation_severity": ["severity"],
     "_flatten_recommendation_for_tabular": ["rec"],
     "_validate_org_report_output_request": ["output_format", "output_to_stdout", "status_print"],
 }
+
+
+@pytest.mark.parametrize(
+    ("func_name", "expected_params"),
+    list(_ORG_WRITER_HELPER_SIGNATURES.items()),
+    ids=list(_ORG_WRITER_HELPER_SIGNATURES.keys()),
+)
+def test_org_writers_package_root_common_helper_signatures(func_name, expected_params):
+    """Package-root common-helper aliases must preserve matching signatures."""
+    mod = importlib.import_module("cja_auto_sdr.org.writers")
+    func = getattr(mod, func_name)
+    assert list(signature(func).parameters) == expected_params
 
 
 @pytest.mark.parametrize(
@@ -816,11 +980,6 @@ def test_generator_org_writer_helper_signatures(func_name, expected_params):
     assert list(signature(func).parameters) == expected_params
 
 
-# ---------------------------------------------------------------------------
-# org.writers format writer signature contracts
-# ---------------------------------------------------------------------------
-
-
 _ORG_FORMAT_WRITER_SIGNATURES = {
     "write_org_report_console": ["result", "config", "quiet", "trending"],
     "write_org_report_stats_only": ["result", "quiet", "trending"],
@@ -832,6 +991,49 @@ _ORG_FORMAT_WRITER_SIGNATURES = {
     "write_org_report_html": ["result", "output_path", "output_dir", "logger", "trending"],
     "write_org_report_csv": ["result", "output_path", "output_dir", "logger", "trending"],
 }
+
+_ORG_CANONICAL_WRITER_SIGNATURE_MODULES = {
+    "cja_auto_sdr.org.writers.console": (
+        "write_org_report_console",
+        "write_org_report_stats_only",
+        "write_org_report_comparison_console",
+    ),
+    "cja_auto_sdr.org.writers.json": (
+        "build_org_report_json_data",
+        "write_org_report_json",
+    ),
+    "cja_auto_sdr.org.writers.excel": ("write_org_report_excel",),
+    "cja_auto_sdr.org.writers.markdown": ("write_org_report_markdown",),
+    "cja_auto_sdr.org.writers.html": ("write_org_report_html",),
+    "cja_auto_sdr.org.writers.csv": ("write_org_report_csv",),
+}
+
+
+@pytest.mark.parametrize(
+    ("module_name", "func_names"),
+    list(_ORG_CANONICAL_WRITER_SIGNATURE_MODULES.items()),
+    ids=list(_ORG_CANONICAL_WRITER_SIGNATURE_MODULES.keys()),
+)
+def test_canonical_org_writer_exports_remain_direct_module_exports(module_name, func_names):
+    """Canonical org-writer exports must remain direct, non-wrapped module functions."""
+    mod = importlib.import_module(module_name)
+    for func_name in func_names:
+        func = getattr(mod, func_name)
+        assert func.__module__ == module_name
+        assert not hasattr(func, "__wrapped__")
+
+
+@pytest.mark.parametrize(
+    ("module_name", "func_names"),
+    list(_ORG_CANONICAL_WRITER_SIGNATURE_MODULES.items()),
+    ids=list(_ORG_CANONICAL_WRITER_SIGNATURE_MODULES.keys()),
+)
+def test_canonical_org_writer_module_signatures(module_name, func_names):
+    """Canonical org-writer submodules must preserve their declared signatures."""
+    mod = importlib.import_module(module_name)
+    for func_name in func_names:
+        func = getattr(mod, func_name)
+        assert list(signature(func).parameters) == _ORG_FORMAT_WRITER_SIGNATURES[func_name]
 
 
 @pytest.mark.parametrize(
