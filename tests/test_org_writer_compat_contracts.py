@@ -13,6 +13,56 @@ import pytest
 
 from cja_auto_sdr.org.writers.compat import override_scope
 
+_IMPORT_ONLY_COMMON_HELPER_ALIASES = (
+    "_render_distribution_bar",
+    "_format_recommendation_context_entries",
+    "_normalize_recommendation_severity",
+    "_normalize_recommendation_for_json",
+    "_flatten_recommendation_for_tabular",
+    "_normalize_org_report_output_format",
+    "_validate_org_report_output_request",
+)
+_WRAPPED_LEGACY_EXPORTS = (
+    "write_org_report_console",
+    "write_org_report_stats_only",
+    "write_org_report_comparison_console",
+    "build_org_report_json_data",
+    "write_org_report_json",
+    "write_org_report_excel",
+    "write_org_report_markdown",
+    "write_org_report_html",
+    "write_org_report_csv",
+)
+_PACKAGE_ROOT_IMPORT_ONLY_TRENDING_ALIASES = (
+    "_format_trending_timestamp_short",
+    "_build_trending_metric_rows",
+    "_trending_snapshot_metric_rows",
+    "_trending_delta_metric_rows",
+    "_trending_snapshot_column_specs",
+    "_format_trending_period_label",
+    "_trending_delta_column_specs",
+    "_format_signed_trending_value",
+    "_stringify_trending_value",
+    "_sorted_drift_score_items",
+    "_resolve_trending_dv_name",
+    "_format_trending_dv_label",
+    "_ranked_drift_entries",
+    "_top_drift_scores",
+    "_trending_date_range",
+    "_render_console_trending_table",
+    "_render_markdown_trending_table",
+    "_escape_markdown_table_cell",
+    "_render_html_trending_table",
+    "_trending_matrix_rows",
+    "_trending_snapshot_csv_rows",
+    "_trending_delta_csv_rows",
+    "_render_trending_console",
+    "_render_trending_markdown",
+    "_render_trending_html",
+    "_print_trending_console_section",
+    "_trending_snapshots_to_dicts",
+)
+
 
 def _recommendation_reasons(data) -> list[str]:
     recommendations = data["recommendations"] if isinstance(data, dict) else data.recommendations
@@ -56,6 +106,60 @@ def _make_trending():
         drift_scores={"dv_001": 0.8},
         window_size=2,
     )
+
+
+@pytest.mark.parametrize(
+    "module_name",
+    ["cja_auto_sdr.org.writers", "cja_auto_sdr.generator"],
+    ids=["org.writers", "generator"],
+)
+@pytest.mark.parametrize("attr_name", _WRAPPED_LEGACY_EXPORTS, ids=_WRAPPED_LEGACY_EXPORTS)
+def test_wrapped_legacy_exports_are_the_only_runtime_compat_shims(module_name, attr_name):
+    """Legacy writer entrypoints remain wrapped runtime shims on the alias surfaces."""
+    mod = importlib.import_module(module_name)
+    value = getattr(mod, attr_name)
+
+    assert value.__module__ == module_name
+    assert hasattr(value, "__wrapped__")
+
+
+@pytest.mark.parametrize(
+    "module_name",
+    ["cja_auto_sdr.org.writers", "cja_auto_sdr.generator"],
+    ids=["org.writers", "generator"],
+)
+@pytest.mark.parametrize(
+    "attr_name",
+    _IMPORT_ONLY_COMMON_HELPER_ALIASES,
+    ids=_IMPORT_ONLY_COMMON_HELPER_ALIASES,
+)
+def test_common_helper_aliases_remain_import_only(module_name, attr_name):
+    """Common helper aliases stay as identity re-exports instead of runtime compat wrappers."""
+    mod = importlib.import_module(module_name)
+    common_mod = importlib.import_module("cja_auto_sdr.org.writers.common")
+    value = getattr(mod, attr_name)
+    canonical = getattr(common_mod, attr_name)
+
+    assert value is canonical
+    assert value.__module__ == common_mod.__name__
+    assert not hasattr(value, "__wrapped__")
+
+
+@pytest.mark.parametrize(
+    "attr_name",
+    _PACKAGE_ROOT_IMPORT_ONLY_TRENDING_ALIASES,
+    ids=_PACKAGE_ROOT_IMPORT_ONLY_TRENDING_ALIASES,
+)
+def test_package_root_trending_helper_aliases_remain_import_only(attr_name):
+    """Package-root trending helpers stay as identity re-exports of the canonical module."""
+    mod = importlib.import_module("cja_auto_sdr.org.writers")
+    trending_mod = importlib.import_module("cja_auto_sdr.org.writers.trending")
+    value = getattr(mod, attr_name)
+    canonical = getattr(trending_mod, attr_name)
+
+    assert value is canonical
+    assert value.__module__ == trending_mod.__name__
+    assert not hasattr(value, "__wrapped__")
 
 
 def test_canonical_json_builder_helper_proxy_supports_self_delegating_override_scope(

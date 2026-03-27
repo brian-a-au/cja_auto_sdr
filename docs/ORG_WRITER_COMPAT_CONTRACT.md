@@ -69,6 +69,26 @@ The following legacy exports are intentionally wrapped at runtime:
 
 Generator helper aliases such as `_normalize_recommendation_for_json` and `_render_distribution_bar` remain part of the legacy import surface, but in this reset they are intentionally not promoted to individually wrapped runtime compat exports.
 
+## Legacy Import-Only Aliases
+
+The following aliases remain import-compatible but are intentionally not wrapped at runtime:
+
+Package-root and generator common-helper aliases:
+
+- `_render_distribution_bar`
+- `_format_recommendation_context_entries`
+- `_normalize_recommendation_severity`
+- `_normalize_recommendation_for_json`
+- `_flatten_recommendation_for_tabular`
+- `_normalize_org_report_output_format`
+- `_validate_org_report_output_request`
+
+Package-root trending-helper aliases:
+
+- all helper names re-exported from `cja_auto_sdr.org.writers.trending` at `cja_auto_sdr.org.writers`
+
+These names are expected to remain identity aliases to the canonical implementation modules. Their purpose is import continuity, not a second layer of runtime compat dispatch.
+
 ## Non-Goals
 
 The following are not compatibility goals for the reset work:
