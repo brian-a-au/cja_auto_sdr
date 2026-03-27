@@ -5,6 +5,7 @@
 This note reviews the `v3.4.7` refactor and the follow-up `v3.4.8` patch train for org writer compatibility routing. It is intentionally design-first. The goal is to stop the regression pattern rather than land another narrow compat fix.
 
 The replacement compatibility boundary is defined in `docs/ORG_WRITER_COMPAT_CONTRACT.md`.
+Future moved-export work should use `docs/COMPAT_REFACTOR_CHECKLIST.md`.
 
 Reviewed history:
 
