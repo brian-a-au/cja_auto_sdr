@@ -57,7 +57,7 @@ class TestAgentPlaybooks:
                 idx = next(i for i, line in enumerate(lines) if line.strip() == section)
             except StopIteration:
                 pytest.fail(f"Missing '{section}' in {playbook_path.name}")
-            remaining = [line for line in lines[idx + 1:] if line.strip()]
+            remaining = [line for line in lines[idx + 1 :] if line.strip()]
             assert remaining, f"Empty section '{section}' in {playbook_path.name}"
             if remaining[0].startswith("## "):
                 pytest.fail(f"Empty section '{section}' in {playbook_path.name}")
@@ -75,4 +75,4 @@ class TestAgentPlaybooks:
                 # If it references a data view, it should use ID format
                 # Allow <dv_id>, <DATA_VIEW_ID>, dv_..., or $DV_ID variable patterns
                 if "my_data_view_name" in line.lower():
-                    pytest.fail(f"Line {i+1} in {playbook_path.name}: unattended example uses name instead of ID")
+                    pytest.fail(f"Line {i + 1} in {playbook_path.name}: unattended example uses name instead of ID")

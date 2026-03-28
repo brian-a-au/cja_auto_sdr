@@ -2169,7 +2169,13 @@ class TestOrgReportAdvisoryRollupRunSummaryContract:
         from cja_auto_sdr.generator import _merge_org_report_run_summary_details
         from cja_auto_sdr.org.models import OrgReportConfig
 
-        rollup = {"advisories_version": "1.0", "severity": "info", "summary": {}, "types": [], "recommended_actions": []}
+        rollup = {
+            "advisories_version": "1.0",
+            "severity": "info",
+            "summary": {},
+            "types": [],
+            "recommended_actions": [],
+        }
         run_state: dict = {"details": {}}
         _merge_org_report_run_summary_details(
             run_state,
@@ -2187,7 +2193,13 @@ class TestOrgReportAdvisoryRollupRunSummaryContract:
         from cja_auto_sdr.generator import _merge_org_report_run_summary_details
         from cja_auto_sdr.org.models import OrgReportConfig
 
-        rollup = {"advisories_version": "1.0", "severity": "info", "summary": {}, "types": [], "recommended_actions": []}
+        rollup = {
+            "advisories_version": "1.0",
+            "severity": "info",
+            "summary": {},
+            "types": [],
+            "recommended_actions": [],
+        }
         run_state: dict = {"details": {}}
         _merge_org_report_run_summary_details(
             run_state,
@@ -2214,7 +2226,10 @@ class TestDiffAdvisoryRollupRunSummaryContract:
         diff_result = DiffResult(
             summary=DiffSummary(),
             metadata_diff=MetadataDiff(
-                source_name="A", target_name="B", source_id="dv-a", target_id="dv-b",
+                source_name="A",
+                target_name="B",
+                source_id="dv-a",
+                target_id="dv-b",
             ),
             metric_diffs=[],
             dimension_diffs=[],
@@ -2265,7 +2280,10 @@ class TestDiffAdvisoryRollupRunSummaryContract:
         diff_result = DiffResult(
             summary=DiffSummary(metrics_removed=1),
             metadata_diff=MetadataDiff(
-                source_name="A", target_name="B", source_id="dv-a", target_id="dv-b",
+                source_name="A",
+                target_name="B",
+                source_id="dv-a",
+                target_id="dv-b",
             ),
             metric_diffs=[removed],
             dimension_diffs=[],

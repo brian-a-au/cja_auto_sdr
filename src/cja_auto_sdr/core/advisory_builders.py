@@ -191,8 +191,7 @@ def build_diff_advisories(
     removed = [d for d in all_diffs + inv_diffs if d.change_type == ChangeType.REMOVED]
     if removed:
         component_details = [
-            {"component_id": d.id, "component_name": d.name, "change_type": d.change_type.value}
-            for d in removed
+            {"component_id": d.id, "component_name": d.name, "change_type": d.change_type.value} for d in removed
         ]
         findings.append(
             AdvisoryFinding(
@@ -245,10 +244,7 @@ def build_diff_advisories(
     total_added = summary.total_added
     if total_added > 0 and total_removed == 0 and total_modified == 0:
         added = [d for d in all_diffs + inv_diffs if d.change_type == ChangeType.ADDED]
-        component_details = [
-            {"component_id": d.id, "component_name": d.name}
-            for d in added
-        ]
+        component_details = [{"component_id": d.id, "component_name": d.name} for d in added]
         findings.append(
             AdvisoryFinding(
                 type="additions_only",

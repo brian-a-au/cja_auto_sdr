@@ -71,8 +71,7 @@ class TestToolManifests:
         for key in ["compare_snapshots_source", "compare_snapshots_target", "snapshot"]:
             if key in props:
                 desc = props[key].get("description", "")
-                assert "path" in desc.lower() or "file" in desc.lower(), \
-                    f"{key} should be described as a file path"
+                assert "path" in desc.lower() or "file" in desc.lower(), f"{key} should be described as a file path"
 
     def test_no_show_config_in_manifests(self):
         for name in REQUIRED_MANIFESTS:
@@ -83,8 +82,12 @@ class TestToolManifests:
     def test_readme_covers_required_topics(self):
         content = (TOOLS_DIR / "README.md").read_text()
         required_topics = [
-            "agent_mode", "stdout", "run-summary-json",
-            "orchestrator", "applicability", "preflight",
+            "agent_mode",
+            "stdout",
+            "run-summary-json",
+            "orchestrator",
+            "applicability",
+            "preflight",
         ]
         for topic in required_topics:
             assert topic.lower() in content.lower(), f"README missing topic: {topic}"

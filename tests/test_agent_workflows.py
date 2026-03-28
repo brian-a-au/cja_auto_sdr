@@ -136,8 +136,8 @@ def test_common_sh_sources_without_error(tmp_path: Path) -> None:
         (2, 0, False),
         (3, 0, False),
         (130, 130, True),
-        (4, 1, True),   # synthetic — must be rejected
-        (5, 1, True),   # synthetic — must be rejected
+        (4, 1, True),  # synthetic — must be rejected
+        (5, 1, True),  # synthetic — must be rejected
         (99, 1, True),  # unknown — must be rejected
     ],
 )
@@ -220,13 +220,13 @@ def _audit_env(tmp_path: Path, **extra: str) -> tuple[dict[str, str], Path]:
         "--list-dataviews --agent-mode": (0, discovery_json),
         "--org-report --agent-mode": (0, '{"status":"ok"}'),
     }
-    env, log_path =_base_env(tmp_path, responses)
+    env, log_path = _base_env(tmp_path, responses)
     env.update(extra)
     return env, log_path
 
 
 def test_audit_runs_to_completion(tmp_path: Path) -> None:
-    env, _log_path =_audit_env(tmp_path)
+    env, _log_path = _audit_env(tmp_path)
 
     result = subprocess.run(
         ["bash", str(WORKFLOWS_DIR / "audit_and_report.sh")],
@@ -239,7 +239,7 @@ def test_audit_runs_to_completion(tmp_path: Path) -> None:
 
 
 def test_audit_calls_list_dataviews_with_agent_mode(tmp_path: Path) -> None:
-    env, log_path =_audit_env(tmp_path)
+    env, log_path = _audit_env(tmp_path)
 
     subprocess.run(
         ["bash", str(WORKFLOWS_DIR / "audit_and_report.sh")],
@@ -253,7 +253,7 @@ def test_audit_calls_list_dataviews_with_agent_mode(tmp_path: Path) -> None:
 
 
 def test_audit_calls_org_report_with_agent_mode(tmp_path: Path) -> None:
-    env, log_path =_audit_env(tmp_path)
+    env, log_path = _audit_env(tmp_path)
 
     subprocess.run(
         ["bash", str(WORKFLOWS_DIR / "audit_and_report.sh")],
@@ -275,7 +275,7 @@ def test_audit_first_run_creates_baseline_without_compare_with_prev(tmp_path: Pa
         "--list-snapshots": (0, '{"snapshots":[]}'),
         "--org-report --agent-mode": (0, '{"status":"ok"}'),
     }
-    env, log_path =_base_env(tmp_path, responses)
+    env, log_path = _base_env(tmp_path, responses)
 
     result = subprocess.run(
         ["bash", str(WORKFLOWS_DIR / "audit_and_report.sh")],
@@ -302,7 +302,7 @@ def test_audit_subsequent_run_uses_compare_with_prev(tmp_path: Path) -> None:
         "--list-snapshots": (0, snapshots_json),
         "--org-report --agent-mode": (0, '{"status":"ok"}'),
     }
-    env, log_path =_base_env(tmp_path, responses)
+    env, log_path = _base_env(tmp_path, responses)
 
     result = subprocess.run(
         ["bash", str(WORKFLOWS_DIR / "audit_and_report.sh")],
@@ -319,7 +319,7 @@ def test_audit_subsequent_run_uses_compare_with_prev(tmp_path: Path) -> None:
 
 def test_audit_never_combines_run_summary_json_with_output_dash(tmp_path: Path) -> None:
     """Must never emit --run-summary-json - combined with --output -."""
-    env, log_path =_audit_env(tmp_path)
+    env, log_path = _audit_env(tmp_path)
 
     subprocess.run(
         ["bash", str(WORKFLOWS_DIR / "audit_and_report.sh")],
@@ -341,7 +341,7 @@ def test_audit_signal_exit_stops_workflow(tmp_path: Path) -> None:
     responses: dict[str, tuple[int, str]] = {
         "--list-dataviews --agent-mode": (130, discovery_json),
     }
-    env, log_path =_base_env(tmp_path, responses)
+    env, log_path = _base_env(tmp_path, responses)
 
     result = subprocess.run(
         ["bash", str(WORKFLOWS_DIR / "audit_and_report.sh")],
@@ -364,7 +364,7 @@ def test_audit_uses_ids_not_names(tmp_path: Path) -> None:
         "--list-dataviews --agent-mode": (0, discovery_json),
         "--org-report --agent-mode": (0, '{"status":"ok"}'),
     }
-    env, log_path =_base_env(tmp_path, responses)
+    env, log_path = _base_env(tmp_path, responses)
 
     subprocess.run(
         ["bash", str(WORKFLOWS_DIR / "audit_and_report.sh")],
@@ -392,14 +392,14 @@ def _onboard_env(tmp_path: Path, **extra: str) -> tuple[dict[str, str], Path]:
         "--describe-dataview": (0, describe_json),
         "--fail-on-quality": (0, sdr_json),
     }
-    env, log_path =_base_env(tmp_path, responses)
+    env, log_path = _base_env(tmp_path, responses)
     env["DATA_VIEW_ID"] = "dv_new"
     env.update(extra)
     return env, log_path
 
 
 def test_onboard_runs_to_completion(tmp_path: Path) -> None:
-    env, _log_path =_onboard_env(tmp_path)
+    env, _log_path = _onboard_env(tmp_path)
 
     result = subprocess.run(
         ["bash", str(WORKFLOWS_DIR / "onboard_dataview.sh")],
@@ -412,7 +412,7 @@ def test_onboard_runs_to_completion(tmp_path: Path) -> None:
 
 
 def test_onboard_calls_validate_config_first(tmp_path: Path) -> None:
-    env, log_path =_onboard_env(tmp_path)
+    env, log_path = _onboard_env(tmp_path)
 
     subprocess.run(
         ["bash", str(WORKFLOWS_DIR / "onboard_dataview.sh")],
@@ -427,7 +427,7 @@ def test_onboard_calls_validate_config_first(tmp_path: Path) -> None:
 
 
 def test_onboard_calls_describe_dataview(tmp_path: Path) -> None:
-    env, log_path =_onboard_env(tmp_path)
+    env, log_path = _onboard_env(tmp_path)
 
     subprocess.run(
         ["bash", str(WORKFLOWS_DIR / "onboard_dataview.sh")],
@@ -441,7 +441,7 @@ def test_onboard_calls_describe_dataview(tmp_path: Path) -> None:
 
 
 def test_onboard_calls_sdr_with_agent_mode_and_quality_gate(tmp_path: Path) -> None:
-    env, log_path =_onboard_env(tmp_path)
+    env, log_path = _onboard_env(tmp_path)
 
     subprocess.run(
         ["bash", str(WORKFLOWS_DIR / "onboard_dataview.sh")],
@@ -451,14 +451,13 @@ def test_onboard_calls_sdr_with_agent_mode_and_quality_gate(tmp_path: Path) -> N
         text=True,
     )
     calls = _read_calls(log_path)
-    assert any(
-        "dv_new" in c and "--agent-mode" in c and "--fail-on-quality" in c
-        for c in calls
-    ), "SDR generation must use --agent-mode and --fail-on-quality"
+    assert any("dv_new" in c and "--agent-mode" in c and "--fail-on-quality" in c for c in calls), (
+        "SDR generation must use --agent-mode and --fail-on-quality"
+    )
 
 
 def test_onboard_saves_baseline_snapshot(tmp_path: Path) -> None:
-    env, log_path =_onboard_env(tmp_path)
+    env, log_path = _onboard_env(tmp_path)
 
     subprocess.run(
         ["bash", str(WORKFLOWS_DIR / "onboard_dataview.sh")],
@@ -479,7 +478,7 @@ def test_onboard_exits_2_on_quality_gate_breach(tmp_path: Path) -> None:
         "--describe-dataview": (0, describe_json),
         "--fail-on-quality": (2, sdr_json),
     }
-    env, log_path =_base_env(tmp_path, responses)
+    env, log_path = _base_env(tmp_path, responses)
     env["DATA_VIEW_ID"] = "dv_new"
 
     result = subprocess.run(
@@ -496,7 +495,7 @@ def test_onboard_exits_2_on_quality_gate_breach(tmp_path: Path) -> None:
 
 
 def test_onboard_exits_1_when_data_view_id_not_set(tmp_path: Path) -> None:
-    env, _log_path =_base_env(tmp_path)
+    env, _log_path = _base_env(tmp_path)
     env.pop("DATA_VIEW_ID", None)
 
     result = subprocess.run(
@@ -511,7 +510,7 @@ def test_onboard_exits_1_when_data_view_id_not_set(tmp_path: Path) -> None:
 
 
 def test_onboard_never_combines_run_summary_json_with_output_dash(tmp_path: Path) -> None:
-    env, log_path =_onboard_env(tmp_path)
+    env, log_path = _onboard_env(tmp_path)
 
     subprocess.run(
         ["bash", str(WORKFLOWS_DIR / "onboard_dataview.sh")],
@@ -530,7 +529,7 @@ def test_onboard_signal_exit_stops_workflow(tmp_path: Path) -> None:
     responses: dict[str, tuple[int, str]] = {
         "--validate-config": (130, ""),
     }
-    env, log_path =_base_env(tmp_path, responses)
+    env, log_path = _base_env(tmp_path, responses)
     env["DATA_VIEW_ID"] = "dv_new"
 
     result = subprocess.run(
@@ -556,13 +555,13 @@ def _governance_env(tmp_path: Path, org_exit: int = 0, **extra: str) -> tuple[di
     responses: dict[str, tuple[int, str]] = {
         "--org-report": (org_exit, org_json),
     }
-    env, log_path =_base_env(tmp_path, responses)
+    env, log_path = _base_env(tmp_path, responses)
     env.update(extra)
     return env, log_path
 
 
 def test_governance_runs_to_completion(tmp_path: Path) -> None:
-    env, _log_path =_governance_env(tmp_path)
+    env, _log_path = _governance_env(tmp_path)
 
     result = subprocess.run(
         ["bash", str(WORKFLOWS_DIR / "quarterly_governance.sh")],
@@ -575,7 +574,7 @@ def test_governance_runs_to_completion(tmp_path: Path) -> None:
 
 
 def test_governance_calls_org_report_with_trending_window(tmp_path: Path) -> None:
-    env, log_path =_governance_env(tmp_path, TRENDING_WINDOW="6")
+    env, log_path = _governance_env(tmp_path, TRENDING_WINDOW="6")
 
     subprocess.run(
         ["bash", str(WORKFLOWS_DIR / "quarterly_governance.sh")],
@@ -589,7 +588,7 @@ def test_governance_calls_org_report_with_trending_window(tmp_path: Path) -> Non
 
 
 def test_governance_uses_agent_mode_for_machine_readable_pass(tmp_path: Path) -> None:
-    env, log_path =_governance_env(tmp_path)
+    env, log_path = _governance_env(tmp_path)
 
     subprocess.run(
         ["bash", str(WORKFLOWS_DIR / "quarterly_governance.sh")],
@@ -603,7 +602,7 @@ def test_governance_uses_agent_mode_for_machine_readable_pass(tmp_path: Path) ->
 
 
 def test_governance_uses_fail_on_threshold(tmp_path: Path) -> None:
-    env, log_path =_governance_env(tmp_path)
+    env, log_path = _governance_env(tmp_path)
 
     subprocess.run(
         ["bash", str(WORKFLOWS_DIR / "quarterly_governance.sh")],
@@ -618,7 +617,7 @@ def test_governance_uses_fail_on_threshold(tmp_path: Path) -> None:
 
 def test_governance_generates_human_artifact_separately(tmp_path: Path) -> None:
     """Markdown report must be a separate uv call from the machine-readable pass."""
-    env, log_path =_governance_env(tmp_path)
+    env, log_path = _governance_env(tmp_path)
 
     subprocess.run(
         ["bash", str(WORKFLOWS_DIR / "quarterly_governance.sh")],
@@ -636,7 +635,7 @@ def test_governance_generates_human_artifact_separately(tmp_path: Path) -> None:
 
 
 def test_governance_exits_2_when_threshold_exceeded(tmp_path: Path) -> None:
-    env, _log_path =_governance_env(tmp_path, org_exit=2)
+    env, _log_path = _governance_env(tmp_path, org_exit=2)
 
     result = subprocess.run(
         ["bash", str(WORKFLOWS_DIR / "quarterly_governance.sh")],
@@ -651,7 +650,7 @@ def test_governance_exits_2_when_threshold_exceeded(tmp_path: Path) -> None:
 def test_governance_never_invents_exit_code_4_or_5(tmp_path: Path) -> None:
     """Scripts must never exit with synthetic codes like 4 or 5."""
     for org_exit in [0, 1, 2, 3]:
-        env, _log_path =_governance_env(tmp_path, org_exit=org_exit)
+        env, _log_path = _governance_env(tmp_path, org_exit=org_exit)
         result = subprocess.run(
             ["bash", str(WORKFLOWS_DIR / "quarterly_governance.sh")],
             cwd=PROJECT_ROOT,
@@ -668,7 +667,7 @@ def test_governance_signal_exit_stops_workflow(tmp_path: Path) -> None:
     responses: dict[str, tuple[int, str]] = {
         "--org-report": (130, ""),
     }
-    env, _log_path =_base_env(tmp_path, responses)
+    env, _log_path = _base_env(tmp_path, responses)
 
     result = subprocess.run(
         ["bash", str(WORKFLOWS_DIR / "quarterly_governance.sh")],
@@ -681,7 +680,7 @@ def test_governance_signal_exit_stops_workflow(tmp_path: Path) -> None:
 
 
 def test_governance_never_combines_run_summary_json_with_output_dash(tmp_path: Path) -> None:
-    env, log_path =_governance_env(tmp_path)
+    env, log_path = _governance_env(tmp_path)
 
     subprocess.run(
         ["bash", str(WORKFLOWS_DIR / "quarterly_governance.sh")],
