@@ -64,6 +64,13 @@ GOVERNANCE_MAX_OVERLAP_THRESHOLD: float = 0.9
 DEFAULT_CACHE_SIZE: int = 1000  # Maximum cached validation results
 DEFAULT_CACHE_TTL: int = 3600  # Cache TTL in seconds (1 hour)
 
+# Jitter multiplier range for retry delay randomization.
+# Final delay = base_delay * uniform(*RETRY_JITTER_RANGE)
+RETRY_JITTER_RANGE: tuple[float, float] = (0.5, 1.5)
+
+# Number of hex characters kept from the MD5 config hash in cache keys.
+CACHE_KEY_HASH_LENGTH: int = 8
+
 # ==================== LOGGING DEFAULTS ====================
 
 LOG_FILE_MAX_BYTES: int = 10 * 1024 * 1024  # 10MB max per log file
