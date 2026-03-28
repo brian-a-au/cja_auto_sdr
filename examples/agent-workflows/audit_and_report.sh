@@ -1,0 +1,181 @@
+#!/usr/bin/env bash
+# audit_and_report.sh — Periodic audit: discover all data views, compare with
+# prior snapshots (or create baselines), then run org-wide report.
+#
+# Designed for agent/automation use:
+#   - Uses --agent-mode (expands to --format json --output - --log-format json)
+#   - Parses discovery output using the dataViews JSON shape
+#   - Detects first-run and creates baselines without --compare-with-prev
+#   - Remains ID-first throughout; never uses display names for unattended ops
+#
+# Environment variables:
+#   REPORT_DIR      — output directory for reports (default: ./reports)
+#   SNAPSHOT_DIR    — snapshot directory (default: ./snapshots)
+#
+# Exit codes follow cja_auto_sdr conventions:
+#   0 = success, 1 = error, 2 = policy/changes detected, 3 = warning
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+REPORT_DIR="${REPORT_DIR:-$PROJECT_ROOT/reports}"
+SNAPSHOT_DIR="${SNAPSHOT_DIR:-$PROJECT_ROOT/snapshots}"
+LOG_PREFIX="[$(date '+%Y-%m-%d %H:%M:%S')]"
+
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/_common.sh"
+
+update_overall_exit() {
+    local code="${1:-0}"
+
+    if is_signal_exit_code "$OVERALL_EXIT"; then
+        return
+    fi
+
+    if is_signal_exit_code "$code"; then
+        OVERALL_EXIT="$code"
+        return
+    fi
+
+    case "$code" in
+        0) ;;
+        1) OVERALL_EXIT=1 ;;
+        2) [[ $OVERALL_EXIT -ne 1 ]] && OVERALL_EXIT=2 ;;
+        3) [[ $OVERALL_EXIT -eq 0 ]] && OVERALL_EXIT=3 ;;
+        *) OVERALL_EXIT=1 ;;
+    esac
+}
+
+# Prefer credentials injected by the caller/CI. Fall back to a repo-local
+# .env only for workstation-style usage of this example script.
+if [[ -z "${ORG_ID:-}" || -z "${CLIENT_ID:-}" || -z "${SECRET:-}" || -z "${SCOPES:-}" ]]; then
+    if [[ -f "$PROJECT_ROOT/.env" ]]; then
+        set -a
+        # shellcheck source=/dev/null
+        source "$PROJECT_ROOT/.env"
+        set +a
+    fi
+fi
+
+cd "$PROJECT_ROOT"
+
+echo "$LOG_PREFIX Starting audit and report"
+
+# --- Step 1: Discover data views (ID-first, agent-mode JSON output) ---
+# --agent-mode expands to --format json --output - --log-format json
+capture_command_output DISCOVER_EXIT DISCOVER_OUTPUT \
+    uv run cja_auto_sdr --list-dataviews --agent-mode
+exit_on_signal_exit "$DISCOVER_EXIT" "$LOG_PREFIX ERROR: Discovery interrupted"
+
+if [[ $DISCOVER_EXIT -ne 0 ]]; then
+    echo "$LOG_PREFIX ERROR: Failed to list data views (exit $DISCOVER_EXIT)" >&2
+    exit 1
+fi
+
+# Parse IDs from the dataViews array in the JSON response
+DATA_VIEW_IDS=$(extract_dataview_ids "$DISCOVER_OUTPUT") || {
+    echo "$LOG_PREFIX ERROR: Failed to parse data view IDs from discovery output" >&2
+    exit 1
+}
+
+if [[ -z "$DATA_VIEW_IDS" ]]; then
+    echo "$LOG_PREFIX ERROR: No data view IDs found in discovery output" >&2
+    exit 1
+fi
+
+mkdir -p "$REPORT_DIR" "$SNAPSHOT_DIR"
+
+OVERALL_EXIT=0
+
+# --- Step 2: Per-data-view snapshot comparison or baseline creation ---
+for DV_ID in $DATA_VIEW_IDS; do
+    echo "$LOG_PREFIX Processing data view: $DV_ID"
+
+    # Detect whether prior snapshots exist for this data view
+    capture_command_output SNAP_LIST_EXIT SNAP_LIST_OUTPUT \
+        uv run cja_auto_sdr --list-snapshots --format json --output - "$DV_ID" 2>/dev/null
+    exit_on_signal_exit "$SNAP_LIST_EXIT" "$LOG_PREFIX ERROR: Snapshot list interrupted for $DV_ID"
+
+    HAS_SNAPSHOTS=0
+    if [[ $SNAP_LIST_EXIT -eq 0 && -n "$SNAP_LIST_OUTPUT" ]]; then
+        # Check if there are any snapshots in the list
+        SNAP_COUNT=$(printf '%s' "$SNAP_LIST_OUTPUT" | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    snaps = data if isinstance(data, list) else data.get('snapshots', [])
+    print(len(snaps))
+except Exception:
+    print(0)
+" 2>/dev/null) || SNAP_COUNT=0
+        [[ "${SNAP_COUNT:-0}" -gt 0 ]] && HAS_SNAPSHOTS=1
+    fi
+
+    if [[ $HAS_SNAPSHOTS -eq 1 ]]; then
+        # Prior snapshots exist — run comparison and auto-update snapshot
+        echo "$LOG_PREFIX  Comparing with previous snapshot for $DV_ID"
+        capture_command_output DIFF_EXIT DIFF_OUTPUT \
+            uv run cja_auto_sdr "$DV_ID" --compare-with-prev --agent-mode \
+                --auto-snapshot --snapshot-dir "$SNAPSHOT_DIR" 2>/dev/null
+        exit_on_signal_exit "$DIFF_EXIT" "$LOG_PREFIX  ERROR: Diff comparison interrupted for $DV_ID"
+
+        case $DIFF_EXIT in
+            0) echo "$LOG_PREFIX  No changes detected for $DV_ID" ;;
+            2)
+                echo "$LOG_PREFIX  Changes detected for $DV_ID"
+                update_overall_exit 2
+                ;;
+            3)
+                echo "$LOG_PREFIX  Warning threshold exceeded for $DV_ID"
+                update_overall_exit 3
+                ;;
+            *)
+                echo "$LOG_PREFIX  ERROR: Diff comparison failed for $DV_ID (exit $DIFF_EXIT)" >&2
+                update_overall_exit 1
+                ;;
+        esac
+    else
+        # First run — create baseline snapshot without attempting --compare-with-prev
+        echo "$LOG_PREFIX  No prior snapshots found. Creating baseline for $DV_ID"
+        capture_command_exit BASELINE_EXIT \
+            uv run cja_auto_sdr "$DV_ID" --snapshot "$SNAPSHOT_DIR/${DV_ID}_baseline.json"
+        exit_on_signal_exit "$BASELINE_EXIT" "$LOG_PREFIX  ERROR: Baseline creation interrupted for $DV_ID"
+
+        case $BASELINE_EXIT in
+            0) echo "$LOG_PREFIX  Baseline created for $DV_ID" ;;
+            *)
+                echo "$LOG_PREFIX  ERROR: Baseline creation failed for $DV_ID (exit $BASELINE_EXIT)" >&2
+                update_overall_exit 1
+                ;;
+        esac
+    fi
+done
+
+# --- Step 3: Org-wide report ---
+echo "$LOG_PREFIX Running org-wide report"
+
+capture_command_output ORG_EXIT ORG_OUTPUT \
+    uv run cja_auto_sdr --org-report --agent-mode
+exit_on_signal_exit "$ORG_EXIT" "$LOG_PREFIX ERROR: Org report interrupted"
+
+case $ORG_EXIT in
+    0) echo "$LOG_PREFIX Org report: OK" ;;
+    2)
+        echo "$LOG_PREFIX Org report: thresholds exceeded"
+        update_overall_exit 2
+        ;;
+    3)
+        echo "$LOG_PREFIX Org report: warning threshold exceeded"
+        update_overall_exit 3
+        ;;
+    *)
+        echo "$LOG_PREFIX ERROR: Org report failed (exit $ORG_EXIT)" >&2
+        update_overall_exit 1
+        ;;
+esac
+
+echo "$LOG_PREFIX Audit and report complete (exit: $OVERALL_EXIT)"
+notify "CJA audit complete — exit $OVERALL_EXIT"
+
+exit "$OVERALL_EXIT"

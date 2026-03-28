@@ -48,7 +48,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y shellcheck
       - name: Lint shell scripts
-        run: shellcheck examples/automation/*.sh
+        run: shellcheck examples/automation/*.sh examples/agent-workflows/*.sh
 
   lockfile:
     runs-on: ubuntu-latest
