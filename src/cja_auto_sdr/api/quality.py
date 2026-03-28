@@ -10,12 +10,12 @@ from tqdm import tqdm
 
 from cja_auto_sdr.api.cache import ValidationCache
 from cja_auto_sdr.core.colors import _format_error_msg
-from cja_auto_sdr.core.constants import TQDM_BAR_FORMAT
+from cja_auto_sdr.core.constants import QUALITY_SEVERITY_ORDER, TQDM_BAR_FORMAT
 
 
 class DataQualityChecker:
     # Severity levels in priority order (highest to lowest) for proper sorting
-    SEVERITY_ORDER: ClassVar[list[str]] = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]
+    SEVERITY_ORDER: ClassVar[list[str]] = list(QUALITY_SEVERITY_ORDER)
 
     def __init__(
         self,
