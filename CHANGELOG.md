@@ -7,6 +7,26 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.0] — 2026-03-28
+
+### Added
+- `--agent-mode` CLI preset: defaults to `--format json --output - --log-format json` for agent-friendly invocation
+- JSON `advisories` block in org-report and diff output — derived convenience layer with versioned schema
+- Compact advisory rollups in `--run-summary-json` for org-report and diff modes
+- `tools/` directory with OpenAI-style JSON tool manifests for agent framework integration
+- `docs/agent-playbooks/` cross-agent task playbooks (sdr-auditor, diff-reviewer, onboarding-guide, quality-monitor, snapshot-manager)
+- `examples/agent-workflows/` behavior-tested shell workflows (audit_and_report, onboard_dataview, quarterly_governance)
+- `sample_outputs/agent/` contract fixtures for representative machine-readable payloads
+- Agent Integration section in root `AGENTS.md`
+
+### Changed
+- Extracted `build_diff_json_data()` as shared public diff JSON builder
+- Expanded `docs/AGENT_AUTOMATION.md` with `--agent-mode` guidance, advisories registry, and machine-interface decision matrix
+- Expanded shell lint coverage to include `examples/agent-workflows/*.sh`
+
+### Fixed
+- Corrected inspection command examples in `AGENTS.md` to use current `--flag <VALUE>` form
+
 ## [3.4.9] - 2026-03-27
 
 ### Internal

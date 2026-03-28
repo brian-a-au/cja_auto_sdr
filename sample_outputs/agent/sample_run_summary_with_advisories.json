@@ -1,0 +1,15 @@
+{
+  "summary_version": "1.1",
+  "exit_code": 0,
+  "mode": "org_report",
+  "details": {
+    "operation_success": true,
+    "advisories": {
+      "advisories_version": "1.0",
+      "severity": "info",
+      "summary": {"total_findings": 0, "by_severity": {}},
+      "types": [],
+      "recommended_actions": []
+    }
+  }
+}

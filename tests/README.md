@@ -129,10 +129,17 @@ tests/
 ├── test_example_automation_scripts.py # Automation shell script validation tests
 ├── test_exit_codes.py               # Exit code helpers and signal detection tests
 ├── test_json_io.py                  # JSON I/O atomic write and read tests
+├── test_advisories.py               # Advisory model, builder, and rollup tests
+├── test_agent_contract_docs.py      # Agent contract documentation validation tests
+├── test_agent_contract_samples.py   # Agent contract sample fixture validation tests
+├── test_agent_mode.py               # --agent-mode CLI preset and resolution tests
+├── test_agent_playbooks.py          # Agent playbook structural validation tests
+├── test_agent_workflows.py          # Agent workflow shell script validation tests
+├── test_tool_manifests.py           # Tool manifest schema and content tests
 └── README.md                        # This file
 ```
 
-**Total: 7,294 comprehensive tests**
+**Total: 7,509 comprehensive tests**
 
 ### Test Count Breakdown
 
@@ -141,16 +148,16 @@ tests/
 
 | Category | Tests | Files | Notes |
 |----------|-------|-------|-------|
-| `unit` | 7,188 | 114 | Default primary category for files without explicit integration/e2e/smoke scope |
+| `unit` | 7,403 | 121 | Default primary category for files without explicit integration/e2e/smoke scope |
 | `integration` | 73 | 3 | Cross-module integration suites |
 | `e2e` | 23 | 2 | End-to-end suites with a mocked external boundary |
 | `smoke` | 10 | 1 | Lightweight command-mode coverage |
 | `slow` | 7 | 1 | Overlay marker; these tests are also counted in a primary category |
-| **Primary Total** | **7,294** | **120** | **unit + integration + e2e + smoke** |
+| **Primary Total** | **7,509** | **127** | **unit + integration + e2e + smoke** |
 
 | CI Slice | Tests | Files | Selector |
 |----------|-------|-------|----------|
-| `test-unit` | 7,181 | 113 | `-m "unit and not slow"` |
+| `test-unit` | 7,396 | 120 | `-m "unit and not slow"` |
 | `test-integration` | 103 | 6 | `-m "integration or e2e or slow"` |
 | `smoke-test` | 10 | 1 | `-m smoke` |
 
@@ -164,7 +171,7 @@ tests/
 | `test_ux_features.py` | 123 | UX features: --open, --stats, --output, --list-dataviews formats, inventory validation, inventory summary, include-all-inventory |
 | `test_org_report.py` | 209 | Org-wide component analysis: config, distribution, similarity, output formats, large org scaling, output path aliases |
 | `test_org_report_integration.py` | 17 | Org-wide analysis integration tests: end-to-end flows, caching, filtering, governance |
-| `test_cli.py` | 410 | Command-line interface and argument parsing |
+| `test_cli.py` | 412 | Command-line interface and argument parsing |
 | `test_profiles.py` | 77 | Multi-organization profile support |
 | `test_derived_inventory.py` | 62 | Derived fields inventory feature |
 | `test_inventory_utils.py` | 56 | Inventory utilities and helpers |
@@ -201,10 +208,10 @@ tests/
 | `test_discovery_extraction.py` | 46 | Discovery module extraction and backwards-compat contracts |
 | `test_diagnostic_events.py` | 23 | Structured diagnostic event vocabulary, logger adapters, and redaction |
 | `test_output_content_validation.py` | 29 | Output format content validation (CSV, JSON, HTML, Excel, Markdown roundtrip) |
-| `test_output_extraction_contracts.py` | 338 | Extraction contracts for output.diff and output.inventory |
+| `test_output_extraction_contracts.py` | 345 | Extraction contracts for output.diff and output.inventory |
 | `test_malformed_api_responses.py` | 20 | Negative tests for malformed/unexpected API responses |
 | `test_main_entry_points.py` | 43 | main() and _main_impl() entry points, dispatch, run_state, run summary |
-| `test_quality_policy_and_run_summary.py` | 163 | Quality policy functions and run summary/status inference |
+| `test_quality_policy_and_run_summary.py` | 169 | Quality policy functions and run summary/status inference |
 | `test_e2e_integration.py` | 16 | End-to-end integration tests with real pipeline, mocked API boundary |
 | `test_api_client.py` | 29 | API client exception paths and error handling |
 | `test_config_validation.py` | 55 | Configuration validation logic |
@@ -239,7 +246,7 @@ tests/
 | `test_main_impl_cli_coverage.py` | 90 | _main_impl CLI path coverage |
 | `test_main_impl_coverage.py` | 57 | _main_impl coverage edge cases |
 | `test_org_cache_branches.py` | 51 | Org cache branch coverage |
-| `test_org_writer_compat_contracts.py` | 106 | Org writer compatibility boundary contract tests |
+| `test_org_writer_compat_contracts.py` | 107 | Org writer compatibility boundary contract tests |
 | `test_org_writer_coverage.py` | 143 | Org writer edge cases and coverage |
 | `test_output_writer_coverage.py` | 37 | Output writer edge cases and coverage |
 | `test_backwards_compat.py` | 34 | Backwards compatibility tests |
@@ -247,7 +254,7 @@ tests/
 | `test_update_test_counts.py` | 7 | Test count validation tests |
 | `test_cli_smoke_modes.py` | 10 | CLI smoke tests for core command modes |
 | `test_generator_mock_contract.py` | 2 | Generator mock symbol contract tests |
-| `test_completion.py` | 55 | Shell completion flag (--completion bash/zsh/fish) |
+| `test_completion.py` | 56 | Shell completion flag (--completion bash/zsh/fish) |
 | `test_exception_narrowing.py` | 50 | Exception narrowing boundary tests |
 | `test_coverage_hardening.py` | 99 | Coverage hardening tests |
 | `test_trending_models.py` | 53 | Trending dataclass construction and bridge tests |
@@ -280,7 +287,14 @@ tests/
 | `test_quality_edge_cases.py` | 19 | Quality edge-case tests |
 | `test_tuning_edge_cases.py` | 15 | Tuning edge-case tests |
 | `test_fetch_edge_cases.py` | 9 | Fetch edge-case tests |
-| **Total** | **7,294** | **Collected via pytest --collect-only** |
+| `test_advisories.py` | 46 | Advisory model, builder, and rollup tests |
+| `test_agent_contract_docs.py` | 16 | Agent contract documentation validation tests |
+| `test_agent_contract_samples.py` | 6 | Agent contract sample fixture validation tests |
+| `test_agent_mode.py` | 28 | --agent-mode CLI preset and resolution tests |
+| `test_agent_playbooks.py` | 27 | Agent playbook structural validation tests |
+| `test_agent_workflows.py` | 44 | Agent workflow shell script validation tests |
+| `test_tool_manifests.py` | 31 | Tool manifest schema and content tests |
+| **Total** | **7,509** | **Collected via pytest --collect-only** |
 
 ## Running Tests
 
@@ -738,7 +752,7 @@ the `tests/README.md` inventory tree or count table.
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (7,294 tests total)
+- [x] Comprehensive test coverage (7,509 tests total)
 - [x] Org-wide analysis tests (test_org_report.py) - 209 tests (including large org scaling, output path aliases, memory warnings, smart cache invalidation)
 - [x] Org-wide analysis integration tests (test_org_report_integration.py) - 17 tests (end-to-end flows, caching, filtering, governance thresholds)
 - [x] Profile management tests (test_profiles.py) - 77 tests

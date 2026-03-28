@@ -1,0 +1,22 @@
+{
+  "dataViews": [
+    {
+      "id": "dv_example_001",
+      "name": "Web Analytics Production",
+      "description": "Primary web analytics data view",
+      "owner": {
+        "id": 200501,
+        "name": "admin@example.com"
+      }
+    },
+    {
+      "id": "dv_example_002",
+      "name": "Mobile App Events",
+      "description": "Mobile application event tracking",
+      "owner": {
+        "id": 200502,
+        "name": "analyst@example.com"
+      }
+    }
+  ]
+}

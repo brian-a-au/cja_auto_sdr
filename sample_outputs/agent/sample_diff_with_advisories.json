@@ -1,0 +1,18 @@
+{
+  "metadata": {"generated_at": "2026-03-28T00:00:00Z", "tool_version": "3.5.0"},
+  "summary": {"has_changes": true, "total_changes": 3, "metrics_removed": 1},
+  "advisories": {
+    "advisories_version": "1.0",
+    "severity": "critical",
+    "findings": [
+      {
+        "type": "breaking_changes",
+        "severity": "critical",
+        "message": "1 component removed",
+        "details": {"removed_count": 1},
+        "recommended_actions": ["review_breaking_changes", "update_downstream_dependencies"]
+      }
+    ],
+    "summary": {"total_findings": 1, "by_severity": {"critical": 1}}
+  }
+}
