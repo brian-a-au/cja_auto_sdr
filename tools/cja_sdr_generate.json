@@ -1,0 +1,71 @@
+{
+  "name": "cja_sdr_generate",
+  "description": "Generate a Solution Design Reference (SDR) document for a single Adobe Customer Journey Analytics data view. Produces structured output describing all metrics, dimensions, segments, and calculated metrics in the data view. Use --agent-mode to get machine-readable JSON on stdout.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "data_view_id": {
+        "type": "string",
+        "description": "The Adobe CJA data view ID to generate the SDR for (e.g. 'dv_abc123xyz'). Required."
+      },
+      "format": {
+        "type": "string",
+        "enum": ["excel", "csv", "json", "html", "markdown"],
+        "description": "Output format for the SDR document. Defaults to 'excel' when writing to file; use 'json' with agent_mode for machine-readable output."
+      },
+      "output": {
+        "type": "string",
+        "description": "File path to write the SDR output to. If omitted, output goes to stdout (combine with agent_mode and format=json for structured output)."
+      },
+      "agent_mode": {
+        "type": "boolean",
+        "description": "Enable agent mode: suppresses banners and progress noise, emits structured JSON to stdout. Strongly recommended for programmatic use."
+      },
+      "quality_report": {
+        "type": "string",
+        "enum": ["json", "csv"],
+        "description": "Emit a data quality report in the specified format alongside the SDR. 'json' is recommended for agent consumers."
+      },
+      "fail_on_quality": {
+        "type": "string",
+        "enum": ["INFO", "LOW", "MEDIUM", "HIGH", "CRITICAL"],
+        "description": "Fail (non-zero exit) if any quality issue at or above this severity level is found. Use 'HIGH' or 'CRITICAL' for gating pipelines."
+      },
+      "max_issues": {
+        "type": "integer",
+        "description": "Maximum number of quality issues allowed before failing. Only relevant when fail_on_quality is set.",
+        "minimum": 0
+      },
+      "snapshot": {
+        "type": "string",
+        "description": "File path to write a JSON snapshot of this SDR for later diff comparison."
+      },
+      "snapshot_dir": {
+        "type": "string",
+        "description": "Directory path where auto-generated snapshots are stored. Used with auto_snapshot."
+      },
+      "auto_snapshot": {
+        "type": "boolean",
+        "description": "Automatically save a timestamped snapshot to snapshot_dir after generation."
+      },
+      "profile": {
+        "type": "string",
+        "description": "Named credential profile to use (as configured via --config). Defaults to the default profile."
+      },
+      "config_file": {
+        "type": "string",
+        "description": "Path to a custom config file (overrides the default ~/.cja_auto_sdr/config.json)."
+      },
+      "run_summary_json": {
+        "type": "string",
+        "description": "File path to write a machine-readable run summary JSON (timing, counts, exit code). Useful for CI and orchestrator integration."
+      },
+      "log_format": {
+        "type": "string",
+        "enum": ["text", "json"],
+        "description": "Log output format. Use 'json' when ingesting logs programmatically."
+      }
+    },
+    "required": ["data_view_id"]
+  }
+}

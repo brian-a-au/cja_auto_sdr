@@ -1,0 +1,72 @@
+{
+  "name": "cja_sdr_governance",
+  "description": "Run an org-wide governance report across all Adobe CJA data views. Identifies duplicate components, isolated/unused metrics and dimensions, schema drift over time, and cross-data-view patterns. Use for periodic governance audits, drift detection, and automated quality gates.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "trending_window": {
+        "type": "integer",
+        "description": "Number of days to include in drift detection trending analysis. Higher values show longer-term trends.",
+        "minimum": 1
+      },
+      "duplicate_threshold": {
+        "type": "number",
+        "description": "Similarity score threshold (0.0–1.0) above which two components are flagged as potential duplicates.",
+        "minimum": 0.0,
+        "maximum": 1.0
+      },
+      "isolated_threshold": {
+        "type": "integer",
+        "description": "Number of data views a component must appear in to avoid being flagged as isolated/unused.",
+        "minimum": 1
+      },
+      "fail_on_threshold": {
+        "type": "boolean",
+        "description": "Exit with a non-zero code if any governance threshold (duplicate or isolated) is exceeded. Useful for CI pipeline gating."
+      },
+      "format": {
+        "type": "string",
+        "enum": ["console", "json", "csv", "html", "markdown", "excel"],
+        "description": "Output format for the org report. Use 'json' for agent/machine-readable output."
+      },
+      "output": {
+        "type": "string",
+        "description": "File path to write the org report to. Omit to receive output on stdout."
+      },
+      "agent_mode": {
+        "type": "boolean",
+        "description": "Enable agent mode: suppresses banners and progress noise, emits structured JSON to stdout. Recommended for programmatic consumption."
+      },
+      "profile": {
+        "type": "string",
+        "description": "Named credential profile to use. Defaults to the default profile."
+      },
+      "run_summary_json": {
+        "type": "string",
+        "description": "File path to write a machine-readable run summary JSON (timing, issue counts, exit code) after the report completes."
+      },
+      "include_names": {
+        "type": "boolean",
+        "description": "Include human-readable component names alongside IDs in the org report output."
+      },
+      "skip_similarity": {
+        "type": "boolean",
+        "description": "Skip the similarity/duplicate detection pass. Speeds up the report when duplicate analysis is not needed."
+      },
+      "filter_pattern": {
+        "type": "string",
+        "description": "Regex or glob pattern to include only matching data views in the org report."
+      },
+      "exclude_pattern": {
+        "type": "string",
+        "description": "Regex or glob pattern to exclude matching data views from the org report."
+      },
+      "limit": {
+        "type": "integer",
+        "description": "Maximum number of data views to process. Useful for testing or sampling large orgs.",
+        "minimum": 1
+      }
+    },
+    "required": []
+  }
+}

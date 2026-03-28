@@ -1,0 +1,27 @@
+{
+  "name": "cja_sdr_config",
+  "description": "Configuration preflight and status checks for cja_auto_sdr. Use 'validate_config' to verify credentials and connectivity before running generation or governance commands. Use 'config_status' to inspect current effective configuration. These are lightweight, read-only operations suitable for agent preflight checks.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "command": {
+        "type": "string",
+        "enum": ["validate_config", "config_status"],
+        "description": "Config command to run. 'validate_config' tests credential resolution and API connectivity. 'config_status' displays the effective configuration for the selected profile."
+      },
+      "config_json": {
+        "type": "boolean",
+        "description": "When true, emit config_status output as JSON (applies to config_status command only). Useful for agents parsing configuration programmatically."
+      },
+      "config_file": {
+        "type": "string",
+        "description": "Path to a custom config file. Overrides the default ~/.cja_auto_sdr/config.json."
+      },
+      "profile": {
+        "type": "string",
+        "description": "Named credential profile to validate or inspect. Defaults to the default profile."
+      }
+    },
+    "required": ["command"]
+  }
+}
