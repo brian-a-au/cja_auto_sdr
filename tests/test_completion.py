@@ -211,6 +211,15 @@ class TestCompletionFastPath:
         mock_generator_main.assert_not_called()
         assert "register-python-argcomplete" in capsys.readouterr().out
 
+    def test_agent_mode_with_completion(self):
+        """--agent-mode --completion bash should still work on fast path."""
+        from cja_auto_sdr.cli.parser import parse_arguments
+
+        # This tests that --agent-mode doesn't break completion
+        args = parse_arguments(["--agent-mode", "--completion", "bash"])
+        assert args.completion == "bash"
+        assert args.agent_mode is True
+
     def test_fast_path_missing_shell_falls_through_to_generator(self):
         """Invalid standalone completion requests must defer to argparse path."""
         from cja_auto_sdr import __main__ as entrypoint

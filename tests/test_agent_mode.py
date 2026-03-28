@@ -98,3 +98,29 @@ class TestAgentModeResolution:
         with patch("sys.argv", ["cja_auto_sdr", "dv_123", "--agent-mode", "--output", "report.json"]):
             args = parse_arguments()
         assert args.output == "report.json"
+
+
+from cja_auto_sdr.cli.standalone_policy import (
+    StandalonePrevalidationPolicy,
+    standalone_prevalidation_policy,
+    _STANDALONE_FAST_PATH_METADATA_DESTS,
+)
+
+
+class TestAgentModeFastPath:
+    """Verify --agent-mode is tolerated on fast-path modes."""
+
+    def test_agent_mode_in_metadata_dests(self):
+        assert "agent_mode" in _STANDALONE_FAST_PATH_METADATA_DESTS
+
+    def test_completion_fast_path_tolerates_agent_mode(self):
+        policy = standalone_prevalidation_policy("completion")
+        assert policy is not None
+        tolerated = policy.tolerated_fast_path_dests()
+        assert "agent_mode" in tolerated
+
+    def test_exit_codes_fast_path_tolerates_agent_mode(self):
+        policy = standalone_prevalidation_policy("exit_codes")
+        assert policy is not None
+        tolerated = policy.tolerated_fast_path_dests()
+        assert "agent_mode" in tolerated
