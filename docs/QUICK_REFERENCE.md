@@ -345,6 +345,7 @@ cja_auto_sdr --list-dataviews  # Uses client-a
 | `--quality-report FORMAT` | Generate standalone quality issues report (`json` or `csv`) without SDR files (requires validation; incompatible with `--skip-validation`) | SDR only |
 | `--allow-partial` | Opt-in exploratory SDR mode: continue on required component fetch or validation runtime failures (not supported with `--quality-report` or `--fail-on-quality`) | SDR only |
 | `--quality-policy PATH` | Load quality defaults from JSON (`fail_on_quality`, `quality_report`, `max_issues`, `allow_partial`); explicit CLI flags take precedence | SDR only |
+| `--agent-mode` | Agent-friendly preset: `--format json --output - --log-format json`. Stdout behavior still implies `--quiet`. Individual flags override preset values. Incompatible with `--interactive` | All modes |
 | `--run-summary-json PATH` | Write machine-readable run summary JSON; use `-` for stdout | All modes |
 | `--explain-exit-code CODE` | Print human-readable explanation for an exit code and exit 0 | All modes |
 | `--lock-stale-threshold SECONDS` | Stale-lease recovery threshold for org-report lock (> 0) | Org-report only |
@@ -510,6 +511,20 @@ cja_auto_sdr dv_12345 --include-segments --include-calculated --inventory-summar
 
 # Save summary to JSON
 cja_auto_sdr dv_12345 --include-segments --inventory-summary --format json
+
+# --- Agent Integration ---
+
+# Agent-friendly JSON on stdout
+cja_auto_sdr dv_12345 --agent-mode
+
+# Agent mode with explicit format override
+cja_auto_sdr dv_12345 --agent-mode --format csv
+
+# Agent mode with org report
+cja_auto_sdr --org-report --agent-mode
+
+# Agent mode with diff
+cja_auto_sdr --diff dv_a dv_b --agent-mode
 
 # --- Inventory Diff (same data view over time) ---
 

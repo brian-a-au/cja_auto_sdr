@@ -23,6 +23,7 @@ Complete command-line interface documentation for the CJA SDR Generator.
   - [Git Integration](#git-integration)
   - [Reliability & Auto-Tuning](#reliability--auto-tuning)
   - [Inventory Options](#inventory-options)
+  - [Agent Integration](#agent-integration)
   - [Environment Variables](#environment-variables)
 - [Usage Examples](#usage-examples)
   - [Single Data View](#single-data-view)
@@ -39,6 +40,7 @@ Complete command-line interface documentation for the CJA SDR Generator.
   - [Org-Wide Analysis Examples](#org-wide-analysis-1)
   - [Git Integration Examples](#git-integration)
   - [Inventory Options Examples](#inventory-options-1)
+  - [Agent Integration Examples](#agent-integration-examples)
 - [Output Files](#output-files)
   - [Excel Workbook](#excel-workbook)
   - [Log Files](#log-files)
@@ -487,6 +489,20 @@ Cache is stored in `~/.cja_auto_sdr/cache/org_report_cache.json`.
 > **Derived Fields:** `--include-derived` is for **SDR generation only**, not diff. Derived fields are already included in the standard metrics/dimensions API output, so changes to derived fields are automatically captured in the Metrics/Dimensions diff sections. The `--include-derived` flag provides additional logic analysis (complexity scores, functions used, branch counts) that is valuable for SDR documentation but would be duplicative in diff mode.
 >
 > **Snapshot/Diff Tip:** `--include-all-inventory` automatically excludes `--include-derived` in `--snapshot`, `--diff-snapshot`, `--compare-snapshots`, and `--compare-with-prev` modes.
+
+### Agent Integration
+
+Preset flag for running CJA SDR Generator from AI agents, scripts, and automation pipelines.
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--agent-mode` | Agent-friendly preset: defaults to `--format json`, `--output -` (stdout), and `--log-format json`. Existing stdout behavior (`--output -`) still implies `--quiet`. Explicit `--format`, `--output`, or `--log-format` flags override the preset values. | False |
+
+> **Interaction constraints:** `--agent-mode` cannot be combined with `--interactive`/`-i` (interactive prompts are incompatible with agent pipelines).
+>
+> **Override behavior:** All three preset values (`--format json`, `--output -`, `--log-format json`) can be overridden by explicitly passing the corresponding flag. For example, `--agent-mode --format csv` produces CSV on stdout with JSON logs.
+>
+> **Log stream:** With `--agent-mode`, structured JSON logs are written to stderr. Successful output (SDR JSON, discovery JSON, etc.) is written to stdout. This keeps both streams independently parseable.
 
 ### Environment Variables
 
@@ -1144,6 +1160,32 @@ cja_auto_sdr dv_12345 --compare-with-prev --include-calculated
 cja_auto_sdr dv_12345 --diff-snapshot ./baseline.json \
   --include-segments --format excel --changes-only
 ```
+
+### Agent Integration Examples
+
+```bash
+# Agent-friendly JSON on stdout (default agent-mode preset)
+uv run cja_auto_sdr dv_123 --agent-mode
+
+# Agent mode with explicit format override (CSV on stdout, JSON logs on stderr)
+uv run cja_auto_sdr dv_123 --agent-mode --format csv
+
+# Agent mode with org report
+uv run cja_auto_sdr --org-report --agent-mode
+
+# Agent mode with diff
+uv run cja_auto_sdr --diff dv_a dv_b --agent-mode
+
+# Pipe agent output directly to jq
+uv run cja_auto_sdr dv_123 --agent-mode | jq '.metrics[]'
+
+# Agent mode with run-summary JSON also on stdout (explanation to stderr)
+uv run cja_auto_sdr dv_123 --agent-mode --run-summary-json -
+```
+
+> **Note:** `--agent-mode` is incompatible with `--interactive`/`-i`. Combining them exits with an error.
+>
+> **Streams:** Output goes to stdout; structured JSON logs go to stderr. Use shell redirection to separate them: `cja_auto_sdr dv_123 --agent-mode 2>logs.jsonl`.
 
 ## Output Files
 
