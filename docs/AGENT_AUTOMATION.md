@@ -7,12 +7,18 @@ This guide covers how to automate `cja_auto_sdr` in CI/CD pipelines, scheduled j
 1. [Why Automate](#why-automate)
 2. [Prerequisites](#prerequisites)
 3. [Agent-Friendly CLI Features](#agent-friendly-cli-features)
-4. [Configuration for Automation](#configuration-for-automation)
-5. [Scheduling Patterns](#scheduling-patterns)
-6. [Agent Framework Integration](#agent-framework-integration)
-7. [Notification Integration](#notification-integration)
-8. [Security Considerations](#security-considerations)
-9. [Troubleshooting](#troubleshooting)
+4. [--agent-mode Flag](#--agent-mode-flag)
+5. [Advisories Block](#advisories-block)
+6. [Machine-Interface Decision Matrix](#machine-interface-decision-matrix)
+7. [Tool Manifests](#tool-manifests)
+8. [Configuration for Automation](#configuration-for-automation)
+9. [Config Preflight Surfaces](#config-preflight-surfaces)
+10. [Exact-ID Guidance](#exact-id-guidance)
+11. [Scheduling Patterns](#scheduling-patterns)
+12. [Agent Framework Integration](#agent-framework-integration)
+13. [Notification Integration](#notification-integration)
+14. [Security Considerations](#security-considerations)
+15. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -85,6 +91,161 @@ uv run cja_auto_sdr <dv_id> --dry-run
 
 ---
 
+## --agent-mode Flag
+
+`--agent-mode` is a convenience preset that configures the CLI for unattended, machine-readable operation.
+
+### What it expands to
+
+`--agent-mode` sets the following defaults when those options are not explicitly provided on the command line:
+
+| Option         | Default applied |
+|----------------|-----------------|
+| `--format`     | `json`          |
+| `--output`     | `-` (stdout)    |
+| `--log-format` | `json`          |
+
+If you explicitly pass any of these options, your explicit value takes precedence — `--agent-mode` only fills in options you did not supply.
+
+### Examples by command family
+
+```bash
+# SDR generation — JSON to stdout, structured logs to stderr
+uv run cja_auto_sdr dv_abc123 --agent-mode
+
+# Batch generation — JSON for each data view, structured error envelopes
+uv run cja_auto_sdr dv_abc123 dv_def456 --agent-mode --continue-on-error
+
+# Org-wide governance report
+uv run cja_auto_sdr --org-report --agent-mode
+
+# Org-report with governance gate
+uv run cja_auto_sdr --org-report --agent-mode --duplicate-threshold 0.8 --fail-on-threshold
+
+# Diff — compare two data views
+uv run cja_auto_sdr --diff dv_abc123 dv_def456 --agent-mode
+
+# Diff against snapshot
+uv run cja_auto_sdr dv_abc123 --diff-snapshot ./snapshots/dv_abc123.json --agent-mode
+
+# Discovery
+uv run cja_auto_sdr --list-dataviews --agent-mode
+
+# Config status (machine-readable)
+uv run cja_auto_sdr --config-status --config-json --agent-mode
+```
+
+### --agent-mode command-family applicability
+
+| Command family                       | `--agent-mode` supported | Notes                                              |
+|--------------------------------------|--------------------------|----------------------------------------------------|
+| SDR generation (single / batch)      | Yes                      | JSON to stdout; `--output -` applies               |
+| Org-report (`--org-report`)          | Yes                      | JSON to stdout; advisories block included          |
+| Diff (`--diff`, `--diff-snapshot`)   | Yes                      | JSON to stdout; advisories block included          |
+| Discovery (`--list-*`)               | Yes                      | JSON to stdout                                     |
+| Config status (`--config-status`)    | Yes                      | Use with `--config-json` for full JSON payload     |
+| Fast-path flags (`--version`, etc.)  | No                       | Fast-path exits before `--agent-mode` is resolved  |
+| Interactive commands (`--show-config`) | No                     | Interactive; not suitable for agent use            |
+
+---
+
+## Advisories Block
+
+Starting in v3.5.0, JSON output for org-report and diff commands includes an `advisories` block with structured findings and a `recommended_actions` registry. Agents should read `advisories.recommended_actions` to determine follow-up steps.
+
+### Advisories block structure
+
+```json
+{
+  "advisories": {
+    "advisories_version": "1.0",
+    "severity": "critical",
+    "summary": {
+      "total_findings": 2,
+      "by_severity": {"critical": 1, "warning": 1}
+    },
+    "findings": [
+      {
+        "type": "governance_threshold_breach",
+        "severity": "critical",
+        "message": "One or more governance thresholds have been exceeded.",
+        "details": { "violation_count": 3, "violations": [...] },
+        "recommended_actions": ["review_governance_thresholds", "remediate_threshold_breach"]
+      }
+    ],
+    "recommended_actions": ["review_governance_thresholds", "remediate_threshold_breach"]
+  }
+}
+```
+
+The top-level `recommended_actions` list is a deduplicated union of all finding-level actions, ordered by first appearance.
+
+### Org-report recommended_actions registry
+
+| Action token                    | Triggered by finding type          | Meaning                                                      |
+|---------------------------------|------------------------------------|--------------------------------------------------------------|
+| `review_overlap_pairs`          | `high_overlap`                     | Inspect the flagged data view pairs for intentional overlap  |
+| `verify_intentional_duplicates` | `high_overlap`                     | Confirm duplicates are deliberate (e.g. regional variants)   |
+| `review_isolated_views`         | (future finding type)              | Examine data views with no shared components                 |
+| `add_descriptions`              | (future finding type)              | Add missing descriptions to flagged components               |
+| `review_stale_views`            | (future finding type)              | Review data views with no recent activity                    |
+| `review_governance_thresholds`  | `governance_threshold_breach`      | Review which thresholds are configured and why they fired    |
+| `remediate_threshold_breach`    | `governance_threshold_breach`      | Take corrective action on breached governance thresholds     |
+| `investigate_fetch_failures`    | `fetch_failures`                   | Diagnose why specific data views could not be fetched        |
+| `review_drift_activity`         | `drift_activity`                   | Inspect which data views are drifting and by how much        |
+| `compare_recent_reports`        | `drift_activity`                   | Run `--compare-org-report` against a recent baseline         |
+
+### Diff recommended_actions registry
+
+| Action token                    | Triggered by finding type | Meaning                                                         |
+|---------------------------------|---------------------------|-----------------------------------------------------------------|
+| `review_breaking_changes`       | `breaking_changes`        | Inspect removed components before merging or deploying          |
+| `update_downstream_dependencies`| `breaking_changes`        | Update any analytics or BI tools that reference removed fields  |
+| `review_schema_changes`         | `schema_changes`          | Review modified component definitions for unintended changes    |
+| `validate_mappings`             | `schema_changes`          | Re-validate field mappings in downstream consumers              |
+| `acknowledge_additive_change`   | `additions_only`          | Confirm additions are expected; no breaking changes detected    |
+
+### Severity levels
+
+| Severity   | Meaning                                             |
+|------------|-----------------------------------------------------|
+| `critical` | Immediate action required; may block CI gates       |
+| `warning`  | Review recommended; does not fail unless gated      |
+| `info`     | Informational; no action strictly required          |
+
+---
+
+## Machine-Interface Decision Matrix
+
+| Need                                              | Use                                                 |
+|---------------------------------------------------|-----------------------------------------------------|
+| Direct JSON payload from CLI                      | `--agent-mode` or `--format json --output -`        |
+| Structured run metadata (exit code, counts, paths)| `--run-summary-json <file>` (use `-` for stdout)    |
+| Batched SDR/discovery from Python                 | `scripts/orchestrator.py`                           |
+| LLM agent tool calling                            | `tools/*.json` manifests                            |
+| Config validation before pipeline step            | `--validate-config` or `--config-status --config-json` |
+| Structured advisories on org / diff results       | `advisories` block in JSON output (`--agent-mode`)  |
+
+---
+
+## Tool Manifests
+
+`tools/` contains OpenAI-style JSON function definitions (tool manifests) for integrating `cja_auto_sdr` into agent frameworks (OpenAI function calling, Anthropic tool use, LangChain, etc.). These manifests are the **authoritative tool-schema surface** for agent integration.
+
+| File                      | Tool name             | Purpose                                      |
+|---------------------------|-----------------------|----------------------------------------------|
+| `tools/cja_sdr_generate.json`   | `cja_sdr_generate`  | Single data view SDR generation            |
+| `tools/cja_sdr_discover.json`   | `cja_sdr_discover`  | Discovery and resource inspection          |
+| `tools/cja_sdr_config.json`     | `cja_sdr_config`    | Config preflight and status checks         |
+| `tools/cja_sdr_diff.json`       | `cja_sdr_diff`      | Snapshot comparison and drift detection    |
+| `tools/cja_sdr_governance.json` | `cja_sdr_governance`| Org-wide governance reporting              |
+
+See `tools/README.md` for full parameter documentation, command-family applicability notes, and example tool-calling sequences.
+
+> **Note:** Any inline tool JSON shown elsewhere in this documentation is illustrative only. Always use the manifests in `tools/` as the authoritative schema source.
+
+---
+
 ## Configuration for Automation
 
 ### Environment variable setup
@@ -119,6 +280,68 @@ export SECRET=$(vault kv get -field=secret secret/cja/prod)
 
 ---
 
+## Config Preflight Surfaces
+
+Two CLI surfaces support pre-flight validation in automated pipelines:
+
+### --validate-config
+
+Performs a lightweight credential resolution and API ping without generating any SDR output. Use this as the first step in any pipeline to catch auth and connectivity issues early.
+
+```bash
+uv run cja_auto_sdr --validate-config
+# Exit 0 → credentials resolved and API reachable
+# Exit 1 → configuration or connectivity error (parse stderr JSON)
+```
+
+### --config-status --config-json
+
+Emits the effective resolved configuration as a JSON object. Useful for audit logging and pipeline diagnostics. Credentials are masked in the output.
+
+```bash
+uv run cja_auto_sdr --config-status --config-json
+# stdout: JSON object with resolved profile, org_id (masked), workers, cache settings, etc.
+```
+
+Combine with `--agent-mode` for consistent JSON log output:
+
+```bash
+uv run cja_auto_sdr --config-status --config-json --agent-mode
+```
+
+Recommended preflight sequence for automated pipelines:
+
+```bash
+# 1. Validate credentials and connectivity
+uv run cja_auto_sdr --validate-config || { echo "Config validation failed"; exit 1; }
+
+# 2. Log effective config for audit trail
+uv run cja_auto_sdr --config-status --config-json >> pipeline_audit.jsonl
+
+# 3. Proceed with primary command
+uv run cja_auto_sdr dv_abc123 --agent-mode --run-summary-json run_summary.json
+```
+
+---
+
+## Exact-ID Guidance
+
+Always use **exact data view IDs** (e.g. `dv_abc123xyz`) in unattended automation, never display names.
+
+- Display names are not guaranteed to be unique across an org. Two data views can share the same name in different connections.
+- Name-based resolution requires an extra list API call and may match the wrong data view silently.
+- IDs beginning with `dv_` are stable CJA identifiers that do not change when a data view is renamed.
+
+To enumerate available data view IDs before an automated run:
+
+```bash
+uv run cja_auto_sdr --list-dataviews --format json --output - | jq '[.[] | {id, name}]'
+```
+
+Or use the `cja_sdr_discover` tool manifest with `command: "list_dataviews"` in agent frameworks.
+
+---
+
 ## Scheduling Patterns
 
 ### Shell script (cron / systemd timer)
@@ -150,58 +373,41 @@ See `scripts/orchestrator.py` for a Python orchestration script that:
 
 ## Agent Framework Integration
 
-Agents should use `AGENTS.md` (repo root) as the primary tool contract. It provides:
-- Complete command syntax
-- Exit code table with agent actions
-- Output format guidance
-- File convention defaults
+### Tool manifests vs. orchestrator
 
-### Inline JSON tool definition
+The repo exposes two distinct automation surfaces:
 
-If your agent framework requires a tool schema, use this minimal definition:
+| Surface | Best for |
+|---------|----------|
+| `tools/*.json` manifests | LLM agent frameworks (OpenAI function calling, Anthropic tool use, LangChain) |
+| `scripts/orchestrator.py` | Python-native batch pipelines, CI scripts, subprocess orchestration |
 
-```json
-{
-  "name": "cja_auto_sdr",
-  "description": "Generate SDR documentation from Adobe CJA data views. Use --format json --output - for machine output.",
-  "parameters": {
-    "type": "object",
-    "properties": {
-      "data_view_id": {
-        "type": "string",
-        "description": "Data view ID (e.g. dv_12345) or exact name"
-      },
-      "format": {
-        "type": "string",
-        "enum": ["excel", "csv", "json", "html", "markdown", "all", "reports", "data", "ci"],
-        "default": "json"
-      },
-      "output": {
-        "type": "string",
-        "description": "Output path. Use '-' for stdout (json/csv only).",
-        "default": "-"
-      },
-      "extra_flags": {
-        "type": "array",
-        "items": {"type": "string"},
-        "description": "Additional CLI flags, e.g. ['--dry-run', '--quiet']"
-      }
-    },
-    "required": ["data_view_id"]
-  }
-}
-```
+`scripts/orchestrator.py` is currently strongest for batched SDR generation and discovery workflows. It is not the primary integration point for org-report and diff-family flows in agent frameworks — use the `tools/cja_sdr_governance.json` and `tools/cja_sdr_diff.json` manifests for those.
 
-### Orchestrator
+### Root AGENTS.md / CLAUDE.md vs. docs/agent-playbooks/
 
-`scripts/orchestrator.py` is the recommended starting point for agent-driven batch workflows when you want a thin JSON-emitting wrapper around repeated CLI runs.
+| Document | Purpose |
+|----------|---------|
+| `AGENTS.md` (repo root) | Primary tool contract: complete command syntax, exit codes, output format guidance, file conventions. Start here for any agent integration. |
+| `CLAUDE.md` (repo root) | Developer instructions for Claude Code: project architecture, test conventions, version bump checklist. Not an agent tool contract. |
+| `docs/agent-playbooks/` | Scenario-specific playbooks (SDR auditor, diff reviewer, quality monitor, snapshot manager, onboarding guide). Use these for task-scoped agent configuration. |
+| `docs/AGENT_AUTOMATION.md` | Scheduling patterns, agent framework integration, advisories, security. The document you are reading. |
+
+For any new agent integration, the recommended reading order is:
+1. `AGENTS.md` — command contract and exit codes
+2. `tools/README.md` — tool manifests and parameter reference
+3. `docs/agent-playbooks/<scenario>.md` — task-specific guidance
+4. `docs/AGENT_AUTOMATION.md` — scheduling, security, advisories
+
+### Structured run summary
+
+`--run-summary-json` writes a JSON file after each command that includes exit code, duration, component counts, and advisory rollup. Use `-` to receive it on stdout alongside the main payload:
 
 ```bash
-# Discover data views, allow 15 minutes per wrapped CLI command
-uv run python scripts/orchestrator.py --discover --timeout 900
+uv run cja_auto_sdr dv_abc123 --agent-mode --run-summary-json -
 ```
 
-Unlike the direct CLI, the orchestrator writes both success payloads and its own machine-readable error envelopes to stdout so callers can consume a single JSON stream per invocation. Wrapped child-command stdout/stderr are preserved inside the JSON result objects.
+The run summary includes an `advisories` rollup key when advisories are present (org-report and diff commands).
 
 ---
 
@@ -218,8 +424,8 @@ Unlike the direct CLI, the orchestrator writes both success payloads and its own
 Pattern:
 
 ```bash
-uv run cja_auto_sdr --org-report --fail-on-threshold --duplicate-threshold 5 \
-  --format json --output report.json
+uv run cja_auto_sdr --org-report --agent-mode --fail-on-threshold --duplicate-threshold 5 \
+  --output report.json
 EXIT=$?
 
 if [ $EXIT -eq 2 ]; then
@@ -227,6 +433,22 @@ if [ $EXIT -eq 2 ]; then
   curl -s -X POST "$SLACK_WEBHOOK" \
     -H 'Content-Type: application/json' \
     -d "$PAYLOAD"
+fi
+```
+
+### Reacting to advisories
+
+For richer notifications, read `recommended_actions` from the advisories block:
+
+```bash
+ACTIONS=$(jq -r '.advisories.recommended_actions[]' report.json 2>/dev/null || echo "")
+
+if echo "$ACTIONS" | grep -q "remediate_threshold_breach"; then
+  # Page on-call for critical threshold breach
+  curl -s -X POST https://events.pagerduty.com/v2/enqueue \
+    -H 'Authorization: Token token='"$PD_TOKEN" \
+    -H 'Content-Type: application/json' \
+    -d '{"routing_key":"'"$PD_KEY"'","event_action":"trigger","payload":{"summary":"CJA governance threshold breach","severity":"critical","source":"cja_auto_sdr"}}'
 fi
 ```
 
@@ -256,3 +478,4 @@ fi
 | JSON parse error on `--output -`         | Banner or progress text mixed into stdout      | Ensure `--output -` is used (it implies `--quiet`); do not use `--format console` with stdout    |
 | `--validate-config` passes but SDR fails | Data view ID not accessible to service account | Confirm data view ID exists and the service account has the correct CJA product profile access   |
 | Exit 2 on governance run without alert   | `--fail-on-threshold` not set                  | Add `--fail-on-threshold` to enable exit code 2 on threshold breach                             |
+| `advisories` block absent from JSON output | Command family or format does not emit advisories | Advisories are emitted for org-report and diff commands with `--format json`; use `--agent-mode` |

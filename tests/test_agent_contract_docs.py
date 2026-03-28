@@ -86,3 +86,24 @@ class TestAgentContractDocs:
         for line in lines:
             if "--run-summary-json -" in line and "--output -" in line:
                 pytest.fail("AGENTS.md documents invalid --run-summary-json - + --output - pair")
+
+
+class TestAgentAutomationDoc:
+    """Verify docs/AGENT_AUTOMATION.md contract surface."""
+
+    def test_references_tool_manifests(self):
+        content = AGENT_AUTOMATION_MD.read_text()
+        assert "tools/" in content
+        # If inline tool JSON remains, it should be marked illustrative
+        if '"parameters"' in content and '"type": "object"' in content:
+            assert "illustrative" in content.lower() or "example" in content.lower()
+
+    def test_agent_mode_documented(self):
+        content = AGENT_AUTOMATION_MD.read_text()
+        assert "--agent-mode" in content
+
+    def test_advisories_registry_documented(self):
+        content = AGENT_AUTOMATION_MD.read_text()
+        assert "recommended_actions" in content
+        assert "review_breaking_changes" in content
+        assert "investigate_fetch_failures" in content
