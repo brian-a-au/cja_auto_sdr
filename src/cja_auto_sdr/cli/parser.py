@@ -1403,6 +1403,18 @@ Requirements:
         help="Stale lease recovery threshold in seconds for the org-report concurrency lock (default: 3600)",
     )
 
+    # --- Agent Integration ---------------------------------------------------
+    agent_group = parser.add_argument_group("Agent Integration")
+    agent_group.add_argument(
+        "--agent-mode",
+        action="store_true",
+        default=False,
+        help=(
+            "Agent-friendly preset: defaults to --format json --output - --log-format json. "
+            "Existing stdout behavior still implies --quiet."
+        ),
+    )
+
     # Enable shell tab-completion if argcomplete is installed
     if enable_autocomplete and _ARGCOMPLETE_AVAILABLE:
         argcomplete.autocomplete(parser)  # pragma: no cover
