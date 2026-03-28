@@ -506,3 +506,96 @@ class TestAdvisoryRollup:
         )
         rollup = build_advisory_rollup(summary)
         assert rollup["severity"] == "warning"
+
+
+# ---------------------------------------------------------------------------
+# Org-report JSON advisory integration tests
+# ---------------------------------------------------------------------------
+
+
+class TestOrgReportJsonAdvisories:
+    """Verify advisories block appears in org-report JSON output."""
+
+    def test_advisories_present_in_org_json(self):
+        from cja_auto_sdr.org.writers.json import build_org_report_json_data
+
+        result = _make_minimal_org_result()
+        data = build_org_report_json_data(result)
+        assert "advisories" in data
+        assert data["advisories"]["advisories_version"] == "1.0"
+
+    def test_advisories_empty_when_no_issues(self):
+        from cja_auto_sdr.org.writers.json import build_org_report_json_data
+
+        result = _make_minimal_org_result()
+        data = build_org_report_json_data(result)
+        assert data["advisories"]["findings"] == []
+        assert data["advisories"]["summary"]["total_findings"] == 0
+
+    def test_advisories_reflects_fetch_failures(self):
+        from cja_auto_sdr.org.models import DataViewSummary
+        from cja_auto_sdr.org.writers.json import build_org_report_json_data
+
+        failed_dv = DataViewSummary(
+            data_view_id="dv-fail",
+            data_view_name="Failing DV",
+            error="Connection timeout",
+        )
+        result = _make_minimal_org_result(data_view_summaries=[failed_dv])
+        data = build_org_report_json_data(result)
+        types = [f["type"] for f in data["advisories"]["findings"]]
+        assert "fetch_failures" in types
+
+    def test_advisories_includes_drift_when_trending_provided(self):
+        from cja_auto_sdr.org.models import OrgReportTrending, TrendingSnapshot
+        from cja_auto_sdr.org.writers.json import build_org_report_json_data
+
+        snapshots = [
+            TrendingSnapshot(
+                timestamp="2025-01-01T00:00:00",
+                data_view_count=3,
+                component_count=10,
+                core_count=5,
+                isolated_count=1,
+                high_sim_pair_count=0,
+            ),
+            TrendingSnapshot(
+                timestamp="2025-02-01T00:00:00",
+                data_view_count=4,
+                component_count=14,
+                core_count=6,
+                isolated_count=2,
+                high_sim_pair_count=1,
+            ),
+        ]
+        trending = OrgReportTrending(
+            snapshots=snapshots,
+            drift_scores={"dv1": 0.72},
+            window_size=2,
+        )
+        result = _make_minimal_org_result()
+        data = build_org_report_json_data(result, trending=trending)
+        types = [f["type"] for f in data["advisories"]["findings"]]
+        assert "drift_activity" in types
+
+    def test_advisories_is_additive_does_not_remove_existing_keys(self):
+        from cja_auto_sdr.org.writers.json import build_org_report_json_data
+
+        result = _make_minimal_org_result()
+        data = build_org_report_json_data(result)
+        # Core existing top-level keys must all still be present
+        for key in (
+            "report_type",
+            "version",
+            "generated_at",
+            "org_id",
+            "parameters",
+            "summary",
+            "data_view_fetch_failures",
+            "distribution",
+            "data_views",
+            "component_index",
+            "similarity_pairs",
+            "recommendations",
+        ):
+            assert key in data, f"Expected key {key!r} missing after advisories injection"

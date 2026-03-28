@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from cja_auto_sdr.core.advisory_builders import build_org_report_advisories
 from cja_auto_sdr.org.models import (
     OrgReportResult,
     OrgReportTrending,
@@ -207,6 +208,8 @@ def build_org_report_json_data(
     }
     if trending is not None and len(trending.snapshots) >= 2:
         data["trending"] = _trending_snapshots_to_dicts(trending)
+    advisory_summary = build_org_report_advisories(result, trending=trending)
+    data["advisories"] = advisory_summary.to_dict()
     return data
 
 

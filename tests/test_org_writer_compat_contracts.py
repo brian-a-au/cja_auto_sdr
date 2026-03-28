@@ -1065,3 +1065,46 @@ def test_legacy_json_writer_builder_patch_remains_visible_to_concurrent_legacy_c
     assert len(patched_calls) == 2
     assert json.loads(output_paths["thread"].read_text(encoding="utf-8"))["report_type"] == "patched:org_analysis"
     assert json.loads(output_paths["main"].read_text(encoding="utf-8"))["report_type"] == "patched:org_analysis"
+
+
+# ---------------------------------------------------------------------------
+# Advisories additive-compat contract
+# ---------------------------------------------------------------------------
+
+
+_EXPECTED_CORE_JSON_KEYS = frozenset(
+    [
+        "report_type",
+        "version",
+        "generated_at",
+        "org_id",
+        "parameters",
+        "summary",
+        "data_view_fetch_failures",
+        "distribution",
+        "data_views",
+        "component_index",
+        "similarity_pairs",
+        "clusters",
+        "recommendations",
+        "governance_violations",
+        "thresholds_exceeded",
+        "naming_audit",
+        "owner_summary",
+        "stale_components",
+    ]
+)
+
+
+def test_advisories_key_is_additive_does_not_remove_existing_keys(rich_org_report_result):
+    """Adding the advisories block must not drop any pre-existing top-level JSON keys."""
+    from cja_auto_sdr.org.writers.json import build_org_report_json_data
+
+    data = build_org_report_json_data(rich_org_report_result)
+
+    # All pre-existing keys must still be present
+    missing = _EXPECTED_CORE_JSON_KEYS - data.keys()
+    assert not missing, f"Keys removed after advisories injection: {missing}"
+
+    # The new key must also be present
+    assert "advisories" in data
