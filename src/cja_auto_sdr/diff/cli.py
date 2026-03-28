@@ -210,6 +210,7 @@ def dispatch_cross_data_view_diff_cli_mode(
 
     diff_format = args.format or "console"
     _diff_output_to_stdout = getattr(args, "output", None) == "-" and diff_format == "json"
+    diff_runtime_details: dict[str, Any] = {}
     success, has_changes, exit_code_override = generator.handle_diff_command(
         source_id=resolved_ids[0],
         target_id=resolved_ids[1],
@@ -243,6 +244,7 @@ def dispatch_cross_data_view_diff_cli_mode(
         keep_since_specified=keep_since_specified,
         profile=getattr(args, "profile", None),
         output_to_stdout=_diff_output_to_stdout,
+        runtime_details=diff_runtime_details,
     )
     if run_state is not None:
         run_state["output_format"] = diff_format
@@ -251,6 +253,9 @@ def dispatch_cross_data_view_diff_cli_mode(
             "has_changes": has_changes,
             "warn_threshold_exit_code": exit_code_override,
         }
+        advisory_rollup = diff_runtime_details.get("advisory_rollup")
+        if advisory_rollup is not None:
+            run_state["details"]["advisories"] = advisory_rollup
 
     _exit_with_diff_result(
         success=success,
@@ -469,6 +474,7 @@ def dispatch_snapshot_cli_modes(
 
         diff_format = args.format or "console"
         _cs_output_to_stdout = getattr(args, "output", None) == "-" and diff_format == "json"
+        cs_runtime_details: dict[str, Any] = {}
         success, has_changes, exit_code_override = generator.handle_compare_snapshots_command(
             source_file=source_file,
             target_file=target_file,
@@ -495,6 +501,7 @@ def dispatch_snapshot_cli_modes(
             include_calc_metrics=getattr(args, "include_calculated_metrics", False),
             include_segments=getattr(args, "include_segments_inventory", False),
             output_to_stdout=_cs_output_to_stdout,
+            runtime_details=cs_runtime_details,
         )
         if run_state is not None:
             run_state["output_format"] = diff_format
@@ -503,6 +510,9 @@ def dispatch_snapshot_cli_modes(
                 "has_changes": has_changes,
                 "warn_threshold_exit_code": exit_code_override,
             }
+            advisory_rollup = cs_runtime_details.get("advisory_rollup")
+            if advisory_rollup is not None:
+                run_state["details"]["advisories"] = advisory_rollup
         _exit_with_diff_result(
             success=success,
             has_changes=has_changes,
@@ -608,6 +618,7 @@ def dispatch_snapshot_cli_modes(
 
         diff_format = args.format or "console"
         _ds_output_to_stdout = getattr(args, "output", None) == "-" and diff_format == "json"
+        ds_runtime_details: dict[str, Any] = {}
         success, has_changes, exit_code_override = generator.handle_diff_snapshot_command(
             data_view_id=resolved_ids[0],
             snapshot_file=args.diff_snapshot,
@@ -643,6 +654,7 @@ def dispatch_snapshot_cli_modes(
             include_calc_metrics=include_calc_metrics,
             include_segments=include_segments,
             output_to_stdout=_ds_output_to_stdout,
+            runtime_details=ds_runtime_details,
         )
         if run_state is not None:
             run_state["output_format"] = diff_format
@@ -652,6 +664,9 @@ def dispatch_snapshot_cli_modes(
                 "has_changes": has_changes,
                 "warn_threshold_exit_code": exit_code_override,
             }
+            advisory_rollup = ds_runtime_details.get("advisory_rollup")
+            if advisory_rollup is not None:
+                run_state["details"]["advisories"] = advisory_rollup
         _exit_with_diff_result(
             success=success,
             has_changes=has_changes,

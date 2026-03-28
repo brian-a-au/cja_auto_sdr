@@ -9,6 +9,7 @@ import os
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 __all__ = [
     "handle_compare_snapshots_command",
@@ -22,6 +23,21 @@ def _generator_module():
     from cja_auto_sdr import generator as _generator
 
     return _generator
+
+
+def _populate_diff_advisory_rollup(
+    runtime_details: dict[str, Any] | None,
+    diff_result: object,
+    *,
+    changes_only: bool,
+) -> None:
+    """Compute diff advisory rollup and store it in *runtime_details* if provided."""
+    if runtime_details is None:
+        return
+    from cja_auto_sdr.core.advisory_builders import build_advisory_rollup, build_diff_advisories
+
+    advisory_summary = build_diff_advisories(diff_result, changes_only=changes_only)
+    runtime_details["advisory_rollup"] = build_advisory_rollup(advisory_summary)
 
 
 def handle_snapshot_command(
@@ -130,6 +146,7 @@ def handle_diff_command(
     profile: str | None = None,
     diff_config=None,
     output_to_stdout: bool = False,
+    runtime_details: dict[str, Any] | None = None,
 ) -> tuple[bool, bool, int | None]:
     """Handle the --diff command to compare two data views."""
     generator = _generator_module()
@@ -330,6 +347,7 @@ def handle_diff_command(
                 print(generator.ConsoleColors.success("Diff report generated successfully"))
 
         generator.append_github_step_summary(generator.build_diff_step_summary(diff_result), logger)
+        _populate_diff_advisory_rollup(runtime_details, diff_result, changes_only=changes_only)
         return True, diff_result.summary.has_changes, exit_code_override
     except (KeyboardInterrupt, SystemExit):
         raise
@@ -375,6 +393,7 @@ def handle_diff_snapshot_command(
     include_segments: bool = False,
     diff_snapshot_config=None,
     output_to_stdout: bool = False,
+    runtime_details: dict[str, Any] | None = None,
 ) -> tuple[bool, bool, int | None]:
     """Handle the --diff-snapshot command to compare a data view against a saved snapshot."""
     generator = _generator_module()
@@ -645,6 +664,7 @@ def handle_diff_snapshot_command(
                 print(generator.ConsoleColors.success("Diff report generated successfully"))
 
         generator.append_github_step_summary(generator.build_diff_step_summary(diff_result), logger)
+        _populate_diff_advisory_rollup(runtime_details, diff_result, changes_only=changes_only)
         return True, diff_result.summary.has_changes, exit_code_override
     except FileNotFoundError:
         print(generator.ConsoleColors.error(f"ERROR: Snapshot file not found: {snapshot_file}"), file=sys.stderr)
@@ -686,6 +706,7 @@ def handle_compare_snapshots_command(
     include_calc_metrics: bool = False,
     include_segments: bool = False,
     output_to_stdout: bool = False,
+    runtime_details: dict[str, Any] | None = None,
 ) -> tuple[bool, bool, int | None]:
     """Handle the --compare-snapshots command to compare two snapshot files directly."""
     generator = _generator_module()
@@ -820,6 +841,7 @@ def handle_compare_snapshots_command(
                 print(generator.ConsoleColors.success("Diff report generated successfully"))
 
         generator.append_github_step_summary(generator.build_diff_step_summary(diff_result), logger)
+        _populate_diff_advisory_rollup(runtime_details, diff_result, changes_only=changes_only)
         return True, diff_result.summary.has_changes, exit_code_override
     except FileNotFoundError as e:
         print(generator.ConsoleColors.error(f"ERROR: Snapshot file not found: {e!s}"), file=sys.stderr)

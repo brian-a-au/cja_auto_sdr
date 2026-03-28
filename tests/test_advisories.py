@@ -661,3 +661,232 @@ class TestDiffJsonAdvisories:
         data = build_diff_json_data(result)
         for key in ("metadata", "source", "target", "summary", "metric_diffs", "dimension_diffs"):
             assert key in data, f"Expected key {key!r} missing after advisories injection"
+
+
+# ---------------------------------------------------------------------------
+# Diff run-summary advisory rollup tests
+# ---------------------------------------------------------------------------
+
+
+class TestDiffRunSummaryAdvisoryRollup:
+    """Verify _populate_diff_advisory_rollup plumbing in diff handlers."""
+
+    def test_populate_diff_advisory_rollup_populates_dict(self):
+        from cja_auto_sdr.diff.commands import _populate_diff_advisory_rollup
+
+        result = _make_minimal_diff_result()
+        details: dict = {}
+        _populate_diff_advisory_rollup(details, result, changes_only=False)
+        assert "advisory_rollup" in details
+        rollup = details["advisory_rollup"]
+        assert rollup["advisories_version"] == "1.0"
+        assert rollup["severity"] == "info"
+        assert "summary" in rollup
+
+    def test_populate_diff_advisory_rollup_noop_when_none(self):
+        from cja_auto_sdr.diff.commands import _populate_diff_advisory_rollup
+
+        result = _make_minimal_diff_result()
+        _populate_diff_advisory_rollup(None, result, changes_only=False)  # no error
+
+    def test_populate_diff_advisory_rollup_with_breaking_changes(self):
+        from cja_auto_sdr.diff.commands import _populate_diff_advisory_rollup
+        from cja_auto_sdr.diff.models import ChangeType, ComponentDiff, DiffSummary
+
+        removed = ComponentDiff(id="m1", name="Revenue", change_type=ChangeType.REMOVED)
+        result = _make_minimal_diff_result(
+            summary=DiffSummary(metrics_removed=1),
+            metric_diffs=[removed],
+        )
+        details: dict = {}
+        _populate_diff_advisory_rollup(details, result, changes_only=False)
+        rollup = details["advisory_rollup"]
+        assert rollup["severity"] == "critical"
+        assert "breaking_changes" in rollup["types"]
+
+    def test_populate_diff_advisory_rollup_changes_only_flag(self):
+        from cja_auto_sdr.diff.commands import _populate_diff_advisory_rollup
+        from cja_auto_sdr.diff.models import ChangeType, ComponentDiff, DiffSummary
+
+        added = ComponentDiff(id="m1", name="NewMetric", change_type=ChangeType.ADDED)
+        result = _make_minimal_diff_result(
+            summary=DiffSummary(metrics_added=1),
+            metric_diffs=[added],
+        )
+        details: dict = {}
+        _populate_diff_advisory_rollup(details, result, changes_only=True)
+        rollup = details["advisory_rollup"]
+        assert "additions_only" in rollup["types"]
+
+    def test_handler_runtime_details_param_exists(self):
+        """All three diff handlers accept runtime_details parameter."""
+        from inspect import signature
+
+        from cja_auto_sdr.diff.commands import (
+            handle_compare_snapshots_command,
+            handle_diff_command,
+            handle_diff_snapshot_command,
+        )
+
+        for fn in (handle_diff_command, handle_diff_snapshot_command, handle_compare_snapshots_command):
+            params = signature(fn).parameters
+            assert "runtime_details" in params, f"{fn.__name__} missing runtime_details param"
+
+    def test_generator_wrappers_accept_runtime_details(self):
+        """Generator wrapper functions forward runtime_details."""
+        from inspect import signature
+
+        from cja_auto_sdr.generator import (
+            handle_compare_snapshots_command,
+            handle_diff_command,
+            handle_diff_snapshot_command,
+        )
+
+        for fn in (handle_diff_command, handle_diff_snapshot_command, handle_compare_snapshots_command):
+            params = signature(fn).parameters
+            assert "runtime_details" in params, f"generator.{fn.__name__} missing runtime_details param"
+
+
+# ---------------------------------------------------------------------------
+# Org-report run-summary advisory rollup integration tests
+# ---------------------------------------------------------------------------
+
+
+class TestOrgReportRunSummaryAdvisories:
+    """Verify org-report advisory rollup appears in run-summary details."""
+
+    def test_advisory_rollup_in_runtime_details(self):
+        """run_org_report populates runtime_details with advisory_rollup."""
+        from cja_auto_sdr.generator import _populate_org_report_advisory_rollup
+
+        result = _make_minimal_org_result()
+        runtime_details: dict = {}
+        _populate_org_report_advisory_rollup(runtime_details, result, trending=None)
+        assert "advisory_rollup" in runtime_details
+        rollup = runtime_details["advisory_rollup"]
+        assert rollup["advisories_version"] == "1.0"
+        assert rollup["severity"] == "info"
+        assert "summary" in rollup
+        assert "types" in rollup
+        assert "recommended_actions" in rollup
+
+    def test_advisory_rollup_none_runtime_details_is_noop(self):
+        """Passing None runtime_details does not raise."""
+        from cja_auto_sdr.generator import _populate_org_report_advisory_rollup
+
+        result = _make_minimal_org_result()
+        _populate_org_report_advisory_rollup(None, result, trending=None)  # no error
+
+    def test_advisory_rollup_with_failures(self):
+        """Advisory rollup captures fetch_failures from OrgReportResult."""
+        from cja_auto_sdr.generator import _populate_org_report_advisory_rollup
+        from cja_auto_sdr.org.models import DataViewSummary
+
+        failed_dv = DataViewSummary(
+            data_view_id="dv_fail_1",
+            data_view_name="Failed View",
+            error="API Error",
+        )
+        result = _make_minimal_org_result(
+            data_view_summaries=[failed_dv],
+        )
+        runtime_details: dict = {}
+        _populate_org_report_advisory_rollup(runtime_details, result, trending=None)
+        rollup = runtime_details["advisory_rollup"]
+        assert rollup["severity"] == "warning"
+        assert "fetch_failures" in rollup["types"]
+
+    def test_advisory_rollup_with_trending(self):
+        """Advisory rollup includes drift_activity when trending is provided."""
+        from cja_auto_sdr.generator import _populate_org_report_advisory_rollup
+        from cja_auto_sdr.org.models import OrgReportTrending, TrendingSnapshot
+
+        result = _make_minimal_org_result()
+        trending = OrgReportTrending(
+            snapshots=[
+                TrendingSnapshot(
+                    timestamp="2025-01-01T00:00:00",
+                    data_view_count=3,
+                    component_count=10,
+                    core_count=5,
+                    isolated_count=1,
+                    high_sim_pair_count=0,
+                ),
+            ],
+            drift_scores={"dv1": 0.72},
+            window_size=2,
+        )
+        runtime_details: dict = {}
+        _populate_org_report_advisory_rollup(runtime_details, result, trending=trending)
+        rollup = runtime_details["advisory_rollup"]
+        assert "drift_activity" in rollup["types"]
+
+    def test_merge_org_report_details_includes_advisories(self):
+        """_merge_org_report_run_summary_details merges advisory_rollup into details."""
+        from cja_auto_sdr.generator import _merge_org_report_run_summary_details
+        from cja_auto_sdr.org.models import OrgReportConfig
+
+        advisory_rollup = {
+            "advisories_version": "1.0",
+            "severity": "warning",
+            "summary": {"total_findings": 1, "by_severity": {"warning": 1}},
+            "types": ["fetch_failures"],
+            "recommended_actions": ["investigate_fetch_failures"],
+        }
+        run_state: dict = {"details": {}}
+        _merge_org_report_run_summary_details(
+            run_state,
+            success=True,
+            thresholds_exceeded=False,
+            fail_on_threshold=False,
+            lock_details={},
+            org_config=OrgReportConfig(),
+            advisory_rollup=advisory_rollup,
+        )
+        assert run_state["details"]["advisories"] == advisory_rollup
+
+    def test_merge_org_report_details_no_advisories_when_none(self):
+        """advisory_rollup=None leaves no advisories key in details."""
+        from cja_auto_sdr.generator import _merge_org_report_run_summary_details
+        from cja_auto_sdr.org.models import OrgReportConfig
+
+        run_state: dict = {"details": {}}
+        _merge_org_report_run_summary_details(
+            run_state,
+            success=True,
+            thresholds_exceeded=False,
+            fail_on_threshold=False,
+            lock_details={},
+            org_config=OrgReportConfig(),
+        )
+        assert "advisories" not in run_state["details"]
+
+    def test_merge_preserves_existing_detail_fields(self):
+        """Advisory merge does not clobber operation_success, lock, or execution_settings."""
+        from cja_auto_sdr.generator import _merge_org_report_run_summary_details
+        from cja_auto_sdr.org.models import OrgReportConfig
+
+        advisory_rollup = {
+            "advisories_version": "1.0",
+            "severity": "info",
+            "summary": {"total_findings": 0, "by_severity": {}},
+            "types": [],
+            "recommended_actions": [],
+        }
+        run_state: dict = {"details": {}}
+        _merge_org_report_run_summary_details(
+            run_state,
+            success=True,
+            thresholds_exceeded=True,
+            fail_on_threshold=True,
+            lock_details={"lock_acquired": True, "lock_contention": False, "lock_stale_threshold_seconds": 3600},
+            org_config=OrgReportConfig(),
+            advisory_rollup=advisory_rollup,
+        )
+        details = run_state["details"]
+        assert details["operation_success"] is True
+        assert details["thresholds_exceeded"] is True
+        assert details["fail_on_threshold"] is True
+        assert "lock" in details
+        assert "execution_settings" in details
+        assert details["advisories"] == advisory_rollup

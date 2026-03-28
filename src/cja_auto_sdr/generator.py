@@ -2114,6 +2114,7 @@ def _merge_org_report_run_summary_details(
     fail_on_threshold: bool,
     lock_details: Mapping[str, Any],
     org_config: OrgReportConfig,
+    advisory_rollup: dict[str, Any] | None = None,
 ) -> None:
     """Merge org-report run-summary details with one shared formatter."""
     if run_state is None:
@@ -2137,6 +2138,9 @@ def _merge_org_report_run_summary_details(
             )
         },
     )
+
+    if advisory_rollup is not None:
+        _merge_run_details(run_state, advisories=advisory_rollup)
 
 
 def _build_run_summary_payload(
@@ -5237,6 +5241,27 @@ write_org_report_csv = _make_org_writer_compat_wrapper(
 )
 
 
+def _populate_org_report_advisory_rollup(
+    runtime_details: dict[str, Any] | None,
+    result: Any,
+    trending: Any | None,
+) -> None:
+    """Compute advisory rollup from org-report result and store in runtime_details.
+
+    This is a best-effort helper — failures are silently ignored so that
+    advisory computation never breaks the org-report flow.
+    """
+    if runtime_details is None:
+        return
+    try:
+        from cja_auto_sdr.core.advisory_builders import build_advisory_rollup, build_org_report_advisories
+
+        advisory_summary = build_org_report_advisories(result, trending=trending)
+        runtime_details["advisory_rollup"] = build_advisory_rollup(advisory_summary)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def run_org_report(
     config_file: str,
     output_format: str,
@@ -5383,6 +5408,7 @@ def run_org_report(
                     if not quiet:
                         _status_print(f"JSON saved to: {file_path}")
             append_github_step_summary(build_org_step_summary(result), logger)
+            _populate_org_report_advisory_rollup(runtime_details, result, trending)
             return True, result.thresholds_exceeded
 
         # Handle format aliases (reports, data, ci)
@@ -5480,6 +5506,7 @@ def run_org_report(
             _status_print("=" * 110)
 
         append_github_step_summary(build_org_step_summary(result), logger)
+        _populate_org_report_advisory_rollup(runtime_details, result, trending)
         return True, result.thresholds_exceeded
 
     except ConcurrentOrgReportError as e:
@@ -5604,6 +5631,8 @@ def handle_diff_command(
     keep_since_specified: bool = False,
     profile: str | None = None,
     diff_config: DiffConfig | None = None,
+    output_to_stdout: bool = False,
+    runtime_details: dict[str, Any] | None = None,
 ) -> tuple[bool, bool, int | None]:
     from cja_auto_sdr.diff.commands import handle_diff_command as _impl
 
@@ -5640,6 +5669,8 @@ def handle_diff_command(
         keep_since_specified=keep_since_specified,
         profile=profile,
         diff_config=diff_config,
+        output_to_stdout=output_to_stdout,
+        runtime_details=runtime_details,
     )
 
 
@@ -5678,6 +5709,8 @@ def handle_diff_snapshot_command(
     include_calc_metrics: bool = False,
     include_segments: bool = False,
     diff_snapshot_config: DiffSnapshotConfig | None = None,
+    output_to_stdout: bool = False,
+    runtime_details: dict[str, Any] | None = None,
 ) -> tuple[bool, bool, int | None]:
     from cja_auto_sdr.diff.commands import handle_diff_snapshot_command as _impl
 
@@ -5716,6 +5749,8 @@ def handle_diff_snapshot_command(
         include_calc_metrics=include_calc_metrics,
         include_segments=include_segments,
         diff_snapshot_config=diff_snapshot_config,
+        output_to_stdout=output_to_stdout,
+        runtime_details=runtime_details,
     )
 
 
@@ -5744,6 +5779,8 @@ def handle_compare_snapshots_command(
     format_pr_comment: bool = False,
     include_calc_metrics: bool = False,
     include_segments: bool = False,
+    output_to_stdout: bool = False,
+    runtime_details: dict[str, Any] | None = None,
 ) -> tuple[bool, bool, int | None]:
     from cja_auto_sdr.diff.commands import handle_compare_snapshots_command as _impl
 
@@ -5772,6 +5809,8 @@ def handle_compare_snapshots_command(
         format_pr_comment=format_pr_comment,
         include_calc_metrics=include_calc_metrics,
         include_segments=include_segments,
+        output_to_stdout=output_to_stdout,
+        runtime_details=runtime_details,
     )
 
 
@@ -6329,6 +6368,7 @@ def _dispatch_post_validation_report_modes(
             trending_window=trending_window,
             runtime_details=lock_details,
         )
+        advisory_rollup = lock_details.pop("advisory_rollup", None)
         if run_state is not None:
             run_state["output_format"] = output_format
             _merge_org_report_run_summary_details(
@@ -6338,6 +6378,7 @@ def _dispatch_post_validation_report_modes(
                 fail_on_threshold=org_config.fail_on_threshold,
                 lock_details=lock_details,
                 org_config=org_config,
+                advisory_rollup=advisory_rollup,
             )
 
         if success:
