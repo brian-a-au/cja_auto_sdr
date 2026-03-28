@@ -101,9 +101,12 @@ class TestErrorPathKeyGeneration:
 
     def test_successive_error_keys_do_not_collide(self):
         cache = ValidationCache(max_size=10, ttl_seconds=60)
-        with patch.object(cache.logger, "warning"), patch(
-            "cja_auto_sdr.api.cache.time.time",
-            side_effect=[1000.0, 1000.5],
+        with (
+            patch.object(cache.logger, "warning"),
+            patch(
+                "cja_auto_sdr.api.cache.time.time",
+                side_effect=[1000.0, 1000.5],
+            ),
         ):
             key1 = cache._generate_cache_key("not_a_dataframe", "Metrics", ["id"], ["id"])
             key2 = cache._generate_cache_key("not_a_dataframe", "Metrics", ["id"], ["id"])

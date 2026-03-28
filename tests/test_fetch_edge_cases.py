@@ -59,9 +59,12 @@ class TestTaskCount:
                 submitted_futures.append(future)
                 return future
 
-        with patch("cja_auto_sdr.api.fetch.ThreadPoolExecutor", FakeExecutor), patch(
-            "cja_auto_sdr.api.fetch.as_completed",
-            side_effect=list,
+        with (
+            patch("cja_auto_sdr.api.fetch.ThreadPoolExecutor", FakeExecutor),
+            patch(
+                "cja_auto_sdr.api.fetch.as_completed",
+                side_effect=list,
+            ),
         ):
             fetcher.fetch_all_data("dv_test")
 

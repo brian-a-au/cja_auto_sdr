@@ -194,9 +194,12 @@ class TestParallelExecution:
                 return future
 
         checker = DataQualityChecker(logger=logging.getLogger("test"), quiet=True)
-        with patch("cja_auto_sdr.api.quality.ThreadPoolExecutor", FakeExecutor), patch(
-            "cja_auto_sdr.api.quality.as_completed",
-            side_effect=list,
+        with (
+            patch("cja_auto_sdr.api.quality.ThreadPoolExecutor", FakeExecutor),
+            patch(
+                "cja_auto_sdr.api.quality.as_completed",
+                side_effect=list,
+            ),
         ):
             checker.check_all_parallel(
                 metrics_df,
@@ -209,18 +212,22 @@ class TestParallelExecution:
         assert executor_workers == [DEFAULT_VALIDATION_WORKERS]
 
     def test_parallel_and_sequential_same_results(self):
-        metrics_df = pd.DataFrame({
-            "id": ["m1", "m2"],
-            "name": ["Alpha", "Alpha"],
-            "type": ["metric", "metric"],
-            "description": ["desc", ""],
-        })
-        dimensions_df = pd.DataFrame({
-            "id": ["d1"],
-            "name": [None],
-            "type": ["dimension"],
-            "description": ["desc"],
-        })
+        metrics_df = pd.DataFrame(
+            {
+                "id": ["m1", "m2"],
+                "name": ["Alpha", "Alpha"],
+                "type": ["metric", "metric"],
+                "description": ["desc", ""],
+            }
+        )
+        dimensions_df = pd.DataFrame(
+            {
+                "id": ["d1"],
+                "name": [None],
+                "type": ["dimension"],
+                "description": ["desc"],
+            }
+        )
 
         req_m = ["id", "name", "type"]
         req_d = ["id", "name", "type"]
