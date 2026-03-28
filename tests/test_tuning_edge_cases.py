@@ -39,8 +39,8 @@ class TestConfigSemantics:
         tuner = APIWorkerTuner(config=config, initial_workers=1)
         assert tuner.current_workers == 3
 
-    def test_sample_window_zero_immediate_adjustment(self):
-        """sample_window=0: first recording can trigger adjustment."""
+    def test_sample_window_zero_clamps_to_one_sample(self):
+        """sample_window=0 is normalized to the minimum meaningful window."""
         config = APITuningConfig(
             min_workers=1,
             max_workers=5,
@@ -50,11 +50,10 @@ class TestConfigSemantics:
         )
         tuner = APIWorkerTuner(config=config, initial_workers=2)
 
-        # With sample_window=0, the "not enough samples" guard
-        # (len < sample_window) is always False, so first call decides
+        assert tuner.config.sample_window == 1
+
+        # After clamping, the first response is enough to evaluate the window.
         result = tuner.record_response_time(100.0)  # Below scale_up threshold
-        # Whether it adjusts depends on if avg < scale_up_threshold
-        # 100.0 < 500.0 → scale up from 2 to 3
         assert result == 3
 
 

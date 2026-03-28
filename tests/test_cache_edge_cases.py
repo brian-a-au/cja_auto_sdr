@@ -106,13 +106,15 @@ class TestErrorPathKeyGeneration:
             patch(
                 "cja_auto_sdr.api.cache.time.time",
                 side_effect=[1000.0, 1000.5],
-            ),
+            ) as mock_time,
         ):
             key1 = cache._generate_cache_key("not_a_dataframe", "Metrics", ["id"], ["id"])
             key2 = cache._generate_cache_key("not_a_dataframe", "Metrics", ["id"], ["id"])
-        assert key1.startswith("error:")
-        assert key2.startswith("error:")
-        assert key1 != key2
+        # Error-path keys intentionally embed the current timestamp so failures
+        # cannot collide and accidentally turn into cache hits.
+        assert key1 == "error:1000.0"
+        assert key2 == "error:1000.5"
+        assert mock_time.call_count == 2
 
 
 # ==================== TTL Boundary ====================
@@ -132,8 +134,7 @@ class TestTTLBoundary:
             issues, _ts = cache._cache[key]
             cache._cache[key] = (issues, now - 9.999)  # TTL - epsilon
 
-        with patch("cja_auto_sdr.api.cache.time") as mock_time:
-            mock_time.time.return_value = now
+        with patch("cja_auto_sdr.api.cache.time.time", return_value=now):
             result, _key = cache.get(df, "Metrics", ["id"], ["id"])
             assert result is not None
 
@@ -148,8 +149,7 @@ class TestTTLBoundary:
             issues, _ts = cache._cache[key]
             cache._cache[key] = (issues, now - 10.001)  # TTL + epsilon
 
-        with patch("cja_auto_sdr.api.cache.time") as mock_time:
-            mock_time.time.return_value = now
+        with patch("cja_auto_sdr.api.cache.time.time", return_value=now):
             result, _key = cache.get(df, "Metrics", ["id"], ["id"])
             assert result is None
 
@@ -167,8 +167,7 @@ class TestTTLBoundary:
             cache._cache[key] = (issues, now - 10)  # Exactly at TTL boundary
 
         # Patch time.time to return consistent value for the comparison
-        with patch("cja_auto_sdr.api.cache.time") as mock_time:
-            mock_time.time.return_value = now
+        with patch("cja_auto_sdr.api.cache.time.time", return_value=now):
             result, _key = cache.get(df, "Metrics", ["id"], ["id"])
             # age == ttl_seconds → NOT expired (uses > not >=)
             assert result is not None

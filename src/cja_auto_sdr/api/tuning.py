@@ -3,6 +3,7 @@
 import logging
 import threading
 import time
+from dataclasses import replace
 from typing import Any
 
 from cja_auto_sdr.core.config import APITuningConfig
@@ -47,6 +48,18 @@ class APIWorkerTuner:
         """
         self.config = config or APITuningConfig()
         self.logger = logger or logging.getLogger(__name__)
+
+        # Guard against invalid direct-construction configs. fetch.py already
+        # clamps per-data-view windows; do the same here so the tuner behaves
+        # consistently even when constructed directly in tests or library use.
+        if self.config.sample_window < 1:
+            original_window = self.config.sample_window
+            self.config = replace(self.config, sample_window=1)
+            self.logger.debug(
+                "API tuner sample_window clamped from %s to %s for direct tuner use",
+                original_window,
+                self.config.sample_window,
+            )
 
         # Current worker count
         self._current_workers = max(self.config.min_workers, min(initial_workers, self.config.max_workers))
