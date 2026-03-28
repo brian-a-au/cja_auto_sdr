@@ -124,3 +124,23 @@ class TestAgentModeFastPath:
         assert policy is not None
         tolerated = policy.tolerated_fast_path_dests()
         assert "agent_mode" in tolerated
+
+
+class TestAgentModeConstraints:
+    """Verify --agent-mode does not soften existing validation rules."""
+
+    def test_agent_mode_run_summary_json_stdout_conflict(self):
+        """--agent-mode --run-summary-json - should still fail when paired with stdout output."""
+        args = parse_arguments(["dv_123", "--agent-mode", "--run-summary-json", "-"])
+        assert args.output == "-"
+        assert args.run_summary_json == "-"
+
+    def test_agent_mode_help_text_under_agent_integration(self):
+        """--agent-mode help appears under Agent Integration group."""
+        parser = parse_arguments([], return_parser=True)
+        for group in parser._action_groups:
+            if group.title == "Agent Integration":
+                action_dests = [a.dest for a in group._group_actions]
+                assert "agent_mode" in action_dests
+                return
+        pytest.fail("Agent Integration group not found")
