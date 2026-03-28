@@ -63,6 +63,8 @@ GOVERNANCE_MAX_OVERLAP_THRESHOLD: float = 0.9
 
 DEFAULT_CACHE_SIZE: int = 1000  # Maximum cached validation results
 DEFAULT_CACHE_TTL: int = 3600  # Cache TTL in seconds (1 hour)
+# Number of hex characters kept from the MD5 config hash in cache keys.
+CACHE_KEY_HASH_LENGTH: int = 8
 
 # ==================== LOGGING DEFAULTS ====================
 
@@ -77,9 +79,18 @@ DEFAULT_CACHE = CacheConfig()
 DEFAULT_LOG = LogConfig()
 DEFAULT_WORKERS = WorkerConfig()
 
+# ==================== RETRY / RESILIENCE ====================
+
 # Default retry settings (dict format for backward compatibility)
 # New code should use DEFAULT_RETRY (RetryConfig dataclass) instead
 DEFAULT_RETRY_CONFIG: dict[str, Any] = DEFAULT_RETRY.to_dict()
+
+# Jitter multiplier range for retry delay randomization.
+# Final delay = base_delay * uniform(*RETRY_JITTER_RANGE)
+RETRY_JITTER_RANGE: tuple[float, float] = (0.5, 1.5)
+
+# HTTP status codes that should trigger a retry
+RETRYABLE_STATUS_CODES: set[int] = {408, 429, 500, 502, 503, 504}
 
 # ==================== QUALITY / SEVERITY ====================
 
@@ -104,11 +115,6 @@ VALIDATION_SCHEMA: dict[str, list] = {
     "required_dimension_fields": ["id", "name", "type"],
     "critical_fields": ["id", "name", "title", "description"],
 }
-
-# ==================== RETRYABLE ERRORS ====================
-
-# HTTP status codes that should trigger a retry
-RETRYABLE_STATUS_CODES: set[int] = {408, 429, 500, 502, 503, 504}
 
 # ==================== CONFIG SCHEMA ====================
 

@@ -7,6 +7,21 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.4.9] - 2026-03-27
+
+### Internal
+- Extracted shared cache validator in `api/cache.py` (removed duplication)
+- Derived `DataQualityChecker.SEVERITY_ORDER` from canonical `QUALITY_SEVERITY_ORDER`
+- Added `RETRY_JITTER_RANGE` and `CACHE_KEY_HASH_LENGTH` named constants
+- Wired named constants into `api/resilience.py`, `api/cache.py`, `api/quality.py`
+
+### Dependencies
+- Pin `pandas<3` upper bound to guard against breaking changes in pandas 3.x
+
+### Tests
+- Added 137 new edge-case tests across the API layer (resilience, cache, quality, tuning, fetch)
+- Total test count: 7,294 tests at 95% coverage gate
+
 ## [3.4.8] - 2026-03-27
 
 ### Fixed

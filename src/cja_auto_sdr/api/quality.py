@@ -10,12 +10,12 @@ from tqdm import tqdm
 
 from cja_auto_sdr.api.cache import ValidationCache
 from cja_auto_sdr.core.colors import _format_error_msg
-from cja_auto_sdr.core.constants import TQDM_BAR_FORMAT
+from cja_auto_sdr.core.constants import DEFAULT_VALIDATION_WORKERS, QUALITY_SEVERITY_ORDER, TQDM_BAR_FORMAT
 
 
 class DataQualityChecker:
     # Severity levels in priority order (highest to lowest) for proper sorting
-    SEVERITY_ORDER: ClassVar[list[str]] = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]
+    SEVERITY_ORDER: ClassVar[list[str]] = list(QUALITY_SEVERITY_ORDER)
 
     def __init__(
         self,
@@ -349,7 +349,7 @@ class DataQualityChecker:
         metrics_required_fields: list[str],
         dimensions_required_fields: list[str],
         critical_fields: list[str],
-        max_workers: int = 2,
+        max_workers: int = DEFAULT_VALIDATION_WORKERS,
     ):
         """
         Run validation checks in parallel for metrics and dimensions

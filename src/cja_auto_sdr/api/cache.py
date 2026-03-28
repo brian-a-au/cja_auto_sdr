@@ -12,6 +12,16 @@ from typing import Any
 
 import pandas as pd
 
+from cja_auto_sdr.core.constants import CACHE_KEY_HASH_LENGTH
+
+
+def _validate_cache_params(max_size: int, ttl_seconds: int) -> None:
+    """Validate cache initialization parameters."""
+    if max_size < 1:
+        raise ValueError(f"max_size must be >= 1, got {max_size}")
+    if ttl_seconds <= 0:
+        raise ValueError(f"ttl_seconds must be > 0, got {ttl_seconds}")
+
 
 class ValidationCache:
     """
@@ -39,10 +49,7 @@ class ValidationCache:
             ttl_seconds: Time-to-live for cache entries in seconds, >= 1 (default: 3600 = 1 hour)
             logger: Logger instance for cache statistics (default: module logger)
         """
-        if max_size < 1:
-            raise ValueError(f"max_size must be >= 1, got {max_size}")
-        if ttl_seconds <= 0:
-            raise ValueError(f"ttl_seconds must be > 0, got {ttl_seconds}")
+        _validate_cache_params(max_size, ttl_seconds)
 
         self.max_size = max_size
         self.ttl_seconds = ttl_seconds
@@ -95,7 +102,7 @@ class ValidationCache:
 
             # Hash configuration (required_fields + critical_fields)
             config_str = f"{sorted(required_fields)}:{sorted(critical_fields)}"
-            config_hash = hashlib.md5(config_str.encode(), usedforsecurity=False).hexdigest()[:8]
+            config_hash = hashlib.md5(config_str.encode(), usedforsecurity=False).hexdigest()[:CACHE_KEY_HASH_LENGTH]
 
             # Combine into cache key
             return f"{item_type}:{df_hash}:{config_hash}"
@@ -333,10 +340,7 @@ class SharedValidationCache:
             ttl_seconds: Time-to-live for cache entries in seconds (default: 3600)
             logger: Logger instance for cache statistics (default: module logger)
         """
-        if max_size < 1:
-            raise ValueError(f"max_size must be >= 1, got {max_size}")
-        if ttl_seconds <= 0:
-            raise ValueError(f"ttl_seconds must be > 0, got {ttl_seconds}")
+        _validate_cache_params(max_size, ttl_seconds)
 
         self.max_size = max_size
         self.ttl_seconds = ttl_seconds
@@ -378,7 +382,7 @@ class SharedValidationCache:
 
             # Hash configuration (required_fields + critical_fields)
             config_str = f"{sorted(required_fields)}:{sorted(critical_fields)}"
-            config_hash = hashlib.md5(config_str.encode(), usedforsecurity=False).hexdigest()[:8]
+            config_hash = hashlib.md5(config_str.encode(), usedforsecurity=False).hexdigest()[:CACHE_KEY_HASH_LENGTH]
 
             # Combine into cache key
             return f"{item_type}:{df_hash}:{config_hash}"

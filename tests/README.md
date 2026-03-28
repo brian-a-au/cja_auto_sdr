@@ -12,6 +12,7 @@ tests/
 ├── test_api_tuning.py               # API worker auto-tuning tests
 ├── test_backwards_compat.py         # Backwards compatibility tests
 ├── test_batch_processor.py          # Batch processor tests
+├── test_cache_edge_cases.py         # Cache edge-case tests
 ├── test_calculated_metrics_inventory.py  # Calculated metrics inventory tests
 ├── test_circuit_breaker.py          # Circuit breaker pattern tests
 ├── test_cja_initialization.py       # CJA initialization and validation tests
@@ -31,6 +32,7 @@ tests/
 ├── test_env_credentials.py          # Environment variable credentials tests
 ├── test_error_messages.py           # Enhanced error message tests
 ├── test_excel_formatting.py         # Excel formatting tests
+├── test_fetch_edge_cases.py         # Fetch edge-case tests
 ├── test_explain_exit_code.py        # Exit-code explainer, fast-path dispatch, and run-summary tests
 ├── test_git_integration.py          # Git integration and snapshot tests
 ├── test_inventory_utils.py          # Inventory utilities tests
@@ -44,9 +46,12 @@ tests/
 ├── test_parallel_validation.py      # Parallel validation tests
 ├── test_process_single_dataview.py  # Single data view processing tests
 ├── test_profiles.py                 # Multi-organization profile tests
+├── test_quality_edge_cases.py       # Quality edge-case tests
+├── test_resilience_edge_cases.py     # Resilience edge-case tests
 ├── test_retry.py                    # Retry with exponential backoff tests
 ├── test_segments_inventory.py       # Segments inventory tests
 ├── test_shared_cache.py             # Shared validation cache tests
+├── test_tuning_edge_cases.py         # Tuning edge-case tests
 ├── test_update_test_counts.py       # Test count validation tests
 ├── test_utils.py                    # Utility function tests
 ├── test_ux_features.py              # UX enhancement features tests
@@ -127,7 +132,7 @@ tests/
 └── README.md                        # This file
 ```
 
-**Total: 7,157 comprehensive tests**
+**Total: 7,294 comprehensive tests**
 
 ### Test Count Breakdown
 
@@ -136,16 +141,16 @@ tests/
 
 | Category | Tests | Files | Notes |
 |----------|-------|-------|-------|
-| `unit` | 7,051 | 109 | Default primary category for files without explicit integration/e2e/smoke scope |
+| `unit` | 7,188 | 114 | Default primary category for files without explicit integration/e2e/smoke scope |
 | `integration` | 73 | 3 | Cross-module integration suites |
 | `e2e` | 23 | 2 | End-to-end suites with a mocked external boundary |
 | `smoke` | 10 | 1 | Lightweight command-mode coverage |
 | `slow` | 7 | 1 | Overlay marker; these tests are also counted in a primary category |
-| **Primary Total** | **7,157** | **115** | **unit + integration + e2e + smoke** |
+| **Primary Total** | **7,294** | **120** | **unit + integration + e2e + smoke** |
 
 | CI Slice | Tests | Files | Selector |
 |----------|-------|-------|----------|
-| `test-unit` | 7,044 | 108 | `-m "unit and not slow"` |
+| `test-unit` | 7,181 | 113 | `-m "unit and not slow"` |
 | `test-integration` | 103 | 6 | `-m "integration or e2e or slow"` |
 | `smoke-test` | 10 | 1 | `-m smoke` |
 
@@ -270,7 +275,12 @@ tests/
 | `test_exit_codes.py` | 11 | Exit code helpers and signal detection tests |
 | `test_json_io.py` | 5 | JSON I/O atomic write and read tests |
 | `test_lock_info_normalization.py` | 54 | Lock-info normalization classmethod direct unit tests |
-| **Total** | **7,157** | **Collected via pytest --collect-only** |
+| `test_resilience_edge_cases.py` | 74 | Resilience edge-case tests |
+| `test_cache_edge_cases.py` | 20 | Cache edge-case tests |
+| `test_quality_edge_cases.py` | 19 | Quality edge-case tests |
+| `test_tuning_edge_cases.py` | 15 | Tuning edge-case tests |
+| `test_fetch_edge_cases.py` | 9 | Fetch edge-case tests |
+| **Total** | **7,294** | **Collected via pytest --collect-only** |
 
 ## Running Tests
 
@@ -728,7 +738,7 @@ the `tests/README.md` inventory tree or count table.
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (7,157 tests total)
+- [x] Comprehensive test coverage (7,294 tests total)
 - [x] Org-wide analysis tests (test_org_report.py) - 209 tests (including large org scaling, output path aliases, memory warnings, smart cache invalidation)
 - [x] Org-wide analysis integration tests (test_org_report_integration.py) - 17 tests (end-to-end flows, caching, filtering, governance thresholds)
 - [x] Profile management tests (test_profiles.py) - 77 tests
