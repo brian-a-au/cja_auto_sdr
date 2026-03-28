@@ -3,10 +3,15 @@
 
 from __future__ import annotations
 
-import pytest
 from unittest.mock import patch
 
+import pytest
+
 from cja_auto_sdr.cli.parser import parse_arguments
+from cja_auto_sdr.cli.standalone_policy import (
+    _STANDALONE_FAST_PATH_METADATA_DESTS,
+    standalone_prevalidation_policy,
+)
 
 
 class TestAgentModeRegistration:
@@ -98,13 +103,6 @@ class TestAgentModeResolution:
         with patch("sys.argv", ["cja_auto_sdr", "dv_123", "--agent-mode", "--output", "report.json"]):
             args = parse_arguments()
         assert args.output == "report.json"
-
-
-from cja_auto_sdr.cli.standalone_policy import (
-    StandalonePrevalidationPolicy,
-    standalone_prevalidation_policy,
-    _STANDALONE_FAST_PATH_METADATA_DESTS,
-)
 
 
 class TestAgentModeFastPath:

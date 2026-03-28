@@ -12,6 +12,7 @@ import logging
 import os
 from collections.abc import Callable
 
+from cja_auto_sdr.cli.option_resolution import explicit_long_option_dests
 from cja_auto_sdr.core.constants import (
     DEFAULT_AUTO_PRUNE_KEEP_LAST,
     DEFAULT_AUTO_PRUNE_KEEP_SINCE,
@@ -22,7 +23,6 @@ from cja_auto_sdr.core.constants import (
     QUALITY_SEVERITY_ORDER,
 )
 from cja_auto_sdr.core.version import __version__
-from cja_auto_sdr.cli.option_resolution import explicit_long_option_dests
 
 _AGENT_MODE_DEFAULTS: dict[str, str] = {
     "format": "json",

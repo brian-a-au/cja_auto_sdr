@@ -57,7 +57,7 @@ class TestAgentPlaybooks:
                 idx = next(i for i, line in enumerate(lines) if line.strip() == section)
             except StopIteration:
                 pytest.fail(f"Missing '{section}' in {playbook_path.name}")
-            remaining = [l for l in lines[idx + 1:] if l.strip()]
+            remaining = [line for line in lines[idx + 1:] if line.strip()]
             assert remaining, f"Empty section '{section}' in {playbook_path.name}"
             if remaining[0].startswith("## "):
                 pytest.fail(f"Empty section '{section}' in {playbook_path.name}")

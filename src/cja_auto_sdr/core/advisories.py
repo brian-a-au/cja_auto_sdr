@@ -7,7 +7,7 @@ agents branch faster without hiding or replacing the base data.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 _ADVISORY_SEVERITY_ORDER = ("info", "warning", "critical")
