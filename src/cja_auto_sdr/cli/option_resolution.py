@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from typing import NamedTuple
 
 
@@ -29,3 +30,25 @@ def resolve_long_option_token(option_text: str, known_long_options: frozenset[st
     if len(matches) > 1:
         return LongOptionResolution(canonical_option=None, is_ambiguous=True)
     return LongOptionResolution(canonical_option=None, is_ambiguous=False)
+
+
+def explicit_long_option_dests(
+    argv: list[str] | None,
+    *,
+    tracked_options: set[str],
+    known_long_options: frozenset[str],
+) -> set[str]:
+    """Return argparse dest names for explicitly provided long options.
+
+    Only checks options in tracked_options. Resolves abbreviations against
+    the full known_long_options set. When argv is None, falls back to sys.argv[1:].
+    """
+    tokens = argv if argv is not None else sys.argv[1:]
+    found_dests: set[str] = set()
+    for token in tokens:
+        resolution = resolve_long_option_token(token, known_long_options)
+        if resolution.canonical_option is not None and resolution.canonical_option in tracked_options:
+            # Convert --log-format to log_format
+            dest = resolution.canonical_option.lstrip("-").replace("-", "_")
+            found_dests.add(dest)
+    return found_dests

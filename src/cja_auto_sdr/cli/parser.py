@@ -22,6 +22,44 @@ from cja_auto_sdr.core.constants import (
     QUALITY_SEVERITY_ORDER,
 )
 from cja_auto_sdr.core.version import __version__
+from cja_auto_sdr.cli.option_resolution import explicit_long_option_dests
+
+_AGENT_MODE_DEFAULTS: dict[str, str] = {
+    "format": "json",
+    "output": "-",
+    "log_format": "json",
+}
+
+
+def _configured_long_options(parser: argparse.ArgumentParser) -> frozenset[str]:
+    """Extract all configured long-option strings from an ArgumentParser."""
+    options: set[str] = set()
+    for action in parser._actions:
+        for opt in action.option_strings:
+            if opt.startswith("--"):
+                options.add(opt)
+    return frozenset(options)
+
+
+def _apply_agent_mode_defaults(
+    args: argparse.Namespace,
+    argv: list[str] | None,
+    *,
+    known_long_options: frozenset[str],
+) -> None:
+    """Apply --agent-mode preset defaults for options not explicitly provided."""
+    if not getattr(args, "agent_mode", False):
+        return
+
+    explicit_dests = explicit_long_option_dests(
+        argv,
+        tracked_options={"--format", "--output", "--log-format"},
+        known_long_options=known_long_options,
+    )
+    for dest, default_value in _AGENT_MODE_DEFAULTS.items():
+        if dest not in explicit_dests:
+            setattr(args, dest, default_value)
+
 
 # Attempt to load argcomplete for shell tab-completion (optional dependency)
 _ARGCOMPLETE_AVAILABLE = False
@@ -1422,4 +1460,6 @@ Requirements:
     if return_parser:
         return parser
 
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    _apply_agent_mode_defaults(args, argv, known_long_options=_configured_long_options(parser))
+    return args
