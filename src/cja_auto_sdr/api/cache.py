@@ -12,6 +12,8 @@ from typing import Any
 
 import pandas as pd
 
+from cja_auto_sdr.core.constants import CACHE_KEY_HASH_LENGTH
+
 
 def _validate_cache_params(max_size: int, ttl_seconds: int) -> None:
     """Validate cache initialization parameters."""
@@ -100,7 +102,7 @@ class ValidationCache:
 
             # Hash configuration (required_fields + critical_fields)
             config_str = f"{sorted(required_fields)}:{sorted(critical_fields)}"
-            config_hash = hashlib.md5(config_str.encode(), usedforsecurity=False).hexdigest()[:8]
+            config_hash = hashlib.md5(config_str.encode(), usedforsecurity=False).hexdigest()[:CACHE_KEY_HASH_LENGTH]
 
             # Combine into cache key
             return f"{item_type}:{df_hash}:{config_hash}"
@@ -380,7 +382,7 @@ class SharedValidationCache:
 
             # Hash configuration (required_fields + critical_fields)
             config_str = f"{sorted(required_fields)}:{sorted(critical_fields)}"
-            config_hash = hashlib.md5(config_str.encode(), usedforsecurity=False).hexdigest()[:8]
+            config_hash = hashlib.md5(config_str.encode(), usedforsecurity=False).hexdigest()[:CACHE_KEY_HASH_LENGTH]
 
             # Combine into cache key
             return f"{item_type}:{df_hash}:{config_hash}"

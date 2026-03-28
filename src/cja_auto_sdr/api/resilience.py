@@ -15,7 +15,7 @@ from collections.abc import Callable
 from typing import Any, TypeVar
 
 from cja_auto_sdr.core.config import CircuitBreakerConfig, CircuitState
-from cja_auto_sdr.core.constants import DEFAULT_RETRY_CONFIG, RETRYABLE_STATUS_CODES
+from cja_auto_sdr.core.constants import DEFAULT_RETRY_CONFIG, RETRY_JITTER_RANGE, RETRYABLE_STATUS_CODES
 from cja_auto_sdr.core.exceptions import CircuitBreakerOpen, RetryableHTTPError
 from cja_auto_sdr.core.logging import emit_diagnostic
 
@@ -749,7 +749,7 @@ def retry_with_backoff(
 
     Backoff Formula:
         delay = min(base_delay * (exponential_base ** attempt), max_delay)
-        if jitter: delay = delay * random.uniform(0.5, 1.5)
+        if jitter: delay = delay * random.uniform(*RETRY_JITTER_RANGE)
     """
     # Use defaults if not specified
     _max_retries = max_retries if max_retries is not None else DEFAULT_RETRY_CONFIG["max_retries"]
@@ -799,7 +799,7 @@ def retry_with_backoff(
 
                     # Add jitter to prevent thundering herd
                     if _jitter:
-                        delay = delay * random.uniform(0.5, 1.5)
+                        delay = delay * random.uniform(*RETRY_JITTER_RANGE)
 
                     _logger.warning(
                         f"⚠ {func.__name__} attempt {attempt + 1}/{_max_retries + 1} failed: {e!s}. "
@@ -931,7 +931,7 @@ def make_api_call_with_retry[T](
 
             delay = min(base_delay * (exponential_base**attempt), max_delay)
             if jitter:
-                delay = delay * random.uniform(0.5, 1.5)
+                delay = delay * random.uniform(*RETRY_JITTER_RANGE)
 
             _logger.warning(
                 f"⚠ {operation_name} attempt {attempt + 1}/{max_retries + 1} failed: {e!s}. Retrying in {delay:.1f}s...",

@@ -20,7 +20,7 @@ from cja_auto_sdr.core.discovery_payloads import assess_dataview_lookup_payload
 from cja_auto_sdr.core.exceptions import CircuitBreakerOpen
 from cja_auto_sdr.core.perf import PerformanceTracker
 
-API_FETCH_TASK_COUNT = 3  # metrics + dimensions + dataview
+API_FETCH_TASK_COUNT = 3  # metrics + dimensions + dataview info
 
 
 @dataclass(frozen=True, slots=True)
