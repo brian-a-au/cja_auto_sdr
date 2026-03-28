@@ -18,6 +18,7 @@ from cja_auto_sdr.core.advisories import (
 )
 
 if TYPE_CHECKING:
+    from cja_auto_sdr.diff.models import DiffResult
     from cja_auto_sdr.org.models import OrgReportResult, OrgReportTrending
 
 
@@ -152,3 +153,140 @@ def build_org_report_advisories(
         findings=findings,
         summary=_make_summary_block(findings),
     )
+
+
+def build_diff_advisories(
+    diff_result: DiffResult,
+    *,
+    changes_only: bool = False,
+) -> AdvisorySummary:
+    """Derive an AdvisorySummary from a DiffResult.
+
+    This is a pure function — it does not mutate *diff_result*.
+
+    Checks performed:
+    - breaking_changes: Any REMOVED components → severity critical
+    - schema_changes: Any MODIFIED components → severity warning
+    - additions_only: All changes are additions and no removals/modifications → severity info
+
+    Excluded types: high_change_volume, rename-derived findings.
+    """
+    from cja_auto_sdr.diff.models import ChangeType
+
+    findings: list[AdvisoryFinding] = []
+    summary = diff_result.summary
+
+    # Collect all component diffs across types
+    all_diffs = list(diff_result.metric_diffs or []) + list(diff_result.dimension_diffs or [])
+    inv_diffs = list(diff_result.calc_metrics_diffs or []) + list(diff_result.segments_diffs or [])
+
+    if changes_only:
+        active_diffs = [d for d in all_diffs if d.change_type != ChangeType.UNCHANGED]
+        active_inv_diffs = [d for d in inv_diffs if d.change_type != ChangeType.UNCHANGED]
+    else:
+        active_diffs = all_diffs
+        active_inv_diffs = inv_diffs
+
+    # 1. Breaking changes — REMOVED components
+    removed = [d for d in all_diffs + inv_diffs if d.change_type == ChangeType.REMOVED]
+    if removed:
+        component_details = [
+            {"component_id": d.id, "component_name": d.name, "change_type": d.change_type.value}
+            for d in removed
+        ]
+        findings.append(
+            AdvisoryFinding(
+                type="breaking_changes",
+                severity="critical",
+                message=f"{len(removed)} component(s) removed — downstream dependencies may break.",
+                details={
+                    "removed_count": len(removed),
+                    "components": component_details,
+                    "total_components": len(active_diffs) + len(active_inv_diffs),
+                },
+                recommended_actions=[
+                    "review_breaking_changes",
+                    "update_downstream_dependencies",
+                ],
+            )
+        )
+
+    # 2. Schema changes — MODIFIED components (only when no breaking changes already cover it)
+    modified = [d for d in all_diffs + inv_diffs if d.change_type == ChangeType.MODIFIED]
+    if modified and not removed:
+        component_details = [
+            {
+                "component_id": d.id,
+                "component_name": d.name,
+                "changed_fields": list(d.changed_fields.keys()) if d.changed_fields else [],
+            }
+            for d in modified
+        ]
+        findings.append(
+            AdvisoryFinding(
+                type="schema_changes",
+                severity="warning",
+                message=f"{len(modified)} component(s) modified — validate field mappings.",
+                details={
+                    "modified_count": len(modified),
+                    "components": component_details,
+                    "total_components": len(active_diffs) + len(active_inv_diffs),
+                },
+                recommended_actions=[
+                    "review_schema_changes",
+                    "validate_mappings",
+                ],
+            )
+        )
+
+    # 3. Additions only — all changes are additions, no removals or modifications
+    total_removed = summary.total_removed
+    total_modified = summary.total_modified
+    total_added = summary.total_added
+    if total_added > 0 and total_removed == 0 and total_modified == 0:
+        added = [d for d in all_diffs + inv_diffs if d.change_type == ChangeType.ADDED]
+        component_details = [
+            {"component_id": d.id, "component_name": d.name}
+            for d in added
+        ]
+        findings.append(
+            AdvisoryFinding(
+                type="additions_only",
+                severity="info",
+                message=f"{total_added} component(s) added — no removals or modifications detected.",
+                details={
+                    "added_count": total_added,
+                    "components": component_details,
+                    "total_components": len(active_diffs) + len(active_inv_diffs),
+                },
+                recommended_actions=["acknowledge_additive_change"],
+            )
+        )
+
+    severity = _max_severity([f.severity for f in findings])
+    return AdvisorySummary(
+        advisories_version="1.0",
+        severity=severity,
+        findings=findings,
+        summary=_make_summary_block(findings),
+    )
+
+
+def build_advisory_rollup(summary: AdvisorySummary) -> dict[str, Any]:
+    """Build a compact advisory rollup for run-summary integration."""
+    seen_types: list[str] = []
+    seen_actions: list[str] = []
+    for f in summary.findings:
+        if f.type not in seen_types:
+            seen_types.append(f.type)
+        for action in f.recommended_actions:
+            if action not in seen_actions:
+                seen_actions.append(action)
+
+    return {
+        "advisories_version": summary.advisories_version,
+        "severity": summary.severity,
+        "summary": summary.summary,
+        "types": seen_types,
+        "recommended_actions": seen_actions,
+    }

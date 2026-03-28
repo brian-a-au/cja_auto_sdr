@@ -268,3 +268,241 @@ class TestOrgReportAdvisoryBuilder:
 
         all_actions = {action for finding in summary.findings for action in finding.recommended_actions}
         assert all_actions <= _DOCUMENTED_RECOMMENDED_ACTIONS
+
+
+# ---------------------------------------------------------------------------
+# Diff advisory builder tests
+# ---------------------------------------------------------------------------
+
+_DOCUMENTED_DIFF_RECOMMENDED_ACTIONS = {
+    "review_breaking_changes",
+    "update_downstream_dependencies",
+    "review_schema_changes",
+    "validate_mappings",
+    "acknowledge_additive_change",
+}
+
+
+def _make_minimal_diff_result(**overrides):
+    """Build a valid DiffResult with sensible defaults using real types."""
+    from cja_auto_sdr.diff.models import (
+        DiffResult,
+        DiffSummary,
+        MetadataDiff,
+    )
+
+    defaults = {
+        "summary": DiffSummary(),
+        "metadata_diff": MetadataDiff(
+            source_name="Source DV",
+            target_name="Target DV",
+            source_id="dv-src",
+            target_id="dv-tgt",
+        ),
+        "metric_diffs": [],
+        "dimension_diffs": [],
+    }
+    defaults.update(overrides)
+    return DiffResult(**defaults)
+
+
+class TestDiffAdvisoryBuilder:
+    """Verify build_diff_advisories() produces correct advisory summaries."""
+
+    def test_empty_diff_produces_info_severity(self):
+        from cja_auto_sdr.core.advisory_builders import build_diff_advisories
+
+        diff = _make_minimal_diff_result()
+        summary = build_diff_advisories(diff)
+
+        assert isinstance(summary, AdvisorySummary)
+        assert summary.severity == "info"
+        assert summary.advisories_version == "1.0"
+
+    def test_breaking_changes_produce_critical(self):
+        from cja_auto_sdr.core.advisory_builders import build_diff_advisories
+        from cja_auto_sdr.diff.models import ChangeType, ComponentDiff, DiffSummary
+
+        removed = ComponentDiff(id="m1", name="Revenue", change_type=ChangeType.REMOVED)
+        diff = _make_minimal_diff_result(
+            summary=DiffSummary(metrics_removed=1),
+            metric_diffs=[removed],
+        )
+        summary = build_diff_advisories(diff)
+
+        types = [f.type for f in summary.findings]
+        assert "breaking_changes" in types
+
+        finding = next(f for f in summary.findings if f.type == "breaking_changes")
+        assert finding.severity == "critical"
+        assert summary.severity == "critical"
+
+    def test_schema_changes_from_modified(self):
+        from cja_auto_sdr.core.advisory_builders import build_diff_advisories
+        from cja_auto_sdr.diff.models import ChangeType, ComponentDiff, DiffSummary
+
+        modified = ComponentDiff(
+            id="d1",
+            name="Page Name",
+            change_type=ChangeType.MODIFIED,
+            changed_fields={"type": ("string", "integer")},
+        )
+        diff = _make_minimal_diff_result(
+            summary=DiffSummary(dimensions_modified=1),
+            dimension_diffs=[modified],
+        )
+        summary = build_diff_advisories(diff)
+
+        types = [f.type for f in summary.findings]
+        assert "schema_changes" in types
+
+        finding = next(f for f in summary.findings if f.type == "schema_changes")
+        assert finding.severity == "warning"
+
+    def test_additions_only_produces_info(self):
+        from cja_auto_sdr.core.advisory_builders import build_diff_advisories
+        from cja_auto_sdr.diff.models import ChangeType, ComponentDiff, DiffSummary
+
+        added = ComponentDiff(id="m2", name="New Metric", change_type=ChangeType.ADDED)
+        diff = _make_minimal_diff_result(
+            summary=DiffSummary(metrics_added=1),
+            metric_diffs=[added],
+        )
+        summary = build_diff_advisories(diff)
+
+        types = [f.type for f in summary.findings]
+        assert "additions_only" in types
+
+        finding = next(f for f in summary.findings if f.type == "additions_only")
+        assert finding.severity == "info"
+
+    def test_changes_only_filters_unchanged_from_details(self):
+        from cja_auto_sdr.core.advisory_builders import build_diff_advisories
+        from cja_auto_sdr.diff.models import ChangeType, ComponentDiff, DiffSummary
+
+        added = ComponentDiff(id="m2", name="New Metric", change_type=ChangeType.ADDED)
+        unchanged = ComponentDiff(id="m3", name="Old Metric", change_type=ChangeType.UNCHANGED)
+        diff = _make_minimal_diff_result(
+            summary=DiffSummary(metrics_added=1, metrics_unchanged=1),
+            metric_diffs=[added, unchanged],
+        )
+
+        summary_all = build_diff_advisories(diff, changes_only=False)
+        summary_filtered = build_diff_advisories(diff, changes_only=True)
+
+        # With changes_only=True, total component count in details should be smaller
+        finding_all = next((f for f in summary_all.findings if f.type == "additions_only"), None)
+        finding_filtered = next((f for f in summary_filtered.findings if f.type == "additions_only"), None)
+
+        # Both should still produce a finding; filtered version should report fewer total components
+        assert finding_all is not None
+        assert finding_filtered is not None
+        assert finding_filtered.details.get("total_components", 0) <= finding_all.details.get("total_components", 0)
+
+    def test_no_high_change_volume_emitted(self):
+        from cja_auto_sdr.core.advisory_builders import build_diff_advisories
+        from cja_auto_sdr.diff.models import ChangeType, ComponentDiff, DiffSummary
+
+        # Even with many changes, high_change_volume must NOT appear
+        diffs = [ComponentDiff(id=f"m{i}", name=f"Metric {i}", change_type=ChangeType.MODIFIED) for i in range(50)]
+        diff = _make_minimal_diff_result(
+            summary=DiffSummary(metrics_modified=50),
+            metric_diffs=diffs,
+        )
+        summary = build_diff_advisories(diff)
+
+        types = [f.type for f in summary.findings]
+        assert "high_change_volume" not in types
+
+    def test_recommended_actions_in_registry(self):
+        from cja_auto_sdr.core.advisory_builders import build_diff_advisories
+        from cja_auto_sdr.diff.models import ChangeType, ComponentDiff, DiffSummary
+
+        removed = ComponentDiff(id="m1", name="Revenue", change_type=ChangeType.REMOVED)
+        added = ComponentDiff(id="m2", name="New Metric", change_type=ChangeType.ADDED)
+        modified = ComponentDiff(id="d1", name="Page", change_type=ChangeType.MODIFIED)
+
+        diff = _make_minimal_diff_result(
+            summary=DiffSummary(metrics_removed=1, metrics_added=1, dimensions_modified=1),
+            metric_diffs=[removed, added],
+            dimension_diffs=[modified],
+        )
+        summary = build_diff_advisories(diff)
+
+        all_actions = {action for finding in summary.findings for action in finding.recommended_actions}
+        assert all_actions <= _DOCUMENTED_DIFF_RECOMMENDED_ACTIONS
+
+
+# ---------------------------------------------------------------------------
+# Advisory rollup builder tests
+# ---------------------------------------------------------------------------
+
+
+class TestAdvisoryRollup:
+    """Verify compact advisory rollup for run-summary integration."""
+
+    def test_rollup_from_empty_summary(self):
+        from cja_auto_sdr.core.advisory_builders import build_advisory_rollup
+
+        summary = AdvisorySummary(
+            advisories_version="1.0",
+            severity="info",
+            findings=[],
+            summary={"total_findings": 0, "by_severity": {}},
+        )
+        rollup = build_advisory_rollup(summary)
+        assert rollup["advisories_version"] == "1.0"
+        assert rollup["severity"] == "info"
+        assert rollup["summary"]["total_findings"] == 0
+        assert rollup["types"] == []
+        assert rollup["recommended_actions"] == []
+
+    def test_rollup_deduplicates_types_and_actions(self):
+        from cja_auto_sdr.core.advisory_builders import build_advisory_rollup
+
+        findings = [
+            AdvisoryFinding(
+                type="breaking_changes",
+                severity="critical",
+                message="test",
+                details={},
+                recommended_actions=["review_breaking_changes", "update_downstream_dependencies"],
+            ),
+            AdvisoryFinding(
+                type="schema_changes",
+                severity="warning",
+                message="test",
+                details={},
+                recommended_actions=["review_schema_changes", "review_breaking_changes"],
+            ),
+        ]
+        summary = AdvisorySummary(
+            advisories_version="1.0",
+            severity="critical",
+            findings=findings,
+            summary={"total_findings": 2, "by_severity": {"critical": 1, "warning": 1}},
+        )
+        rollup = build_advisory_rollup(summary)
+        assert sorted(rollup["types"]) == ["breaking_changes", "schema_changes"]
+        assert len(rollup["recommended_actions"]) == len(set(rollup["recommended_actions"]))
+
+    def test_rollup_severity_matches_summary(self):
+        from cja_auto_sdr.core.advisory_builders import build_advisory_rollup
+
+        findings = [
+            AdvisoryFinding(
+                type="fetch_failures",
+                severity="warning",
+                message="test",
+                details={},
+                recommended_actions=["investigate_fetch_failures"],
+            ),
+        ]
+        summary = AdvisorySummary(
+            advisories_version="1.0",
+            severity="warning",
+            findings=findings,
+            summary={"total_findings": 1, "by_severity": {"warning": 1}},
+        )
+        rollup = build_advisory_rollup(summary)
+        assert rollup["severity"] == "warning"
