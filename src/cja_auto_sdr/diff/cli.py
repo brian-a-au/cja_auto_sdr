@@ -209,6 +209,7 @@ def dispatch_cross_data_view_diff_cli_mode(
         run_state["resolved_data_views"] = list(resolved_ids)
 
     diff_format = args.format or "console"
+    _diff_output_to_stdout = getattr(args, "output", None) == "-" and diff_format == "json"
     success, has_changes, exit_code_override = generator.handle_diff_command(
         source_id=resolved_ids[0],
         target_id=resolved_ids[1],
@@ -241,6 +242,7 @@ def dispatch_cross_data_view_diff_cli_mode(
         keep_last_specified=keep_last_specified,
         keep_since_specified=keep_since_specified,
         profile=getattr(args, "profile", None),
+        output_to_stdout=_diff_output_to_stdout,
     )
     if run_state is not None:
         run_state["output_format"] = diff_format
@@ -466,6 +468,7 @@ def dispatch_snapshot_cli_modes(
             sys.exit(1)
 
         diff_format = args.format or "console"
+        _cs_output_to_stdout = getattr(args, "output", None) == "-" and diff_format == "json"
         success, has_changes, exit_code_override = generator.handle_compare_snapshots_command(
             source_file=source_file,
             target_file=target_file,
@@ -491,6 +494,7 @@ def dispatch_snapshot_cli_modes(
             format_pr_comment=getattr(args, "format_pr_comment", False),
             include_calc_metrics=getattr(args, "include_calculated_metrics", False),
             include_segments=getattr(args, "include_segments_inventory", False),
+            output_to_stdout=_cs_output_to_stdout,
         )
         if run_state is not None:
             run_state["output_format"] = diff_format
@@ -603,6 +607,7 @@ def dispatch_snapshot_cli_modes(
         )
 
         diff_format = args.format or "console"
+        _ds_output_to_stdout = getattr(args, "output", None) == "-" and diff_format == "json"
         success, has_changes, exit_code_override = generator.handle_diff_snapshot_command(
             data_view_id=resolved_ids[0],
             snapshot_file=args.diff_snapshot,
@@ -637,6 +642,7 @@ def dispatch_snapshot_cli_modes(
             profile=getattr(args, "profile", None),
             include_calc_metrics=include_calc_metrics,
             include_segments=include_segments,
+            output_to_stdout=_ds_output_to_stdout,
         )
         if run_state is not None:
             run_state["output_format"] = diff_format

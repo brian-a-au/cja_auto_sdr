@@ -129,6 +129,7 @@ def handle_diff_command(
     keep_since_specified: bool = False,
     profile: str | None = None,
     diff_config=None,
+    output_to_stdout: bool = False,
 ) -> tuple[bool, bool, int | None]:
     """Handle the --diff command to compare two data views."""
     generator = _generator_module()
@@ -317,13 +318,14 @@ def handle_diff_command(
                 use_color=generator.ConsoleColors.is_enabled() and not no_color,
                 group_by_field=group_by_field,
                 group_by_field_limit=group_by_field_limit,
+                output_to_stdout=output_to_stdout,
             )
             if diff_output and output_content:
                 with open(diff_output, "w", encoding="utf-8") as f:
                     f.write(output_content)
                 if not quiet:
                     print(f"Diff output written to: {diff_output}")
-            if not quiet and output_format != "console":
+            if not quiet and output_format != "console" and not output_to_stdout:
                 print()
                 print(generator.ConsoleColors.success("Diff report generated successfully"))
 
@@ -372,6 +374,7 @@ def handle_diff_snapshot_command(
     include_calc_metrics: bool = False,
     include_segments: bool = False,
     diff_snapshot_config=None,
+    output_to_stdout: bool = False,
 ) -> tuple[bool, bool, int | None]:
     """Handle the --diff-snapshot command to compare a data view against a saved snapshot."""
     generator = _generator_module()
@@ -630,13 +633,14 @@ def handle_diff_snapshot_command(
                 use_color=generator.ConsoleColors.is_enabled() and not no_color,
                 group_by_field=group_by_field,
                 group_by_field_limit=group_by_field_limit,
+                output_to_stdout=output_to_stdout,
             )
             if diff_output and output_content:
                 with open(diff_output, "w", encoding="utf-8") as f:
                     f.write(output_content)
                 if not quiet:
                     print(f"Diff output written to: {diff_output}")
-            if not quiet and output_format != "console":
+            if not quiet and output_format != "console" and not output_to_stdout:
                 print()
                 print(generator.ConsoleColors.success("Diff report generated successfully"))
 
@@ -681,6 +685,7 @@ def handle_compare_snapshots_command(
     format_pr_comment: bool = False,
     include_calc_metrics: bool = False,
     include_segments: bool = False,
+    output_to_stdout: bool = False,
 ) -> tuple[bool, bool, int | None]:
     """Handle the --compare-snapshots command to compare two snapshot files directly."""
     generator = _generator_module()
@@ -803,13 +808,14 @@ def handle_compare_snapshots_command(
                 use_color=generator.ConsoleColors.is_enabled() and not no_color,
                 group_by_field=group_by_field,
                 group_by_field_limit=group_by_field_limit,
+                output_to_stdout=output_to_stdout,
             )
             if diff_output and output_content:
                 with open(diff_output, "w", encoding="utf-8") as f:
                     f.write(output_content)
                 if not quiet:
                     print(f"Diff output written to: {diff_output}")
-            if not quiet and output_format != "console":
+            if not quiet and output_format != "console" and not output_to_stdout:
                 print()
                 print(generator.ConsoleColors.success("Diff report generated successfully"))
 

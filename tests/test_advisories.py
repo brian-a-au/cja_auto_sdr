@@ -599,3 +599,65 @@ class TestOrgReportJsonAdvisories:
             "recommendations",
         ):
             assert key in data, f"Expected key {key!r} missing after advisories injection"
+
+
+# ---------------------------------------------------------------------------
+# Diff JSON advisory integration tests
+# ---------------------------------------------------------------------------
+
+
+class TestDiffJsonAdvisories:
+    """Verify advisories block appears in diff JSON output."""
+
+    def test_build_diff_json_data_exists(self):
+        from cja_auto_sdr.output.diff.json import build_diff_json_data
+
+        result = _make_minimal_diff_result()
+        data = build_diff_json_data(result)
+        assert "metadata" in data
+        assert "summary" in data
+
+    def test_advisories_present_in_diff_json(self):
+        from cja_auto_sdr.output.diff.json import build_diff_json_data
+
+        result = _make_minimal_diff_result()
+        data = build_diff_json_data(result)
+        assert "advisories" in data
+        assert data["advisories"]["advisories_version"] == "1.0"
+
+    def test_diff_json_data_matches_file_writer_shape(self):
+        from cja_auto_sdr.output.diff.json import build_diff_json_data
+
+        result = _make_minimal_diff_result()
+        data = build_diff_json_data(result)
+        expected_keys = {"metadata", "source", "target", "summary", "metric_diffs", "dimension_diffs", "advisories"}
+        assert expected_keys.issubset(set(data.keys()))
+
+    def test_advisories_empty_when_no_changes(self):
+        from cja_auto_sdr.output.diff.json import build_diff_json_data
+
+        result = _make_minimal_diff_result()
+        data = build_diff_json_data(result)
+        assert data["advisories"]["findings"] == []
+        assert data["advisories"]["summary"]["total_findings"] == 0
+
+    def test_advisories_reflects_breaking_changes(self):
+        from cja_auto_sdr.diff.models import ChangeType, ComponentDiff, DiffSummary
+        from cja_auto_sdr.output.diff.json import build_diff_json_data
+
+        removed = ComponentDiff(id="m1", name="Revenue", change_type=ChangeType.REMOVED)
+        result = _make_minimal_diff_result(
+            summary=DiffSummary(metrics_removed=1),
+            metric_diffs=[removed],
+        )
+        data = build_diff_json_data(result)
+        types = [f["type"] for f in data["advisories"]["findings"]]
+        assert "breaking_changes" in types
+
+    def test_advisories_is_additive_does_not_remove_existing_keys(self):
+        from cja_auto_sdr.output.diff.json import build_diff_json_data
+
+        result = _make_minimal_diff_result()
+        data = build_diff_json_data(result)
+        for key in ("metadata", "source", "target", "summary", "metric_diffs", "dimension_diffs"):
+            assert key in data, f"Expected key {key!r} missing after advisories injection"

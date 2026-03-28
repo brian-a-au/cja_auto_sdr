@@ -144,3 +144,37 @@ class TestAgentModeConstraints:
                 assert "agent_mode" in action_dests
                 return
         pytest.fail("Agent Integration group not found")
+
+
+class TestAgentModeDiffStdout:
+    """Verify --agent-mode diff stdout JSON behavior."""
+
+    def test_agent_mode_diff_sets_json_stdout(self):
+        """--agent-mode with --diff should set json format and stdout output."""
+        args = parse_arguments(["--diff", "dv_a", "dv_b", "--agent-mode"])
+        assert args.format == "json"
+        assert args.output == "-"
+
+    def test_diff_stdout_detection_logic(self):
+        """output=='-' and format=='json' should yield output_to_stdout=True."""
+        args = parse_arguments(["--diff", "dv_a", "dv_b", "--agent-mode"])
+        output_to_stdout = getattr(args, "output", None) == "-" and args.format == "json"
+        assert output_to_stdout is True
+
+    def test_diff_stdout_detection_false_for_csv(self):
+        """Non-json format should not trigger stdout JSON path."""
+        args = parse_arguments(["--diff", "dv_a", "dv_b", "--agent-mode", "--format", "csv"])
+        output_to_stdout = getattr(args, "output", None) == "-" and args.format == "json"
+        assert output_to_stdout is False
+
+    def test_compare_snapshots_agent_mode_sets_json_stdout(self):
+        """--agent-mode with --compare-snapshots should set json format and stdout output."""
+        args = parse_arguments(["--compare-snapshots", "a.json", "b.json", "--agent-mode"])
+        assert args.format == "json"
+        assert args.output == "-"
+
+    def test_diff_snapshot_agent_mode_sets_json_stdout(self):
+        """--agent-mode with --diff-snapshot should set json format and stdout output."""
+        args = parse_arguments(["dv_123", "--diff-snapshot", "baseline.json", "--agent-mode"])
+        assert args.format == "json"
+        assert args.output == "-"

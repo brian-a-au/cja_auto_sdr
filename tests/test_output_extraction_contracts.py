@@ -877,6 +877,7 @@ _DIFF_WRITER_SIGNATURES = {
         "use_color",
         "group_by_field",
         "group_by_field_limit",
+        "output_to_stdout",
     ],
 }
 
@@ -1130,3 +1131,47 @@ def test_trending_helper_signatures_via_package_root(func_name, expected_params)
     mod = importlib.import_module("cja_auto_sdr.org.writers")
     func = getattr(mod, func_name)
     assert list(signature(func).parameters) == expected_params
+
+
+# ---------------------------------------------------------------------------
+# output.diff.json — build_diff_json_data extraction contract
+# ---------------------------------------------------------------------------
+
+
+def test_build_diff_json_data_importable_from_output_diff_json():
+    """build_diff_json_data is importable from output.diff.json."""
+    from cja_auto_sdr.output.diff.json import build_diff_json_data
+
+    assert callable(build_diff_json_data)
+
+
+def test_build_diff_json_data_importable_from_output_diff():
+    """build_diff_json_data is importable from output.diff package root."""
+    from cja_auto_sdr.output.diff import build_diff_json_data
+
+    assert callable(build_diff_json_data)
+
+
+def test_build_diff_json_data_signature():
+    """build_diff_json_data must accept diff_result and changes_only."""
+    from cja_auto_sdr.output.diff.json import build_diff_json_data
+
+    params = list(signature(build_diff_json_data).parameters)
+    assert params == ["diff_result", "changes_only"]
+
+
+def test_build_diff_json_data_return_shape():
+    """build_diff_json_data must return a dict with required top-level keys."""
+    from cja_auto_sdr.output.diff.json import build_diff_json_data
+
+    data = build_diff_json_data(_make_diff_result())
+    required = {"metadata", "source", "target", "summary", "metric_diffs", "dimension_diffs", "advisories"}
+    assert required.issubset(set(data.keys()))
+
+
+def test_write_diff_output_accepts_output_to_stdout():
+    """write_diff_output signature must include output_to_stdout."""
+    from cja_auto_sdr.output.diff import write_diff_output
+
+    params = list(signature(write_diff_output).parameters)
+    assert "output_to_stdout" in params
