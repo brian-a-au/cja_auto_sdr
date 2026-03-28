@@ -5258,8 +5258,8 @@ def _populate_org_report_advisory_rollup(
 
         advisory_summary = build_org_report_advisories(result, trending=trending)
         runtime_details["advisory_rollup"] = build_advisory_rollup(advisory_summary)
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception:
+        logging.getLogger("org_report").debug("Advisory rollup computation failed", exc_info=True)
 
 
 def run_org_report(
