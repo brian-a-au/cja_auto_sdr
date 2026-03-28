@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `RETRY_JITTER_RANGE` and `CACHE_KEY_HASH_LENGTH` named constants
 - Wired named constants into `api/resilience.py`, `api/cache.py`, `api/quality.py`
 
+### Dependencies
+- Pin `pandas<3` upper bound to guard against breaking changes in pandas 3.x
+
 ### Tests
 - Added 137 new edge-case tests across the API layer (resilience, cache, quality, tuning, fetch)
 - Total test count: 7,294 tests at 95% coverage gate

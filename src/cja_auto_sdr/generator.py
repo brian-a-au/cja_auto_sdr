@@ -856,7 +856,6 @@ def _run_data_quality_validation(
             metrics_required_fields=VALIDATION_SCHEMA["required_metric_fields"],
             dimensions_required_fields=VALIDATION_SCHEMA["required_dimension_fields"],
             critical_fields=VALIDATION_SCHEMA["critical_fields"],
-            max_workers=DEFAULT_VALIDATION_WORKERS,
         )
         dq_checker.log_summary()
 
