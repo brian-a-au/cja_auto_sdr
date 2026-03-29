@@ -29,6 +29,7 @@ class TestAgentContractSamples:
         assert "severity" in adv
         assert "findings" in adv
         assert "summary" in adv
+        assert "recommended_actions" in adv
 
     def test_diff_fixture_has_advisories(self):
         data = json.loads((SAMPLES_DIR / "sample_diff_with_advisories.json").read_text())
@@ -38,6 +39,7 @@ class TestAgentContractSamples:
         assert "severity" in adv
         assert "findings" in adv
         assert "summary" in adv
+        assert "recommended_actions" in adv
 
     def test_run_summary_fixture_has_details_advisories(self):
         data = json.loads((SAMPLES_DIR / "sample_run_summary_with_advisories.json").read_text())

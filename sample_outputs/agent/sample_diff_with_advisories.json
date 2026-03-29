@@ -13,6 +13,7 @@
         "recommended_actions": ["review_breaking_changes", "update_downstream_dependencies"]
       }
     ],
-    "summary": {"total_findings": 1, "by_severity": {"critical": 1}}
+    "summary": {"total_findings": 1, "by_severity": {"critical": 1}},
+    "recommended_actions": ["review_breaking_changes", "update_downstream_dependencies"]
   }
 }

@@ -40,6 +40,7 @@ class TestAdvisoryModel:
         assert d["findings"] == []
         assert d["summary"]["total_findings"] == 0
         assert d["summary"]["by_severity"] == {}
+        assert d["recommended_actions"] == []
 
     def test_summary_with_findings_to_dict(self):
         finding = AdvisoryFinding(
@@ -60,6 +61,7 @@ class TestAdvisoryModel:
         assert len(d["findings"]) == 1
         assert d["findings"][0]["type"] == "governance_threshold_breach"
         assert d["findings"][0]["recommended_actions"] == ["review_governance_thresholds"]
+        assert d["recommended_actions"] == ["review_governance_thresholds"]
 
     def test_advisories_version_always_present(self):
         summary = AdvisorySummary(
@@ -70,6 +72,38 @@ class TestAdvisoryModel:
         )
         d = summary.to_dict()
         assert "advisories_version" in d
+
+    def test_summary_to_dict_deduplicates_top_level_recommended_actions(self):
+        findings = [
+            AdvisoryFinding(
+                type="breaking_changes",
+                severity="critical",
+                message="test",
+                details={},
+                recommended_actions=["review_breaking_changes", "update_downstream_dependencies"],
+            ),
+            AdvisoryFinding(
+                type="schema_changes",
+                severity="warning",
+                message="test",
+                details={},
+                recommended_actions=["validate_mappings", "review_breaking_changes"],
+            ),
+        ]
+        summary = AdvisorySummary(
+            advisories_version="1.0",
+            severity="critical",
+            findings=findings,
+            summary={"total_findings": 2, "by_severity": {"critical": 1, "warning": 1}},
+        )
+
+        d = summary.to_dict()
+
+        assert d["recommended_actions"] == [
+            "review_breaking_changes",
+            "update_downstream_dependencies",
+            "validate_mappings",
+        ]
 
 
 # ---------------------------------------------------------------------------

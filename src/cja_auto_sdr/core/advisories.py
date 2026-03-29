@@ -13,6 +13,15 @@ from typing import Any
 _ADVISORY_SEVERITY_ORDER = ("info", "warning", "critical")
 
 
+def _dedupe_preserving_order(values: list[str]) -> list[str]:
+    """Return unique values while preserving their first-seen order."""
+    unique_values: list[str] = []
+    for value in values:
+        if value not in unique_values:
+            unique_values.append(value)
+    return unique_values
+
+
 @dataclass
 class AdvisoryFinding:
     """A single advisory finding derived from existing result data."""
@@ -42,10 +51,19 @@ class AdvisorySummary:
     findings: list[AdvisoryFinding]
     summary: dict[str, Any]  # {"total_findings": N, "by_severity": {...}}
 
+    def finding_types(self) -> list[str]:
+        """Return the distinct finding types in first-seen order."""
+        return _dedupe_preserving_order([finding.type for finding in self.findings])
+
+    def recommended_actions(self) -> list[str]:
+        """Return the distinct recommended actions in first-seen order."""
+        return _dedupe_preserving_order([action for finding in self.findings for action in finding.recommended_actions])
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "advisories_version": self.advisories_version,
             "severity": self.severity,
             "findings": [f.to_dict() for f in self.findings],
             "summary": self.summary,
+            "recommended_actions": self.recommended_actions(),
         }

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import sys
 from unittest.mock import patch
 
 import pytest
@@ -12,6 +13,17 @@ from cja_auto_sdr.cli.standalone_policy import (
     _STANDALONE_FAST_PATH_METADATA_DESTS,
     standalone_prevalidation_policy,
 )
+from cja_auto_sdr.diff.cli import _diff_output_to_stdout_requested
+
+
+def _run_main_impl(argv_tail: list[str]) -> int:
+    """Execute _main_impl with argv and return the exit code."""
+    from cja_auto_sdr.generator import _main_impl
+
+    with patch.object(sys, "argv", ["cja_auto_sdr", *argv_tail]):
+        with pytest.raises(SystemExit) as exc_info:
+            _main_impl()
+    return int(exc_info.value.code)
 
 
 class TestAgentModeRegistration:
@@ -153,17 +165,20 @@ class TestAgentModeDiffStdout:
         assert args.format == "json"
         assert args.output == "-"
 
-    def test_diff_stdout_detection_logic(self):
-        """output=='-' and format=='json' should yield output_to_stdout=True."""
+    def test_diff_stdout_detection_logic_honors_dash_alias(self):
+        """The diff dispatch helper should treat '-' as stdout for JSON output."""
         args = parse_arguments(["--diff", "dv_a", "dv_b", "--agent-mode"])
-        output_to_stdout = getattr(args, "output", None) == "-" and args.format == "json"
-        assert output_to_stdout is True
+        assert _diff_output_to_stdout_requested(args, output_format=args.format) is True
+
+    def test_diff_stdout_detection_logic_honors_stdout_alias(self):
+        """The diff dispatch helper should treat 'stdout' as stdout for JSON output."""
+        args = parse_arguments(["--diff", "dv_a", "dv_b", "--format", "json", "--output", "stdout"])
+        assert _diff_output_to_stdout_requested(args, output_format=args.format) is True
 
     def test_diff_stdout_detection_false_for_csv(self):
         """Non-json format should not trigger stdout JSON path."""
         args = parse_arguments(["--diff", "dv_a", "dv_b", "--agent-mode", "--format", "csv"])
-        output_to_stdout = getattr(args, "output", None) == "-" and args.format == "json"
-        assert output_to_stdout is False
+        assert _diff_output_to_stdout_requested(args, output_format=args.format) is False
 
     def test_compare_snapshots_agent_mode_sets_json_stdout(self):
         """--agent-mode with --compare-snapshots should set json format and stdout output."""
@@ -176,3 +191,57 @@ class TestAgentModeDiffStdout:
         args = parse_arguments(["dv_123", "--diff-snapshot", "baseline.json", "--agent-mode"])
         assert args.format == "json"
         assert args.output == "-"
+
+
+class TestDiffStdoutAliasRuntime:
+    """Verify the documented 'stdout' alias reaches diff-family runtime handlers."""
+
+    def test_diff_stdout_alias_reaches_live_diff_handler(self):
+        with (
+            patch(
+                "cja_auto_sdr.generator.resolve_data_view_names",
+                side_effect=[(["dv_source"], {}), (["dv_target"], {})],
+            ),
+            patch("cja_auto_sdr.generator.handle_diff_command", return_value=(True, False, None)) as mock_diff,
+        ):
+            exit_code = _run_main_impl(["--diff", "dv_source", "dv_target", "--format", "json", "--output", "stdout"])
+
+        assert exit_code == 0
+        assert mock_diff.call_args.kwargs["output_to_stdout"] is True
+
+    def test_diff_snapshot_stdout_alias_reaches_handler(self):
+        with (
+            patch("cja_auto_sdr.generator.resolve_data_view_names", return_value=(["dv_123"], {})),
+            patch("cja_auto_sdr.generator.handle_diff_snapshot_command", return_value=(True, False, None)) as mock_diff,
+        ):
+            exit_code = _run_main_impl(
+                ["dv_123", "--diff-snapshot", "baseline.json", "--format", "json", "--output", "stdout"]
+            )
+
+        assert exit_code == 0
+        assert mock_diff.call_args.kwargs["output_to_stdout"] is True
+
+    def test_compare_with_prev_stdout_alias_reaches_handler(self):
+        with (
+            patch("cja_auto_sdr.generator.resolve_data_view_names", return_value=(["dv_123"], {})),
+            patch("cja_auto_sdr.generator.SnapshotManager") as mock_snapshot_manager,
+            patch("cja_auto_sdr.generator.handle_diff_snapshot_command", return_value=(True, False, None)) as mock_diff,
+        ):
+            mock_snapshot_manager.return_value.get_most_recent_snapshot.return_value = "./snapshots/prev.json"
+            exit_code = _run_main_impl(["dv_123", "--compare-with-prev", "--format", "json", "--output", "stdout"])
+
+        assert exit_code == 0
+        assert mock_diff.call_args.kwargs["snapshot_file"] == "./snapshots/prev.json"
+        assert mock_diff.call_args.kwargs["output_to_stdout"] is True
+
+    def test_compare_snapshots_stdout_alias_reaches_handler(self):
+        with patch(
+            "cja_auto_sdr.generator.handle_compare_snapshots_command",
+            return_value=(True, False, None),
+        ) as mock_compare:
+            exit_code = _run_main_impl(
+                ["--compare-snapshots", "source.json", "target.json", "--format", "json", "--output", "stdout"]
+            )
+
+        assert exit_code == 0
+        assert mock_compare.call_args.kwargs["output_to_stdout"] is True

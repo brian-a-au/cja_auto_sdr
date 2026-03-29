@@ -13,6 +13,7 @@
         "recommended_actions": ["review_overlap_pairs", "verify_intentional_duplicates"]
       }
     ],
-    "summary": {"total_findings": 1, "by_severity": {"warning": 1}}
+    "summary": {"total_findings": 1, "by_severity": {"warning": 1}},
+    "recommended_actions": ["review_overlap_pairs", "verify_intentional_duplicates"]
   }
 }

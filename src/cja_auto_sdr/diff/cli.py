@@ -19,6 +19,15 @@ def _generator_module():
     return _generator
 
 
+def _diff_output_to_stdout_requested(
+    args: argparse.Namespace,
+    *,
+    output_format: str,
+) -> bool:
+    """Return whether a diff-family JSON request should emit to stdout."""
+    return output_format == "json" and getattr(args, "output", None) in ("-", "stdout")
+
+
 def _exit_with_diff_result(
     *,
     success: bool,
@@ -209,7 +218,7 @@ def dispatch_cross_data_view_diff_cli_mode(
         run_state["resolved_data_views"] = list(resolved_ids)
 
     diff_format = args.format or "console"
-    _diff_output_to_stdout = getattr(args, "output", None) == "-" and diff_format == "json"
+    _diff_output_to_stdout = _diff_output_to_stdout_requested(args, output_format=diff_format)
     diff_runtime_details: dict[str, Any] = {}
     success, has_changes, exit_code_override = generator.handle_diff_command(
         source_id=resolved_ids[0],
@@ -473,7 +482,7 @@ def dispatch_snapshot_cli_modes(
             sys.exit(1)
 
         diff_format = args.format or "console"
-        _cs_output_to_stdout = getattr(args, "output", None) == "-" and diff_format == "json"
+        _cs_output_to_stdout = _diff_output_to_stdout_requested(args, output_format=diff_format)
         cs_runtime_details: dict[str, Any] = {}
         success, has_changes, exit_code_override = generator.handle_compare_snapshots_command(
             source_file=source_file,
@@ -617,7 +626,7 @@ def dispatch_snapshot_cli_modes(
         )
 
         diff_format = args.format or "console"
-        _ds_output_to_stdout = getattr(args, "output", None) == "-" and diff_format == "json"
+        _ds_output_to_stdout = _diff_output_to_stdout_requested(args, output_format=diff_format)
         ds_runtime_details: dict[str, Any] = {}
         success, has_changes, exit_code_override = generator.handle_diff_snapshot_command(
             data_view_id=resolved_ids[0],

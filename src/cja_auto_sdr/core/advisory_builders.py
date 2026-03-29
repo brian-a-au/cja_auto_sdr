@@ -262,19 +262,10 @@ def build_diff_advisories(
 
 def build_advisory_rollup(summary: AdvisorySummary) -> dict[str, Any]:
     """Build a compact advisory rollup for run-summary integration."""
-    seen_types: list[str] = []
-    seen_actions: list[str] = []
-    for f in summary.findings:
-        if f.type not in seen_types:
-            seen_types.append(f.type)
-        for action in f.recommended_actions:
-            if action not in seen_actions:
-                seen_actions.append(action)
-
     return {
         "advisories_version": summary.advisories_version,
         "severity": summary.severity,
         "summary": summary.summary,
-        "types": seen_types,
-        "recommended_actions": seen_actions,
+        "types": summary.finding_types(),
+        "recommended_actions": summary.recommended_actions(),
     }
