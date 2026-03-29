@@ -75,8 +75,8 @@ uv run cja_auto_sdr <dv_id> --stats
 # Generate default Excel SDR
 uv run cja_auto_sdr <dv_id>
 
-# Machine-readable JSON to stdout
-uv run cja_auto_sdr <dv_id> --format json --output -
+# JSON SDR artifact
+uv run cja_auto_sdr <dv_id> --format json --output-dir /reports
 
 # Write to specific directory
 uv run cja_auto_sdr <dv_id> --format excel --output-dir /reports
@@ -182,9 +182,10 @@ Use `--explain-exit-code CODE` to get a human-readable explanation of any exit c
 
 ## Output Conventions
 
-- Use `--format json --output -` for machine-parseable stdout.
+- Use `--format json --output -` for machine-parseable stdout on command families that support direct stdout emission.
 - Only `json` and `csv` formats are valid with `--output -` (stdout).
 - `--output -` implies `--quiet` (suppresses banner/progress to stderr).
+- Single-SDR generation currently writes auto-named artifacts under `--output-dir`; use `--run-summary-json` for stable machine-readable completion metadata.
 - For scheduled/agent runs, prefer retry settings such as `--max-retries 5 --retry-max-delay 60` to absorb transient Adobe API rate limits.
 - On failure, stderr receives a JSON error envelope:
   ```json
@@ -220,12 +221,15 @@ Log levels: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`. Log formats: `text`
 --format json --output - --log-format json
 ```
 
-It produces machine-readable JSON on stdout and structured log output on stderr, with no banner or progress output. Use it for unattended automation where you want a single predictable output stream.
+It applies machine-friendly defaults. Discovery, diff, and org-report flows emit machine-readable JSON on stdout with structured logs on stderr. Single-SDR and batch generation currently still write auto-named artifacts under `--output-dir`.
 
 ```bash
-# Equivalent forms:
-uv run cja_auto_sdr <dv_id> --agent-mode
-uv run cja_auto_sdr <dv_id> --format json --output - --log-format json
+# Direct stdout command families:
+uv run cja_auto_sdr --list-dataviews --agent-mode
+uv run cja_auto_sdr --org-report --agent-mode
+
+# Single SDR keeps the preset but still writes auto-named artifacts
+uv run cja_auto_sdr <dv_id> --agent-mode --output-dir /reports
 ```
 
 Config preflight before running unattended:
@@ -239,12 +243,12 @@ uv run cja_auto_sdr --config-status --config-json  # machine-readable config sta
 
 | Command Family | `--agent-mode` | Notes |
 |---|---|---|
-| Single SDR | ✅ | JSON on stdout |
+| Single SDR | Limited | Preset applies, but current generation writes auto-named artifacts under `--output-dir` |
 | Discovery | ✅ | JSON on stdout |
 | Org Report | ✅ | JSON on stdout |
 | Diff | ✅ | JSON on stdout |
-| Batch | ✅ | JSON on stdout |
-| Config/Stats | ❌ | Use `--config-status --config-json` |
+| Batch | Limited | Preset applies, but generated artifacts still land under `--output-dir` per data view |
+| Config/Stats | Partial | Use `--config-status --config-json`; stats supports `--format json --output -` |
 
 ### JSON `advisories` Block
 
