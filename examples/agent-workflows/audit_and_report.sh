@@ -6,6 +6,7 @@
 #   - Uses --agent-mode (expands to --format json --output - --log-format json)
 #   - Parses discovery output using the dataViews JSON shape
 #   - Detects first-run and creates baselines without --compare-with-prev
+#   - Persists machine-readable diff and org-report JSON artifacts under REPORT_DIR
 #   - Remains ID-first throughout; never uses display names for unattended ops
 #
 # Environment variables:
@@ -21,6 +22,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 REPORT_DIR="${REPORT_DIR:-$PROJECT_ROOT/reports}"
 SNAPSHOT_DIR="${SNAPSHOT_DIR:-$PROJECT_ROOT/snapshots}"
+RUN_ID="$(date '+%Y%m%dT%H%M%S')"
+REPORT_RUN_DIR="$REPORT_DIR/audit-$RUN_ID"
 LOG_PREFIX="[$(date '+%Y-%m-%d %H:%M:%S')]"
 
 # shellcheck source=/dev/null
@@ -84,7 +87,8 @@ if [[ -z "$DATA_VIEW_IDS" ]]; then
     exit 1
 fi
 
-mkdir -p "$REPORT_DIR" "$SNAPSHOT_DIR"
+mkdir -p "$REPORT_RUN_DIR" "$SNAPSHOT_DIR"
+printf '%s\n' "$DISCOVER_OUTPUT" > "$REPORT_RUN_DIR/discovery.json"
 
 OVERALL_EXIT=0
 
@@ -97,18 +101,19 @@ for DV_ID in $DATA_VIEW_IDS; do
         uv run cja_auto_sdr --list-snapshots --format json --output - "$DV_ID" 2>/dev/null
     exit_on_signal_exit "$SNAP_LIST_EXIT" "$LOG_PREFIX ERROR: Snapshot list interrupted for $DV_ID"
 
+    if [[ $SNAP_LIST_EXIT -ne 0 ]]; then
+        echo "$LOG_PREFIX  ERROR: Snapshot list failed for $DV_ID (exit $SNAP_LIST_EXIT)" >&2
+        update_overall_exit 1
+        continue
+    fi
+
     HAS_SNAPSHOTS=0
-    if [[ $SNAP_LIST_EXIT -eq 0 && -n "$SNAP_LIST_OUTPUT" ]]; then
-        # Check if there are any snapshots in the list
-        SNAP_COUNT=$(printf '%s' "$SNAP_LIST_OUTPUT" | python3 -c "
-import sys, json
-try:
-    data = json.load(sys.stdin)
-    snaps = data if isinstance(data, list) else data.get('snapshots', [])
-    print(len(snaps))
-except Exception:
-    print(0)
-" 2>/dev/null) || SNAP_COUNT=0
+    if [[ -n "$SNAP_LIST_OUTPUT" ]]; then
+        SNAP_COUNT="$(extract_snapshot_count "$SNAP_LIST_OUTPUT" 2>/dev/null)" || {
+            echo "$LOG_PREFIX  ERROR: Failed to parse snapshot inventory for $DV_ID" >&2
+            update_overall_exit 1
+            continue
+        }
         [[ "${SNAP_COUNT:-0}" -gt 0 ]] && HAS_SNAPSHOTS=1
     fi
 
@@ -119,6 +124,10 @@ except Exception:
             uv run cja_auto_sdr "$DV_ID" --compare-with-prev --agent-mode \
                 --auto-snapshot --snapshot-dir "$SNAPSHOT_DIR" 2>/dev/null
         exit_on_signal_exit "$DIFF_EXIT" "$LOG_PREFIX  ERROR: Diff comparison interrupted for $DV_ID"
+
+        if [[ -n "$DIFF_OUTPUT" ]]; then
+            printf '%s\n' "$DIFF_OUTPUT" > "$REPORT_RUN_DIR/${DV_ID}_diff.json"
+        fi
 
         case $DIFF_EXIT in
             0) echo "$LOG_PREFIX  No changes detected for $DV_ID" ;;
@@ -159,6 +168,10 @@ capture_command_output ORG_EXIT ORG_OUTPUT \
     uv run cja_auto_sdr --org-report --agent-mode
 exit_on_signal_exit "$ORG_EXIT" "$LOG_PREFIX ERROR: Org report interrupted"
 
+if [[ -n "$ORG_OUTPUT" ]]; then
+    printf '%s\n' "$ORG_OUTPUT" > "$REPORT_RUN_DIR/org_report.json"
+fi
+
 case $ORG_EXIT in
     0) echo "$LOG_PREFIX Org report: OK" ;;
     2)
@@ -175,6 +188,7 @@ case $ORG_EXIT in
         ;;
 esac
 
+echo "$LOG_PREFIX Reports saved to: $REPORT_RUN_DIR"
 echo "$LOG_PREFIX Audit and report complete (exit: $OVERALL_EXIT)"
 notify "CJA audit complete — exit $OVERALL_EXIT"
 

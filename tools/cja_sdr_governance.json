@@ -6,7 +6,7 @@
     "properties": {
       "trending_window": {
         "type": "integer",
-        "description": "Number of days to include in drift detection trending analysis. Higher values show longer-term trends.",
+        "description": "Number of cached org-report snapshots to include in drift detection trending analysis. Higher values compare across a longer snapshot history.",
         "minimum": 1
       },
       "duplicate_threshold": {

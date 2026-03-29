@@ -5243,8 +5243,8 @@ write_org_report_csv = _make_org_writer_compat_wrapper(
 
 def _populate_org_report_advisory_rollup(
     runtime_details: dict[str, Any] | None,
-    result: Any,
-    trending: Any | None,
+    result: OrgReportResult,
+    trending: OrgReportTrending | None,
 ) -> None:
     """Compute advisory rollup from org-report result and store in runtime_details.
 

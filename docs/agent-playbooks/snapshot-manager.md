@@ -19,21 +19,22 @@ and change tracking.
 
 **Required (capture):**
 - `<dv_id>` — data view ID to snapshot
-- `CJA_CLIENT_ID`, `CJA_CLIENT_SECRET`, `CJA_ORG_ID` — API credentials
+- `ORG_ID`, `CLIENT_ID`, `SECRET`, `SCOPES` — API credentials (or `--profile <name>`)
 
 **Required (compare):**
-- Either two named snapshot labels, or `--compare-with-prev` for the most recent pair
+- Either two snapshot JSON file paths, or `--compare-with-prev` for the most recent snapshot of one data view
 
 **Optional:**
-- `--snapshot <label>` — name the snapshot (defaults to timestamp-based label)
-- `--output <path>` — write snapshot metadata to file
-- `--format json` — machine-readable output
+- `--snapshot <path.json>` — write a snapshot to an explicit file path
+- `--snapshot-dir <dir>` — directory scanned by `--compare-with-prev` and `--list-snapshots`
+- `--agent-mode` — machine-readable JSON on stdout for compare flows
 - `--profile <name>` — named credential profile
 
 ## Constraints
 
 - Snapshots are stored locally (or in the configured snapshot directory); they
   are not uploaded to CJA or any remote service.
+- `--compare-snapshots` compares snapshot files directly and does not call the API.
 - Git-backed snapshots require a git repository at or above the working directory;
   configure with `--git-snapshot` if desired.
 - Pruning is irreversible; verify the snapshot list before deleting.
@@ -44,32 +45,31 @@ and change tracking.
 **1. Capture a named snapshot before a schema change:**
 
 ```bash
-uv run cja_auto_sdr <DATA_VIEW_ID> --snapshot pre-migration --agent-mode \
-  --format json
+uv run cja_auto_sdr <DATA_VIEW_ID> --snapshot ./snapshots/pre-migration.json
 echo "Exit: $?"
 ```
 
 **2. Capture a snapshot after the change:**
 
 ```bash
-uv run cja_auto_sdr <DATA_VIEW_ID> --snapshot post-migration --agent-mode \
-  --format json
+uv run cja_auto_sdr <DATA_VIEW_ID> --snapshot ./snapshots/post-migration.json
 ```
 
 **3. List all snapshots for a data view:**
 
 ```bash
-uv run cja_auto_sdr --list-snapshots <DATA_VIEW_ID> --format json
+uv run cja_auto_sdr --list-snapshots <DATA_VIEW_ID> --format json --output -
 ```
 
-Each entry includes `label`, `timestamp`, and `data_view_id`.
+Each entry includes `filename`, `created_at`, and `data_view_id`.
 
 **4. Compare two named snapshots:**
 
 ```bash
-uv run cja_auto_sdr --diff pre-migration post-migration --agent-mode \
-  --format json \
-  --output /tmp/migration-diff.json
+uv run cja_auto_sdr --compare-snapshots \
+  ./snapshots/pre-migration.json \
+  ./snapshots/post-migration.json \
+  --agent-mode > /tmp/migration-diff.json
 ```
 
 See `diff-reviewer.md` for full diff workflow.
@@ -77,38 +77,33 @@ See `diff-reviewer.md` for full diff workflow.
 **5. Compare a data view against its most recent snapshot:**
 
 ```bash
-uv run cja_auto_sdr <DATA_VIEW_ID> --compare-with-prev --agent-mode \
-  --format json \
-  --output /tmp/incremental-diff.json
+uv run cja_auto_sdr <DATA_VIEW_ID> --compare-with-prev --agent-mode > /tmp/incremental-diff.json
 ```
 
 **6. Capture a timestamped snapshot for scheduled drift tracking:**
 
 ```bash
-LABEL="scheduled-$(date +%Y%m%d)"
-uv run cja_auto_sdr <DATA_VIEW_ID> --snapshot "$LABEL" --agent-mode \
-  --format json
+SNAPSHOT_FILE="./snapshots/${DATA_VIEW_ID}_$(date +%Y%m%d).json"
+uv run cja_auto_sdr <DATA_VIEW_ID> --snapshot "$SNAPSHOT_FILE"
 ```
 
-**7. Scheduled drift window query (rolling 7 days):**
+**7. Scheduled drift window query (last 7 cached org-report snapshots):**
 
 ```bash
-uv run cja_auto_sdr --org-report --trending-window 7 --agent-mode \
-  --format json \
-  --output /tmp/weekly-drift.json
+uv run cja_auto_sdr --org-report --trending-window 7 --agent-mode > /tmp/weekly-drift.json
 ```
 
 ## Success Criteria
 
-- Snapshot capture exits 0 and the new label appears in `--list-snapshots` output.
-- Diff between pre/post snapshots exits 0 and `diff` key is present in JSON output.
+- Snapshot capture exits 0 and the new filename appears in `--list-snapshots` output.
+- Diff between pre/post snapshots exits 0 or 2 and `summary` is present in JSON output.
 - Snapshot count grows monotonically over scheduled runs.
 - Pruned snapshots no longer appear in `--list-snapshots` output.
 
 ## Follow-Up Actions
 
 - **After capturing pre/post snapshots:** Run `diff-reviewer.md` to validate changes.
-- **After a clean drift window:** No action needed; log the snapshot label for audit trail.
+- **After a clean drift window:** No action needed; log the snapshot filename for audit trail.
 - **Drift detected:** Route drift report to `diff-reviewer.md` for full analysis.
 - **Snapshot storage growing large:** Prune snapshots older than your retention policy;
   keep at minimum the last baseline and the most recent snapshot per data view.

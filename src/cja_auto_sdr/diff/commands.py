@@ -9,7 +9,10 @@ import os
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from cja_auto_sdr.diff.models import DiffResult
 
 __all__ = [
     "handle_compare_snapshots_command",
@@ -27,7 +30,7 @@ def _generator_module():
 
 def _populate_diff_advisory_rollup(
     runtime_details: dict[str, Any] | None,
-    diff_result: object,
+    diff_result: DiffResult,
     *,
     changes_only: bool,
 ) -> None:

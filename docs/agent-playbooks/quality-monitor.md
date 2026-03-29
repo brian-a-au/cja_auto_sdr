@@ -12,17 +12,17 @@ to prevent downstream data issues.
 - CI gate before promoting a data view schema change to production
 - Scheduled quality sweeps (daily or per-deployment)
 - Post-migration validation to confirm component descriptions and metadata are intact
-- Any time a data view's quality score needs to be measured and reported
+- Any time a data view's quality issues need to be measured and reported
 
 ## Inputs
 
 **Required:**
-- `<dv_id>` — the data view ID to quality-check (or `--org-report` for all views)
-- `CJA_CLIENT_ID`, `CJA_CLIENT_SECRET`, `CJA_ORG_ID` — API credentials
+- One or more exact data view IDs (`<dv_id> [<dv_id> ...]`)
+- `ORG_ID`, `CLIENT_ID`, `SECRET`, `SCOPES` — API credentials (or `--profile <name>`)
 
 **Optional:**
-- `--fail-on-quality` — exit non-zero if any quality threshold is breached
-- `--format json` — machine-readable output for pipeline consumption
+- `--fail-on-quality <SEVERITY>` — exit 2 if any issue at or above the threshold is found
+- `--quality-report json|csv` — emit a standalone quality report without SDR artifacts
 - `--output <path>` — write quality report to file
 - `--profile <name>` — named credential profile
 - `--workers <n>` — parallel API workers (default: auto-tuned)
@@ -30,10 +30,9 @@ to prevent downstream data issues.
 ## Constraints
 
 - Quality checks are read-only; this playbook does not remediate issues.
-- `--fail-on-quality` uses built-in thresholds; custom thresholds are configured
-  via the profile or config file, not per-invocation flags.
-- Org-wide quality checks (`--org-report`) may be slow for large organizations;
-  plan for several minutes of runtime and use `--workers` to optimize.
+- `--quality-report` supports `json` and `csv` only.
+- `--fail-on-quality` is supported in SDR/quality-report flows, not with `--org-report`.
+- Org-wide sweeps require a resolved list of data view IDs; start with discovery if needed.
 - Missing descriptions and empty display names are the most common quality
   findings; prepare remediation scripts separately.
 
@@ -42,59 +41,62 @@ to prevent downstream data issues.
 **1. Quality gate for a single data view (unattended CI):**
 
 ```bash
-uv run cja_auto_sdr <DATA_VIEW_ID> --agent-mode \
-  --fail-on-quality \
-  --format json \
-  --output /tmp/quality-report.json
+uv run cja_auto_sdr <DATA_VIEW_ID> \
+  --quality-report json \
+  --output /tmp/quality-report.json \
+  --fail-on-quality HIGH
 echo "Exit: $?"
 ```
 
 Exit 0 — all quality thresholds passed.
-Exit 2 — quality threshold breached; inspect `quality` section of JSON output.
-Exit 64 — authentication failure.
+Exit 2 — quality threshold breached; inspect the emitted issue rows in the JSON report.
+Exit 1 — configuration, auth, or processing failure.
 
 **2. Org-wide quality sweep:**
 
 ```bash
-uv run cja_auto_sdr --org-report --agent-mode \
-  --fail-on-quality \
-  --format json \
-  --output /tmp/org-quality.json
+uv run cja_auto_sdr <DATA_VIEW_ID_1> <DATA_VIEW_ID_2> <DATA_VIEW_ID_3> \
+  --quality-report json \
+  --output /tmp/org-quality.json \
+  --continue-on-error
 ```
 
 **3. Parse quality findings from JSON output:**
 
-The `quality` object in the report includes:
-- `score`: 0–100 composite quality score
-- `findings`: array of issues, each with `severity`, `code`, `component_id`, `message`
-- `thresholds_breached`: boolean
+Standalone quality-report JSON is an array of issue objects. Inspect fields such as:
+- `Severity`
+- `Issue`
+- `Data View ID`
+- `Data View Name`
+- `Type`
 
-Filter `findings` where `severity == "critical"` for blocking issues.
-Filter `severity == "warning"` for advisory items.
+Filter rows where `Severity == "CRITICAL"` for blocking issues.
+Filter rows where `Severity == "HIGH"`, `Severity == "MEDIUM"`, `Severity == "LOW"`, or `Severity == "INFO"` for advisory review.
 
 **4. Generate a human-readable quality report:**
 
 ```bash
-uv run cja_auto_sdr <DATA_VIEW_ID> --agent-mode \
-  --fail-on-quality \
+uv run cja_auto_sdr <DATA_VIEW_ID> \
   --format markdown \
-  --output /tmp/quality-report.md
+  --output-dir /tmp/reports \
+  --fail-on-quality HIGH \
+  --run-summary-json /tmp/quality-run-summary.json
 ```
 
 ## Success Criteria
 
 - Exit code 0 from the quality-check command.
-- `quality.thresholds_breached` is `false` in JSON output.
-- `quality.score` meets or exceeds the configured minimum (default: 70).
-- No `critical` findings in the `quality.findings` array.
+- The standalone quality report is valid JSON or CSV and is non-empty.
+- No report entries meet or exceed the configured `--fail-on-quality` threshold.
+- If a run summary is written, `quality_gate_failed` is `false`.
 
 ## Follow-Up Actions
 
-- **Thresholds breached (exit 2):** Block the pipeline; route `quality.findings`
-  to schema owners for remediation. Reference component IDs for targeted fixes.
+- **Thresholds breached (exit 2):** Block the pipeline; route the emitted issue rows
+  to schema owners for remediation. Reference the affected `Data View ID` and issue rows for targeted fixes.
 - **Warnings only (exit 0):** Log findings; schedule remediation for next sprint.
-- **Clean pass:** Record quality score and timestamp; optionally commit a snapshot
-  via `snapshot-manager.md` to track score trends over time.
+- **Clean pass:** Record the issue counts by severity and timestamp; optionally commit a snapshot
+  via `snapshot-manager.md` to track trend changes over time.
 - **Recurring monitoring:** Pair with `sdr-auditor.md` for governance context and
   `diff-reviewer.md` to detect quality regressions between releases.
 

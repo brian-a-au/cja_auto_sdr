@@ -164,6 +164,12 @@ class TestToolManifests:
         assert "csv" in output_dir_desc
         assert "directory" in output_dir_desc
 
+    def test_governance_manifest_trending_window_uses_snapshot_count_not_days(self):
+        manifest = json.loads((TOOLS_DIR / "cja_sdr_governance.json").read_text())
+        desc = manifest["parameters"]["properties"]["trending_window"]["description"].lower()
+        assert "snapshot" in desc
+        assert "days" not in desc
+
     def test_no_show_config_in_manifests(self):
         for name in REQUIRED_MANIFESTS:
             manifest = json.loads((TOOLS_DIR / name).read_text())

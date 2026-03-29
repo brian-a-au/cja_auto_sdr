@@ -17,14 +17,16 @@ snapshot for future diff comparisons.
 ## Inputs
 
 **Required:**
-- `CJA_CLIENT_ID`, `CJA_CLIENT_SECRET`, `CJA_ORG_ID` — Adobe IMS credentials
+- `ORG_ID`, `CLIENT_ID`, `SECRET`, `SCOPES` — Adobe IMS credentials
   (set as environment variables or in a `.env` file)
 
 **Optional:**
-- `--profile <name>` — create a named profile for multi-org environments
+- `--profile-add <name>` — create a named profile for multi-org environments
+- `--profile <name>` — reuse an existing named profile
 - `<dv_id>` — a specific data view ID to target for the initial SDR; if
   unknown, use `--list-dataviews` to discover available IDs
-- `--output <path>` — write SDR to file instead of stdout
+- `--output-dir <path>` — directory for auto-named SDR artifacts
+- `--run-summary-json <path>` — stable machine-readable completion metadata
 - `--format excel` | `json` | `csv` | `markdown` — output format
 
 ## Constraints
@@ -45,7 +47,7 @@ echo "Exit: $?"
 ```
 
 Exit 0 — credentials valid, API reachable.
-Exit 64 — authentication failure; verify `CJA_CLIENT_ID` / `CJA_CLIENT_SECRET`.
+Exit 1 — validation failed; verify `CLIENT_ID` / `SECRET` / `ORG_ID` / `SCOPES`.
 
 **2. Discover available data views:**
 
@@ -66,18 +68,18 @@ uv run cja_auto_sdr --describe-dataview <DATA_VIEW_ID>
 
 ```bash
 uv run cja_auto_sdr <DATA_VIEW_ID> --agent-mode \
-  --format json \
-  --output /tmp/initial-sdr.json
+  --output-dir /tmp/reports \
+  --run-summary-json /tmp/initial-sdr-run-summary.json
 echo "Exit: $?"
 ```
 
-Exit 0 — SDR generated successfully.
-Exit 1 — partial failure (some components skipped); review warnings in output.
+This writes the SDR artifact under `/tmp/reports` and records completion metadata
+in `/tmp/initial-sdr-run-summary.json`.
 
 **5. Capture a baseline snapshot for future comparisons:**
 
 ```bash
-uv run cja_auto_sdr <DATA_VIEW_ID> --snapshot baseline
+uv run cja_auto_sdr <DATA_VIEW_ID> --snapshot ./snapshots/<DATA_VIEW_ID>_baseline.json
 ```
 
 This snapshot can be used with `diff-reviewer.md` to detect future changes.
@@ -85,7 +87,7 @@ This snapshot can be used with `diff-reviewer.md` to detect future changes.
 **6. (Optional) Save a named profile for reuse:**
 
 ```bash
-uv run cja_auto_sdr --config --profile production
+uv run cja_auto_sdr --profile-add production
 ```
 
 Follow the interactive prompts to store credentials. Subsequent commands can
@@ -95,7 +97,7 @@ use `--profile production` instead of environment variables.
 
 - `--validate-config` exits 0.
 - `--list-dataviews` returns at least one data view.
-- SDR generation exits 0 and produces a non-empty output file.
+- SDR generation exits 0 and writes an auto-named artifact under the requested `--output-dir`.
 - Baseline snapshot is recorded (verify with `--list-snapshots`).
 
 ## Follow-Up Actions
@@ -103,7 +105,7 @@ use `--profile production` instead of environment variables.
 - Store credentials in a secrets manager or CI secret store; do not commit to version control.
 - Schedule `sdr-auditor.md` for recurring org-wide governance reviews.
 - Configure `snapshot-manager.md` to capture snapshots on a regular cadence.
-- Document the baseline SDR path and snapshot label for the team.
+- Document the baseline SDR path and snapshot file path for the team.
 
 ---
 

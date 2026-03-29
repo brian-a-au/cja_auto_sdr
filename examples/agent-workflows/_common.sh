@@ -93,6 +93,30 @@ extract_advisory_severity() {
     printf '%s' "$json" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('advisories',{}).get('severity','info'))"
 }
 
+extract_highest_quality_severity_from_run_summary() {
+    local json="$1"
+    printf '%s' "$json" | python3 -c "
+import json, sys
+
+order = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO']
+
+try:
+    payload = json.load(sys.stdin)
+except Exception:
+    print('unknown')
+    raise SystemExit(0)
+
+for result in payload.get('results', []):
+    counts = result.get('dq_severity_counts') or {}
+    for severity in order:
+        if int(counts.get(severity, 0) or 0) > 0:
+            print(severity)
+            raise SystemExit(0)
+
+print('unknown')
+"
+}
+
 extract_dataview_ids() {
     local json="$1"
     printf '%s' "$json" | python3 -c "
@@ -100,6 +124,17 @@ import sys, json
 data = json.load(sys.stdin)
 for dv in data.get('dataViews', []):
     print(dv.get('id', ''))
+"
+}
+
+extract_snapshot_count() {
+    local json="$1"
+    printf '%s' "$json" | python3 -c "
+import sys, json
+
+data = json.load(sys.stdin)
+snapshots = data if isinstance(data, list) else data.get('snapshots', [])
+print(len(snapshots))
 "
 }
 

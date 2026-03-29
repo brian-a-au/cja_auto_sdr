@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import textwrap
@@ -45,6 +46,22 @@ def _install_fake_uv(tmp_path: Path, responses: dict[str, tuple[int, str]] | Non
 
             args="$*"
             printf '%s\n' "$args" >> "$FAKE_UV_LOG"
+
+            if [[ "$args" == *"--run-summary-json"* && -n "${{FAKE_UV_RUN_SUMMARY_JSON:-}}" ]]; then
+                summary_path=""
+                prev=""
+                for arg in "$@"; do
+                    if [[ "$prev" == "--run-summary-json" ]]; then
+                        summary_path="$arg"
+                        break
+                    fi
+                    prev="$arg"
+                done
+
+                if [[ -n "$summary_path" ]]; then
+                    printf '%s\n' "$FAKE_UV_RUN_SUMMARY_JSON" > "$summary_path"
+                fi
+            fi
 
             {dispatch_block}
 
@@ -317,6 +334,73 @@ def test_audit_subsequent_run_uses_compare_with_prev(tmp_path: Path) -> None:
     assert any("--compare-with-prev" in c for c in calls), "Must use --compare-with-prev when snapshots exist"
 
 
+def test_audit_snapshot_inventory_failure_does_not_create_baseline(tmp_path: Path) -> None:
+    discovery_json = '{"dataViews":[{"id":"dv_1"}]}'
+    responses: dict[str, tuple[int, str]] = {
+        "--list-dataviews --agent-mode": (0, discovery_json),
+        "--list-snapshots": (1, ""),
+        "--org-report --agent-mode": (0, '{"status":"ok"}'),
+    }
+    env, log_path = _base_env(tmp_path, responses)
+
+    result = subprocess.run(
+        ["bash", str(WORKFLOWS_DIR / "audit_and_report.sh")],
+        cwd=PROJECT_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    calls = _read_calls(log_path)
+
+    assert result.returncode == 1
+    assert all("--snapshot" not in c for c in calls), "Must not create baseline when snapshot inventory fails"
+    assert "Snapshot list failed for dv_1" in result.stderr
+
+
+def test_audit_persists_org_report_artifact(tmp_path: Path) -> None:
+    env, _log_path = _audit_env(tmp_path)
+
+    result = subprocess.run(
+        ["bash", str(WORKFLOWS_DIR / "audit_and_report.sh")],
+        cwd=PROJECT_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0
+    org_reports = list((tmp_path / "reports").glob("audit-*/org_report.json"))
+    assert len(org_reports) == 1
+    assert json.loads(org_reports[0].read_text(encoding="utf-8")) == {"status": "ok"}
+
+
+def test_audit_persists_diff_artifact_when_compare_with_prev_runs(tmp_path: Path) -> None:
+    discovery_json = '{"dataViews":[{"id":"dv_1"}]}'
+    snapshots_json = '{"snapshots":[{"id":"snap_001"}]}'
+    diff_json = '{"summary":{"has_changes":true,"total_changes":1},"advisories":{"severity":"warning"}}'
+    responses: dict[str, tuple[int, str]] = {
+        "--list-dataviews --agent-mode": (0, discovery_json),
+        "--list-snapshots": (0, snapshots_json),
+        "--compare-with-prev --agent-mode": (2, diff_json),
+        "--org-report --agent-mode": (0, '{"status":"ok"}'),
+    }
+    env, _log_path = _base_env(tmp_path, responses)
+
+    result = subprocess.run(
+        ["bash", str(WORKFLOWS_DIR / "audit_and_report.sh")],
+        cwd=PROJECT_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 2
+    diff_reports = list((tmp_path / "reports").glob("audit-*/dv_1_diff.json"))
+    assert len(diff_reports) == 1
+    payload = json.loads(diff_reports[0].read_text(encoding="utf-8"))
+    assert payload["summary"]["has_changes"] is True
+
+
 def test_audit_never_combines_run_summary_json_with_output_dash(tmp_path: Path) -> None:
     """Must never emit --run-summary-json - combined with --output -."""
     env, log_path = _audit_env(tmp_path)
@@ -386,14 +470,20 @@ def test_audit_uses_ids_not_names(tmp_path: Path) -> None:
 
 def _onboard_env(tmp_path: Path, **extra: str) -> tuple[dict[str, str], Path]:
     describe_json = '{"id":"dv_new","name":"New View"}'
-    sdr_json = '{"status":"ok","advisories":{"severity":"info"}}'
     responses: dict[str, tuple[int, str]] = {
         "--validate-config": (0, ""),
         "--describe-dataview": (0, describe_json),
-        "--fail-on-quality": (0, sdr_json),
+        "--fail-on-quality": (0, ""),
     }
     env, log_path = _base_env(tmp_path, responses)
     env["DATA_VIEW_ID"] = "dv_new"
+    env["FAKE_UV_RUN_SUMMARY_JSON"] = json.dumps(
+        {
+            "summary_version": "1.1",
+            "quality_gate_failed": False,
+            "results": [{"dq_severity_counts": {"INFO": 1}}],
+        }
+    )
     env.update(extra)
     return env, log_path
 
@@ -440,7 +530,7 @@ def test_onboard_calls_describe_dataview(tmp_path: Path) -> None:
     assert any("--describe-dataview" in c and "dv_new" in c for c in calls)
 
 
-def test_onboard_calls_sdr_with_agent_mode_and_quality_gate(tmp_path: Path) -> None:
+def test_onboard_calls_sdr_with_agent_mode_quality_gate_and_run_summary(tmp_path: Path) -> None:
     env, log_path = _onboard_env(tmp_path)
 
     subprocess.run(
@@ -451,9 +541,14 @@ def test_onboard_calls_sdr_with_agent_mode_and_quality_gate(tmp_path: Path) -> N
         text=True,
     )
     calls = _read_calls(log_path)
-    assert any("dv_new" in c and "--agent-mode" in c and "--fail-on-quality" in c for c in calls), (
-        "SDR generation must use --agent-mode and --fail-on-quality"
-    )
+    assert any(
+        "dv_new" in c
+        and "--agent-mode" in c
+        and "--fail-on-quality" in c
+        and "--run-summary-json" in c
+        and "--output-dir" in c
+        for c in calls
+    ), "SDR generation must use --agent-mode, --fail-on-quality, --output-dir, and --run-summary-json"
 
 
 def test_onboard_saves_baseline_snapshot(tmp_path: Path) -> None:
@@ -472,14 +567,20 @@ def test_onboard_saves_baseline_snapshot(tmp_path: Path) -> None:
 
 def test_onboard_exits_2_on_quality_gate_breach(tmp_path: Path) -> None:
     describe_json = '{"id":"dv_new"}'
-    sdr_json = '{"status":"quality_breach","advisories":{"severity":"high"}}'
     responses: dict[str, tuple[int, str]] = {
         "--validate-config": (0, ""),
         "--describe-dataview": (0, describe_json),
-        "--fail-on-quality": (2, sdr_json),
+        "--fail-on-quality": (2, ""),
     }
     env, log_path = _base_env(tmp_path, responses)
     env["DATA_VIEW_ID"] = "dv_new"
+    env["FAKE_UV_RUN_SUMMARY_JSON"] = json.dumps(
+        {
+            "summary_version": "1.1",
+            "quality_gate_failed": True,
+            "results": [{"dq_severity_counts": {"HIGH": 1}}],
+        }
+    )
 
     result = subprocess.run(
         ["bash", str(WORKFLOWS_DIR / "onboard_dataview.sh")],
@@ -492,6 +593,39 @@ def test_onboard_exits_2_on_quality_gate_breach(tmp_path: Path) -> None:
     calls = _read_calls(log_path)
     # Snapshot must NOT be saved on quality gate breach
     assert all("--snapshot" not in c for c in calls), "Must not save snapshot when quality gate is breached"
+    assert "severity=HIGH" in result.stdout
+    assert (tmp_path / "reports" / "dv_new_run_summary.json").exists()
+
+
+def test_onboard_suppresses_inner_success_stdout_on_quality_gate_breach(tmp_path: Path) -> None:
+    describe_json = '{"id":"dv_new"}'
+    responses: dict[str, tuple[int, str]] = {
+        "--validate-config": (0, ""),
+        "--describe-dataview": (0, describe_json),
+        "--fail-on-quality": (2, "SUCCESS: SDR generated for New View"),
+    }
+    env, _log_path = _base_env(tmp_path, responses)
+    env["DATA_VIEW_ID"] = "dv_new"
+    env["FAKE_UV_RUN_SUMMARY_JSON"] = json.dumps(
+        {
+            "summary_version": "1.1",
+            "quality_gate_failed": True,
+            "results": [{"dq_severity_counts": {"HIGH": 1}}],
+        }
+    )
+
+    result = subprocess.run(
+        ["bash", str(WORKFLOWS_DIR / "onboard_dataview.sh")],
+        cwd=PROJECT_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 2
+    assert "SUCCESS: SDR generated" not in result.stdout
+    assert "SUCCESS: SDR generated" not in result.stderr
+    assert "severity=HIGH" in result.stdout
 
 
 def test_onboard_exits_1_when_data_view_id_not_set(tmp_path: Path) -> None:

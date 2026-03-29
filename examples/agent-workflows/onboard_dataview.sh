@@ -12,6 +12,7 @@
 #
 # Environment variables:
 #   DATA_VIEW_ID    — data view to onboard (required)
+#   REPORT_DIR      — output directory for SDR artifacts and run summary (default: ./reports)
 #   SNAPSHOT_DIR    — snapshot directory (default: ./snapshots)
 #   QUALITY_GATE    — quality level for --fail-on-quality (default: MEDIUM)
 #
@@ -22,6 +23,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+REPORT_DIR="${REPORT_DIR:-$PROJECT_ROOT/reports}"
 SNAPSHOT_DIR="${SNAPSHOT_DIR:-$PROJECT_ROOT/snapshots}"
 QUALITY_GATE="${QUALITY_GATE:-MEDIUM}"
 LOG_PREFIX="[$(date '+%Y-%m-%d %H:%M:%S')]"
@@ -69,21 +71,30 @@ echo "$LOG_PREFIX Data view inspection complete"
 # --- Step 3: Generate SDR with quality gating ---
 echo "$LOG_PREFIX Generating SDR with quality gate: $QUALITY_GATE"
 
-mkdir -p "$SNAPSHOT_DIR"
+mkdir -p "$REPORT_DIR" "$SNAPSHOT_DIR"
+
+RUN_SUMMARY_FILE="$REPORT_DIR/${DATA_VIEW_ID}_run_summary.json"
 
 capture_command_output SDR_EXIT SDR_OUTPUT \
     uv run cja_auto_sdr "$DATA_VIEW_ID" --agent-mode \
-        --fail-on-quality "$QUALITY_GATE"
+        --output-dir "$REPORT_DIR" \
+        --fail-on-quality "$QUALITY_GATE" \
+        --run-summary-json "$RUN_SUMMARY_FILE"
 exit_on_signal_exit "$SDR_EXIT" "$LOG_PREFIX ERROR: SDR generation interrupted"
 
 case $SDR_EXIT in
     0)
         echo "$LOG_PREFIX SDR generated successfully"
+        echo "$LOG_PREFIX SDR artifacts written to: $REPORT_DIR"
+        echo "$LOG_PREFIX Run summary written to: $RUN_SUMMARY_FILE"
         ;;
     2)
         echo "$LOG_PREFIX Quality gate breached ($QUALITY_GATE) for $DATA_VIEW_ID" >&2
-        # Capture advisory severity for notification
-        SEVERITY=$(extract_advisory_severity "$SDR_OUTPUT" 2>/dev/null || echo "unknown")
+        SEVERITY="unknown"
+        if [[ -f "$RUN_SUMMARY_FILE" ]]; then
+            RUN_SUMMARY_JSON="$(<"$RUN_SUMMARY_FILE")"
+            SEVERITY=$(extract_highest_quality_severity_from_run_summary "$RUN_SUMMARY_JSON" 2>/dev/null || echo "unknown")
+        fi
         notify "Quality gate breach — $DATA_VIEW_ID severity=$SEVERITY"
         exit 2
         ;;

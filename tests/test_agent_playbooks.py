@@ -76,3 +76,68 @@ class TestAgentPlaybooks:
                 # Allow <dv_id>, <DATA_VIEW_ID>, dv_..., or $DV_ID variable patterns
                 if "my_data_view_name" in line.lower():
                     pytest.fail(f"Line {i + 1} in {playbook_path.name}: unattended example uses name instead of ID")
+
+    def test_playbooks_use_current_credential_env_names(self):
+        for name in REQUIRED_PLAYBOOKS:
+            content = (PLAYBOOKS_DIR / name).read_text()
+            assert "CJA_CLIENT_ID" not in content
+            assert "CJA_CLIENT_SECRET" not in content
+            assert "CJA_ORG_ID" not in content
+
+    def test_diff_reviewer_uses_compare_snapshots_for_snapshot_files(self):
+        content = (PLAYBOOKS_DIR / "diff-reviewer.md").read_text()
+        assert "--compare-snapshots" in content
+        assert "--diff baseline current" not in content
+
+    def test_playbooks_do_not_document_fail_on_advisory(self):
+        for name in REQUIRED_PLAYBOOKS:
+            content = (PLAYBOOKS_DIR / name).read_text()
+            assert "--fail-on-advisory" not in content
+
+    def test_quality_monitor_and_sdr_auditor_do_not_mix_org_report_with_fail_on_quality(self):
+        for name in ["quality-monitor.md", "sdr-auditor.md"]:
+            content = (PLAYBOOKS_DIR / name).read_text()
+            assert "--org-report --agent-mode \\\n  --fail-on-quality" not in content
+
+    def test_diff_reviewer_describes_current_diff_json_shape(self):
+        content = (PLAYBOOKS_DIR / "diff-reviewer.md").read_text()
+        assert "summary.has_changes" in content
+        assert "metric_diffs" in content
+        assert "dimension_diffs" in content
+        assert "advisories.findings" in content
+        assert "diff.changes" not in content
+        assert "breaking_changes_count" not in content
+
+    def test_snapshot_related_playbooks_describe_trending_window_as_snapshot_count(self):
+        for name in ["diff-reviewer.md", "snapshot-manager.md", "sdr-auditor.md"]:
+            content = (PLAYBOOKS_DIR / name).read_text().lower()
+            if "--trending-window" in content:
+                assert "cached org-report snapshots" in content or "snapshot window" in content
+
+    def test_onboarding_guide_uses_current_profile_creation_flow(self):
+        content = (PLAYBOOKS_DIR / "onboarding-guide.md").read_text()
+        assert "--profile-add production" in content
+        assert "--config --profile production" not in content
+
+    def test_playbooks_do_not_document_exit_64(self):
+        for name in REQUIRED_PLAYBOOKS:
+            content = (PLAYBOOKS_DIR / name).read_text()
+            assert "Exit 64" not in content
+
+    def test_quality_monitor_uses_supported_quality_severities(self):
+        content = (PLAYBOOKS_DIR / "quality-monitor.md").read_text()
+        assert 'Severity == "WARNING"' not in content
+        for severity in ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]:
+            assert f'Severity == "{severity}"' in content
+
+    def test_diff_reviewer_treats_warn_threshold_exit_as_completed_comparison(self):
+        content = (PLAYBOOKS_DIR / "diff-reviewer.md").read_text()
+        assert "Exit code 0, 2, or 3" in content
+
+    def test_sdr_auditor_default_org_report_flow_does_not_claim_exit_2(self):
+        content = (PLAYBOOKS_DIR / "sdr-auditor.md").read_text()
+        assert "Exit 2 — configured governance threshold exceeded." not in content
+        assert (
+            "If `--fail-on-threshold` is used, exit code 2 indicates a configured governance threshold breach."
+            in content
+        )
