@@ -358,6 +358,55 @@ class TestDiffAdvisoryBuilder:
 
         finding = next(f for f in summary.findings if f.type == "schema_changes")
         assert finding.severity == "warning"
+        assert finding.details["count"] == 1
+        assert finding.details["changes"][0]["change_type"] == "type_changed"
+
+    def test_schema_changes_ignore_non_breaking_modified_fields(self):
+        from cja_auto_sdr.core.advisory_builders import build_diff_advisories
+        from cja_auto_sdr.diff.models import ChangeType, ComponentDiff, DiffSummary
+
+        modified = ComponentDiff(
+            id="d1",
+            name="Page Name",
+            change_type=ChangeType.MODIFIED,
+            changed_fields={"description": ("Old description", "New description")},
+        )
+        diff = _make_minimal_diff_result(
+            summary=DiffSummary(dimensions_modified=1),
+            dimension_diffs=[modified],
+        )
+
+        summary = build_diff_advisories(diff)
+
+        types = [f.type for f in summary.findings]
+        assert "schema_changes" not in types
+
+    def test_schema_changes_emitted_alongside_breaking_changes(self):
+        from cja_auto_sdr.core.advisory_builders import build_diff_advisories
+        from cja_auto_sdr.diff.models import ChangeType, ComponentDiff, DiffSummary
+
+        removed = ComponentDiff(id="m1", name="Revenue", change_type=ChangeType.REMOVED)
+        modified = ComponentDiff(
+            id="d1",
+            name="Page Name",
+            change_type=ChangeType.MODIFIED,
+            changed_fields={"type": ("string", "integer")},
+        )
+        diff = _make_minimal_diff_result(
+            summary=DiffSummary(metrics_removed=1, dimensions_modified=1),
+            metric_diffs=[removed],
+            dimension_diffs=[modified],
+        )
+
+        summary = build_diff_advisories(diff)
+
+        types = [f.type for f in summary.findings]
+        assert "breaking_changes" in types
+        assert "schema_changes" in types
+
+        schema_finding = next(f for f in summary.findings if f.type == "schema_changes")
+        assert schema_finding.details["count"] == 1
+        assert "validate_mappings" in schema_finding.recommended_actions
 
     def test_additions_only_produces_info(self):
         from cja_auto_sdr.core.advisory_builders import build_diff_advisories

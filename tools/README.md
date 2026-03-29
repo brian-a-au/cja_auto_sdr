@@ -18,31 +18,36 @@ This directory contains OpenAI-style JSON function definitions (tool manifests) 
 
 Not every manifest parameter is valid for every command within a family. The `command` enum in each manifest determines which other parameters are applicable:
 
+- **`cja_sdr_generate`**: `data_view_id` is always required. `format` accepts the direct formats plus the CLI aliases `all`, `reports`, `data`, and `ci`. Main SDR artifacts still use `output_dir` auto-naming. Standalone `quality_report` mode additionally honors `output` for stdout or a caller-chosen file path, and falls back to `output_dir` for auto-named report files when `output` is omitted.
 - **`cja_sdr_discover`**: `data_view_id` is required only for `describe_dataview`, `list_metrics`, `list_dimensions`, `list_segments`, `list_calculated_metrics`. It is unused for `list_dataviews`, `list_connections`, `list_datasets`.
-- **`cja_sdr_diff`**: `source`/`target` apply to `diff`. `compare_snapshots_source`/`compare_snapshots_target` apply to `compare_snapshots`. `snapshot` applies to `diff_snapshot`. `compare_with_prev` requires only a data view ID (passed as `source`).
+- **`cja_sdr_diff`**: `source`/`target` apply to `diff`. `compare_snapshots_source`/`compare_snapshots_target` apply to `compare_snapshots`. `snapshot` applies to `diff_snapshot`. `compare_with_prev` requires only a data view ID (passed as `source`). `output` is for stdout JSON only. `diff_output` is limited to inline-text output such as `console` or `format_pr_comment: true`; file-writing formats (`json`, `markdown`, `html`, `excel`, `csv`) create auto-named artifacts under `output_dir`.
+- **`cja_sdr_governance`**: `duplicate_threshold` is an integer count of high-similarity pairs. `isolated_threshold` is a `0.0-1.0` percentage. `output` can target stdout or a named location, but the shape depends on `format`: JSON/Excel/Markdown/HTML create a single file, CSV expands to a directory of multiple files, and console ignores named file paths. `output_dir` controls auto-named artifacts.
 - **`cja_sdr_config`**: `config_json` applies only to `config_status`.
 
 ---
 
 ## Agent Mode (`agent_mode`)
 
-All generation and reporting tools accept an `agent_mode` boolean. When `true`:
+`agent_mode` is a wrapper convenience that maps to the CLI's `--agent-mode` preset:
 
-- Banners, progress bars, and human-readable noise are suppressed.
-- Structured JSON is emitted to **stdout** (rather than formatted for a terminal).
-- Errors are written to **stderr** as JSON objects with `error`, `code`, and `details` fields.
+```text
+--format json --output - --log-format json
+```
 
-**Always set `agent_mode: true` in automated pipelines.**
+Important caveats:
 
-CLI mapping: `agent_mode: true` → `--agent-mode` flag.
+- It expands to the repo's real CLI contract; it is not an independent execution mode.
+- Explicit manifest parameters still win over the preset.
+- Command-family behavior still follows the underlying CLI implementation. Discovery, diff, and org-report flows honor stdout JSON directly. Single-SDR generation still writes auto-named SDR artifacts under `output_dir`, while standalone `quality_report` mode continues to honor `output`/`output_dir`.
 
 ---
 
 ## stdout vs. File Output
 
-- When `output` is omitted, the tool writes to **stdout**. Combine with `agent_mode: true` and `format: "json"` to receive structured, parseable output directly from the tool call.
-- When `output` is provided, the file is written to that path and a confirmation summary is emitted to stdout.
-- Use `run_summary_json` to always capture a machine-readable run summary at a known file path, regardless of where primary output goes.
+- `cja_sdr_generate`: main SDR artifacts use `output_dir` auto-naming. Standalone `quality_report` mode supports `output: "-"` / `output: "stdout"` for JSON or CSV stdout, a caller-chosen file path in `output`, or an auto-named report under `output_dir`.
+- `cja_sdr_diff`: use `output: "-"` or `output: "stdout"` for JSON stdout. `diff_output` is only for inline-text output such as `console` or `format_pr_comment: true`; JSON/Markdown/HTML/Excel/CSV file outputs remain auto-named under `output_dir`.
+- `cja_sdr_governance`: use `output: "-"` or `output: "stdout"` for supported stdout flows. For named outputs, JSON/Excel/Markdown/HTML create a single file, CSV creates a directory of multiple files, and console ignores named file paths. Use `output_dir` for auto-named artifacts.
+- Use `run_summary_json` to capture a stable machine-readable completion record at a known path regardless of primary output behavior.
 
 ---
 
@@ -130,13 +135,15 @@ A typical agent workflow for generating a governed SDR:
     "data_view_id": "dv_abc123xyz",
     "format": "json",
     "agent_mode": true,
-    "quality_report": "json",
+    "output_dir": "/tmp/reports",
     "fail_on_quality": "HIGH",
     "run_summary_json": "/tmp/run_summary.json",
     "profile": "prod"
   }
 }
 ```
+
+For a standalone quality-report-only flow, set `quality_report` to `json` or `csv` and use `output` for stdout or a stable report path.
 
 ---
 

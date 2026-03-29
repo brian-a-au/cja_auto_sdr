@@ -64,6 +64,49 @@ class TestToolManifests:
         if "fail_on_quality" in props:
             assert "INFO" in props["fail_on_quality"]["enum"]
 
+    def test_generate_manifest_includes_cli_format_aliases(self):
+        manifest = json.loads((TOOLS_DIR / "cja_sdr_generate.json").read_text())
+        fmt = manifest["parameters"]["properties"]["format"]
+
+        for value in ["all", "reports", "data", "ci"]:
+            assert value in fmt["enum"]
+        desc = fmt["description"].lower()
+        assert "reports" in desc
+        assert "data" in desc
+        assert "ci" in desc
+
+    def test_governance_threshold_types_match_cli(self):
+        manifest = json.loads((TOOLS_DIR / "cja_sdr_governance.json").read_text())
+        props = manifest["parameters"]["properties"]
+
+        duplicate_threshold = props["duplicate_threshold"]
+        assert duplicate_threshold["type"] == "integer"
+        assert duplicate_threshold["minimum"] == 0
+
+        isolated_threshold = props["isolated_threshold"]
+        assert isolated_threshold["type"] == "number"
+        assert isolated_threshold["minimum"] == 0.0
+        assert isolated_threshold["maximum"] == 1.0
+
+    def test_generate_manifest_quality_report_output_contract_matches_cli(self):
+        manifest = json.loads((TOOLS_DIR / "cja_sdr_generate.json").read_text())
+        props = manifest["parameters"]["properties"]
+
+        assert "output" in props
+        assert "output_dir" in props
+        output_desc = props["output"]["description"].lower()
+        assert "quality report" in output_desc
+        assert "stdout" in output_desc
+        assert "output_dir" in output_desc
+
+        output_dir_desc = props["output_dir"]["description"].lower()
+        assert "auto-named" in output_dir_desc
+        assert "quality report" in output_dir_desc
+
+        quality_report_desc = props["quality_report"]["description"].lower()
+        assert "standalone" in quality_report_desc
+        assert "without sdr files" in quality_report_desc
+
     def test_diff_snapshot_params_are_file_paths(self):
         manifest = json.loads((TOOLS_DIR / "cja_sdr_diff.json").read_text())
         props = manifest["parameters"]["properties"]
@@ -72,6 +115,54 @@ class TestToolManifests:
             if key in props:
                 desc = props[key].get("description", "")
                 assert "path" in desc.lower() or "file" in desc.lower(), f"{key} should be described as a file path"
+
+    def test_diff_manifest_limits_diff_output_to_inline_text_formats(self):
+        manifest = json.loads((TOOLS_DIR / "cja_sdr_diff.json").read_text())
+        props = manifest["parameters"]["properties"]
+
+        assert "output" in props
+        assert "diff_output" in props
+        assert "output_dir" in props
+        assert "format_pr_comment" in props
+        assert "include_inventory" not in props
+
+        format_enum = props["format"]["enum"]
+        assert "pr_comment" not in format_enum
+
+        output_desc = props["output"]["description"].lower()
+        assert "stdout" in output_desc
+        assert "diff_output" in output_desc
+        assert "json" in output_desc
+        assert "format_pr_comment" in output_desc
+
+        diff_output_desc = props["diff_output"]["description"].lower()
+        assert "console" in diff_output_desc
+        assert "format_pr_comment" in diff_output_desc
+        assert "json" in diff_output_desc
+        assert "output_dir" in diff_output_desc
+
+        output_dir_desc = props["output_dir"]["description"].lower()
+        assert "json" in output_dir_desc
+        assert "markdown" in output_dir_desc
+
+        pr_comment_desc = props["format_pr_comment"]["description"].lower()
+        assert "--format-pr-comment" in pr_comment_desc
+        assert "markdown" in pr_comment_desc
+
+    def test_governance_manifest_describes_output_shape_by_format(self):
+        manifest = json.loads((TOOLS_DIR / "cja_sdr_governance.json").read_text())
+        props = manifest["parameters"]["properties"]
+
+        output_desc = props["output"]["description"].lower()
+        assert "single file" in output_desc
+        assert "csv" in output_desc
+        assert "multiple csv files" in output_desc
+        assert "console" in output_desc
+
+        output_dir_desc = props["output_dir"]["description"].lower()
+        assert "auto-named" in output_dir_desc
+        assert "csv" in output_dir_desc
+        assert "directory" in output_dir_desc
 
     def test_no_show_config_in_manifests(self):
         for name in REQUIRED_MANIFESTS:
@@ -88,6 +179,13 @@ class TestToolManifests:
             "orchestrator",
             "applicability",
             "preflight",
+            "quality_report",
+            "output_dir",
+            "diff_output",
+            "format_pr_comment",
+            "reports",
+            "data",
+            "ci",
         ]
         for topic in required_topics:
             assert topic.lower() in content.lower(), f"README missing topic: {topic}"

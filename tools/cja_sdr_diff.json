@@ -7,7 +7,7 @@
       "command": {
         "type": "string",
         "enum": ["diff", "diff_snapshot", "compare_with_prev", "compare_snapshots"],
-        "description": "Diff command to run. 'diff' compares two live data views (source and target required). 'diff_snapshot' captures a new snapshot for a data view. 'compare_with_prev' diffs a data view against its previous snapshot. 'compare_snapshots' diffs two snapshot files on disk (compare_snapshots_source and compare_snapshots_target required)."
+        "description": "Diff command to run. 'diff' compares two live data views (source and target required). 'diff_snapshot' compares a live data view (source) against a snapshot file (snapshot). 'compare_with_prev' diffs a data view against its previous snapshot. 'compare_snapshots' diffs two snapshot files on disk (compare_snapshots_source and compare_snapshots_target required)."
       },
       "source": {
         "type": "string",
@@ -31,12 +31,24 @@
       },
       "format": {
         "type": "string",
-        "enum": ["console", "json", "csv", "html", "markdown", "excel", "pr_comment"],
-        "description": "Output format for the diff report. Use 'json' for agent/machine-readable output. Use 'pr_comment' to generate GitHub PR comment markdown."
+        "enum": ["console", "json", "csv", "html", "markdown", "excel"],
+        "description": "Output format for the diff report. Use 'json' for agent/machine-readable output."
       },
       "output": {
         "type": "string",
-        "description": "File path to write the diff report to. Omit to receive output on stdout."
+        "description": "Use '-' or 'stdout' to emit JSON diff output on stdout. For console output or when format_pr_comment is true, use diff_output to capture the rendered text in a named file. File-writing formats ('json', 'markdown', 'html', 'excel', 'csv') create auto-named artifacts under output_dir."
+      },
+      "diff_output": {
+        "type": "string",
+        "description": "Named file path for inline-text diff output only. Currently applies to 'console' output and to PR-comment mode when format_pr_comment is true; JSON, Markdown, HTML, Excel, and CSV formats ignore this path and write auto-named artifacts under output_dir."
+      },
+      "output_dir": {
+        "type": "string",
+        "description": "Directory where file-writing diff formats ('json', 'markdown', 'html', 'excel', 'csv') create auto-named artifacts."
+      },
+      "format_pr_comment": {
+        "type": "boolean",
+        "description": "When true, emit GitHub/GitLab PR comment markdown via the CLI's --format-pr-comment flag instead of the regular diff format."
       },
       "agent_mode": {
         "type": "boolean",
@@ -45,10 +57,6 @@
       "changes_only": {
         "type": "boolean",
         "description": "When true, omit unchanged components from the diff output. Reduces noise for large data views with few changes."
-      },
-      "include_inventory": {
-        "type": "boolean",
-        "description": "Include full component inventory in the diff output, not just changed items."
       },
       "profile": {
         "type": "string",

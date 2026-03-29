@@ -9,6 +9,7 @@ import pytest
 
 AGENTS_MD = Path(__file__).resolve().parent.parent / "AGENTS.md"
 AGENT_AUTOMATION_MD = Path(__file__).resolve().parent.parent / "docs" / "AGENT_AUTOMATION.md"
+QUICK_REFERENCE_MD = Path(__file__).resolve().parent.parent / "docs" / "QUICK_REFERENCE.md"
 
 
 class TestAgentContractDocs:
@@ -107,3 +108,34 @@ class TestAgentAutomationDoc:
         assert "recommended_actions" in content
         assert "review_breaking_changes" in content
         assert "investigate_fetch_failures" in content
+
+    def test_does_not_document_agent_mode_run_summary_stdout_pair(self):
+        content = AGENT_AUTOMATION_MD.read_text()
+        for line in content.split("\n"):
+            if "--agent-mode" in line and "--run-summary-json -" in line:
+                pytest.fail("docs/AGENT_AUTOMATION.md documents invalid --agent-mode + --run-summary-json - pair")
+
+    def test_fast_path_tolerance_documented(self):
+        content = AGENT_AUTOMATION_MD.read_text()
+        assert "--version" in content
+        assert "--completion" in content
+        assert "partial" in content.lower()
+
+
+class TestQuickReferenceDoc:
+    """Verify docs/QUICK_REFERENCE.md stays aligned with the agent contract."""
+
+    def test_quick_reference_exists(self):
+        assert QUICK_REFERENCE_MD.exists()
+
+    def test_agent_mode_examples_match_command_family_behavior(self):
+        content = QUICK_REFERENCE_MD.read_text()
+        assert "--list-dataviews --agent-mode" in content
+        assert "--org-report --agent-mode" in content
+        assert "--diff dv_a dv_b --agent-mode" in content
+        assert "dv_12345 --agent-mode --output-dir ./reports" in content
+
+    def test_agent_mode_single_sdr_caveat_documented(self):
+        content = QUICK_REFERENCE_MD.read_text().lower()
+        assert "--output-dir" in content
+        assert "single-sdr generation" in content

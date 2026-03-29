@@ -1,6 +1,6 @@
 {
   "name": "cja_sdr_generate",
-  "description": "Generate a Solution Design Reference (SDR) document for a single Adobe Customer Journey Analytics data view. Produces structured output describing all metrics, dimensions, segments, and calculated metrics in the data view. Use --agent-mode to get machine-readable JSON on stdout.",
+  "description": "Generate a Solution Design Reference (SDR) document for a single Adobe Customer Journey Analytics data view. Produces SDR artifacts describing metrics, dimensions, segments, and calculated metrics. Single-SDR generation writes auto-named artifacts under output_dir; standalone quality_report output still honors output/output_dir, and run_summary_json provides stable machine-readable completion metadata.",
   "parameters": {
     "type": "object",
     "properties": {
@@ -10,21 +10,25 @@
       },
       "format": {
         "type": "string",
-        "enum": ["excel", "csv", "json", "html", "markdown"],
-        "description": "Output format for the SDR document. Defaults to 'excel' when writing to file; use 'json' with agent_mode for machine-readable output."
+        "enum": ["excel", "csv", "json", "html", "markdown", "all", "reports", "data", "ci"],
+        "description": "Output format for the SDR artifact. Supports direct formats plus aliases: 'all' (all formats + console), 'reports' (excel + markdown), 'data' (csv + json), and 'ci' (json + markdown). JSON is recommended for machine-readable downstream processing."
       },
       "output": {
         "type": "string",
-        "description": "File path to write the SDR output to. If omitted, output goes to stdout (combine with agent_mode and format=json for structured output)."
+        "description": "Optional destination for standalone quality reports (quality_report only). Use '-' or 'stdout' for JSON/CSV stdout, or provide a file path for a stable report artifact. SDR artifacts themselves still use output_dir auto-naming."
+      },
+      "output_dir": {
+        "type": "string",
+        "description": "Directory where generated SDR artifacts are written. Also used as the fallback location for auto-named standalone quality reports when output is omitted."
       },
       "agent_mode": {
         "type": "boolean",
-        "description": "Enable agent mode: suppresses banners and progress noise, emits structured JSON to stdout. Strongly recommended for programmatic use."
+        "description": "Wrapper convenience that maps to the CLI's --agent-mode preset. In current single-SDR generation, it selects machine-friendly defaults but artifacts still land under output_dir auto-naming."
       },
       "quality_report": {
         "type": "string",
         "enum": ["json", "csv"],
-        "description": "Emit a data quality report in the specified format alongside the SDR. 'json' is recommended for agent consumers."
+        "description": "Generate a standalone data quality report only in the specified format ('json' or 'csv') without SDR files. Use output/output_dir to control where the report is written."
       },
       "fail_on_quality": {
         "type": "string",

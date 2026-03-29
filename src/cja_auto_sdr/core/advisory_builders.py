@@ -165,13 +165,14 @@ def build_diff_advisories(
     This is a pure function — it does not mutate *diff_result*.
 
     Checks performed:
-    - breaking_changes: Any REMOVED components → severity critical
-    - schema_changes: Any MODIFIED components → severity warning
+    - breaking_changes: Any breaking change detected by detect_breaking_changes() → severity critical
+    - schema_changes: Breaking-change subset with type/schema changes → severity warning
     - additions_only: All changes are additions and no removals/modifications → severity info
 
     Excluded types: high_change_volume, rename-derived findings.
     """
     from cja_auto_sdr.diff.models import ChangeType
+    from cja_auto_sdr.output.diff.common import detect_breaking_changes
 
     findings: list[AdvisoryFinding] = []
     summary = diff_result.summary
@@ -187,20 +188,17 @@ def build_diff_advisories(
         active_diffs = all_diffs
         active_inv_diffs = inv_diffs
 
-    # 1. Breaking changes — REMOVED components
-    removed = [d for d in all_diffs + inv_diffs if d.change_type == ChangeType.REMOVED]
-    if removed:
-        component_details = [
-            {"component_id": d.id, "component_name": d.name, "change_type": d.change_type.value} for d in removed
-        ]
+    # 1. Breaking changes — use the canonical breaking-change detector.
+    breaking_changes = detect_breaking_changes(diff_result)
+    if breaking_changes:
         findings.append(
             AdvisoryFinding(
                 type="breaking_changes",
                 severity="critical",
-                message=f"{len(removed)} component(s) removed — downstream dependencies may break.",
+                message=f"{len(breaking_changes)} breaking change(s) detected — downstream dependencies may break.",
                 details={
-                    "removed_count": len(removed),
-                    "components": component_details,
+                    "count": len(breaking_changes),
+                    "changes": breaking_changes,
                     "total_components": len(active_diffs) + len(active_inv_diffs),
                 },
                 recommended_actions=[
@@ -210,25 +208,19 @@ def build_diff_advisories(
             )
         )
 
-    # 2. Schema changes — MODIFIED components (only when no breaking changes already cover it)
-    modified = [d for d in all_diffs + inv_diffs if d.change_type == ChangeType.MODIFIED]
-    if modified and not removed:
-        component_details = [
-            {
-                "component_id": d.id,
-                "component_name": d.name,
-                "changed_fields": list(d.changed_fields.keys()) if d.changed_fields else [],
-            }
-            for d in modified
-        ]
+    # 2. Schema changes — breaking-change subset for type/schema deltas.
+    schema_changes = [
+        change for change in breaking_changes if change.get("change_type") in {"type_changed", "schema_changed"}
+    ]
+    if schema_changes:
         findings.append(
             AdvisoryFinding(
                 type="schema_changes",
                 severity="warning",
-                message=f"{len(modified)} component(s) modified — validate field mappings.",
+                message=f"{len(schema_changes)} schema-level breaking change(s) detected — validate field mappings.",
                 details={
-                    "modified_count": len(modified),
-                    "components": component_details,
+                    "count": len(schema_changes),
+                    "changes": schema_changes,
                     "total_components": len(active_diffs) + len(active_inv_diffs),
                 },
                 recommended_actions=[

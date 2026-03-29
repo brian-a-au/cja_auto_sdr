@@ -10,15 +10,15 @@
         "minimum": 1
       },
       "duplicate_threshold": {
-        "type": "number",
-        "description": "Similarity score threshold (0.0–1.0) above which two components are flagged as potential duplicates.",
-        "minimum": 0.0,
-        "maximum": 1.0
+        "type": "integer",
+        "description": "Maximum allowed count of high-similarity component pairs (>=90%). Use with fail_on_threshold for CI governance gates.",
+        "minimum": 0
       },
       "isolated_threshold": {
-        "type": "integer",
-        "description": "Number of data views a component must appear in to avoid being flagged as isolated/unused.",
-        "minimum": 1
+        "type": "number",
+        "description": "Maximum isolated component percentage (0.0-1.0). Use with fail_on_threshold for CI governance gates.",
+        "minimum": 0.0,
+        "maximum": 1.0
       },
       "fail_on_threshold": {
         "type": "boolean",
@@ -31,7 +31,11 @@
       },
       "output": {
         "type": "string",
-        "description": "File path to write the org report to. Omit to receive output on stdout."
+        "description": "Use '-' or 'stdout' to emit supported stdout formats. For named outputs, JSON/Excel/Markdown/HTML write a single file, CSV treats the path as a directory/base path for multiple CSV files, and console ignores file paths."
+      },
+      "output_dir": {
+        "type": "string",
+        "description": "Directory where auto-named org-report artifacts are written when output is omitted. Auto-named CSV output creates a directory of multiple CSV files beneath this location."
       },
       "agent_mode": {
         "type": "boolean",

@@ -52,17 +52,18 @@ This guide covers how to automate `cja_auto_sdr` in CI/CD pipelines, scheduled j
 ### Machine-readable output
 
 ```bash
-# JSON to stdout — parse with jq, Python json.loads(), etc.
-uv run cja_auto_sdr <dv_id> --format json --output -
-
-# Discovery as JSON
+# Discovery JSON to stdout — parse with jq, Python json.loads(), etc.
 uv run cja_auto_sdr --list-dataviews --format json --output -
+
+# Org-report JSON to stdout
+uv run cja_auto_sdr --org-report --format json --output -
 
 # Structured run summary (includes per-DV status, failure codes, output paths)
 uv run cja_auto_sdr <dv_id> --format json --run-summary-json -
 ```
 
 `--output -` implies `--quiet`, so stdout contains only the payload and stderr contains any log output.
+Single-SDR generation currently writes auto-named artifacts under `--output-dir` rather than streaming the SDR payload to stdout.
 
 ### Exit codes
 
@@ -110,17 +111,17 @@ If you explicitly pass any of these options, your explicit value takes precedenc
 ### Examples by command family
 
 ```bash
-# SDR generation — JSON to stdout, structured logs to stderr
-uv run cja_auto_sdr dv_abc123 --agent-mode
+# SDR generation — preset/logging apply, artifact still lands under output_dir
+uv run cja_auto_sdr dv_abc123 --agent-mode --output-dir ./reports
 
-# Batch generation — JSON for each data view, structured error envelopes
-uv run cja_auto_sdr dv_abc123 dv_def456 --agent-mode --continue-on-error
+# Batch generation — preset/logging apply, artifacts still land under output_dir
+uv run cja_auto_sdr dv_abc123 dv_def456 --agent-mode --continue-on-error --output-dir ./reports
 
 # Org-wide governance report
 uv run cja_auto_sdr --org-report --agent-mode
 
 # Org-report with governance gate
-uv run cja_auto_sdr --org-report --agent-mode --duplicate-threshold 0.8 --fail-on-threshold
+uv run cja_auto_sdr --org-report --agent-mode --duplicate-threshold 5 --fail-on-threshold
 
 # Diff — compare two data views
 uv run cja_auto_sdr --diff dv_abc123 dv_def456 --agent-mode
@@ -139,12 +140,12 @@ uv run cja_auto_sdr --config-status --config-json --agent-mode
 
 | Command family                       | `--agent-mode` supported | Notes                                              |
 |--------------------------------------|--------------------------|----------------------------------------------------|
-| SDR generation (single / batch)      | Yes                      | JSON to stdout; `--output -` applies               |
+| SDR generation (single / batch)      | Limited                  | Preset applies, but current generation still writes auto-named artifacts under `--output-dir` |
 | Org-report (`--org-report`)          | Yes                      | JSON to stdout; advisories block included          |
 | Diff (`--diff`, `--diff-snapshot`)   | Yes                      | JSON to stdout; advisories block included          |
 | Discovery (`--list-*`)               | Yes                      | JSON to stdout                                     |
 | Config status (`--config-status`)    | Yes                      | Use with `--config-json` for full JSON payload     |
-| Fast-path flags (`--version`, etc.)  | No                       | Fast-path exits before `--agent-mode` is resolved  |
+| Fast-path flags (`--version`, etc.)  | Partial                  | Informational fast paths such as `--version` and `--completion` tolerate `--agent-mode`, but the preset itself is not applied before exit |
 | Interactive commands (`--show-config`) | No                     | Interactive; not suitable for agent use            |
 
 ---
@@ -401,10 +402,10 @@ For any new agent integration, the recommended reading order is:
 
 ### Structured run summary
 
-`--run-summary-json` writes a JSON file after each command that includes exit code, duration, component counts, and advisory rollup. Use `-` to receive it on stdout alongside the main payload:
+`--run-summary-json` writes a JSON file after each command that includes exit code, duration, component counts, and advisory rollup. For single-SDR generation under `--agent-mode`, use a file path because the preset already routes primary output to stdout. Use `-` only when the command is not already emitting its main payload on stdout.
 
 ```bash
-uv run cja_auto_sdr dv_abc123 --agent-mode --run-summary-json -
+uv run cja_auto_sdr dv_abc123 --agent-mode --run-summary-json run_summary.json
 ```
 
 The run summary includes an `advisories` rollup key when advisories are present (org-report and diff commands).
