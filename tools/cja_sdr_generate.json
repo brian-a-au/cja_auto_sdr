@@ -58,7 +58,7 @@
       },
       "config_file": {
         "type": "string",
-        "description": "Path to a custom config file (overrides the default ~/.cja_auto_sdr/config.json)."
+        "description": "Path to a custom config file (overrides the default config.json in the working directory)."
       },
       "run_summary_json": {
         "type": "string",

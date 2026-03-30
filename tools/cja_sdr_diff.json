@@ -27,7 +27,7 @@
       },
       "snapshot": {
         "type": "string",
-        "description": "File path where the new snapshot will be written (for diff_snapshot command) or the snapshot file path used as a reference."
+        "description": "File path to an existing baseline snapshot JSON file for the 'diff_snapshot' command. New snapshots are only written via auto_snapshot into snapshot_dir."
       },
       "format": {
         "type": "string",

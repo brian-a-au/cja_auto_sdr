@@ -257,6 +257,81 @@ class TestDiffStdoutAliasRuntime:
         assert mock_compare.call_args.kwargs["output_to_stdout"] is True
 
 
+class TestAgentModeDiffRuntime:
+    """Verify diff-family agent-mode file-format overrides resolve quiet from the effective output path."""
+
+    def test_file_only_diff_format_override_recomputes_quiet_after_stdout_suppression(self):
+        with (
+            patch(
+                "cja_auto_sdr.generator.resolve_data_view_names",
+                side_effect=[(["dv_source"], {}), (["dv_target"], {})],
+            ),
+            patch("cja_auto_sdr.generator.handle_diff_command", return_value=(True, False, None)) as mock_diff,
+        ):
+            exit_code = _run_main_impl(["--diff", "dv_source", "dv_target", "--agent-mode", "--format", "markdown"])
+
+        assert exit_code == 0
+        assert mock_diff.call_args.kwargs["output_to_stdout"] is False
+        assert mock_diff.call_args.kwargs["quiet"] is False
+
+    def test_explicit_quiet_still_wins_for_file_only_diff_format_override(self):
+        with (
+            patch(
+                "cja_auto_sdr.generator.resolve_data_view_names",
+                side_effect=[(["dv_source"], {}), (["dv_target"], {})],
+            ),
+            patch("cja_auto_sdr.generator.handle_diff_command", return_value=(True, False, None)) as mock_diff,
+        ):
+            exit_code = _run_main_impl(
+                ["--diff", "dv_source", "dv_target", "--agent-mode", "--format", "markdown", "--quiet"]
+            )
+
+        assert exit_code == 0
+        assert mock_diff.call_args.kwargs["output_to_stdout"] is False
+        assert mock_diff.call_args.kwargs["quiet"] is True
+
+    def test_file_only_diff_snapshot_format_override_recomputes_quiet(self):
+        with (
+            patch("cja_auto_sdr.generator.resolve_data_view_names", return_value=(["dv_123"], {})),
+            patch("cja_auto_sdr.generator.handle_diff_snapshot_command", return_value=(True, False, None)) as mock_diff,
+        ):
+            exit_code = _run_main_impl(
+                ["dv_123", "--diff-snapshot", "baseline.json", "--agent-mode", "--format", "csv"]
+            )
+
+        assert exit_code == 0
+        assert mock_diff.call_args.kwargs["output_to_stdout"] is False
+        assert mock_diff.call_args.kwargs["quiet"] is False
+
+    def test_compare_with_prev_file_only_format_override_recomputes_quiet(self, capsys):
+        with (
+            patch("cja_auto_sdr.generator.resolve_data_view_names", return_value=(["dv_123"], {})),
+            patch("cja_auto_sdr.generator.SnapshotManager") as mock_snapshot_manager,
+            patch("cja_auto_sdr.generator.handle_diff_snapshot_command", return_value=(True, False, None)) as mock_diff,
+        ):
+            mock_snapshot_manager.return_value.get_most_recent_snapshot.return_value = "./snapshots/prev.json"
+            exit_code = _run_main_impl(["dv_123", "--compare-with-prev", "--agent-mode", "--format", "markdown"])
+
+        captured = capsys.readouterr()
+        assert exit_code == 0
+        assert "Comparing against previous snapshot: ./snapshots/prev.json" in captured.out
+        assert mock_diff.call_args.kwargs["output_to_stdout"] is False
+        assert mock_diff.call_args.kwargs["quiet"] is False
+
+    def test_file_only_compare_snapshots_format_override_recomputes_quiet(self):
+        with patch(
+            "cja_auto_sdr.generator.handle_compare_snapshots_command",
+            return_value=(True, False, None),
+        ) as mock_compare:
+            exit_code = _run_main_impl(
+                ["--compare-snapshots", "source.json", "target.json", "--agent-mode", "--format", "html"]
+            )
+
+        assert exit_code == 0
+        assert mock_compare.call_args.kwargs["output_to_stdout"] is False
+        assert mock_compare.call_args.kwargs["quiet"] is False
+
+
 class TestAgentModeOrgReportRuntime:
     """Verify org-report agent-mode overrides reach runtime without self-invalid stdout wiring."""
 

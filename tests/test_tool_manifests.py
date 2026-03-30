@@ -127,6 +127,15 @@ class TestToolManifests:
                 desc = props[key].get("description", "")
                 assert "path" in desc.lower() or "file" in desc.lower(), f"{key} should be described as a file path"
 
+    def test_diff_manifest_snapshot_param_matches_diff_snapshot_baseline_contract(self):
+        manifest = json.loads((TOOLS_DIR / "cja_sdr_diff.json").read_text())
+        snapshot_desc = manifest["parameters"]["properties"]["snapshot"]["description"].lower()
+
+        assert "existing" in snapshot_desc
+        assert "baseline" in snapshot_desc
+        assert "diff_snapshot" in snapshot_desc
+        assert "auto_snapshot" in snapshot_desc
+
     def test_diff_manifest_limits_diff_output_to_inline_text_formats(self):
         manifest = json.loads((TOOLS_DIR / "cja_sdr_diff.json").read_text())
         props = manifest["parameters"]["properties"]
@@ -188,6 +197,15 @@ class TestToolManifests:
             manifest = json.loads((TOOLS_DIR / name).read_text())
             props = manifest["parameters"]["properties"]
             assert "show_config" not in props, f"show_config should not be in {name}"
+
+    def test_config_file_manifest_defaults_match_cli(self):
+        for name in ["cja_sdr_config.json", "cja_sdr_generate.json"]:
+            manifest = json.loads((TOOLS_DIR / name).read_text())
+            config_desc = manifest["parameters"]["properties"]["config_file"]["description"].lower()
+
+            assert "config.json" in config_desc
+            assert "working directory" in config_desc
+            assert "~/.cja_auto_sdr/config.json" not in config_desc
 
     def test_readme_covers_required_topics(self):
         content = (TOOLS_DIR / "README.md").read_text()

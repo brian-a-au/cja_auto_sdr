@@ -23,9 +23,39 @@ def _diff_output_to_stdout_requested(
     args: argparse.Namespace,
     *,
     output_format: str,
+    output_path: str | None = None,
 ) -> bool:
     """Return whether a diff-family JSON request should emit to stdout."""
-    return output_format == "json" and getattr(args, "output", None) in ("-", "stdout")
+    effective_output_path = output_path if output_path is not None else getattr(args, "output", None)
+    return output_format == "json" and effective_output_path in ("-", "stdout")
+
+
+def _resolve_diff_output_path(args: argparse.Namespace, *, output_format: str) -> str | None:
+    """Resolve the effective diff-family output path after agent-mode defaults.
+
+    Keep the parser contract literal, but suppress inherited agent-mode stdout
+    only when the caller did not explicitly pass ``--output`` and the chosen
+    diff format is not the supported JSON stdout path.
+    """
+    output_path = getattr(args, "output", None)
+    if not getattr(args, "agent_mode", False):
+        return output_path
+
+    generator = _generator_module()
+    if generator._cli_option_specified("--output"):
+        return output_path
+
+    if output_format == "json":
+        return output_path
+    return None
+
+
+def _resolve_diff_quiet(args: argparse.Namespace, *, output_path: str | None) -> bool:
+    """Resolve the effective diff-family quiet flag after output coercion."""
+    generator = _generator_module()
+    if generator._cli_option_specified("--quiet"):
+        return True
+    return getattr(args, "run_summary_json", None) in ("-", "stdout") or output_path in ("-", "stdout")
 
 
 def _exit_with_diff_result(
@@ -218,7 +248,13 @@ def dispatch_cross_data_view_diff_cli_mode(
         run_state["resolved_data_views"] = list(resolved_ids)
 
     diff_format = args.format or "console"
-    _diff_output_to_stdout = _diff_output_to_stdout_requested(args, output_format=diff_format)
+    resolved_output_path = _resolve_diff_output_path(args, output_format=diff_format)
+    diff_quiet = _resolve_diff_quiet(args, output_path=resolved_output_path)
+    _diff_output_to_stdout = _diff_output_to_stdout_requested(
+        args,
+        output_format=diff_format,
+        output_path=resolved_output_path,
+    )
     diff_runtime_details: dict[str, Any] = {}
     success, has_changes, exit_code_override = generator.handle_diff_command(
         source_id=resolved_ids[0],
@@ -230,7 +266,7 @@ def dispatch_cross_data_view_diff_cli_mode(
         summary_only=getattr(args, "summary", False),
         ignore_fields=ignore_fields,
         labels=labels,
-        quiet=args.quiet,
+        quiet=diff_quiet,
         show_only=show_only,
         metrics_only=getattr(args, "metrics_only", False),
         dimensions_only=getattr(args, "dimensions_only", False),
@@ -482,7 +518,13 @@ def dispatch_snapshot_cli_modes(
             sys.exit(1)
 
         diff_format = args.format or "console"
-        _cs_output_to_stdout = _diff_output_to_stdout_requested(args, output_format=diff_format)
+        resolved_output_path = _resolve_diff_output_path(args, output_format=diff_format)
+        diff_quiet = _resolve_diff_quiet(args, output_path=resolved_output_path)
+        _cs_output_to_stdout = _diff_output_to_stdout_requested(
+            args,
+            output_format=diff_format,
+            output_path=resolved_output_path,
+        )
         cs_runtime_details: dict[str, Any] = {}
         success, has_changes, exit_code_override = generator.handle_compare_snapshots_command(
             source_file=source_file,
@@ -493,7 +535,7 @@ def dispatch_snapshot_cli_modes(
             summary_only=getattr(args, "summary", False),
             ignore_fields=ignore_fields,
             labels=labels,
-            quiet=args.quiet,
+            quiet=diff_quiet,
             show_only=show_only,
             metrics_only=getattr(args, "metrics_only", False),
             dimensions_only=getattr(args, "dimensions_only", False),
@@ -594,7 +636,9 @@ def dispatch_snapshot_cli_modes(
             print("Or use --auto-snapshot with --diff to automatically save snapshots.", file=sys.stderr)
             sys.exit(1)
 
-        if not args.quiet:
+        resolved_output_path = _resolve_diff_output_path(args, output_format=args.format or "console")
+        diff_quiet = _resolve_diff_quiet(args, output_path=resolved_output_path)
+        if not diff_quiet:
             print(f"Comparing against previous snapshot: {prev_snapshot}")
 
         args.diff_snapshot = prev_snapshot
@@ -626,7 +670,13 @@ def dispatch_snapshot_cli_modes(
         )
 
         diff_format = args.format or "console"
-        _ds_output_to_stdout = _diff_output_to_stdout_requested(args, output_format=diff_format)
+        resolved_output_path = _resolve_diff_output_path(args, output_format=diff_format)
+        diff_quiet = _resolve_diff_quiet(args, output_path=resolved_output_path)
+        _ds_output_to_stdout = _diff_output_to_stdout_requested(
+            args,
+            output_format=diff_format,
+            output_path=resolved_output_path,
+        )
         ds_runtime_details: dict[str, Any] = {}
         success, has_changes, exit_code_override = generator.handle_diff_snapshot_command(
             data_view_id=resolved_ids[0],
@@ -638,7 +688,7 @@ def dispatch_snapshot_cli_modes(
             summary_only=getattr(args, "summary", False),
             ignore_fields=ignore_fields,
             labels=labels,
-            quiet=args.quiet,
+            quiet=diff_quiet,
             show_only=show_only,
             metrics_only=getattr(args, "metrics_only", False),
             dimensions_only=getattr(args, "dimensions_only", False),
