@@ -5296,6 +5296,8 @@ def run_org_report(
     output_format = _normalize_org_report_output_format(output_format)
     output_to_stdout = output_path in ("-", "stdout")
     status_to_stderr = output_to_stdout and output_format == "json"
+    render_console_payload_to_stdout = output_to_stdout and output_format == "console"
+    console_writer_quiet = quiet and not render_console_payload_to_stdout
     status_stream = sys.stderr if status_to_stderr else sys.stdout
 
     def _status_print(*args, **kwargs) -> None:
@@ -5360,7 +5362,7 @@ def run_org_report(
                     _status_print(f"\nComparing to previous report: {requested_baseline_path}")
                 comparison = compare_org_reports(result, str(requested_baseline_path))
                 with contextlib.redirect_stdout(status_stream):
-                    write_org_report_comparison_console(comparison, quiet)
+                    write_org_report_comparison_console(comparison, console_writer_quiet)
             except FileNotFoundError:
                 _status_print(ConsoleColors.error(f"ERROR: Previous report not found: {requested_baseline_path}"))
             except json.JSONDecodeError:
@@ -5395,7 +5397,7 @@ def run_org_report(
         # Handle org-stats mode (Feature 2) - minimal output
         if org_config.org_stats_only:
             with contextlib.redirect_stdout(status_stream):
-                write_org_report_stats_only(result, quiet=quiet, trending=trending)
+                write_org_report_stats_only(result, quiet=console_writer_quiet, trending=trending)
             # Still output JSON if requested for CI integration
             if output_format == "json":
                 if output_to_stdout:
@@ -5437,7 +5439,7 @@ def run_org_report(
                 for f in generated_files:
                     _status_print(f"  - {f}")
         elif output_format == "console" or (output_format is None and output_path is None):
-            write_org_report_console(result, org_config, quiet, trending=trending)
+            write_org_report_console(result, org_config, console_writer_quiet, trending=trending)
         elif output_format == "json":
             if output_to_stdout:
                 json.dump(
