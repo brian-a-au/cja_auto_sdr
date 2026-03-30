@@ -139,7 +139,7 @@ tests/
 └── README.md                        # This file
 ```
 
-**Total: 7,566 comprehensive tests**
+**Total: 7,578 comprehensive tests**
 
 ### Test Count Breakdown
 
@@ -148,16 +148,16 @@ tests/
 
 | Category | Tests | Files | Notes |
 |----------|-------|-------|-------|
-| `unit` | 7,460 | 121 | Default primary category for files without explicit integration/e2e/smoke scope |
+| `unit` | 7,472 | 121 | Default primary category for files without explicit integration/e2e/smoke scope |
 | `integration` | 73 | 3 | Cross-module integration suites |
 | `e2e` | 23 | 2 | End-to-end suites with a mocked external boundary |
 | `smoke` | 10 | 1 | Lightweight command-mode coverage |
 | `slow` | 7 | 1 | Overlay marker; these tests are also counted in a primary category |
-| **Primary Total** | **7,566** | **127** | **unit + integration + e2e + smoke** |
+| **Primary Total** | **7,578** | **127** | **unit + integration + e2e + smoke** |
 
 | CI Slice | Tests | Files | Selector |
 |----------|-------|-------|----------|
-| `test-unit` | 7,453 | 120 | `-m "unit and not slow"` |
+| `test-unit` | 7,465 | 120 | `-m "unit and not slow"` |
 | `test-integration` | 103 | 6 | `-m "integration or e2e or slow"` |
 | `smoke-test` | 10 | 1 | `-m smoke` |
 
@@ -287,14 +287,14 @@ tests/
 | `test_quality_edge_cases.py` | 19 | Quality edge-case tests |
 | `test_tuning_edge_cases.py` | 15 | Tuning edge-case tests |
 | `test_fetch_edge_cases.py` | 9 | Fetch edge-case tests |
-| `test_advisories.py` | 49 | Advisory model, builder, and rollup tests |
-| `test_agent_contract_docs.py` | 23 | Agent contract documentation validation tests |
+| `test_advisories.py` | 53 | Advisory model, builder, and rollup tests |
+| `test_agent_contract_docs.py` | 27 | Agent contract documentation validation tests |
 | `test_agent_contract_samples.py` | 6 | Agent contract sample fixture validation tests |
-| `test_agent_mode.py` | 33 | --agent-mode CLI preset and resolution tests |
+| `test_agent_mode.py` | 36 | --agent-mode CLI preset and resolution tests |
 | `test_agent_playbooks.py` | 38 | Agent playbook structural validation tests |
 | `test_agent_workflows.py` | 69 | Agent workflow shell script validation tests |
-| `test_tool_manifests.py` | 37 | Tool manifest schema and content tests |
-| **Total** | **7,566** | **Collected via pytest --collect-only** |
+| `test_tool_manifests.py` | 38 | Tool manifest schema and content tests |
+| **Total** | **7,578** | **Collected via pytest --collect-only** |
 
 ## Running Tests
 
@@ -752,7 +752,7 @@ the `tests/README.md` inventory tree or count table.
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (7,566 tests total)
+- [x] Comprehensive test coverage (7,578 tests total)
 - [x] Org-wide analysis tests (test_org_report.py) - 209 tests (including large org scaling, output path aliases, memory warnings, smart cache invalidation)
 - [x] Org-wide analysis integration tests (test_org_report_integration.py) - 17 tests (end-to-end flows, caching, filtering, governance thresholds)
 - [x] Profile management tests (test_profiles.py) - 77 tests

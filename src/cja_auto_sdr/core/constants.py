@@ -59,6 +59,12 @@ DEFAULT_ORG_REPORT_WORKERS: int = 10  # Max concurrent workers for org-wide data
 # Pairs >= 90% similarity are always flagged for governance, regardless of --overlap-threshold
 GOVERNANCE_MAX_OVERLAP_THRESHOLD: float = 0.9
 
+
+def effective_governance_overlap_threshold(overlap_threshold: float) -> float:
+    """Return the effective overlap threshold after applying the governance cap."""
+    return min(overlap_threshold, GOVERNANCE_MAX_OVERLAP_THRESHOLD)
+
+
 # ==================== CACHE DEFAULTS ====================
 
 DEFAULT_CACHE_SIZE: int = 1000  # Maximum cached validation results

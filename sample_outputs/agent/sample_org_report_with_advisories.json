@@ -1,5 +1,5 @@
 {
-  "report_type": "org_report",
+  "report_type": "org_analysis",
   "data_views_analyzed": 5,
   "advisories": {
     "advisories_version": "1.0",
@@ -8,8 +8,20 @@
       {
         "type": "high_overlap",
         "severity": "warning",
-        "message": "2 data view pairs exceed overlap threshold",
-        "details": {"pairs_count": 2, "threshold": 0.8},
+        "message": "1 data view pair exceeds the effective overlap threshold of 90%.",
+        "details": {
+          "pairs": [
+            {
+              "dv1_id": "dv_prod",
+              "dv1_name": "Production",
+              "dv2_id": "dv_stage",
+              "dv2_name": "Staging",
+              "jaccard_similarity": 0.93
+            }
+          ],
+          "threshold": 0.9,
+          "max_similarity": 0.93
+        },
         "recommended_actions": ["review_overlap_pairs", "verify_intentional_duplicates"]
       }
     ],

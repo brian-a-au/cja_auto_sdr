@@ -6220,6 +6220,26 @@ def _handle_org_report_snapshot_cli(
     sys.exit(0)
 
 
+def _resolve_org_report_output_path(args: argparse.Namespace, *, output_format: str) -> str | None:
+    """Resolve the effective org-report output path for the current CLI invocation.
+
+    Keep parser-level ``--agent-mode`` preset semantics intact, then let the
+    org-report CLI seam suppress only the inherited stdout default when the
+    caller explicitly selected a file-only format without explicitly choosing
+    ``--output``.
+    """
+    output_path = getattr(args, "output", None)
+    if not getattr(args, "agent_mode", False):
+        return output_path
+    if _cli_option_specified("--output"):
+        return output_path
+
+    normalized_format = _normalize_org_report_output_format(output_format)
+    if normalized_format in {"json", "console"}:
+        return output_path
+    return None
+
+
 def _dispatch_post_validation_report_modes(
     args: argparse.Namespace,
     *,
@@ -6360,7 +6380,7 @@ def _dispatch_post_validation_report_modes(
         success, thresholds_exceeded = run_org_report(
             config_file=args.config_file,
             output_format=output_format,
-            output_path=getattr(args, "output", None),
+            output_path=_resolve_org_report_output_path(args, output_format=output_format),
             output_dir=args.output_dir,
             org_config=org_config,
             profile=getattr(args, "profile", None),

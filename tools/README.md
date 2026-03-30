@@ -147,6 +147,26 @@ For a standalone quality-report-only flow, set `quality_report` to `json` or `cs
 
 ---
 
+## Example: Generic Wrapper Construction
+
+For a non-LLM wrapper that reads these manifests and shells out to the CLI:
+
+1. Load the manifest JSON for the target command family.
+2. Validate the caller payload against `parameters.properties` and any documented command-specific applicability rules.
+3. Convert `snake_case` parameter names to CLI flags (`run_summary_json` → `--run-summary-json`).
+4. Emit booleans as presence/absence flags, not string values (`agent_mode: true` → `--agent-mode`).
+5. Preserve exact IDs and snapshot file paths as documented instead of guessing by name.
+6. Execute `uv run cja_auto_sdr ...` and consume stdout/stderr according to the command family's documented output contract.
+
+Minimal example:
+
+```text
+payload = {"command": "list_dataviews", "agent_mode": true, "format": "json"}
+argv = ["uv", "run", "cja_auto_sdr", "--list-dataviews", "--agent-mode", "--format", "json"]
+```
+
+---
+
 ## Notes for Manifest Consumers
 
 - `show_config` (interactive config display) is intentionally excluded from all manifests — it is not suitable for automated use.

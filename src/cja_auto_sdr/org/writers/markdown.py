@@ -9,6 +9,7 @@ import logging
 from datetime import UTC, datetime
 from pathlib import Path
 
+from cja_auto_sdr.core.constants import effective_governance_overlap_threshold
 from cja_auto_sdr.core.version import __version__
 from cja_auto_sdr.org.models import (
     OrgReportResult,
@@ -210,7 +211,7 @@ def write_org_report_markdown(
     if result.similarity_pairs:
         lines.append("## High Overlap Pairs")
         lines.append("")
-        effective_threshold = min(result.parameters.overlap_threshold, 0.9)
+        effective_threshold = effective_governance_overlap_threshold(result.parameters.overlap_threshold)
         threshold_note = ""
         if result.parameters.overlap_threshold > 0.9:
             threshold_note = (

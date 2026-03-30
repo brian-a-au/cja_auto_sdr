@@ -16,6 +16,7 @@ from cja_auto_sdr.core.advisories import (
     AdvisoryFinding,
     AdvisorySummary,
 )
+from cja_auto_sdr.core.constants import effective_governance_overlap_threshold
 
 if TYPE_CHECKING:
     from cja_auto_sdr.diff.models import DiffResult
@@ -39,6 +40,15 @@ def _make_summary_block(findings: list[AdvisoryFinding]) -> dict[str, Any]:
     }
 
 
+def _top_nonzero_drift_scores(drift_scores: dict[str, float], *, limit: int = 10) -> list[dict[str, Any]]:
+    """Return the highest non-zero drift scores in stable order."""
+    ranked = sorted(
+        ({"data_view_id": data_view_id, "score": score} for data_view_id, score in drift_scores.items() if score > 0),
+        key=lambda entry: (-entry["score"], entry["data_view_id"]),
+    )
+    return ranked[:limit]
+
+
 def build_org_report_advisories(
     result: OrgReportResult,
     trending: OrgReportTrending | None = None,
@@ -49,9 +59,11 @@ def build_org_report_advisories(
 
     Checks performed:
     - fetch_failures: Any data views with errors → severity warning
-    - high_overlap: Similarity pairs whose Jaccard score >= overlap_threshold → warning
+    - high_overlap: Similarity pairs whose Jaccard score >= effective overlap threshold → warning
+    - isolated_review: existing review_isolated recommendations → info
+    - metadata_hygiene: missing_descriptions and stale_data_view recommendations → warning
     - governance_threshold_breach: thresholds_exceeded=True with violations → critical
-    - drift_activity: trending provided with non-empty drift_scores → warning
+    - drift_activity: trending provided with non-zero drift_scores → info
     """
     findings: list[AdvisoryFinding] = []
 
@@ -65,8 +77,9 @@ def build_org_report_advisories(
                 severity="warning",
                 message=f"{len(failed_ids)} data view(s) could not be fetched.",
                 details={
+                    "count": len(failed_ids),
                     "data_view_ids": failed_ids,
-                    "reason_counts": reason_counts,
+                    "failure_reason_counts": reason_counts,
                 },
                 recommended_actions=["investigate_fetch_failures"],
             )
@@ -74,7 +87,8 @@ def build_org_report_advisories(
 
     # 2. High overlap
     if result.similarity_pairs is not None:
-        threshold = result.parameters.overlap_threshold
+        configured_threshold = result.parameters.overlap_threshold
+        threshold = effective_governance_overlap_threshold(configured_threshold)
         high_pairs = [p for p in result.similarity_pairs if p.jaccard_similarity >= threshold]
         if high_pairs:
             pair_details = [
@@ -91,11 +105,15 @@ def build_org_report_advisories(
                 AdvisoryFinding(
                     type="high_overlap",
                     severity="warning",
-                    message=(f"{len(high_pairs)} data view pair(s) exceed the overlap threshold of {threshold:.0%}."),
+                    message=(
+                        f"{len(high_pairs)} data view pair(s) exceed the "
+                        f"{'effective ' if configured_threshold > threshold else ''}"
+                        f"overlap threshold of {threshold:.0%}."
+                    ),
                     details={
-                        "pair_count": len(high_pairs),
-                        "threshold": threshold,
                         "pairs": pair_details,
+                        "threshold": threshold,
+                        "max_similarity": max(p.jaccard_similarity for p in high_pairs),
                     },
                     recommended_actions=[
                         "review_overlap_pairs",
@@ -104,7 +122,61 @@ def build_org_report_advisories(
                 )
             )
 
-    # 3. Governance threshold breach
+    # 3. Isolated review
+    isolated_recommendations = [rec for rec in result.recommendations if rec.get("type") == "review_isolated"]
+    if isolated_recommendations:
+        data_views = [
+            {
+                "data_view_id": rec.get("data_view"),
+                "data_view_name": rec.get("data_view_name"),
+                "isolated_count": rec.get("isolated_count"),
+            }
+            for rec in isolated_recommendations
+        ]
+        findings.append(
+            AdvisoryFinding(
+                type="isolated_review",
+                severity="info",
+                message=f"{len(data_views)} data view(s) have high isolated-component counts.",
+                details={
+                    "data_views": data_views,
+                    "count": len(data_views),
+                },
+                recommended_actions=["review_isolated_views"],
+            )
+        )
+
+    # 4. Metadata hygiene
+    stale_recommendations = [rec for rec in result.recommendations if rec.get("type") == "stale_data_view"]
+    missing_description_recommendations = [
+        rec for rec in result.recommendations if rec.get("type") == "missing_descriptions"
+    ]
+    if stale_recommendations or missing_description_recommendations:
+        missing_description_count = sum(int(rec.get("count", 0) or 0) for rec in missing_description_recommendations)
+        stale_view_ids = [rec.get("data_view") for rec in stale_recommendations if rec.get("data_view")]
+        recommended_actions: list[str] = []
+        if missing_description_count > 0:
+            recommended_actions.append("add_descriptions")
+        if stale_view_ids:
+            recommended_actions.append("review_stale_views")
+
+        findings.append(
+            AdvisoryFinding(
+                type="metadata_hygiene",
+                severity="warning",
+                message=(
+                    f"Metadata hygiene issues detected across {missing_description_count} undocumented "
+                    f"and {len(stale_view_ids)} stale data view(s)."
+                ),
+                details={
+                    "missing_description_count": missing_description_count,
+                    "stale_view_ids": stale_view_ids,
+                },
+                recommended_actions=recommended_actions,
+            )
+        )
+
+    # 5. Governance threshold breach
     if result.thresholds_exceeded:
         violations = list(result.governance_violations or [])
         findings.append(
@@ -114,7 +186,7 @@ def build_org_report_advisories(
                 message="One or more governance thresholds have been exceeded.",
                 details={
                     "violations": violations,
-                    "violation_count": len(violations),
+                    "count": len(violations),
                 },
                 recommended_actions=[
                     "review_governance_thresholds",
@@ -123,28 +195,28 @@ def build_org_report_advisories(
             )
         )
 
-    # 4. Drift activity from trending
+    # 6. Drift activity from trending
     if trending is not None and trending.drift_scores:
-        drift_scores = dict(trending.drift_scores)
-        findings.append(
-            AdvisoryFinding(
-                type="drift_activity",
-                severity="warning",
-                message=(
-                    f"Drift activity detected across {len(drift_scores)} data view(s) "
-                    f"over a {trending.window_size}-snapshot window."
-                ),
-                details={
-                    "drift_scores": drift_scores,
-                    "data_view_count": len(drift_scores),
-                    "window_size": trending.window_size,
-                },
-                recommended_actions=[
-                    "review_drift_activity",
-                    "compare_recent_reports",
-                ],
+        top_drift_scores = _top_nonzero_drift_scores(dict(trending.drift_scores))
+        if top_drift_scores:
+            findings.append(
+                AdvisoryFinding(
+                    type="drift_activity",
+                    severity="info",
+                    message=(
+                        f"Drift activity detected across {len(top_drift_scores)} data view(s) "
+                        f"over a {trending.window_size}-snapshot window."
+                    ),
+                    details={
+                        "top_drift_scores": top_drift_scores,
+                        "window": trending.window_size,
+                    },
+                    recommended_actions=[
+                        "review_drift_activity",
+                        "compare_recent_reports",
+                    ],
+                )
             )
-        )
 
     severity = _max_severity([f.severity for f in findings])
     return AdvisorySummary(

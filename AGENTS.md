@@ -183,7 +183,7 @@ Use `--explain-exit-code CODE` to get a human-readable explanation of any exit c
 ## Output Conventions
 
 - Use `--format json --output -` for machine-parseable stdout on command families that support direct stdout emission.
-- Only `json` and `csv` formats are valid with `--output -` (stdout).
+- Machine-readable stdout uses `json` or `csv`; org-report also supports `console` on stdout for human-readable output.
 - `--output -` implies `--quiet` (suppresses banner/progress to stderr).
 - Single-SDR generation currently writes auto-named artifacts under `--output-dir`; use `--run-summary-json` for stable machine-readable completion metadata.
 - For scheduled/agent runs, prefer retry settings such as `--max-retries 5 --retry-max-delay 60` to absorb transient Adobe API rate limits.
@@ -244,11 +244,13 @@ uv run cja_auto_sdr --config-status --config-json  # machine-readable config sta
 | Command Family | `--agent-mode` | Notes |
 |---|---|---|
 | Single SDR | Limited | Preset applies, but current generation writes auto-named artifacts under `--output-dir` |
-| Discovery | ✅ | JSON on stdout |
-| Org Report | ✅ | JSON on stdout |
-| Diff | ✅ | JSON on stdout |
-| Batch | Limited | Preset applies, but generated artifacts still land under `--output-dir` per data view |
-| Config/Stats | Partial | Use `--config-status --config-json`; stats supports `--format json --output -` |
+| Batch SDR | Limited | Preset applies, but generated artifacts still land under `--output-dir` per data view |
+| Discovery / Inspection | ✅ | JSON on stdout for machine-readable flows; prefer exact IDs for unattended inspection |
+| Org Report | ✅ | JSON on stdout; `--format console --output -` is also supported for human-readable stdout |
+| Diff Family | ✅ | JSON on stdout for `--diff`, `--diff-snapshot`, `--compare-with-prev`, and `--compare-snapshots` |
+| Validation / Preflight | Partial | Use `--config-status --config-json` for JSON state; `--validate-config` remains exit-code driven |
+| Stats | Partial | Supports `--format json --output -` |
+| Fast-Path Flags | Partial | `--version` and `--completion` tolerate `--agent-mode`, but the preset is not applied before early exit |
 
 ### JSON `advisories` Block
 

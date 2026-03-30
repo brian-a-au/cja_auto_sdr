@@ -24,8 +24,8 @@
       },
       "format": {
         "type": "string",
-        "enum": ["json", "csv", "table"],
-        "description": "Output format. Use 'json' for agent/programmatic consumption. Defaults to 'table' for human-readable console output."
+        "enum": ["console", "json", "csv"],
+        "description": "Output format. Use 'json' for agent/programmatic consumption. Defaults to 'console' for human-readable output."
       },
       "output": {
         "type": "string",

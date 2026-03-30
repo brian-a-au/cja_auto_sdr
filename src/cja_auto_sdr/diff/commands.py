@@ -34,13 +34,20 @@ def _populate_diff_advisory_rollup(
     *,
     changes_only: bool,
 ) -> None:
-    """Compute diff advisory rollup and store it in *runtime_details* if provided."""
+    """Compute diff advisory rollup and store it in *runtime_details* if provided.
+
+    This is a best-effort helper — failures are silently ignored so that
+    advisory computation never breaks the diff flow.
+    """
     if runtime_details is None:
         return
-    from cja_auto_sdr.core.advisory_builders import build_advisory_rollup, build_diff_advisories
+    try:
+        from cja_auto_sdr.core.advisory_builders import build_advisory_rollup, build_diff_advisories
 
-    advisory_summary = build_diff_advisories(diff_result, changes_only=changes_only)
-    runtime_details["advisory_rollup"] = build_advisory_rollup(advisory_summary)
+        advisory_summary = build_diff_advisories(diff_result, changes_only=changes_only)
+        runtime_details["advisory_rollup"] = build_advisory_rollup(advisory_summary)
+    except Exception:
+        logging.getLogger("diff").debug("Advisory rollup computation failed", exc_info=True)
 
 
 def handle_snapshot_command(

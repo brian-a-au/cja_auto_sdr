@@ -82,7 +82,7 @@ class TestAgentModeResolution:
         """Explicit flags win regardless of order."""
         args = parse_arguments(["--agent-mode", "dv_123", "--format", "csv"])
         assert args.format == "csv"
-        assert args.output == "-"  # agent-mode still fills non-overridden
+        assert args.output == "-"
 
     def test_no_flag_behavior_unchanged(self):
         """Without --agent-mode, defaults remain as before."""
@@ -96,9 +96,19 @@ class TestAgentModeResolution:
         assert args.format == "json"
         assert args.output == "-"
 
+    def test_stdout_compatible_discovery_format_override_keeps_stdout(self):
+        args = parse_arguments(["--list-dataviews", "--agent-mode", "--format", "csv"])
+        assert args.format == "csv"
+        assert args.output == "-"
+
     def test_agent_mode_on_org_report(self):
         args = parse_arguments(["--org-report", "--agent-mode"])
         assert args.format == "json"
+        assert args.output == "-"
+
+    def test_file_only_org_report_format_override_keeps_agent_mode_stdout_default(self):
+        args = parse_arguments(["--org-report", "--agent-mode", "--format", "markdown"])
+        assert args.format == "markdown"
         assert args.output == "-"
 
     def test_agent_mode_on_diff(self):
@@ -245,3 +255,14 @@ class TestDiffStdoutAliasRuntime:
 
         assert exit_code == 0
         assert mock_compare.call_args.kwargs["output_to_stdout"] is True
+
+
+class TestAgentModeOrgReportRuntime:
+    """Verify org-report agent-mode overrides reach runtime without self-invalid stdout wiring."""
+
+    def test_file_only_org_report_format_override_does_not_pass_stdout_output(self):
+        with patch("cja_auto_sdr.generator.run_org_report", return_value=(True, False)) as mock_run:
+            exit_code = _run_main_impl(["--org-report", "--agent-mode", "--format", "markdown"])
+
+        assert exit_code == 0
+        assert mock_run.call_args.kwargs["output_path"] is None

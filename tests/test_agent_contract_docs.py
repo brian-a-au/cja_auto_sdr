@@ -124,6 +124,24 @@ class TestAgentAutomationDoc:
         assert "review_breaking_changes" in content
         assert "investigate_fetch_failures" in content
 
+    def test_advisories_example_uses_current_org_contract_fields(self):
+        content = AGENT_AUTOMATION_MD.read_text()
+        assert "violation_count" not in content
+        assert '"details": { "count": 3, "violations": [...] }' in content
+
+    def test_org_report_actions_are_documented_as_live_findings(self):
+        content = AGENT_AUTOMATION_MD.read_text()
+        assert "(future finding type)" not in content
+        assert "`isolated_review`" in content
+        assert "`metadata_hygiene`" in content
+
+    def test_applicability_matrix_uses_current_command_families(self):
+        content = AGENT_AUTOMATION_MD.read_text()
+        assert "--validate-config" in content
+        assert "--describe-dataview" in content
+        assert "--interactive" in content
+        assert "--show-config" not in content
+
     def test_does_not_document_agent_mode_run_summary_stdout_pair(self):
         content = AGENT_AUTOMATION_MD.read_text()
         for line in content.split("\n"):
@@ -135,6 +153,11 @@ class TestAgentAutomationDoc:
         assert "--version" in content
         assert "--completion" in content
         assert "partial" in content.lower()
+
+    def test_agents_md_mentions_org_report_console_stdout_exception(self):
+        content = AGENTS_MD.read_text().lower()
+        assert "org-report also supports `console` on stdout" in content
+        assert "only `json` and `csv` formats are valid with `--output -`" not in content
 
 
 class TestQuickReferenceDoc:

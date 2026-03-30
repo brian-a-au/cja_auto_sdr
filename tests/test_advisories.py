@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from cja_auto_sdr.core.advisories import (
     _ADVISORY_SEVERITY_ORDER,
     AdvisoryFinding,
@@ -186,8 +188,9 @@ class TestOrgReportAdvisoryBuilder:
 
         finding = next(f for f in summary.findings if f.type == "fetch_failures")
         assert finding.severity == "warning"
+        assert finding.details["count"] == 1
         assert "dv-fail" in finding.details.get("data_view_ids", [])
-        assert "reason_counts" in finding.details
+        assert finding.details["failure_reason_counts"] == {"Connection timeout": 1}
         assert summary.severity in ("warning", "critical")
 
     def test_high_overlap_produces_warning(self):
@@ -215,6 +218,91 @@ class TestOrgReportAdvisoryBuilder:
 
         finding = next(f for f in summary.findings if f.type == "high_overlap")
         assert finding.severity == "warning"
+        assert finding.details["threshold"] == pytest.approx(0.8)
+        assert finding.details["max_similarity"] == pytest.approx(0.95)
+        assert len(finding.details["pairs"]) == 1
+
+    def test_high_overlap_uses_effective_governance_threshold(self):
+        from cja_auto_sdr.core.advisory_builders import build_org_report_advisories
+        from cja_auto_sdr.org.models import OrgReportConfig, SimilarityPair
+
+        pair = SimilarityPair(
+            dv1_id="dv1",
+            dv1_name="DV One",
+            dv2_id="dv2",
+            dv2_name="DV Two",
+            jaccard_similarity=0.91,
+            shared_count=10,
+            union_count=11,
+        )
+        result = _make_minimal_org_result(
+            parameters=OrgReportConfig(overlap_threshold=0.95),
+            similarity_pairs=[pair],
+        )
+
+        summary = build_org_report_advisories(result)
+
+        finding = next(f for f in summary.findings if f.type == "high_overlap")
+        assert finding.details["threshold"] == pytest.approx(0.9)
+        assert finding.details["max_similarity"] == pytest.approx(0.91)
+        assert len(finding.details["pairs"]) == 1
+        assert "effective overlap threshold" in finding.message
+
+    def test_isolated_review_uses_existing_recommendation_shape(self):
+        from cja_auto_sdr.core.advisory_builders import build_org_report_advisories
+
+        result = _make_minimal_org_result(
+            recommendations=[
+                {
+                    "type": "review_isolated",
+                    "data_view": "dv1",
+                    "data_view_name": "Data View 1",
+                    "isolated_count": 23,
+                }
+            ]
+        )
+
+        summary = build_org_report_advisories(result)
+
+        finding = next(f for f in summary.findings if f.type == "isolated_review")
+        assert finding.severity == "info"
+        assert finding.details == {
+            "data_views": [
+                {
+                    "data_view_id": "dv1",
+                    "data_view_name": "Data View 1",
+                    "isolated_count": 23,
+                }
+            ],
+            "count": 1,
+        }
+        assert finding.recommended_actions == ["review_isolated_views"]
+
+    def test_metadata_hygiene_aggregates_existing_recommendation_types(self):
+        from cja_auto_sdr.core.advisory_builders import build_org_report_advisories
+
+        result = _make_minimal_org_result(
+            recommendations=[
+                {
+                    "type": "missing_descriptions",
+                    "count": 2,
+                },
+                {
+                    "type": "stale_data_view",
+                    "data_view": "dv-old",
+                },
+            ]
+        )
+
+        summary = build_org_report_advisories(result)
+
+        finding = next(f for f in summary.findings if f.type == "metadata_hygiene")
+        assert finding.severity == "warning"
+        assert finding.details == {
+            "missing_description_count": 2,
+            "stale_view_ids": ["dv-old"],
+        }
+        assert finding.recommended_actions == ["add_descriptions", "review_stale_views"]
 
     def test_governance_threshold_breach_produces_critical(self):
         from cja_auto_sdr.core.advisory_builders import build_org_report_advisories
@@ -231,6 +319,7 @@ class TestOrgReportAdvisoryBuilder:
 
         finding = next(f for f in summary.findings if f.type == "governance_threshold_breach")
         assert finding.severity == "critical"
+        assert finding.details["count"] == 1
         assert summary.severity == "critical"
 
     def test_drift_activity_from_trending(self):
@@ -248,7 +337,29 @@ class TestOrgReportAdvisoryBuilder:
         assert "drift_activity" in types
 
         finding = next(f for f in summary.findings if f.type == "drift_activity")
-        assert finding.severity in ("info", "warning", "critical")
+        assert finding.severity == "info"
+        assert finding.details == {
+            "top_drift_scores": [
+                {"data_view_id": "dv1", "score": 0.72},
+                {"data_view_id": "dv2", "score": 0.45},
+            ],
+            "window": 3,
+        }
+        assert finding.recommended_actions == ["review_drift_activity", "compare_recent_reports"]
+
+    def test_drift_activity_ignores_zero_only_scores(self):
+        from cja_auto_sdr.core.advisory_builders import build_org_report_advisories
+        from cja_auto_sdr.org.models import OrgReportTrending
+
+        trending = OrgReportTrending(
+            drift_scores={"dv1": 0.0, "dv2": 0.0},
+            window_size=3,
+        )
+        result = _make_minimal_org_result()
+
+        summary = build_org_report_advisories(result, trending=trending)
+
+        assert all(f.type != "drift_activity" for f in summary.findings)
 
     def test_no_mutation_of_input(self):
         from cja_auto_sdr.core.advisory_builders import build_org_report_advisories

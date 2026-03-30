@@ -88,6 +88,17 @@ class TestToolManifests:
         assert isolated_threshold["minimum"] == 0.0
         assert isolated_threshold["maximum"] == 1.0
 
+    def test_discover_manifest_formats_match_cli(self):
+        manifest = json.loads((TOOLS_DIR / "cja_sdr_discover.json").read_text())
+        fmt = manifest["parameters"]["properties"]["format"]
+
+        assert set(fmt["enum"]) == {"console", "json", "csv"}
+        assert "table" not in fmt["enum"]
+
+        desc = fmt["description"].lower()
+        assert "console" in desc
+        assert "table" not in desc
+
     def test_generate_manifest_quality_report_output_contract_matches_cli(self):
         manifest = json.loads((TOOLS_DIR / "cja_sdr_generate.json").read_text())
         props = manifest["parameters"]["properties"]
@@ -166,7 +177,9 @@ class TestToolManifests:
 
     def test_governance_manifest_trending_window_uses_snapshot_count_not_days(self):
         manifest = json.loads((TOOLS_DIR / "cja_sdr_governance.json").read_text())
-        desc = manifest["parameters"]["properties"]["trending_window"]["description"].lower()
+        trending_window = manifest["parameters"]["properties"]["trending_window"]
+        desc = trending_window["description"].lower()
+        assert trending_window["minimum"] == 2
         assert "snapshot" in desc
         assert "days" not in desc
 
@@ -189,6 +202,7 @@ class TestToolManifests:
             "output_dir",
             "diff_output",
             "format_pr_comment",
+            "generic wrapper",
             "reports",
             "data",
             "ci",

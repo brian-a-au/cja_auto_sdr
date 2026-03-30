@@ -138,15 +138,16 @@ uv run cja_auto_sdr --config-status --config-json --agent-mode
 
 ### --agent-mode command-family applicability
 
-| Command family                       | `--agent-mode` supported | Notes                                              |
-|--------------------------------------|--------------------------|----------------------------------------------------|
-| SDR generation (single / batch)      | Limited                  | Preset applies, but current generation still writes auto-named artifacts under `--output-dir` |
-| Org-report (`--org-report`)          | Yes                      | JSON to stdout; advisories block included          |
-| Diff (`--diff`, `--diff-snapshot`)   | Yes                      | JSON to stdout; advisories block included          |
-| Discovery (`--list-*`)               | Yes                      | JSON to stdout                                     |
-| Config status (`--config-status`)    | Yes                      | Use with `--config-json` for full JSON payload     |
-| Fast-path flags (`--version`, etc.)  | Partial                  | Informational fast paths such as `--version` and `--completion` tolerate `--agent-mode`, but the preset itself is not applied before exit |
-| Interactive commands (`--show-config`) | No                     | Interactive; not suitable for agent use            |
+| Command family                                      | `--agent-mode` supported | Notes |
+|-----------------------------------------------------|--------------------------|-------|
+| SDR generation (single)                             | Limited                  | Preset applies, but current generation still writes auto-named artifacts under `--output-dir` |
+| Batch SDR generation                                | Limited                  | Preset applies, but per-data-view artifacts still land under `--output-dir` |
+| Discovery / inspection (`--list-*`, `--describe-dataview`) | Yes             | JSON to stdout for machine-readable flows; prefer exact IDs for unattended inspection |
+| Org-report (`--org-report`)                         | Yes                      | JSON to stdout; advisories block included; `--format console --output -` is also valid for human-readable stdout |
+| Diff family (`--diff`, `--diff-snapshot`, `--compare-with-prev`, `--compare-snapshots`) | Yes | JSON to stdout; advisories block included |
+| Validation / preflight (`--validate-config`, `--config-status`) | Partial        | Use `--config-status --config-json` for JSON state; `--validate-config` is primarily exit-code driven |
+| Fast-path flags (`--version`, `--completion`)       | Partial                  | Informational fast paths tolerate `--agent-mode`, but the preset itself is not applied before exit |
+| Interactive mode (`--interactive`)                  | No                       | Interactive prompts are not suitable for unattended pipelines |
 
 ---
 
@@ -170,7 +171,7 @@ Starting in v3.5.0, JSON output for org-report and diff commands includes an `ad
         "type": "governance_threshold_breach",
         "severity": "critical",
         "message": "One or more governance thresholds have been exceeded.",
-        "details": { "violation_count": 3, "violations": [...] },
+        "details": { "count": 3, "violations": [...] },
         "recommended_actions": ["review_governance_thresholds", "remediate_threshold_breach"]
       }
     ],
@@ -187,14 +188,16 @@ The top-level `recommended_actions` list is a deduplicated union of all finding-
 |---------------------------------|------------------------------------|--------------------------------------------------------------|
 | `review_overlap_pairs`          | `high_overlap`                     | Inspect the flagged data view pairs for intentional overlap  |
 | `verify_intentional_duplicates` | `high_overlap`                     | Confirm duplicates are deliberate (e.g. regional variants)   |
-| `review_isolated_views`         | (future finding type)              | Examine data views with no shared components                 |
-| `add_descriptions`              | (future finding type)              | Add missing descriptions to flagged components               |
-| `review_stale_views`            | (future finding type)              | Review data views with no recent activity                    |
+| `review_isolated_views`         | `isolated_review`                  | Examine data views with many isolated components             |
+| `add_descriptions`              | `metadata_hygiene`                 | Add missing descriptions to flagged data views               |
+| `review_stale_views`            | `metadata_hygiene`                 | Review stale data views and confirm they are still needed    |
 | `review_governance_thresholds`  | `governance_threshold_breach`      | Review which thresholds are configured and why they fired    |
 | `remediate_threshold_breach`    | `governance_threshold_breach`      | Take corrective action on breached governance thresholds     |
 | `investigate_fetch_failures`    | `fetch_failures`                   | Diagnose why specific data views could not be fetched        |
 | `review_drift_activity`         | `drift_activity`                   | Inspect which data views are drifting and by how much        |
 | `compare_recent_reports`        | `drift_activity`                   | Run `--compare-org-report` against a recent baseline         |
+
+`metadata_hygiene` can emit one or both of `add_descriptions` and `review_stale_views`, depending on which underlying recommendations are present.
 
 ### Diff recommended_actions registry
 
@@ -476,7 +479,7 @@ fi
 | Stale snapshot comparison misses changes | Snapshot file is too old or wrong data view    | Re-run `uv run cja_auto_sdr <dv_id> --snapshot <file>` to refresh; check `--snapshot-dir` path  |
 | Git commit step fails in CI              | Missing git identity on runner                 | Set `git config user.email` and `git config user.name` in the workflow before any git steps      |
 | Rate limiting (429 errors)               | Too many concurrent requests                   | Reduce `--workers` count; increase `--retry-base-delay`; use `--org-report --use-cache`          |
-| JSON parse error on `--output -`         | Banner or progress text mixed into stdout      | Ensure `--output -` is used (it implies `--quiet`); do not use `--format console` with stdout    |
+| JSON parse error on `--output -`         | Banner or progress text mixed into stdout      | Ensure `--format json --output -` is used for machine-readable stdout. Org-report `--format console --output -` is valid, but it is human-readable rather than JSON |
 | `--validate-config` passes but SDR fails | Data view ID not accessible to service account | Confirm data view ID exists and the service account has the correct CJA product profile access   |
 | Exit 2 on governance run without alert   | `--fail-on-threshold` not set                  | Add `--fail-on-threshold` to enable exit code 2 on threshold breach                             |
 | `advisories` block absent from JSON output | Command family or format does not emit advisories | Advisories are emitted for org-report and diff commands with `--format json`; use `--agent-mode` |
