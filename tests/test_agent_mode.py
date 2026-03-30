@@ -266,3 +266,27 @@ class TestAgentModeOrgReportRuntime:
 
         assert exit_code == 0
         assert mock_run.call_args.kwargs["output_path"] is None
+
+    def test_file_only_org_report_format_override_recomputes_quiet_after_stdout_suppression(self):
+        with patch("cja_auto_sdr.generator.run_org_report", return_value=(True, False)) as mock_run:
+            exit_code = _run_main_impl(["--org-report", "--agent-mode", "--format", "all"])
+
+        assert exit_code == 0
+        assert mock_run.call_args.kwargs["output_path"] is None
+        assert mock_run.call_args.kwargs["quiet"] is False
+
+    def test_org_stats_file_only_format_override_recomputes_quiet_after_stdout_suppression(self):
+        with patch("cja_auto_sdr.generator.run_org_report", return_value=(True, False)) as mock_run:
+            exit_code = _run_main_impl(["--org-report", "--org-stats", "--agent-mode", "--format", "markdown"])
+
+        assert exit_code == 0
+        assert mock_run.call_args.kwargs["output_path"] is None
+        assert mock_run.call_args.kwargs["quiet"] is False
+
+    def test_explicit_quiet_still_wins_when_org_report_suppresses_inherited_stdout(self):
+        with patch("cja_auto_sdr.generator.run_org_report", return_value=(True, False)) as mock_run:
+            exit_code = _run_main_impl(["--org-report", "--agent-mode", "--format", "markdown", "--quiet"])
+
+        assert exit_code == 0
+        assert mock_run.call_args.kwargs["output_path"] is None
+        assert mock_run.call_args.kwargs["quiet"] is True

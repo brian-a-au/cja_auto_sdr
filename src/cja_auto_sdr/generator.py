@@ -6242,6 +6242,18 @@ def _resolve_org_report_output_path(args: argparse.Namespace, *, output_format: 
     return None
 
 
+def _resolve_org_report_quiet(args: argparse.Namespace, *, output_path: str | None) -> bool:
+    """Resolve the effective org-report quiet flag after output-path coercion.
+
+    Keep explicit ``--quiet`` intact, but otherwise let quiet follow the
+    effective stdout destination rather than the parser-level ``--agent-mode``
+    default that may be suppressed for file-only org-report formats.
+    """
+    if _cli_option_specified("--quiet"):
+        return True
+    return getattr(args, "run_summary_json", None) in ("-", "stdout") or output_path in ("-", "stdout")
+
+
 def _dispatch_post_validation_report_modes(
     args: argparse.Namespace,
     *,
@@ -6335,6 +6347,10 @@ def _dispatch_post_validation_report_modes(
         sys.exit(0 if success else 1)
 
     if getattr(args, "org_report", False):
+        output_format = args.format or "console"
+        resolved_output_path = _resolve_org_report_output_path(args, output_format=output_format)
+        org_report_quiet = _resolve_org_report_quiet(args, output_path=resolved_output_path)
+
         org_config = OrgReportConfig(
             filter_pattern=getattr(args, "org_filter", None),
             exclude_pattern=getattr(args, "org_exclude", None),
@@ -6362,7 +6378,7 @@ def _dispatch_post_validation_report_modes(
             memory_limit_mb=getattr(args, "org_memory_limit", None),
             enable_clustering=getattr(args, "org_cluster", False),
             cluster_method=getattr(args, "org_cluster_method", "average"),
-            quiet=args.quiet,
+            quiet=org_report_quiet,
             cja_per_thread=not getattr(args, "org_shared_client", False),
             duplicate_threshold=getattr(args, "org_duplicate_threshold", None),
             isolated_threshold=getattr(args, "org_isolated_threshold", None),
@@ -6375,18 +6391,17 @@ def _dispatch_post_validation_report_modes(
             lock_stale_threshold_seconds=getattr(args, "org_lock_stale_threshold", 3600),
         )
 
-        output_format = args.format or "console"
         trending_window = getattr(args, "trending_window", None)
 
         lock_details: dict[str, Any] = {}
         success, thresholds_exceeded = run_org_report(
             config_file=args.config_file,
             output_format=output_format,
-            output_path=_resolve_org_report_output_path(args, output_format=output_format),
+            output_path=resolved_output_path,
             output_dir=args.output_dir,
             org_config=org_config,
             profile=getattr(args, "profile", None),
-            quiet=args.quiet,
+            quiet=org_report_quiet,
             trending_window=trending_window,
             runtime_details=lock_details,
         )
