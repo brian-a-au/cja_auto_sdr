@@ -10,7 +10,11 @@
 #
 # Environment variables:
 #   REPORT_DIR       — output directory for reports (default: ./reports)
-#   TRENDING_WINDOW  — number of snapshots for drift window (default: 4)
+#   SNAPSHOT_DIR     — snapshot directory to prune (default: ./snapshots)
+#   KEEP_LAST        — number of snapshots to retain after pruning (default: 4)
+#   TRENDING_WINDOW  — number of snapshots for drift window (default: 10)
+#   DUPLICATE_THRESHOLD — max allowed high-similarity pairs (default: 5)
+#   ISOLATED_THRESHOLD  — max allowed isolated component percentage (default: 0.35)
 #
 # Exit codes follow cja_auto_sdr conventions:
 #   0 = success, 1 = error, 2 = policy threshold exceeded
@@ -20,7 +24,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 REPORT_DIR="${REPORT_DIR:-$PROJECT_ROOT/reports}"
-TRENDING_WINDOW="${TRENDING_WINDOW:-4}"
+SNAPSHOT_DIR="${SNAPSHOT_DIR:-$PROJECT_ROOT/snapshots}"
+KEEP_LAST="${KEEP_LAST:-4}"
+TRENDING_WINDOW="${TRENDING_WINDOW:-10}"
+DUPLICATE_THRESHOLD="${DUPLICATE_THRESHOLD:-5}"
+ISOLATED_THRESHOLD="${ISOLATED_THRESHOLD:-0.35}"
 QUARTER="Q$(( ($(date +%-m) - 1) / 3 + 1 ))-$(date +%Y)"
 QUARTER_DIR="$REPORT_DIR/$QUARTER"
 LOG_PREFIX="[$(date '+%Y-%m-%d %H:%M:%S')]"
@@ -30,20 +38,13 @@ source "$SCRIPT_DIR/_common.sh"
 
 # Prefer credentials injected by the caller/CI. Fall back to a repo-local
 # .env only for workstation-style usage of this example script.
-if [[ -z "${ORG_ID:-}" || -z "${CLIENT_ID:-}" || -z "${SECRET:-}" || -z "${SCOPES:-}" ]]; then
-    if [[ -f "$PROJECT_ROOT/.env" ]]; then
-        set -a
-        # shellcheck source=/dev/null
-        source "$PROJECT_ROOT/.env"
-        set +a
-    fi
-fi
+load_auth_from_project_dotenv "$PROJECT_ROOT"
 
 cd "$PROJECT_ROOT"
 
 echo "$LOG_PREFIX === Quarterly governance: $QUARTER (window=$TRENDING_WINDOW) ==="
 
-mkdir -p "$QUARTER_DIR"
+mkdir -p "$QUARTER_DIR" "$SNAPSHOT_DIR"
 
 OVERALL_EXIT=0
 
@@ -53,6 +54,8 @@ echo "$LOG_PREFIX Running org-report with trending (window=$TRENDING_WINDOW)"
 capture_command_output ORG_EXIT ORG_OUTPUT \
     uv run cja_auto_sdr --org-report \
         --trending-window "$TRENDING_WINDOW" \
+        --duplicate-threshold "$DUPLICATE_THRESHOLD" \
+        --isolated-threshold "$ISOLATED_THRESHOLD" \
         --fail-on-threshold \
         --agent-mode
 exit_on_signal_exit "$ORG_EXIT" "$LOG_PREFIX ERROR: Org report interrupted"
@@ -81,6 +84,9 @@ echo "$LOG_PREFIX Generating human-facing governance report (markdown)"
 capture_command_exit MD_EXIT \
     uv run cja_auto_sdr --org-report \
         --trending-window "$TRENDING_WINDOW" \
+        --duplicate-threshold "$DUPLICATE_THRESHOLD" \
+        --isolated-threshold "$ISOLATED_THRESHOLD" \
+        --fail-on-threshold \
         --format markdown \
         --output "$QUARTER_DIR/org_governance.md"
 exit_on_signal_exit "$MD_EXIT" "$LOG_PREFIX ERROR: Markdown export interrupted"
@@ -95,11 +101,30 @@ case $MD_EXIT in
         ;;
     *)
         echo "$LOG_PREFIX WARNING: Markdown export failed (exit $MD_EXIT); continuing" >&2
-        [[ $OVERALL_EXIT -ne 2 ]] && OVERALL_EXIT=1
+        OVERALL_EXIT=1
         ;;
 esac
 
-# --- Step 3: Compact summary ---
+# --- Step 3: Snapshot pruning ---
+echo "$LOG_PREFIX Pruning snapshots (keeping last $KEEP_LAST)"
+
+capture_command_exit PRUNE_EXIT \
+    uv run cja_auto_sdr --prune-snapshots \
+        --keep-last "$KEEP_LAST" \
+        --snapshot-dir "$SNAPSHOT_DIR"
+exit_on_signal_exit "$PRUNE_EXIT" "$LOG_PREFIX ERROR: Snapshot pruning interrupted"
+
+case $PRUNE_EXIT in
+    0)
+        echo "$LOG_PREFIX Snapshot pruning complete"
+        ;;
+    *)
+        echo "$LOG_PREFIX WARNING: Snapshot pruning failed (exit $PRUNE_EXIT); continuing" >&2
+        OVERALL_EXIT=1
+        ;;
+esac
+
+# --- Step 4: Compact summary ---
 GOVERNANCE_STATUS="PASS"
 [[ $OVERALL_EXIT -eq 2 ]] && GOVERNANCE_STATUS="THRESHOLDS_EXCEEDED"
 [[ $OVERALL_EXIT -eq 1 ]] && GOVERNANCE_STATUS="ERROR"

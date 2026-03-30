@@ -50,16 +50,34 @@ update_overall_exit() {
     esac
 }
 
+inspect_advisories() {
+    local context="$1"
+    local json="${2:-}"
+    local severity="info"
+    local finding_count="0"
+    local actions=""
+
+    [[ -n "$json" ]] || return 0
+
+    severity="$(extract_advisory_severity "$json" 2>/dev/null || echo "info")"
+    finding_count="$(extract_advisory_finding_count "$json" 2>/dev/null || echo "0")"
+
+    [[ "$finding_count" =~ ^[0-9]+$ ]] || finding_count="0"
+    if [[ "$finding_count" -eq 0 ]]; then
+        return 0
+    fi
+
+    actions="$(extract_advisory_recommended_actions "$json" 2>/dev/null || true)"
+
+    echo "$LOG_PREFIX  Advisories for $context: count=$finding_count severity=$severity"
+    if [[ -n "$actions" ]]; then
+        echo "$LOG_PREFIX  Recommended actions for $context: $actions"
+    fi
+}
+
 # Prefer credentials injected by the caller/CI. Fall back to a repo-local
 # .env only for workstation-style usage of this example script.
-if [[ -z "${ORG_ID:-}" || -z "${CLIENT_ID:-}" || -z "${SECRET:-}" || -z "${SCOPES:-}" ]]; then
-    if [[ -f "$PROJECT_ROOT/.env" ]]; then
-        set -a
-        # shellcheck source=/dev/null
-        source "$PROJECT_ROOT/.env"
-        set +a
-    fi
-fi
+load_auth_from_project_dotenv "$PROJECT_ROOT"
 
 cd "$PROJECT_ROOT"
 
@@ -98,7 +116,7 @@ for DV_ID in $DATA_VIEW_IDS; do
 
     # Detect whether prior snapshots exist for this data view
     capture_command_output SNAP_LIST_EXIT SNAP_LIST_OUTPUT \
-        uv run cja_auto_sdr --list-snapshots --format json --output - "$DV_ID" 2>/dev/null
+        uv run cja_auto_sdr --list-snapshots --snapshot-dir "$SNAPSHOT_DIR" --format json --output - "$DV_ID" 2>/dev/null
     exit_on_signal_exit "$SNAP_LIST_EXIT" "$LOG_PREFIX ERROR: Snapshot list interrupted for $DV_ID"
 
     if [[ $SNAP_LIST_EXIT -ne 0 ]]; then
@@ -128,6 +146,7 @@ for DV_ID in $DATA_VIEW_IDS; do
         if [[ -n "$DIFF_OUTPUT" ]]; then
             printf '%s\n' "$DIFF_OUTPUT" > "$REPORT_RUN_DIR/${DV_ID}_diff.json"
         fi
+        inspect_advisories "diff $DV_ID" "$DIFF_OUTPUT"
 
         case $DIFF_EXIT in
             0) echo "$LOG_PREFIX  No changes detected for $DV_ID" ;;
@@ -171,6 +190,7 @@ exit_on_signal_exit "$ORG_EXIT" "$LOG_PREFIX ERROR: Org report interrupted"
 if [[ -n "$ORG_OUTPUT" ]]; then
     printf '%s\n' "$ORG_OUTPUT" > "$REPORT_RUN_DIR/org_report.json"
 fi
+inspect_advisories "org report" "$ORG_OUTPUT"
 
 case $ORG_EXIT in
     0) echo "$LOG_PREFIX Org report: OK" ;;

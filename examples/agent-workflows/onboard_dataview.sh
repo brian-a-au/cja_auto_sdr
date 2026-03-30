@@ -33,14 +33,7 @@ source "$SCRIPT_DIR/_common.sh"
 
 # Prefer credentials injected by the caller/CI. Fall back to a repo-local
 # .env only for workstation-style usage of this example script.
-if [[ -z "${ORG_ID:-}" || -z "${CLIENT_ID:-}" || -z "${SECRET:-}" || -z "${SCOPES:-}" ]]; then
-    if [[ -f "$PROJECT_ROOT/.env" ]]; then
-        set -a
-        # shellcheck source=/dev/null
-        source "$PROJECT_ROOT/.env"
-        set +a
-    fi
-fi
+load_auth_from_project_dotenv "$PROJECT_ROOT"
 
 require_env DATA_VIEW_ID
 
@@ -50,8 +43,12 @@ echo "$LOG_PREFIX Onboarding data view: $DATA_VIEW_ID"
 
 # --- Step 1: Config preflight ---
 echo "$LOG_PREFIX Running config preflight"
-if ! uv run cja_auto_sdr --validate-config; then
-    echo "$LOG_PREFIX ERROR: Configuration validation failed" >&2
+capture_command_exit VALIDATE_EXIT \
+    uv run cja_auto_sdr --validate-config
+exit_on_signal_exit "$VALIDATE_EXIT" "$LOG_PREFIX ERROR: Configuration validation interrupted"
+
+if [[ $VALIDATE_EXIT -ne 0 ]]; then
+    echo "$LOG_PREFIX ERROR: Configuration validation failed (exit $VALIDATE_EXIT)" >&2
     exit 1
 fi
 echo "$LOG_PREFIX Configuration validated"

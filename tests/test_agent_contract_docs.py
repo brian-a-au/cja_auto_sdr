@@ -33,6 +33,21 @@ class TestAgentContractDocs:
         content = AGENTS_MD.read_text()
         assert "advisories" in content.lower()
 
+    def test_advisories_block_shape_documented(self):
+        content = AGENTS_MD.read_text().lower()
+        assert "`advisories` block" in content
+        assert "advisories array" not in content
+        assert "advisories.findings" in content
+        assert "advisories.recommended_actions" in content
+        assert "findings: []" in content
+        assert "when issues requiring attention are detected" not in content
+
+    def test_run_summary_advisories_rollup_documented(self):
+        content = AGENTS_MD.read_text().lower()
+        assert "details.advisories" in content
+        assert "types" in content
+        assert "recommended_actions" in content
+
     def test_tools_directory_referenced(self):
         content = AGENTS_MD.read_text()
         assert "tools/" in content

@@ -252,9 +252,9 @@ uv run cja_auto_sdr --config-status --config-json  # machine-readable config sta
 
 ### JSON `advisories` Block
 
-Org-report and diff commands include an `advisories` array in their JSON output when issues requiring attention are detected (e.g. duplicate components, stale segments, governance threshold violations). Parse this field to drive downstream alerting or CI gate decisions.
+Org-report and diff commands include an `advisories` block in their JSON output. Parse `advisories.findings` and `advisories.recommended_actions` to drive downstream alerting or CI gate decisions. In v3.5.0, an empty advisories block with `findings: []` is still a valid machine-readable payload.
 
-Run-summary advisory rollups are available via `--run-summary-json <file>` — the summary includes aggregated advisory counts across all processed data views.
+Run-summary advisory rollups are available via `--run-summary-json <file>` under `details.advisories`. The compact rollup includes severity, summary counts, `types`, and `recommended_actions` for org-report and diff runs.
 
 ### Exact-ID Guidance
 
