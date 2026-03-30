@@ -7,7 +7,7 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [3.5.0] — 2026-03-28
+## [3.5.0] — 2026-03-30
 
 ### Added
 - `--agent-mode` CLI preset: defaults to `--format json --output - --log-format json` for agent-friendly invocation
@@ -26,6 +26,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Corrected inspection command examples in `AGENTS.md` to use current `--flag <VALUE>` form
+- Align agent-mode defaults and contract docs with v3.5.0 spec
+- Honor diff stdout alias (`--output -`) and advisory action registry in agent-mode
+- Restore org-report console stdout output path
+- Recompute org-report quiet flag after output resolution
+- Align diff agent-mode contracts for consistent JSON output
+
+### Tests
+- 7,590 tests across 127 files at 95% coverage gate (up from 7,294)
+- 553+ new agent workflow contract tests
+- 57 agent-mode tests, 109 playbook/workflow tests, 44 manifest tests
 
 ## [3.4.9] - 2026-03-27
 
