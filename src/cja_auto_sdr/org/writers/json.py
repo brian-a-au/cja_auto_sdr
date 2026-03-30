@@ -8,6 +8,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from cja_auto_sdr.core.advisory_builders import build_org_report_advisories
+from cja_auto_sdr.core.constants import effective_governance_overlap_threshold
 from cja_auto_sdr.org.models import (
     OrgReportResult,
     OrgReportTrending,
@@ -39,7 +41,7 @@ def build_org_report_json_data(
     trending: OrgReportTrending | None = None,
 ) -> dict[str, Any]:
     """Build org report JSON payload."""
-    effective_overlap_threshold = min(result.parameters.overlap_threshold, 0.9)
+    effective_overlap_threshold = effective_governance_overlap_threshold(result.parameters.overlap_threshold)
     similarity_analysis_complete = result.similarity_pairs is not None
     if result.parameters.org_stats_only:
         similarity_analysis_mode = "org_stats_only"
@@ -207,6 +209,8 @@ def build_org_report_json_data(
     }
     if trending is not None and len(trending.snapshots) >= 2:
         data["trending"] = _trending_snapshots_to_dicts(trending)
+    advisory_summary = build_org_report_advisories(result, trending=trending)
+    data["advisories"] = advisory_summary.to_dict()
     return data
 
 

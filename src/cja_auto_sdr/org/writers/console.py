@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from cja_auto_sdr.core.constants import BANNER_WIDTH
+from cja_auto_sdr.core.constants import BANNER_WIDTH, effective_governance_overlap_threshold
 from cja_auto_sdr.org.models import (
     OrgReportComparison,
     OrgReportConfig,
@@ -198,7 +198,7 @@ def write_org_report_console(
         print("-" * 110)
         print("HIGH OVERLAP PAIRS")
         print("-" * 110)
-        effective_threshold = min(config.overlap_threshold, 0.9)
+        effective_threshold = effective_governance_overlap_threshold(config.overlap_threshold)
         threshold_note = ""
         if config.overlap_threshold > 0.9:
             threshold_note = f" (configured {config.overlap_threshold * 100:.0f}%, capped at 90% for governance checks)"

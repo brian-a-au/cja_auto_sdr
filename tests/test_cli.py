@@ -758,6 +758,16 @@ class TestFastPathEntryPoint:
 
         assert _is_fast_path_flag(["prog", "--exit-codes", "--trending-window", "3"]) is None
 
+    def test_agent_mode_with_version_fast_path(self):
+        from cja_auto_sdr.__main__ import _is_fast_path_flag
+
+        assert _is_fast_path_flag(["prog", "--agent-mode", "--version"]) == "--version"
+
+    def test_agent_mode_with_completion_fast_path(self):
+        from cja_auto_sdr.__main__ import _is_fast_path_flag
+
+        assert _is_fast_path_flag(["prog", "--agent-mode", "--completion", "bash"]) == "--completion"
+
     def test_is_fast_path_flag_none_for_regular_args(self):
         from cja_auto_sdr.__main__ import _is_fast_path_flag
 

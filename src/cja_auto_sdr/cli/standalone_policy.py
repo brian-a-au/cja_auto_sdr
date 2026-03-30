@@ -11,7 +11,7 @@ from dataclasses import dataclass
 
 from cja_auto_sdr.cli.mode_scoped_options import org_report_mode_scoped_dests
 
-_STANDALONE_FAST_PATH_METADATA_DESTS = frozenset({"config_file", "format", "output_dir", "profile"})
+_STANDALONE_FAST_PATH_METADATA_DESTS = frozenset({"agent_mode", "config_file", "format", "output_dir", "profile"})
 _ORG_REPORT_MODE_SCOPED_DESTS = org_report_mode_scoped_dests()
 
 _WRAPPER_EXECUTION_TOLERATED_SEMANTIC_DESTS = frozenset(

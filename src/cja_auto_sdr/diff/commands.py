@@ -9,6 +9,10 @@ import os
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from cja_auto_sdr.diff.models import DiffResult
 
 __all__ = [
     "handle_compare_snapshots_command",
@@ -22,6 +26,28 @@ def _generator_module():
     from cja_auto_sdr import generator as _generator
 
     return _generator
+
+
+def _populate_diff_advisory_rollup(
+    runtime_details: dict[str, Any] | None,
+    diff_result: DiffResult,
+    *,
+    changes_only: bool,
+) -> None:
+    """Compute diff advisory rollup and store it in *runtime_details* if provided.
+
+    This is a best-effort helper — failures are silently ignored so that
+    advisory computation never breaks the diff flow.
+    """
+    if runtime_details is None:
+        return
+    try:
+        from cja_auto_sdr.core.advisory_builders import build_advisory_rollup, build_diff_advisories
+
+        advisory_summary = build_diff_advisories(diff_result, changes_only=changes_only)
+        runtime_details["advisory_rollup"] = build_advisory_rollup(advisory_summary)
+    except Exception:
+        logging.getLogger("diff").debug("Advisory rollup computation failed", exc_info=True)
 
 
 def handle_snapshot_command(
@@ -129,6 +155,8 @@ def handle_diff_command(
     keep_since_specified: bool = False,
     profile: str | None = None,
     diff_config=None,
+    output_to_stdout: bool = False,
+    runtime_details: dict[str, Any] | None = None,
 ) -> tuple[bool, bool, int | None]:
     """Handle the --diff command to compare two data views."""
     generator = _generator_module()
@@ -317,17 +345,19 @@ def handle_diff_command(
                 use_color=generator.ConsoleColors.is_enabled() and not no_color,
                 group_by_field=group_by_field,
                 group_by_field_limit=group_by_field_limit,
+                output_to_stdout=output_to_stdout,
             )
             if diff_output and output_content:
                 with open(diff_output, "w", encoding="utf-8") as f:
                     f.write(output_content)
                 if not quiet:
                     print(f"Diff output written to: {diff_output}")
-            if not quiet and output_format != "console":
+            if not quiet and output_format != "console" and not output_to_stdout:
                 print()
                 print(generator.ConsoleColors.success("Diff report generated successfully"))
 
         generator.append_github_step_summary(generator.build_diff_step_summary(diff_result), logger)
+        _populate_diff_advisory_rollup(runtime_details, diff_result, changes_only=changes_only)
         return True, diff_result.summary.has_changes, exit_code_override
     except (KeyboardInterrupt, SystemExit):
         raise
@@ -372,6 +402,8 @@ def handle_diff_snapshot_command(
     include_calc_metrics: bool = False,
     include_segments: bool = False,
     diff_snapshot_config=None,
+    output_to_stdout: bool = False,
+    runtime_details: dict[str, Any] | None = None,
 ) -> tuple[bool, bool, int | None]:
     """Handle the --diff-snapshot command to compare a data view against a saved snapshot."""
     generator = _generator_module()
@@ -630,17 +662,19 @@ def handle_diff_snapshot_command(
                 use_color=generator.ConsoleColors.is_enabled() and not no_color,
                 group_by_field=group_by_field,
                 group_by_field_limit=group_by_field_limit,
+                output_to_stdout=output_to_stdout,
             )
             if diff_output and output_content:
                 with open(diff_output, "w", encoding="utf-8") as f:
                     f.write(output_content)
                 if not quiet:
                     print(f"Diff output written to: {diff_output}")
-            if not quiet and output_format != "console":
+            if not quiet and output_format != "console" and not output_to_stdout:
                 print()
                 print(generator.ConsoleColors.success("Diff report generated successfully"))
 
         generator.append_github_step_summary(generator.build_diff_step_summary(diff_result), logger)
+        _populate_diff_advisory_rollup(runtime_details, diff_result, changes_only=changes_only)
         return True, diff_result.summary.has_changes, exit_code_override
     except FileNotFoundError:
         print(generator.ConsoleColors.error(f"ERROR: Snapshot file not found: {snapshot_file}"), file=sys.stderr)
@@ -681,6 +715,8 @@ def handle_compare_snapshots_command(
     format_pr_comment: bool = False,
     include_calc_metrics: bool = False,
     include_segments: bool = False,
+    output_to_stdout: bool = False,
+    runtime_details: dict[str, Any] | None = None,
 ) -> tuple[bool, bool, int | None]:
     """Handle the --compare-snapshots command to compare two snapshot files directly."""
     generator = _generator_module()
@@ -803,17 +839,19 @@ def handle_compare_snapshots_command(
                 use_color=generator.ConsoleColors.is_enabled() and not no_color,
                 group_by_field=group_by_field,
                 group_by_field_limit=group_by_field_limit,
+                output_to_stdout=output_to_stdout,
             )
             if diff_output and output_content:
                 with open(diff_output, "w", encoding="utf-8") as f:
                     f.write(output_content)
                 if not quiet:
                     print(f"Diff output written to: {diff_output}")
-            if not quiet and output_format != "console":
+            if not quiet and output_format != "console" and not output_to_stdout:
                 print()
                 print(generator.ConsoleColors.success("Diff report generated successfully"))
 
         generator.append_github_step_summary(generator.build_diff_step_summary(diff_result), logger)
+        _populate_diff_advisory_rollup(runtime_details, diff_result, changes_only=changes_only)
         return True, diff_result.summary.has_changes, exit_code_override
     except FileNotFoundError as e:
         print(generator.ConsoleColors.error(f"ERROR: Snapshot file not found: {e!s}"), file=sys.stderr)

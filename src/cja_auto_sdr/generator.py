@@ -2114,6 +2114,7 @@ def _merge_org_report_run_summary_details(
     fail_on_threshold: bool,
     lock_details: Mapping[str, Any],
     org_config: OrgReportConfig,
+    advisory_rollup: dict[str, Any] | None = None,
 ) -> None:
     """Merge org-report run-summary details with one shared formatter."""
     if run_state is None:
@@ -2137,6 +2138,9 @@ def _merge_org_report_run_summary_details(
             )
         },
     )
+
+    if advisory_rollup is not None:
+        _merge_run_details(run_state, advisories=advisory_rollup)
 
 
 def _build_run_summary_payload(
@@ -5237,6 +5241,27 @@ write_org_report_csv = _make_org_writer_compat_wrapper(
 )
 
 
+def _populate_org_report_advisory_rollup(
+    runtime_details: dict[str, Any] | None,
+    result: OrgReportResult,
+    trending: OrgReportTrending | None,
+) -> None:
+    """Compute advisory rollup from org-report result and store in runtime_details.
+
+    This is a best-effort helper — failures are silently ignored so that
+    advisory computation never breaks the org-report flow.
+    """
+    if runtime_details is None:
+        return
+    try:
+        from cja_auto_sdr.core.advisory_builders import build_advisory_rollup, build_org_report_advisories
+
+        advisory_summary = build_org_report_advisories(result, trending=trending)
+        runtime_details["advisory_rollup"] = build_advisory_rollup(advisory_summary)
+    except Exception:
+        logging.getLogger("org_report").debug("Advisory rollup computation failed", exc_info=True)
+
+
 def run_org_report(
     config_file: str,
     output_format: str,
@@ -5271,6 +5296,8 @@ def run_org_report(
     output_format = _normalize_org_report_output_format(output_format)
     output_to_stdout = output_path in ("-", "stdout")
     status_to_stderr = output_to_stdout and output_format == "json"
+    render_console_payload_to_stdout = output_to_stdout and output_format == "console"
+    console_writer_quiet = quiet and not render_console_payload_to_stdout
     status_stream = sys.stderr if status_to_stderr else sys.stdout
 
     def _status_print(*args, **kwargs) -> None:
@@ -5335,7 +5362,7 @@ def run_org_report(
                     _status_print(f"\nComparing to previous report: {requested_baseline_path}")
                 comparison = compare_org_reports(result, str(requested_baseline_path))
                 with contextlib.redirect_stdout(status_stream):
-                    write_org_report_comparison_console(comparison, quiet)
+                    write_org_report_comparison_console(comparison, console_writer_quiet)
             except FileNotFoundError:
                 _status_print(ConsoleColors.error(f"ERROR: Previous report not found: {requested_baseline_path}"))
             except json.JSONDecodeError:
@@ -5370,7 +5397,7 @@ def run_org_report(
         # Handle org-stats mode (Feature 2) - minimal output
         if org_config.org_stats_only:
             with contextlib.redirect_stdout(status_stream):
-                write_org_report_stats_only(result, quiet=quiet, trending=trending)
+                write_org_report_stats_only(result, quiet=console_writer_quiet, trending=trending)
             # Still output JSON if requested for CI integration
             if output_format == "json":
                 if output_to_stdout:
@@ -5383,6 +5410,7 @@ def run_org_report(
                     if not quiet:
                         _status_print(f"JSON saved to: {file_path}")
             append_github_step_summary(build_org_step_summary(result), logger)
+            _populate_org_report_advisory_rollup(runtime_details, result, trending)
             return True, result.thresholds_exceeded
 
         # Handle format aliases (reports, data, ci)
@@ -5411,7 +5439,7 @@ def run_org_report(
                 for f in generated_files:
                     _status_print(f"  - {f}")
         elif output_format == "console" or (output_format is None and output_path is None):
-            write_org_report_console(result, org_config, quiet, trending=trending)
+            write_org_report_console(result, org_config, console_writer_quiet, trending=trending)
         elif output_format == "json":
             if output_to_stdout:
                 json.dump(
@@ -5480,6 +5508,7 @@ def run_org_report(
             _status_print("=" * 110)
 
         append_github_step_summary(build_org_step_summary(result), logger)
+        _populate_org_report_advisory_rollup(runtime_details, result, trending)
         return True, result.thresholds_exceeded
 
     except ConcurrentOrgReportError as e:
@@ -5604,6 +5633,8 @@ def handle_diff_command(
     keep_since_specified: bool = False,
     profile: str | None = None,
     diff_config: DiffConfig | None = None,
+    output_to_stdout: bool = False,
+    runtime_details: dict[str, Any] | None = None,
 ) -> tuple[bool, bool, int | None]:
     from cja_auto_sdr.diff.commands import handle_diff_command as _impl
 
@@ -5640,6 +5671,8 @@ def handle_diff_command(
         keep_since_specified=keep_since_specified,
         profile=profile,
         diff_config=diff_config,
+        output_to_stdout=output_to_stdout,
+        runtime_details=runtime_details,
     )
 
 
@@ -5678,6 +5711,8 @@ def handle_diff_snapshot_command(
     include_calc_metrics: bool = False,
     include_segments: bool = False,
     diff_snapshot_config: DiffSnapshotConfig | None = None,
+    output_to_stdout: bool = False,
+    runtime_details: dict[str, Any] | None = None,
 ) -> tuple[bool, bool, int | None]:
     from cja_auto_sdr.diff.commands import handle_diff_snapshot_command as _impl
 
@@ -5716,6 +5751,8 @@ def handle_diff_snapshot_command(
         include_calc_metrics=include_calc_metrics,
         include_segments=include_segments,
         diff_snapshot_config=diff_snapshot_config,
+        output_to_stdout=output_to_stdout,
+        runtime_details=runtime_details,
     )
 
 
@@ -5744,6 +5781,8 @@ def handle_compare_snapshots_command(
     format_pr_comment: bool = False,
     include_calc_metrics: bool = False,
     include_segments: bool = False,
+    output_to_stdout: bool = False,
+    runtime_details: dict[str, Any] | None = None,
 ) -> tuple[bool, bool, int | None]:
     from cja_auto_sdr.diff.commands import handle_compare_snapshots_command as _impl
 
@@ -5772,6 +5811,8 @@ def handle_compare_snapshots_command(
         format_pr_comment=format_pr_comment,
         include_calc_metrics=include_calc_metrics,
         include_segments=include_segments,
+        output_to_stdout=output_to_stdout,
+        runtime_details=runtime_details,
     )
 
 
@@ -6181,6 +6222,38 @@ def _handle_org_report_snapshot_cli(
     sys.exit(0)
 
 
+def _resolve_org_report_output_path(args: argparse.Namespace, *, output_format: str) -> str | None:
+    """Resolve the effective org-report output path for the current CLI invocation.
+
+    Keep parser-level ``--agent-mode`` preset semantics intact, then let the
+    org-report CLI seam suppress only the inherited stdout default when the
+    caller explicitly selected a file-only format without explicitly choosing
+    ``--output``.
+    """
+    output_path = getattr(args, "output", None)
+    if not getattr(args, "agent_mode", False):
+        return output_path
+    if _cli_option_specified("--output"):
+        return output_path
+
+    normalized_format = _normalize_org_report_output_format(output_format)
+    if normalized_format in {"json", "console"}:
+        return output_path
+    return None
+
+
+def _resolve_org_report_quiet(args: argparse.Namespace, *, output_path: str | None) -> bool:
+    """Resolve the effective org-report quiet flag after output-path coercion.
+
+    Keep explicit ``--quiet`` intact, but otherwise let quiet follow the
+    effective stdout destination rather than the parser-level ``--agent-mode``
+    default that may be suppressed for file-only org-report formats.
+    """
+    if _cli_option_specified("--quiet"):
+        return True
+    return getattr(args, "run_summary_json", None) in ("-", "stdout") or output_path in ("-", "stdout")
+
+
 def _dispatch_post_validation_report_modes(
     args: argparse.Namespace,
     *,
@@ -6274,6 +6347,10 @@ def _dispatch_post_validation_report_modes(
         sys.exit(0 if success else 1)
 
     if getattr(args, "org_report", False):
+        output_format = args.format or "console"
+        resolved_output_path = _resolve_org_report_output_path(args, output_format=output_format)
+        org_report_quiet = _resolve_org_report_quiet(args, output_path=resolved_output_path)
+
         org_config = OrgReportConfig(
             filter_pattern=getattr(args, "org_filter", None),
             exclude_pattern=getattr(args, "org_exclude", None),
@@ -6301,7 +6378,7 @@ def _dispatch_post_validation_report_modes(
             memory_limit_mb=getattr(args, "org_memory_limit", None),
             enable_clustering=getattr(args, "org_cluster", False),
             cluster_method=getattr(args, "org_cluster_method", "average"),
-            quiet=args.quiet,
+            quiet=org_report_quiet,
             cja_per_thread=not getattr(args, "org_shared_client", False),
             duplicate_threshold=getattr(args, "org_duplicate_threshold", None),
             isolated_threshold=getattr(args, "org_isolated_threshold", None),
@@ -6314,21 +6391,21 @@ def _dispatch_post_validation_report_modes(
             lock_stale_threshold_seconds=getattr(args, "org_lock_stale_threshold", 3600),
         )
 
-        output_format = args.format or "console"
         trending_window = getattr(args, "trending_window", None)
 
         lock_details: dict[str, Any] = {}
         success, thresholds_exceeded = run_org_report(
             config_file=args.config_file,
             output_format=output_format,
-            output_path=getattr(args, "output", None),
+            output_path=resolved_output_path,
             output_dir=args.output_dir,
             org_config=org_config,
             profile=getattr(args, "profile", None),
-            quiet=args.quiet,
+            quiet=org_report_quiet,
             trending_window=trending_window,
             runtime_details=lock_details,
         )
+        advisory_rollup = lock_details.pop("advisory_rollup", None)
         if run_state is not None:
             run_state["output_format"] = output_format
             _merge_org_report_run_summary_details(
@@ -6338,6 +6415,7 @@ def _dispatch_post_validation_report_modes(
                 fail_on_threshold=org_config.fail_on_threshold,
                 lock_details=lock_details,
                 org_config=org_config,
+                advisory_rollup=advisory_rollup,
             )
 
         if success:

@@ -1,5 +1,7 @@
 # Project Notes for Claude
 
+> For agent and automation tool contracts, see [AGENTS.md](AGENTS.md).
+
 ## Python Version
 
 This project requires **Python 3.14+**. This is intentional and correct — Python 3.14 exists and is the minimum supported version for this project.
@@ -15,8 +17,8 @@ CJA SDR Generator — a CLI tool for generating Solution Design Reference (SDR) 
 - Package manager: **uv**
 - Build system: **hatchling** (dynamic version from `src/cja_auto_sdr/core/version.py`)
 - Entry points: `cja_auto_sdr` and `cja-auto-sdr` (both via `__main__:main`)
-- Current version: v3.4.9
-- Tests: **7,294** across 120 files at **95% coverage gate**
+- Current version: v3.5.0
+- Tests: **7,566** across 127 files at **95% coverage gate**
 - Dependencies: cjapy, numpy, pandas, xlsxwriter, tqdm
 - Optional deps: scipy (clustering), python-dotenv (env), argcomplete (completion)
 
@@ -255,6 +257,10 @@ When adding new CLI flags, update these docs:
 - `README.md` — common use cases table
 - Feature-specific docs (e.g. `DATA_QUALITY.md`, `DIFF_COMPARISON.md`, `CONFIGURATION.md`)
 - `tests/README.md` — tree listing and test count table (if new test files added)
+- `tools/*.json` — tool manifests for agent frameworks
+- `docs/agent-playbooks/*.md` — cross-agent task playbooks
+- `examples/agent-workflows/*.sh` — shell workflow examples
+- `docs/AGENT_AUTOMATION.md` — agent automation guide
 
 ### Documentation Inventory (`docs/`)
 

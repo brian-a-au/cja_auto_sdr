@@ -25,6 +25,7 @@ from tqdm import tqdm
 from cja_auto_sdr.core.constants import (
     DEFAULT_ORG_REPORT_WORKERS,
     GOVERNANCE_MAX_OVERLAP_THRESHOLD,
+    effective_governance_overlap_threshold,
 )
 from cja_auto_sdr.core.exceptions import LockOwnershipLostError
 from cja_auto_sdr.inventory.utils import extract_owner
@@ -445,7 +446,7 @@ class OrgComponentAnalyzer:
         if need_similarity and not similarity_guardrail_blocked:
             self.logger.info("Computing similarity matrix...")
             similarity_pairs = self._compute_similarity_matrix(summaries, precomputed=pairwise_data)
-            effective_threshold = min(self.config.overlap_threshold, GOVERNANCE_MAX_OVERLAP_THRESHOLD)
+            effective_threshold = effective_governance_overlap_threshold(self.config.overlap_threshold)
             self.logger.info(f"Found {len(similarity_pairs)} pairs above threshold (>= {effective_threshold})")
         elif self.config.org_stats_only:
             self.logger.info("Skipping similarity matrix (--org-stats mode)")
@@ -1183,7 +1184,7 @@ class OrgComponentAnalyzer:
             valid_summaries, pairwise = self._compute_pairwise_jaccard(summaries)
 
         pairs = []
-        min_similarity_threshold = min(self.config.overlap_threshold, GOVERNANCE_MAX_OVERLAP_THRESHOLD)
+        min_similarity_threshold = effective_governance_overlap_threshold(self.config.overlap_threshold)
 
         for (i, j), similarity in pairwise.items():
             if similarity >= min_similarity_threshold:

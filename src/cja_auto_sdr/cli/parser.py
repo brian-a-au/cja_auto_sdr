@@ -12,6 +12,7 @@ import logging
 import os
 from collections.abc import Callable
 
+from cja_auto_sdr.cli.option_resolution import explicit_long_option_dests
 from cja_auto_sdr.core.constants import (
     DEFAULT_AUTO_PRUNE_KEEP_LAST,
     DEFAULT_AUTO_PRUNE_KEEP_SINCE,
@@ -22,6 +23,43 @@ from cja_auto_sdr.core.constants import (
     QUALITY_SEVERITY_ORDER,
 )
 from cja_auto_sdr.core.version import __version__
+
+_AGENT_MODE_DEFAULTS: dict[str, str] = {
+    "format": "json",
+    "output": "-",
+    "log_format": "json",
+}
+
+
+def _configured_long_options(parser: argparse.ArgumentParser) -> frozenset[str]:
+    """Extract all configured long-option strings from an ArgumentParser."""
+    options: set[str] = set()
+    for action in parser._actions:
+        for opt in action.option_strings:
+            if opt.startswith("--"):
+                options.add(opt)
+    return frozenset(options)
+
+
+def _apply_agent_mode_defaults(
+    args: argparse.Namespace,
+    argv: list[str] | None,
+    *,
+    known_long_options: frozenset[str],
+) -> None:
+    """Apply --agent-mode preset defaults for options not explicitly provided."""
+    if not getattr(args, "agent_mode", False):
+        return
+
+    explicit_dests = explicit_long_option_dests(
+        argv,
+        tracked_options={"--format", "--output", "--log-format"},
+        known_long_options=known_long_options,
+    )
+    for dest, default_value in _AGENT_MODE_DEFAULTS.items():
+        if dest not in explicit_dests:
+            setattr(args, dest, default_value)
+
 
 # Attempt to load argcomplete for shell tab-completion (optional dependency)
 _ARGCOMPLETE_AVAILABLE = False
@@ -1403,6 +1441,18 @@ Requirements:
         help="Stale lease recovery threshold in seconds for the org-report concurrency lock (default: 3600)",
     )
 
+    # --- Agent Integration ---------------------------------------------------
+    agent_group = parser.add_argument_group("Agent Integration")
+    agent_group.add_argument(
+        "--agent-mode",
+        action="store_true",
+        default=False,
+        help=(
+            "Agent-friendly preset: defaults to --format json --output - --log-format json. "
+            "Existing stdout behavior still implies --quiet."
+        ),
+    )
+
     # Enable shell tab-completion if argcomplete is installed
     if enable_autocomplete and _ARGCOMPLETE_AVAILABLE:
         argcomplete.autocomplete(parser)  # pragma: no cover
@@ -1410,4 +1460,6 @@ Requirements:
     if return_parser:
         return parser
 
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    _apply_agent_mode_defaults(args, argv, known_long_options=_configured_long_options(parser))
+    return args

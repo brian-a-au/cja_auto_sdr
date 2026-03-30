@@ -1,0 +1,45 @@
+{
+  "name": "cja_sdr_discover",
+  "description": "Discover and inspect Adobe CJA resources: list data views, connections, datasets, or inspect a specific data view's metrics, dimensions, segments, and calculated metrics. Use this tool before cja_sdr_generate to find valid data_view_id values.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "command": {
+        "type": "string",
+        "enum": [
+          "list_dataviews",
+          "list_connections",
+          "list_datasets",
+          "describe_dataview",
+          "list_metrics",
+          "list_dimensions",
+          "list_segments",
+          "list_calculated_metrics"
+        ],
+        "description": "Discovery command to run. Use 'list_dataviews' first to enumerate available data view IDs. Use 'describe_dataview' or the list_* commands with data_view_id to inspect a specific data view."
+      },
+      "data_view_id": {
+        "type": "string",
+        "description": "Data view ID required for inspection commands: describe_dataview, list_metrics, list_dimensions, list_segments, list_calculated_metrics."
+      },
+      "format": {
+        "type": "string",
+        "enum": ["console", "json", "csv"],
+        "description": "Output format. Use 'json' for agent/programmatic consumption. Defaults to 'console' for human-readable output."
+      },
+      "output": {
+        "type": "string",
+        "description": "File path to write discovery output to. Omit to receive output on stdout."
+      },
+      "agent_mode": {
+        "type": "boolean",
+        "description": "Enable agent mode: suppresses banners, emits clean JSON to stdout. Recommended for programmatic use."
+      },
+      "profile": {
+        "type": "string",
+        "description": "Named credential profile to use. Defaults to the default profile."
+      }
+    },
+    "required": ["command"]
+  }
+}

@@ -23,6 +23,7 @@ Complete command-line interface documentation for the CJA SDR Generator.
   - [Git Integration](#git-integration)
   - [Reliability & Auto-Tuning](#reliability--auto-tuning)
   - [Inventory Options](#inventory-options)
+  - [Agent Integration](#agent-integration)
   - [Environment Variables](#environment-variables)
 - [Usage Examples](#usage-examples)
   - [Single Data View](#single-data-view)
@@ -39,6 +40,7 @@ Complete command-line interface documentation for the CJA SDR Generator.
   - [Org-Wide Analysis Examples](#org-wide-analysis-1)
   - [Git Integration Examples](#git-integration)
   - [Inventory Options Examples](#inventory-options-1)
+  - [Agent Integration Examples](#agent-integration-examples)
 - [Output Files](#output-files)
   - [Excel Workbook](#excel-workbook)
   - [Log Files](#log-files)
@@ -487,6 +489,20 @@ Cache is stored in `~/.cja_auto_sdr/cache/org_report_cache.json`.
 > **Derived Fields:** `--include-derived` is for **SDR generation only**, not diff. Derived fields are already included in the standard metrics/dimensions API output, so changes to derived fields are automatically captured in the Metrics/Dimensions diff sections. The `--include-derived` flag provides additional logic analysis (complexity scores, functions used, branch counts) that is valuable for SDR documentation but would be duplicative in diff mode.
 >
 > **Snapshot/Diff Tip:** `--include-all-inventory` automatically excludes `--include-derived` in `--snapshot`, `--diff-snapshot`, `--compare-snapshots`, and `--compare-with-prev` modes.
+
+### Agent Integration
+
+Preset flag for running CJA SDR Generator from AI agents, scripts, and automation pipelines.
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--agent-mode` | Agent-friendly preset: defaults to `--format json`, `--output -` (stdout), and `--log-format json`. Existing stdout behavior (`--output -`) still implies `--quiet`. Explicit `--format`, `--output`, or `--log-format` flags override the preset values. Command-family runtime behavior still applies, so some flows continue to write auto-named artifacts under `--output-dir`. | False |
+
+> **Interaction constraints:** `--agent-mode` cannot be combined with `--interactive`/`-i` (interactive prompts are incompatible with agent pipelines).
+>
+> **Override behavior:** All three preset values (`--format json`, `--output -`, `--log-format json`) can be overridden by explicitly passing the corresponding flag. For example, `--list-dataviews --agent-mode --format csv` produces CSV on stdout with JSON logs.
+>
+> **Log stream:** With `--agent-mode`, structured JSON logs are written to stderr. Command families that honor stdout write their payload to stdout; single-SDR generation currently still writes auto-named artifacts under `--output-dir`.
 
 ### Environment Variables
 
@@ -1144,6 +1160,37 @@ cja_auto_sdr dv_12345 --compare-with-prev --include-calculated
 cja_auto_sdr dv_12345 --diff-snapshot ./baseline.json \
   --include-segments --format excel --changes-only
 ```
+
+### Agent Integration Examples
+
+```bash
+# Agent-friendly discovery JSON on stdout
+uv run cja_auto_sdr --list-dataviews --agent-mode
+
+# Agent mode with explicit format override (CSV on stdout, JSON logs on stderr)
+uv run cja_auto_sdr --list-dataviews --agent-mode --format csv
+
+# Agent mode with org report
+uv run cja_auto_sdr --org-report --agent-mode
+
+# Agent mode with diff
+uv run cja_auto_sdr --diff dv_a dv_b --agent-mode
+
+# Single SDR keeps agent defaults but still writes an auto-named artifact
+uv run cja_auto_sdr dv_123 --agent-mode --output-dir ./reports
+
+# Pipe org-report agent output directly to jq
+uv run cja_auto_sdr --org-report --agent-mode | jq '.advisories'
+
+# Single SDR with a machine-readable run summary file
+uv run cja_auto_sdr dv_123 --agent-mode --run-summary-json run_summary.json
+```
+
+> **Note:** `--agent-mode` is incompatible with `--interactive`/`-i`. Combining them exits with an error.
+>
+> **Streams:** When the selected command family honors stdout, output goes to stdout and structured JSON logs go to stderr. Single-SDR generation currently still writes auto-named artifacts under `--output-dir`.
+>
+> **Run-summary constraint:** `--agent-mode` implies stdout output, so `--run-summary-json -` cannot be combined with agent-mode stdout flows such as single-SDR generation.
 
 ## Output Files
 

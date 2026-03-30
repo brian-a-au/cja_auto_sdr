@@ -47,11 +47,11 @@ Supports `--filter PATTERN`, `--exclude PATTERN`, `--limit N`, `--sort FIELD`.
 ### Inspection (per data view)
 
 ```bash
-uv run cja_auto_sdr <dv_id> --describe-dataview
-uv run cja_auto_sdr <dv_id> --list-metrics    [--format json|csv] [--output -]
-uv run cja_auto_sdr <dv_id> --list-dimensions [--format json|csv] [--output -]
-uv run cja_auto_sdr <dv_id> --list-segments   [--format json|csv] [--output -]
-uv run cja_auto_sdr <dv_id> --list-calculated-metrics [--format json|csv] [--output -]
+uv run cja_auto_sdr --describe-dataview <DATA_VIEW_ID_OR_NAME>
+uv run cja_auto_sdr --list-metrics <DATA_VIEW_ID_OR_NAME>    [--format json|csv] [--output -]
+uv run cja_auto_sdr --list-dimensions <DATA_VIEW_ID_OR_NAME> [--format json|csv] [--output -]
+uv run cja_auto_sdr --list-segments <DATA_VIEW_ID_OR_NAME>   [--format json|csv] [--output -]
+uv run cja_auto_sdr --list-calculated-metrics <DATA_VIEW_ID_OR_NAME> [--format json|csv] [--output -]
 uv run cja_auto_sdr <dv_id> --stats
 ```
 
@@ -75,8 +75,8 @@ uv run cja_auto_sdr <dv_id> --stats
 # Generate default Excel SDR
 uv run cja_auto_sdr <dv_id>
 
-# Machine-readable JSON to stdout
-uv run cja_auto_sdr <dv_id> --format json --output -
+# JSON SDR artifact
+uv run cja_auto_sdr <dv_id> --format json --output-dir /reports
 
 # Write to specific directory
 uv run cja_auto_sdr <dv_id> --format excel --output-dir /reports
@@ -182,9 +182,10 @@ Use `--explain-exit-code CODE` to get a human-readable explanation of any exit c
 
 ## Output Conventions
 
-- Use `--format json --output -` for machine-parseable stdout.
-- Only `json` and `csv` formats are valid with `--output -` (stdout).
+- Use `--format json --output -` for machine-parseable stdout on command families that support direct stdout emission.
+- Machine-readable stdout uses `json` or `csv`; org-report also supports `console` on stdout for human-readable output.
 - `--output -` implies `--quiet` (suppresses banner/progress to stderr).
+- Single-SDR generation currently writes auto-named artifacts under `--output-dir`; use `--run-summary-json` for stable machine-readable completion metadata.
 - For scheduled/agent runs, prefer retry settings such as `--max-retries 5 --retry-max-delay 60` to absorb transient Adobe API rate limits.
 - On failure, stderr receives a JSON error envelope:
   ```json
@@ -207,6 +208,69 @@ Use `--explain-exit-code CODE` to get a human-readable explanation of any exit c
 | Profiles          | `~/.cja/orgs/<name>/`             | `--profile`, `CJA_PROFILE`, `CJA_HOME` |
 
 Log levels: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`. Log formats: `text` (default), `json`.
+
+---
+
+## Agent Integration
+
+### `--agent-mode` Preset
+
+`--agent-mode` is a convenience preset that expands to:
+
+```
+--format json --output - --log-format json
+```
+
+It applies machine-friendly defaults. Discovery, diff, and org-report flows emit machine-readable JSON on stdout with structured logs on stderr. Single-SDR and batch generation currently still write auto-named artifacts under `--output-dir`.
+
+```bash
+# Direct stdout command families:
+uv run cja_auto_sdr --list-dataviews --agent-mode
+uv run cja_auto_sdr --org-report --agent-mode
+
+# Single SDR keeps the preset but still writes auto-named artifacts
+uv run cja_auto_sdr <dv_id> --agent-mode --output-dir /reports
+```
+
+Config preflight before running unattended:
+
+```bash
+uv run cja_auto_sdr --validate-config          # verify credentials + API connectivity
+uv run cja_auto_sdr --config-status --config-json  # machine-readable config state
+```
+
+### Command-Family Applicability
+
+| Command Family | `--agent-mode` | Notes |
+|---|---|---|
+| Single SDR | Limited | Preset applies, but current generation writes auto-named artifacts under `--output-dir` |
+| Batch SDR | Limited | Preset applies, but generated artifacts still land under `--output-dir` per data view |
+| Discovery / Inspection | ✅ | JSON on stdout for machine-readable flows; prefer exact IDs for unattended inspection |
+| Org Report | ✅ | JSON on stdout; `--format console --output -` is also supported for human-readable stdout |
+| Diff Family | ✅ | JSON on stdout for `--diff`, `--diff-snapshot`, `--compare-with-prev`, and `--compare-snapshots` |
+| Validation / Preflight | Partial | Use `--config-status --config-json` for JSON state; `--validate-config` remains exit-code driven |
+| Stats | Partial | Supports `--format json --output -` |
+| Fast-Path Flags | Partial | `--version` and `--completion` tolerate `--agent-mode`, but the preset is not applied before early exit |
+
+### JSON `advisories` Block
+
+Org-report and diff commands include an `advisories` block in their JSON output. Parse `advisories.findings` and `advisories.recommended_actions` to drive downstream alerting or CI gate decisions. In v3.5.0, an empty advisories block with `findings: []` is still a valid machine-readable payload.
+
+Run-summary advisory rollups are available via `--run-summary-json <file>` under `details.advisories`. The compact rollup includes severity, summary counts, `types`, and `recommended_actions` for org-report and diff runs.
+
+### Exact-ID Guidance
+
+Prefer exact data view IDs (`dv_...`) over names for unattended automation. Name resolution requires an extra API call and is subject to naming ambiguity. Use `--list-dataviews --format json --output -` to resolve names to IDs in a preflight step.
+
+### `scripts/orchestrator.py` Scope
+
+`scripts/orchestrator.py` is a higher-level JSON wrapper that is currently strongest for batched SDR generation and discovery. It is not the primary wrapper for org-report and diff-family flows — invoke those directly via the CLI with `--agent-mode` or explicit `--format json --output -`.
+
+### Tools Manifests and Playbooks
+
+- [`tools/`](tools/) — OpenAI-compatible function call manifests for each command family (`cja_sdr_generate.json`, `cja_sdr_discover.json`, `cja_sdr_governance.json`, `cja_sdr_diff.json`, `cja_sdr_config.json`)
+- [`docs/agent-playbooks/`](docs/agent-playbooks/) — task-oriented playbooks (onboarding, quality monitor, diff reviewer, SDR auditor, snapshot manager)
+- [`examples/agent-workflows/`](examples/agent-workflows/) — end-to-end workflow examples for common agent automation patterns
 
 ---
 

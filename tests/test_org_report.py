@@ -3134,6 +3134,59 @@ class TestOrgReportOutputHandling:
             assert '"report_type"' in captured.out
             assert '"org_id"' in captured.out
 
+    def test_console_output_to_stdout_emits_console_report(self, sample_result, capsys):
+        """--output - should still emit the console org-report payload."""
+        with (
+            patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "ok", {"org_id": "org_123"})),
+            patch("cja_auto_sdr.generator.cjapy.CJA", return_value=Mock()),
+            patch("cja_auto_sdr.generator.OrgComponentAnalyzer") as mock_analyzer,
+        ):
+            mock_analyzer.return_value.run_analysis.return_value = sample_result
+
+            success, _ = run_org_report(
+                config_file="config.json",
+                output_format="console",
+                output_path="-",
+                output_dir=".",
+                org_config=OrgReportConfig(),
+                profile=None,
+                quiet=True,
+            )
+
+            assert success is True
+            captured = capsys.readouterr()
+            assert "ORG-WIDE COMPONENT ANALYSIS REPORT: org_123" in captured.out
+            assert "SUMMARY" in captured.out
+            assert captured.err == ""
+
+    def test_org_stats_console_output_to_stdout_emits_stats_payload(self, sample_result, capsys):
+        """Console stdout should still render the org-stats payload."""
+        with (
+            patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "ok", {"org_id": "org_123"})),
+            patch("cja_auto_sdr.generator.cjapy.CJA", return_value=Mock()),
+            patch("cja_auto_sdr.generator.OrgComponentAnalyzer") as mock_analyzer,
+            patch("cja_auto_sdr.generator.build_org_step_summary", return_value="summary"),
+            patch("cja_auto_sdr.generator.append_github_step_summary"),
+        ):
+            mock_analyzer.return_value.run_analysis.return_value = sample_result
+
+            success, thresholds = run_org_report(
+                config_file="config.json",
+                output_format="console",
+                output_path="stdout",
+                output_dir=".",
+                org_config=OrgReportConfig(org_stats_only=True),
+                profile=None,
+                quiet=True,
+            )
+
+            assert success is True
+            assert thresholds is False
+            captured = capsys.readouterr()
+            assert "ORG STATS: org_123" in captured.out
+            assert "Data Views:" in captured.out
+            assert captured.err == ""
+
     def test_csv_output_to_stdout_errors(self, sample_result, capsys):
         """CSV org-report should error on stdout since it writes multiple files."""
         with (

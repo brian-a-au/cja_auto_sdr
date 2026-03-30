@@ -39,7 +39,7 @@ from cja_auto_sdr.output.diff.csv import write_diff_csv_output
 from cja_auto_sdr.output.diff.excel import write_diff_excel_output
 from cja_auto_sdr.output.diff.grouped import write_diff_grouped_by_field_output
 from cja_auto_sdr.output.diff.html import write_diff_html_output
-from cja_auto_sdr.output.diff.json import write_diff_json_output
+from cja_auto_sdr.output.diff.json import build_diff_json_data, write_diff_json_output
 from cja_auto_sdr.output.diff.markdown import (
     _format_markdown_side_by_side,
     write_diff_markdown_output,
@@ -64,6 +64,7 @@ def write_diff_output(
     use_color: bool = True,
     group_by_field: bool = False,
     group_by_field_limit: int = 10,
+    output_to_stdout: bool = False,
 ) -> str | None:
     """
     Write diff comparison output in specified format(s).
@@ -84,7 +85,15 @@ def write_diff_output(
     Returns:
         Console output string (for console/pr-comment format) or None
     """
+    import json as _json
+
     from cja_auto_sdr.core.constants import should_generate_format
+
+    # Stdout JSON fast-path: emit JSON to stdout and skip file creation
+    if output_to_stdout and output_format == "json":
+        data = build_diff_json_data(diff_result, changes_only=changes_only)
+        print(_json.dumps(data, indent=2, ensure_ascii=False))  # noqa: T201
+        return None
 
     os.makedirs(output_dir, exist_ok=True)
     console_output = None
@@ -137,6 +146,7 @@ __all__ = [
     "_get_change_symbol",
     "_get_colored_symbol",
     "_get_inventory_change_detail",
+    "build_diff_json_data",
     "detect_breaking_changes",
     "write_diff_console_output",
     "write_diff_csv_output",

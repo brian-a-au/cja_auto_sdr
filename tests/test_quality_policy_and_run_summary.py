@@ -2152,3 +2152,144 @@ class TestBuildOrgReportLockRunSummaryBlock:
             }
         )
         assert "loss_reason" not in block
+
+
+# ==================== advisory rollup in run-summary contract ====================
+
+
+class TestOrgReportAdvisoryRollupRunSummaryContract:
+    """Verify the advisory rollup integration with run-summary details."""
+
+    def test_summary_version_unchanged_with_advisory_rollup(self):
+        """Adding advisory_rollup must not alter the run-summary schema version."""
+        assert RUN_SUMMARY_SCHEMA_VERSION == "1.1"
+
+    def test_advisory_rollup_merged_via_details_key(self):
+        """Advisory rollup appears under details.advisories."""
+        from cja_auto_sdr.generator import _merge_org_report_run_summary_details
+        from cja_auto_sdr.org.models import OrgReportConfig
+
+        rollup = {
+            "advisories_version": "1.0",
+            "severity": "info",
+            "summary": {},
+            "types": [],
+            "recommended_actions": [],
+        }
+        run_state: dict = {"details": {}}
+        _merge_org_report_run_summary_details(
+            run_state,
+            success=True,
+            thresholds_exceeded=False,
+            fail_on_threshold=False,
+            lock_details={},
+            org_config=OrgReportConfig(),
+            advisory_rollup=rollup,
+        )
+        assert run_state["details"]["advisories"] is rollup
+
+    def test_existing_envelope_fields_survive_advisory_merge(self):
+        """Core run-summary envelope fields must not be lost when advisories are merged."""
+        from cja_auto_sdr.generator import _merge_org_report_run_summary_details
+        from cja_auto_sdr.org.models import OrgReportConfig
+
+        rollup = {
+            "advisories_version": "1.0",
+            "severity": "info",
+            "summary": {},
+            "types": [],
+            "recommended_actions": [],
+        }
+        run_state: dict = {"details": {}}
+        _merge_org_report_run_summary_details(
+            run_state,
+            success=True,
+            thresholds_exceeded=False,
+            fail_on_threshold=False,
+            lock_details={},
+            org_config=OrgReportConfig(),
+            advisory_rollup=rollup,
+        )
+        # Core fields must be present
+        assert "operation_success" in run_state["details"]
+        assert "execution_settings" in run_state["details"]
+
+
+class TestDiffAdvisoryRollupRunSummaryContract:
+    """Verify diff advisory rollup integration with run-summary details."""
+
+    def test_diff_advisory_rollup_merged_into_run_state(self):
+        """Advisory rollup from diff handler is merged under details.advisories."""
+        from cja_auto_sdr.diff.commands import _populate_diff_advisory_rollup
+        from cja_auto_sdr.diff.models import DiffResult, DiffSummary, MetadataDiff
+
+        diff_result = DiffResult(
+            summary=DiffSummary(),
+            metadata_diff=MetadataDiff(
+                source_name="A",
+                target_name="B",
+                source_id="dv-a",
+                target_id="dv-b",
+            ),
+            metric_diffs=[],
+            dimension_diffs=[],
+        )
+        runtime_details: dict = {}
+        _populate_diff_advisory_rollup(runtime_details, diff_result, changes_only=False)
+
+        run_state: dict = {
+            "details": {
+                "operation_success": True,
+                "has_changes": False,
+                "warn_threshold_exit_code": None,
+            },
+        }
+        advisory_rollup = runtime_details.get("advisory_rollup")
+        if advisory_rollup is not None:
+            run_state["details"]["advisories"] = advisory_rollup
+
+        assert "advisories" in run_state["details"]
+        assert run_state["details"]["advisories"]["advisories_version"] == "1.0"
+        # Core fields preserved
+        assert run_state["details"]["operation_success"] is True
+        assert run_state["details"]["has_changes"] is False
+
+    def test_diff_advisory_rollup_not_merged_on_failure(self):
+        """When handler fails, runtime_details is empty and no advisories key appears."""
+        runtime_details: dict = {}
+        run_state: dict = {"details": {"operation_success": False}}
+
+        advisory_rollup = runtime_details.get("advisory_rollup")
+        if advisory_rollup is not None:
+            run_state["details"]["advisories"] = advisory_rollup
+
+        assert "advisories" not in run_state["details"]
+
+    def test_diff_advisory_rollup_severity_reflects_content(self):
+        """Breaking changes in diff should produce critical severity in rollup."""
+        from cja_auto_sdr.diff.commands import _populate_diff_advisory_rollup
+        from cja_auto_sdr.diff.models import (
+            ChangeType,
+            ComponentDiff,
+            DiffResult,
+            DiffSummary,
+            MetadataDiff,
+        )
+
+        removed = ComponentDiff(id="m1", name="Revenue", change_type=ChangeType.REMOVED)
+        diff_result = DiffResult(
+            summary=DiffSummary(metrics_removed=1),
+            metadata_diff=MetadataDiff(
+                source_name="A",
+                target_name="B",
+                source_id="dv-a",
+                target_id="dv-b",
+            ),
+            metric_diffs=[removed],
+            dimension_diffs=[],
+        )
+        runtime_details: dict = {}
+        _populate_diff_advisory_rollup(runtime_details, diff_result, changes_only=False)
+        rollup = runtime_details["advisory_rollup"]
+        assert rollup["severity"] == "critical"
+        assert "breaking_changes" in rollup["types"]

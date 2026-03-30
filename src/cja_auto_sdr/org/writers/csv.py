@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from cja_auto_sdr.core.constants import effective_governance_overlap_threshold
 from cja_auto_sdr.org.models import (
     OrgReportResult,
     OrgReportTrending,
@@ -107,7 +108,7 @@ def write_org_report_csv(
     total_derived_metrics = sum(dv.derived_metric_count for dv in result.data_view_summaries if dv.error is None)
     total_derived_dimensions = sum(dv.derived_dimension_count for dv in result.data_view_summaries if dv.error is None)
     total_derived_fields = total_derived_metrics + total_derived_dimensions
-    effective_overlap_threshold = min(result.parameters.overlap_threshold, 0.9)
+    effective_overlap_threshold = effective_governance_overlap_threshold(result.parameters.overlap_threshold)
 
     summary_data = [
         {
@@ -221,7 +222,7 @@ def write_org_report_csv(
 
     # 5. Similarity CSV (if computed)
     if result.similarity_pairs:
-        effective_overlap_threshold = min(result.parameters.overlap_threshold, 0.9)
+        effective_overlap_threshold = effective_governance_overlap_threshold(result.parameters.overlap_threshold)
         sim_data = [
             {
                 "Data View 1 ID": pair.dv1_id,
