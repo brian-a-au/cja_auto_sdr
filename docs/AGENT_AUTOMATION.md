@@ -19,7 +19,6 @@ This guide covers how to automate `cja_auto_sdr` in CI/CD pipelines, scheduled j
 13. [Notification Integration](#notification-integration)
 14. [Security Considerations](#security-considerations)
 15. [Troubleshooting](#troubleshooting)
-16. [Live Agent Smoke Matrix](#live-agent-smoke-matrix)
 
 ---
 
@@ -484,40 +483,3 @@ fi
 | `--validate-config` passes but SDR fails | Data view ID not accessible to service account | Confirm data view ID exists and the service account has the correct CJA product profile access   |
 | Exit 2 on governance run without alert   | `--fail-on-threshold` not set                  | Add `--fail-on-threshold` to enable exit code 2 on threshold breach                             |
 | `advisories` block absent from JSON output | Command family or format does not emit advisories | Advisories are emitted for org-report and diff commands with `--format json`; use `--agent-mode` |
-
----
-
-## Live Agent Smoke Matrix
-
-Run this matrix before merging any PR that touches agent-mode output resolution, `--quiet` derivation, or command-family stdout routing.  Each case exercises a distinct output-contract path.
-
-### Prerequisites
-
-Set the credential environment variables (`ORG_ID`, `CLIENT_ID`, `SECRET`) for a sandbox org with at least two data views and one connection.
-
-### Matrix
-
-| # | Command | Expected Behaviour |
-|---|---------|-------------------|
-| 1 | `cja_auto_sdr --list-dataviews --agent-mode` | JSON array on stdout, no banner |
-| 2 | `cja_auto_sdr <dv_id> --describe-dataview --agent-mode` | JSON object on stdout, no banner |
-| 3 | `cja_auto_sdr --diff <dv1> <dv2> --agent-mode` | JSON diff on stdout, quiet (no progress) |
-| 4 | `cja_auto_sdr --diff <dv1> <dv2> --agent-mode --format markdown` | File artifact created, console progress visible (not silent) |
-| 5 | `cja_auto_sdr --org-report --agent-mode` | JSON on stdout, quiet |
-| 6 | `cja_auto_sdr --org-report --agent-mode --format console` | Console on stdout, quiet |
-| 7 | `cja_auto_sdr --org-report --agent-mode --format excel` | File artifact created, console progress visible (not silent) |
-| 8 | `cja_auto_sdr --org-report --org-stats --agent-mode` | JSON stats on stdout |
-| 9 | `cja_auto_sdr --org-report --agent-mode --format json --trending-window 2` | Trending JSON on stdout (requires ≥2 cached snapshots) |
-
-### Pass Criteria
-
-- **Stdout cases (1-3, 5-6, 8-9):** Output is valid JSON (or console for #6), no banner text, no progress spinners mixed in.
-- **File-only cases (4, 7):** No output on stdout, progress/status messages appear on stderr or console, file artifact is written.
-- **No case exits non-zero** unless the API itself is unreachable.
-
-### When to Run
-
-Run this matrix:
-- Before merging any PR labelled `agent-contract`
-- After modifying `cli/agent_output.py`, `diff/cli.py` output resolution, or `generator.py` org-report output resolution
-- After changing tool manifests in `tools/`
