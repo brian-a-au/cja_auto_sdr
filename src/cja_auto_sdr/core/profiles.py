@@ -688,9 +688,9 @@ def test_profile(profile_name: str) -> bool:
         print()
         print(ConsoleColors.error("Profile test: FAILED"), file=sys.stderr)
         print()
-        from cja_auto_sdr.cli.commands.config import _api_connection_hint
+        from cja_auto_sdr.core.exceptions import api_connection_hint
 
-        hint = _api_connection_hint(e)
+        hint = api_connection_hint(e)
         if hint:
             for line in hint.splitlines():
                 print(ConsoleColors.warning(f"  {line}"))

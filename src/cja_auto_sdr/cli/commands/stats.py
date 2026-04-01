@@ -256,6 +256,7 @@ def resolve_data_view_names(
     except generator.RECOVERABLE_CONFIG_API_EXCEPTIONS as e:
         error_message = f"Failed to resolve data view names: {e!s}"
         logger.error(error_message)
+        generator._print_api_hint(e)
         resolution_diagnostics = generator.NameResolutionDiagnostics(
             error_type="connectivity_error",
             error_message=error_message,
@@ -269,6 +270,7 @@ def resolve_data_view_names(
     except (AttributeError, RuntimeError) as e:
         error_message = f"Failed to resolve data view names (unexpected): {e!s}"
         logger.error(error_message)
+        generator._print_api_hint(e)
         logger.debug("Unexpected error during name resolution", exc_info=True)
         resolution_diagnostics = generator.NameResolutionDiagnostics(
             error_type="connectivity_error",

@@ -30,30 +30,12 @@ def _generator_module():
 def _api_connection_hint(exc: Exception) -> str | None:
     """Return an actionable hint for common API connection failures.
 
-    Maps opaque exceptions (e.g. ``KeyError('content')``) to plain-English
-    guidance so users don't have to guess what went wrong.
+    Thin wrapper around :func:`core.exceptions.api_connection_hint` so that
+    existing tests and call-sites in this module keep working unchanged.
     """
-    if isinstance(exc, KeyError):
-        key = str(exc).strip("'\"")
-        if key == "content":
-            return (
-                "Hint: This usually means the API returned an empty or malformed response.\n"
-                "      Verify that both the CJA API and AEP API are added to your Adobe\n"
-                "      Developer Console project, and that the service account is granted\n"
-                "      access to the correct product profiles."
-            )
-        return (
-            f"Hint: API response missing expected key '{key}'.\n"
-            "      Check your OAuth credentials and Developer Console project configuration."
-        )
-    status = getattr(exc, "status_code", None)
-    if status in (401, 403):
-        return (
-            f"Hint: Received HTTP {status} — authentication or authorization failed.\n"
-            "      Verify your client_id, client_secret, and OAuth scopes match the\n"
-            "      Developer Console configuration."
-        )
-    return None
+    from cja_auto_sdr.core.exceptions import api_connection_hint
+
+    return api_connection_hint(exc)
 
 
 def generate_sample_config(output_path: str = "config.sample.json") -> bool:

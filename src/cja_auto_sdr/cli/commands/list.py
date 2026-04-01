@@ -222,6 +222,7 @@ def _run_list_command(
             error_type="connectivity_error",
             human_to_stderr=False,
         )
+        _generator._print_api_hint(e)
         return False
 
 
