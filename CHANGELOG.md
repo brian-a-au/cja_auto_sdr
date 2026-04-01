@@ -7,6 +7,22 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.1] — 2026-03-31
+
+### Added
+- Centralized agent-output contract resolver (`cli/agent_output.py`) — single authoritative source for stdout capability, output-path resolution, and quiet recomputation across all command families
+- Command-family stdout capability tables (`DIFF_STDOUT_FORMATS`, `ORG_REPORT_STDOUT_FORMATS`, `DISCOVERY_STDOUT_FORMATS`) as code-owned constants
+- Manifest validation tests that fail when tool manifests drift from runtime capability definitions
+- Targeted regression tests for output-resolution and quiet recomputation edge cases
+- Discovery commands now participate in the shared agent-output contract
+
+### Changed
+- Diff-family output resolution now delegates to shared `resolve_agent_output_path()` and `resolve_agent_quiet()`
+- Org-report output resolution now delegates to shared `resolve_agent_output_path()` and `resolve_agent_quiet()`
+
+### Fixed
+- Eliminated per-command-family re-derivation of stdout and quiet rules that caused recurring contract regressions
+
 ## [3.5.0] — 2026-03-30
 
 ### Added

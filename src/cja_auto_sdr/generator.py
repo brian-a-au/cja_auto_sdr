@@ -6225,33 +6225,23 @@ def _handle_org_report_snapshot_cli(
 def _resolve_org_report_output_path(args: argparse.Namespace, *, output_format: str) -> str | None:
     """Resolve the effective org-report output path for the current CLI invocation.
 
-    Keep parser-level ``--agent-mode`` preset semantics intact, then let the
-    org-report CLI seam suppress only the inherited stdout default when the
-    caller explicitly selected a file-only format without explicitly choosing
-    ``--output``.
+    Delegates to the shared agent-output contract resolver with the org-report
+    command-family stdout capability set.
     """
-    output_path = getattr(args, "output", None)
-    if not getattr(args, "agent_mode", False):
-        return output_path
-    if _cli_option_specified("--output"):
-        return output_path
+    from cja_auto_sdr.cli.agent_output import ORG_REPORT_STDOUT_FORMATS, resolve_agent_output_path
 
     normalized_format = _normalize_org_report_output_format(output_format)
-    if normalized_format in {"json", "console"}:
-        return output_path
-    return None
+    return resolve_agent_output_path(args, output_format=normalized_format, stdout_formats=ORG_REPORT_STDOUT_FORMATS)
 
 
 def _resolve_org_report_quiet(args: argparse.Namespace, *, output_path: str | None) -> bool:
     """Resolve the effective org-report quiet flag after output-path coercion.
 
-    Keep explicit ``--quiet`` intact, but otherwise let quiet follow the
-    effective stdout destination rather than the parser-level ``--agent-mode``
-    default that may be suppressed for file-only org-report formats.
+    Delegates to the shared agent-output contract resolver.
     """
-    if _cli_option_specified("--quiet"):
-        return True
-    return getattr(args, "run_summary_json", None) in ("-", "stdout") or output_path in ("-", "stdout")
+    from cja_auto_sdr.cli.agent_output import resolve_agent_quiet
+
+    return resolve_agent_quiet(args, output_path=output_path)
 
 
 def _dispatch_post_validation_report_modes(

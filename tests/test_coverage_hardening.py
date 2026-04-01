@@ -489,6 +489,16 @@ class TestResolveDiscoveryOutputFormat:
 
         assert _resolve_discovery_output_format("csv", output_to_stdout=True) == "csv"
 
+    def test_stdout_console_alias_warns_and_defaults_to_json(self, caplog: pytest.LogCaptureFixture) -> None:
+        from cja_auto_sdr.generator import _resolve_discovery_output_format
+
+        with caplog.at_level(logging.WARNING, logger="cja_auto_sdr.generator"):
+            result = _resolve_discovery_output_format("console", output_to_stdout=True)
+
+        assert result == "json"
+        assert "discovery commands" in caplog.text
+        assert "using json" in caplog.text
+
     def test_unsupported_format_warns_and_defaults_to_table(self) -> None:
         """Unsupported format like 'excel' triggers a warning and falls back to 'table'."""
         from cja_auto_sdr.generator import _resolve_discovery_output_format
