@@ -122,7 +122,7 @@ After setup, you'll see your credentials. You need these four values:
 | **Scopes** | OAuth Server-to-Server > Scopes | Pre-filled after both APIs are added |
 
 > **Tip:** Copy your scopes **after** adding both the CJA and AEP APIs. The Developer Console aggregates scopes from all APIs in your project, so copying before both are added may give you an incomplete set.
-
+>
 > **Important:** Keep these credentials secure. Never commit them to version control.
 
 ---

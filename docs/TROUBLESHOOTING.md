@@ -401,6 +401,8 @@ The `--validate-config` command runs 5 checks. If Step [4/5] (API connection) fa
 2. Verify the service account is assigned to the correct product profiles for both APIs
 3. Wait 5-10 minutes after making permission changes, then re-run `--validate-config`
 
+For detailed steps, see [Missing AEP API Integration](#missing-aep-api-integration) below.
+
 ### `API connection failed: HTTP 401` or `HTTP 403`
 
 **Cause:** Authentication or authorization failed — invalid credentials or insufficient permissions.
