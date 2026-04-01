@@ -1406,7 +1406,11 @@ class TestOrgComponentAnalyzer:
         ):
             analyzer.run_analysis()
 
-        assert any("pairs above threshold (>= 0.9)" in str(call.args[0]) for call in mock_logger.info.call_args_list)
+        assert any(
+            "pairs above threshold" in str(call.args[0]) and 0.9 in call.args[1:]
+            for call in mock_logger.info.call_args_list
+            if call.args
+        )
 
     def test_similarity_includes_exact_ninety_percent(self, mock_cja, mock_logger):
         """Test exact 0.9 similarity is included when overlap threshold is higher"""

@@ -15,6 +15,11 @@ import pandas as pd
 from cja_auto_sdr.core.constants import CACHE_KEY_HASH_LENGTH
 
 
+def _unique_error_key() -> str:
+    """Return a unique cache key that forces a miss on key-generation failure."""
+    return f"error:{time.monotonic_ns()}"
+
+
 def _validate_cache_params(max_size: int, ttl_seconds: int) -> None:
     """Validate cache initialization parameters."""
     if max_size < 1:
@@ -67,7 +72,7 @@ class ValidationCache:
         self._misses = 0
         self._evictions = 0
 
-        self.logger.debug(f"ValidationCache initialized: max_size={max_size}, ttl={ttl_seconds}s")
+        self.logger.debug("ValidationCache initialized: max_size=%s, ttl=%ss", max_size, ttl_seconds)
 
     def _generate_cache_key(
         self,
@@ -108,9 +113,9 @@ class ValidationCache:
             return f"{item_type}:{df_hash}:{config_hash}"
 
         except (TypeError, KeyError, ValueError) as e:
-            self.logger.warning(f"Error generating cache key: {e}. Cache disabled for this call.")
+            self.logger.warning("Error generating cache key: %s. Cache disabled for this call.", e)
             # Return unique key to force cache miss
-            return f"error:{time.time()}"
+            return _unique_error_key()
 
     def get(
         self,
@@ -135,16 +140,16 @@ class ValidationCache:
             if cache_key not in self._cache:
                 self._misses += 1
                 if debug_enabled:
-                    self.logger.debug(f"Cache MISS: {item_type} (key: {cache_key[:20]}...)")
+                    self.logger.debug("Cache MISS: %s (key: %s...)", item_type, cache_key[:20])
                 return None, cache_key
 
             cached_issues, timestamp = self._cache[cache_key]
 
             # Check TTL expiration
-            age = time.time() - timestamp
+            age = time.monotonic() - timestamp
             if age > self.ttl_seconds:
                 if debug_enabled:
-                    self.logger.debug(f"Cache EXPIRED: {item_type} (age: {age:.1f}s)")
+                    self.logger.debug("Cache EXPIRED: %s (age: %.1fs)", item_type, age)
                 del self._cache[cache_key]
                 self._misses += 1
                 return None, cache_key
@@ -153,7 +158,7 @@ class ValidationCache:
             self._cache.move_to_end(cache_key)
             self._hits += 1
             if debug_enabled:
-                self.logger.debug(f"Cache HIT: {item_type} ({len(cached_issues)} issues)")
+                self.logger.debug("Cache HIT: %s (%s issues)", item_type, len(cached_issues))
 
             # Return deep copy to prevent mutation of cached data
             return [issue.copy() for issue in cached_issues], cache_key
@@ -182,7 +187,7 @@ class ValidationCache:
         debug_enabled = self.logger.isEnabledFor(logging.DEBUG)
 
         with self._lock:
-            now = time.time()
+            now = time.monotonic()
 
             if cache_key not in self._cache:
                 self._ensure_capacity_for_new_entry(now, debug_enabled)
@@ -195,7 +200,7 @@ class ValidationCache:
             self._cache.move_to_end(cache_key)
 
             if debug_enabled:
-                self.logger.debug(f"Cache STORE: {item_type} ({len(issues)} issues)")
+                self.logger.debug("Cache STORE: %s (%s issues)", item_type, len(issues))
 
     def _ensure_capacity_for_new_entry(self, now: float, debug_enabled: bool = False) -> None:
         """Make room for one new entry when capacity pressure exists (must be called within lock)."""
@@ -224,7 +229,7 @@ class ValidationCache:
             del self._cache[key]
 
         if expired_keys and debug_enabled:
-            self.logger.debug(f"Cache PRUNE: removed {len(expired_keys)} expired entries")
+            self.logger.debug("Cache PRUNE: removed %s expired entries", len(expired_keys))
 
         return len(expired_keys)
 
@@ -242,7 +247,7 @@ class ValidationCache:
         self._evictions += 1
 
         if debug_enabled:
-            self.logger.debug(f"Cache EVICT: LRU entry removed (total evictions: {self._evictions})")
+            self.logger.debug("Cache EVICT: LRU entry removed (total evictions: %s)", self._evictions)
 
     def get_statistics(self) -> dict[str, Any]:
         """
@@ -287,13 +292,16 @@ class ValidationCache:
         estimated_time_saved = stats["hits"] * 0.049  # 49ms saved per hit
 
         self.logger.info(
-            f"Cache Statistics: {stats['hits']}/{stats['total_requests']} hits ({stats['hit_rate']:.1f}% hit rate)",
+            "Cache Statistics: %s/%s hits (%.1f%% hit rate)",
+            stats["hits"],
+            stats["total_requests"],
+            stats["hit_rate"],
         )
-        self.logger.info(f"  - Cache size: {stats['size']}/{stats['max_size']} entries")
+        self.logger.info("  - Cache size: %s/%s entries", stats["size"], stats["max_size"])
         if stats["evictions"] > 0:
-            self.logger.info(f"  - Evictions: {stats['evictions']}")
+            self.logger.info("  - Evictions: %s", stats["evictions"])
         if estimated_time_saved > 0.1:
-            self.logger.info(f"  - Estimated time saved: {estimated_time_saved:.2f}s")
+            self.logger.info("  - Estimated time saved: %.2fs", estimated_time_saved)
 
 
 class SharedValidationCache:
@@ -388,9 +396,9 @@ class SharedValidationCache:
             return f"{item_type}:{df_hash}:{config_hash}"
 
         except (TypeError, KeyError, ValueError) as e:
-            self.logger.warning(f"Error generating cache key: {e}. Cache disabled for this call.")
+            self.logger.warning("Error generating cache key: %s. Cache disabled for this call.", e)
             # Return unique key to force cache miss
-            return f"error:{time.time()}"
+            return _unique_error_key()
 
     def get(
         self,
@@ -425,14 +433,14 @@ class SharedValidationCache:
             cached_issues, timestamp = cached_data
 
             # Check TTL expiration
-            age = time.time() - timestamp
+            age = time.monotonic() - timestamp
             if age > self.ttl_seconds:
                 self._remove_entry(cache_key)
                 self._stats["misses"] = self._stats.get("misses", 0) + 1
                 return None, cache_key
 
             # Cache hit - update access time and stats
-            self._access_times[cache_key] = time.time()
+            self._access_times[cache_key] = time.monotonic()
             self._stats["hits"] = self._stats.get("hits", 0) + 1
 
             # Return copy to prevent mutation
@@ -520,7 +528,7 @@ class SharedValidationCache:
             cache_key = self._generate_cache_key(df, item_type, required_fields, critical_fields)
 
         with self._lock:
-            now = time.time()
+            now = time.monotonic()
 
             if cache_key not in self._cache:
                 self._ensure_capacity_for_new_entry(now)
@@ -539,7 +547,7 @@ class SharedValidationCache:
             self._access_times.clear()
             return False
 
-        current_time = now if now is not None else time.time()
+        current_time = now if now is not None else time.monotonic()
         if not access_times_reconciled:
             self._reconcile_access_times(current_time)
 

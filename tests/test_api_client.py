@@ -23,6 +23,7 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import cja_auto_sdr.api.client as _client_module
 from cja_auto_sdr.api.client import (
     _bootstrap_dotenv,
     _config_from_env,
@@ -34,6 +35,12 @@ from cja_auto_sdr.core.exceptions import (
     ProfileConfigError,
     ProfileNotFoundError,
 )
+
+
+@pytest.fixture(autouse=True)
+def _reset_temp_cleanup_guard():
+    """Reset the one-shot temp-cleanup guard between tests."""
+    _client_module._temp_cleanup_done = False
 
 
 @pytest.fixture
@@ -181,7 +188,7 @@ class TestConfigFromEnvCleanup:
         _config_from_env(credentials, mock_logger)
 
         assert not stale_file.exists()
-        assert any("Removed 1 stale temp credential file" in str(call) for call in mock_logger.debug.call_args_list)
+        mock_logger.debug.assert_any_call("Removed %s stale temp credential file(s) from previous runs", 1)
 
     @patch("cja_auto_sdr.api.client.cjapy")
     @patch("cja_auto_sdr.api.client.tempfile.gettempdir")
@@ -202,7 +209,7 @@ class TestConfigFromEnvCleanup:
         _config_from_env(credentials, mock_logger)
 
         assert not stale_file.exists()
-        assert any("Removed 1 stale temp credential file" in str(call) for call in mock_logger.debug.call_args_list)
+        mock_logger.debug.assert_any_call("Removed %s stale temp credential file(s) from previous runs", 1)
 
     @patch("cja_auto_sdr.api.client.cjapy")
     @patch("cja_auto_sdr.api.client.tempfile.gettempdir")
@@ -216,6 +223,18 @@ class TestConfigFromEnvCleanup:
         _config_from_env(credentials, mock_logger)
 
         assert recent_file.exists()
+
+    @patch("cja_auto_sdr.api.client.cjapy")
+    @patch("cja_auto_sdr.api.client._cleanup_stale_temp_configs")
+    def test_stale_cleanup_runs_only_once_per_process(self, mock_cleanup, mock_cjapy, mock_logger):
+        """The temp-directory scan should happen at most once per process."""
+        credentials = {"org_id": "test@AdobeOrg", "client_id": "x", "secret": "y"}
+
+        _config_from_env(credentials, mock_logger)
+        _config_from_env(credentials, mock_logger)
+        _config_from_env(credentials, mock_logger)
+
+        mock_cleanup.assert_called_once_with(mock_logger)
 
 
 # ==================== configure_cjapy default logger (lines 96-97) ====================

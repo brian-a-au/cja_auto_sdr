@@ -163,13 +163,13 @@ class ParallelAPIFetcher:
                             detail = task_status.error_message or task_status.reason or "unknown failure"
                             errors[task_name] = detail
                             pbar.set_postfix_str(f"\u2717 {task_name}", refresh=True)
-                            self.logger.error(f"\u2717 {task_name.capitalize()} fetch failed: {detail}")
+                            self.logger.error("\u2717 %s fetch failed: %s", task_name.capitalize(), detail)
                         elif task_status is not None and task_status.status == "empty":
                             pbar.set_postfix_str(f"\u2205 {task_name}", refresh=True)
-                            self.logger.warning(f"\u2205 {task_name.capitalize()} fetch returned no components")
+                            self.logger.warning("\u2205 %s fetch returned no components", task_name.capitalize())
                         else:
                             pbar.set_postfix_str(f"\u2713 {task_name}", refresh=True)
-                            self.logger.info(f"\u2713 {task_name.capitalize()} fetch completed")
+                            self.logger.info("\u2713 %s fetch completed", task_name.capitalize())
                     except Exception as e:  # Intentional: per-task boundary for heterogeneous worker failures
                         errors[task_name] = str(e)
                         self._record_fetch_status(
@@ -179,17 +179,17 @@ class ParallelAPIFetcher:
                             error_message=str(e),
                         )
                         pbar.set_postfix_str(f"\u2717 {task_name}", refresh=True)
-                        self.logger.error(f"\u2717 {task_name.capitalize()} fetch failed: {e}")
+                        self.logger.error("\u2717 %s fetch failed: %s", task_name.capitalize(), e)
                     pbar.update(1)
 
         self.perf_tracker.end("Parallel API Fetch")
 
         # Log summary
         success_count = sum(1 for status in self.get_fetch_statuses().values() if status.status == "success")
-        self.logger.info(f"Parallel fetch complete: {success_count}/3 successful")
+        self.logger.info("Parallel fetch complete: %s/3 successful", success_count)
 
         if errors:
-            self.logger.warning(f"Errors encountered: {list(errors.keys())}")
+            self.logger.warning("Errors encountered: %s", list(errors.keys()))
 
         # Return results with proper None checking for DataFrames
         metrics_result = results.get("metrics")
@@ -235,7 +235,7 @@ class ParallelAPIFetcher:
     def _fetch_metrics(self, data_view_id: str) -> pd.DataFrame:
         """Fetch metrics with error handling and retry"""
         try:
-            self.logger.debug(f"Fetching metrics for {data_view_id}")
+            self.logger.debug("Fetching metrics for %s", data_view_id)
 
             # Use retry for transient network errors with circuit breaker support
             metrics = self._timed_api_call(
@@ -251,12 +251,12 @@ class ParallelAPIFetcher:
                 self._record_fetch_status("metrics", "empty", reason="empty_response", item_count=0)
                 return pd.DataFrame()
 
-            self.logger.info(f"Successfully fetched {len(metrics)} metrics")
+            self.logger.info("Successfully fetched %s metrics", len(metrics))
             self._record_fetch_status("metrics", "success", item_count=len(metrics))
             return metrics
 
         except CircuitBreakerOpen as e:
-            self.logger.warning(f"Circuit breaker open for metrics fetch: {e.message}")
+            self.logger.warning("Circuit breaker open for metrics fetch: %s", e.message)
             self._record_fetch_status(
                 "metrics",
                 "failed",
@@ -265,7 +265,7 @@ class ParallelAPIFetcher:
             )
             return pd.DataFrame()
         except AttributeError as e:
-            self.logger.error(f"API method error - getMetrics may not be available: {e!s}")
+            self.logger.error("API method error - getMetrics may not be available: %s", e)
             self._record_fetch_status(
                 "metrics",
                 "failed",
@@ -274,14 +274,14 @@ class ParallelAPIFetcher:
             )
             return pd.DataFrame()
         except Exception as e:  # Intentional: preserve resilient fallback-to-empty contract for metrics fetch
-            self.logger.error(f"Failed to fetch metrics: {e!s}")
+            self.logger.error("Failed to fetch metrics: %s", e)
             self._record_fetch_status("metrics", "failed", reason="exception", error_message=str(e))
             return pd.DataFrame()
 
     def _fetch_dimensions(self, data_view_id: str) -> pd.DataFrame:
         """Fetch dimensions with error handling and retry"""
         try:
-            self.logger.debug(f"Fetching dimensions for {data_view_id}")
+            self.logger.debug("Fetching dimensions for %s", data_view_id)
 
             # Use retry for transient network errors with circuit breaker support
             dimensions = self._timed_api_call(
@@ -297,12 +297,12 @@ class ParallelAPIFetcher:
                 self._record_fetch_status("dimensions", "empty", reason="empty_response", item_count=0)
                 return pd.DataFrame()
 
-            self.logger.info(f"Successfully fetched {len(dimensions)} dimensions")
+            self.logger.info("Successfully fetched %s dimensions", len(dimensions))
             self._record_fetch_status("dimensions", "success", item_count=len(dimensions))
             return dimensions
 
         except CircuitBreakerOpen as e:
-            self.logger.warning(f"Circuit breaker open for dimensions fetch: {e.message}")
+            self.logger.warning("Circuit breaker open for dimensions fetch: %s", e.message)
             self._record_fetch_status(
                 "dimensions",
                 "failed",
@@ -311,7 +311,7 @@ class ParallelAPIFetcher:
             )
             return pd.DataFrame()
         except AttributeError as e:
-            self.logger.error(f"API method error - getDimensions may not be available: {e!s}")
+            self.logger.error("API method error - getDimensions may not be available: %s", e)
             self._record_fetch_status(
                 "dimensions",
                 "failed",
@@ -320,14 +320,14 @@ class ParallelAPIFetcher:
             )
             return pd.DataFrame()
         except Exception as e:  # Intentional: preserve resilient fallback-to-empty contract for dimensions fetch
-            self.logger.error(f"Failed to fetch dimensions: {e!s}")
+            self.logger.error("Failed to fetch dimensions: %s", e)
             self._record_fetch_status("dimensions", "failed", reason="exception", error_message=str(e))
             return pd.DataFrame()
 
     def _fetch_dataview_info(self, data_view_id: str) -> dict:
         """Fetch data view information with error handling and retry"""
         try:
-            self.logger.debug(f"Fetching data view information for {data_view_id}")
+            self.logger.debug("Fetching data view information for %s", data_view_id)
 
             # Use retry for transient network errors with circuit breaker support
             lookup_data = self._timed_api_call(self.cja.getDataView, data_view_id, operation_name="getDataView")
@@ -353,12 +353,12 @@ class ParallelAPIFetcher:
                 )
 
             validated_payload = assessment.payload or {}
-            self.logger.info(f"Successfully fetched data view info: {validated_payload.get('name', 'Unknown')}")
+            self.logger.info("Successfully fetched data view info: %s", validated_payload.get("name", "Unknown"))
             self._record_fetch_status("dataview", "success")
             return validated_payload
 
         except CircuitBreakerOpen as e:
-            self.logger.warning(f"Circuit breaker open for data view fetch: {e.message}")
+            self.logger.warning("Circuit breaker open for data view fetch: %s", e.message)
             self._record_fetch_status(
                 "dataview",
                 "failed",
@@ -372,7 +372,7 @@ class ParallelAPIFetcher:
                 circuit_breaker_open=True,
             )
         except Exception as e:  # Intentional: preserve resilient lookup-failure payload contract
-            self.logger.error(f"Failed to fetch data view information: {e!s}")
+            self.logger.error("Failed to fetch data view information: %s", e)
             self._record_fetch_status("dataview", "failed", reason="exception", error_message=str(e))
             return self._build_lookup_failure_payload(
                 data_view_id,

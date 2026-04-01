@@ -7,6 +7,14 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.3] — 2026-04-01
+
+### Changed
+- Replaced wall-clock `time.time()` with `time.monotonic()` / `time.perf_counter()` for all in-process elapsed-time, cooldown, and TTL bookkeeping in circuit breaker, API tuner, validation caches, performance tracker, batch processor, CLI execution, and org analyzer.
+- Converted eager f-string logging to lazy `%s`-style interpolation across hot-path runtime modules outside `generator.py` (`api/`, `core/`, `pipeline/`, `org/`).
+- Extracted shared `_unique_error_key()` helper for cache fallback key generation using monotonic nanosecond resolution.
+- Added one-shot guard for legacy temp-file cleanup in `_config_from_env()` to avoid repeated `/tmp` scans.
+
 ## [3.5.2] — 2026-03-31
 
 ### Security

@@ -536,7 +536,7 @@ class CircuitBreaker:
         self._failure_count = 0
         self._success_count = 0
         self._last_failure_time: float | None = None
-        self._last_state_change_time = time.time()
+        self._last_state_change_time = time.monotonic()
         self._lock = threading.Lock()
 
         # Statistics
@@ -571,7 +571,7 @@ class CircuitBreaker:
             if self._state == CircuitState.OPEN:
                 # Check if timeout has elapsed for recovery attempt
                 if self._last_failure_time is not None:
-                    elapsed = time.time() - self._last_failure_time
+                    elapsed = time.monotonic() - self._last_failure_time
                     if elapsed >= self.config.timeout_seconds:
                         self._transition_to(CircuitState.HALF_OPEN)
                         return True
@@ -617,7 +617,7 @@ class CircuitBreaker:
         with self._lock:
             self._failure_count += 1
             self._total_failures += 1
-            self._last_failure_time = time.time()
+            self._last_failure_time = time.monotonic()
 
             if self._state == CircuitState.CLOSED:
                 if self._failure_count >= self.config.failure_threshold:
@@ -637,7 +637,7 @@ class CircuitBreaker:
         """
         old_state = self._state
         self._state = new_state
-        self._last_state_change_time = time.time()
+        self._last_state_change_time = time.monotonic()
 
         if old_state != new_state:
             emit_diagnostic(
@@ -658,11 +658,11 @@ class CircuitBreaker:
             Dict with state, counts, and timing information
         """
         with self._lock:
-            time_in_state = time.time() - self._last_state_change_time
+            time_in_state = time.monotonic() - self._last_state_change_time
             time_until_retry = 0.0
 
             if self._state == CircuitState.OPEN and self._last_failure_time is not None:
-                time_until_retry = max(0.0, self.config.timeout_seconds - (time.time() - self._last_failure_time))
+                time_until_retry = max(0.0, self.config.timeout_seconds - (time.monotonic() - self._last_failure_time))
 
             return {
                 "state": self._state.value,
@@ -683,7 +683,7 @@ class CircuitBreaker:
             self._failure_count = 0
             self._success_count = 0
             self._last_failure_time = None
-            self._last_state_change_time = time.time()
+            self._last_state_change_time = time.monotonic()
             self.logger.debug("Circuit breaker reset to CLOSED state")
 
     def __call__(self, func: Callable[..., T]) -> Callable[..., T]:
@@ -769,11 +769,11 @@ def retry_with_backoff(
                     result = func(*args, **kwargs)
                     # Log success after retry
                     if attempt > 0:
-                        _logger.info(f"✓ {func.__name__} succeeded on attempt {attempt + 1}/{_max_retries + 1}")
+                        _logger.info("✓ %s succeeded on attempt %s/%s", func.__name__, attempt + 1, _max_retries + 1)
                     return result
                 except _retryable_exceptions as e:
                     if attempt == _max_retries:
-                        _logger.error(f"All {_max_retries + 1} attempts failed for {func.__name__}")
+                        _logger.error("All %s attempts failed for %s", _max_retries + 1, func.__name__)
 
                         # Provide enhanced error message based on exception type
                         if isinstance(e, RetryableHTTPError):
@@ -788,7 +788,7 @@ def retry_with_backoff(
                             error_msg = ErrorMessageHelper.get_network_error_message(e, operation=func.__name__)
                             _logger.error("\n" + error_msg)
                         else:  # pragma: no cover — RETRYABLE_EXCEPTIONS exhausted above
-                            _logger.error(f"Error: {e!s}")
+                            _logger.error("Error: %s", e)
                             _logger.error(
                                 "Troubleshooting: Check network connectivity, verify API credentials, or try again later",
                             )
@@ -802,15 +802,19 @@ def retry_with_backoff(
                         delay = delay * random.uniform(*RETRY_JITTER_RANGE)
 
                     _logger.warning(
-                        f"⚠ {func.__name__} attempt {attempt + 1}/{_max_retries + 1} failed: {e!s}. "
-                        f"Retrying in {delay:.1f}s...",
+                        "⚠ %s attempt %s/%s failed: %s. Retrying in %.1fs...",
+                        func.__name__,
+                        attempt + 1,
+                        _max_retries + 1,
+                        e,
+                        delay,
                     )
                     time.sleep(delay)
                 except (
                     Exception
                 ) as e:  # Intentional: Retry loop must catch all to distinguish retryable vs non-retryable
                     # Non-retryable exception, raise immediately
-                    _logger.error(f"{func.__name__} failed with non-retryable error: {e!s}")
+                    _logger.error("%s failed with non-retryable error: %s", func.__name__, e)
                     raise
 
             # Defensive guard: should be unreachable since the last attempt
@@ -896,7 +900,7 @@ def make_api_call_with_retry[T](
 
             # Log success after retry
             if attempt > 0:
-                _logger.info(f"✓ {operation_name} succeeded on attempt {attempt + 1}/{max_retries + 1}")
+                _logger.info("✓ %s succeeded on attempt %s/%s", operation_name, attempt + 1, max_retries + 1)
 
             # Record success to circuit breaker
             if circuit_breaker is not None:
@@ -907,7 +911,7 @@ def make_api_call_with_retry[T](
             last_exception = e
 
             if attempt == max_retries:
-                _logger.error(f"All {max_retries + 1} attempts failed for {operation_name}")
+                _logger.error("All %s attempts failed for %s", max_retries + 1, operation_name)
 
                 # Provide enhanced error message based on exception type
                 if isinstance(e, RetryableHTTPError):
@@ -919,7 +923,7 @@ def make_api_call_with_retry[T](
                     error_msg = ErrorMessageHelper.get_network_error_message(e, operation=operation_name)
                     _logger.error("\n" + error_msg)
                 else:  # pragma: no cover — RETRYABLE_EXCEPTIONS exhausted above
-                    _logger.error(f"Error: {e!s}")
+                    _logger.error("Error: %s", e)
                     _logger.error(
                         "Troubleshooting: Check network connectivity, verify API credentials, or try again later",
                     )
@@ -934,12 +938,17 @@ def make_api_call_with_retry[T](
                 delay = delay * random.uniform(*RETRY_JITTER_RANGE)
 
             _logger.warning(
-                f"⚠ {operation_name} attempt {attempt + 1}/{max_retries + 1} failed: {e!s}. Retrying in {delay:.1f}s...",
+                "⚠ %s attempt %s/%s failed: %s. Retrying in %.1fs...",
+                operation_name,
+                attempt + 1,
+                max_retries + 1,
+                e,
+                delay,
             )
             time.sleep(delay)
         except Exception as e:  # Intentional: Retry loop must catch all to distinguish retryable vs non-retryable
             # Non-retryable exception
-            _logger.error(f"{operation_name} failed with non-retryable error: {e!s}")
+            _logger.error("%s failed with non-retryable error: %s", operation_name, e)
             # Record failure to circuit breaker
             if circuit_breaker is not None:
                 circuit_breaker.record_failure(e)

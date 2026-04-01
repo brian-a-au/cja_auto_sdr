@@ -104,17 +104,17 @@ class TestErrorPathKeyGeneration:
         with (
             patch.object(cache.logger, "warning"),
             patch(
-                "cja_auto_sdr.api.cache.time.time",
-                side_effect=[1000.0, 1000.5],
-            ) as mock_time,
+                "cja_auto_sdr.api.cache.time.monotonic_ns",
+                side_effect=[1_000_000_000, 1_500_000_000],
+            ) as mock_ns,
         ):
             key1 = cache._generate_cache_key("not_a_dataframe", "Metrics", ["id"], ["id"])
             key2 = cache._generate_cache_key("not_a_dataframe", "Metrics", ["id"], ["id"])
-        # Error-path keys intentionally embed the current timestamp so failures
-        # cannot collide and accidentally turn into cache hits.
-        assert key1 == "error:1000.0"
-        assert key2 == "error:1000.5"
-        assert mock_time.call_count == 2
+        # Error-path keys intentionally embed a monotonic nanosecond timestamp
+        # so failures cannot collide and accidentally turn into cache hits.
+        assert key1 == "error:1000000000"
+        assert key2 == "error:1500000000"
+        assert mock_ns.call_count == 2
 
 
 # ==================== TTL Boundary ====================
@@ -129,12 +129,12 @@ class TestTTLBoundary:
         cache.put(df, "Metrics", ["id"], ["id"], [{"test": "issue"}])
 
         key = cache._generate_cache_key(df, "Metrics", ["id"], ["id"])
-        now = time.time()
+        now = time.monotonic()
         with cache._lock:
             issues, _ts = cache._cache[key]
             cache._cache[key] = (issues, now - 9.999)  # TTL - epsilon
 
-        with patch("cja_auto_sdr.api.cache.time.time", return_value=now):
+        with patch("cja_auto_sdr.api.cache.time.monotonic", return_value=now):
             result, _key = cache.get(df, "Metrics", ["id"], ["id"])
             assert result is not None
 
@@ -144,12 +144,12 @@ class TestTTLBoundary:
         cache.put(df, "Metrics", ["id"], ["id"], [{"test": "issue"}])
 
         key = cache._generate_cache_key(df, "Metrics", ["id"], ["id"])
-        now = time.time()
+        now = time.monotonic()
         with cache._lock:
             issues, _ts = cache._cache[key]
             cache._cache[key] = (issues, now - 10.001)  # TTL + epsilon
 
-        with patch("cja_auto_sdr.api.cache.time.time", return_value=now):
+        with patch("cja_auto_sdr.api.cache.time.monotonic", return_value=now):
             result, _key = cache.get(df, "Metrics", ["id"], ["id"])
             assert result is None
 
@@ -161,13 +161,13 @@ class TestTTLBoundary:
 
         # Set timestamp to exactly TTL age
         key = cache._generate_cache_key(df, "Metrics", ["id"], ["id"])
-        now = time.time()
+        now = time.monotonic()
         with cache._lock:
             issues, _ts = cache._cache[key]
             cache._cache[key] = (issues, now - 10)  # Exactly at TTL boundary
 
-        # Patch time.time to return consistent value for the comparison
-        with patch("cja_auto_sdr.api.cache.time.time", return_value=now):
+        # Patch time.monotonic to return consistent value for the comparison
+        with patch("cja_auto_sdr.api.cache.time.monotonic", return_value=now):
             result, _key = cache.get(df, "Metrics", ["id"], ["id"])
             # age == ttl_seconds → NOT expired (uses > not >=)
             assert result is not None

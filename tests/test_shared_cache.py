@@ -292,11 +292,12 @@ class TestSharedValidationCacheEviction:
         """Reconciliation should be skipped if expiration pruning already frees capacity."""
         fake_now = [1000000.0]
 
-        def mock_time():
+        def mock_monotonic():
             return fake_now[0]
 
         with patch("cja_auto_sdr.api.cache.time") as mock_time_module:
-            mock_time_module.time = mock_time
+            mock_time_module.monotonic = mock_monotonic
+            mock_time_module.monotonic_ns = lambda: int(fake_now[0] * 1e9)
             cache = SharedValidationCache(max_size=2, ttl_seconds=1)
 
             try:
