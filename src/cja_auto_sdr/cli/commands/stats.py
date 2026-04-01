@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import logging
+import sys
 from typing import Any
 
 import cjapy
@@ -480,4 +481,5 @@ def show_stats(
             error_type="connectivity_error",
             human_to_stderr=False,
         )
+        generator._print_api_hint(e, enabled=not is_machine_readable, file=sys.stdout)
         return False

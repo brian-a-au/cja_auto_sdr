@@ -50,6 +50,11 @@ def _populate_diff_advisory_rollup(
         logging.getLogger("diff").debug("Advisory rollup computation failed", exc_info=True)
 
 
+def _emit_api_failure_hint(generator: Any, exc: Exception) -> None:
+    """Print a diff/snapshot API hint to stderr when one is available."""
+    generator._print_api_hint(exc, file=sys.stderr)
+
+
 def handle_snapshot_command(
     data_view_id: str,
     snapshot_file: str,
@@ -119,6 +124,7 @@ def handle_snapshot_command(
         raise
     except generator.RECOVERABLE_COMMAND_HANDLER_EXCEPTIONS as e:
         print(generator.ConsoleColors.error(f"ERROR: Failed to create snapshot: {e!s}"), file=sys.stderr)
+        _emit_api_failure_hint(generator, e)
         return False
 
 
@@ -363,6 +369,7 @@ def handle_diff_command(
         raise
     except generator.RECOVERABLE_COMMAND_HANDLER_EXCEPTIONS as e:
         print(generator.ConsoleColors.error(f"ERROR: Failed to compare data views: {e!s}"), file=sys.stderr)
+        _emit_api_failure_hint(generator, e)
         logger.debug("Diff comparison failed", exc_info=True)
         return False, False, None
 
@@ -686,6 +693,7 @@ def handle_diff_snapshot_command(
         raise
     except generator.RECOVERABLE_COMMAND_HANDLER_EXCEPTIONS as e:
         print(generator.ConsoleColors.error(f"ERROR: Failed to compare against snapshot: {e!s}"), file=sys.stderr)
+        _emit_api_failure_hint(generator, e)
         logger.debug("Diff-snapshot comparison failed", exc_info=True)
         return False, False, None
 

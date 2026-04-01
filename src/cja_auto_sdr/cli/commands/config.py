@@ -38,6 +38,22 @@ def _api_connection_hint(exc: Exception) -> str | None:
     return api_connection_hint(exc)
 
 
+def _print_api_connection_failure(
+    generator: Any,
+    exc: Exception,
+    *,
+    unexpected: bool = False,
+) -> None:
+    """Render validate-config API failures with consistent hint handling."""
+    hint = _api_connection_hint(exc)
+    label = "API connection failed (unexpected)" if unexpected and hint is None else "API connection failed"
+    print(generator.ConsoleColors.error(f"  \u2717 {label}: {exc!s}"))
+    if hint:
+        print()
+        for line in hint.splitlines():
+            print(generator.ConsoleColors.warning(f"    {line}"))
+
+
 def generate_sample_config(output_path: str = "config.sample.json") -> bool:
     """Generate a sample configuration file."""
     generator = _generator_module()
@@ -468,15 +484,10 @@ def validate_config_only(
         print(generator.ConsoleColors.warning("Validation cancelled."))
         raise
     except generator.RECOVERABLE_CONFIG_API_EXCEPTIONS as e:
-        print(generator.ConsoleColors.error(f"  \u2717 API connection failed: {e!s}"))
-        hint = _api_connection_hint(e)
-        if hint:
-            print()
-            for line in hint.splitlines():
-                print(generator.ConsoleColors.warning(f"    {line}"))
+        _print_api_connection_failure(generator, e)
         all_passed = False
     except (AttributeError, RuntimeError) as e:
-        print(generator.ConsoleColors.error(f"  \u2717 API connection failed (unexpected): {e!s}"))
+        _print_api_connection_failure(generator, e, unexpected=True)
         logging.getLogger(__name__).debug("Unexpected validate-config error", exc_info=True)
         all_passed = False
 

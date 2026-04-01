@@ -3851,6 +3851,16 @@ def run_dry_run(data_views: list[str], config_file: str, logger: logging.Logger,
         text = str(error).strip()
         return text or error.__class__.__name__
 
+    def _fail_dry_run_api_connection(error: Exception) -> bool:
+        """Print a consistent step-[2/3] API probe failure and stop the dry-run."""
+        print(f"  ✗ API connection failed: {_dry_run_error_text(error)}")
+        _print_api_hint(error, file=sys.stdout)
+        print()
+        print("=" * BANNER_WIDTH)
+        print("DRY-RUN FAILED - Cannot connect to CJA API")
+        print("=" * BANNER_WIDTH)
+        return False
+
     # Step 1: Validate credentials
     print("[1/3] Validating credentials...")
     if profile:
@@ -3915,22 +3925,12 @@ def run_dry_run(data_views: list[str], config_file: str, logger: logging.Logger,
         print(ConsoleColors.warning("Dry-run cancelled."))
         raise
     except RECOVERABLE_CONFIG_API_EXCEPTIONS as e:
-        print(f"  ✗ API connection failed: {_dry_run_error_text(e)}")
         all_passed = False
-        print()
-        print("=" * BANNER_WIDTH)
-        print("DRY-RUN FAILED - Cannot connect to CJA API")
-        print("=" * BANNER_WIDTH)
-        return False
+        return _fail_dry_run_api_connection(e)
     except (RuntimeError, AttributeError) as e:  # Residual non-API failures (e.g. cjapy internals)
         logger.debug("Unexpected dry-run API connection failure", exc_info=True)
-        print(f"  ✗ API connection failed: {_dry_run_error_text(e)}")
         all_passed = False
-        print()
-        print("=" * BANNER_WIDTH)
-        print("DRY-RUN FAILED - Cannot connect to CJA API")
-        print("=" * BANNER_WIDTH)
-        return False
+        return _fail_dry_run_api_connection(e)
 
     # Step 3: Validate each data view
     print()

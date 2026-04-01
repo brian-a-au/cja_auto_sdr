@@ -752,6 +752,27 @@ class TestHandleDiffCommand:
         assert has_changes is False
         assert exit_override is None
 
+    @patch("cja_auto_sdr.generator.cjapy")
+    @patch("cja_auto_sdr.generator.configure_cjapy")
+    def test_diff_plain_hint_stays_on_stderr(self, mock_conf, mock_cjapy, capsys):
+        """Hint-bearing diff failures should keep the error and remediation text on stderr."""
+        mock_conf.return_value = (True, "config_path", {})
+        mock_cjapy.CJA.side_effect = KeyError("content")
+
+        success, has_changes, exit_override = handle_diff_command(
+            source_id="dv_a",
+            target_id="dv_b",
+            quiet=True,
+        )
+
+        assert success is False
+        assert has_changes is False
+        assert exit_override is None
+        captured = capsys.readouterr()
+        assert "Failed to compare data views: 'content'" in captured.err
+        assert "AEP API" in captured.err
+        assert captured.out == ""
+
     @patch("cja_auto_sdr.generator.SnapshotManager")
     @patch("cja_auto_sdr.generator.cjapy")
     @patch("cja_auto_sdr.generator.configure_cjapy")

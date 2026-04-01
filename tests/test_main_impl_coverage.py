@@ -1816,6 +1816,38 @@ class TestRunDryRunAPIValidation:
         captured = capsys.readouterr()
         assert "API connection failed" in captured.out
 
+    def test_api_connection_key_error_shows_hint(self, capsys):
+        """KeyError('content') during the step-[2/3] probe should include the remediation hint."""
+        logger = logging.getLogger("test_dry_run_api_keyerror_hint")
+        with (
+            patch("cja_auto_sdr.generator.validate_config_file", return_value=True),
+            patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "config", {})),
+            patch("cja_auto_sdr.generator.cjapy") as mock_cjapy,
+            patch("cja_auto_sdr.generator.make_api_call_with_retry", side_effect=KeyError("content")),
+        ):
+            mock_cjapy.CJA.return_value = MagicMock()
+            result = run_dry_run(["dv_test"], "config.json", logger)
+        assert result is False
+        captured = capsys.readouterr()
+        assert "API connection failed: 'content'" in captured.out
+        assert "AEP API" in captured.out
+
+    def test_api_connection_runtime_auth_error_shows_hint(self, capsys):
+        """HTTP 401/403 text in the fallback branch should still surface the API hint."""
+        logger = logging.getLogger("test_dry_run_api_runtime_hint")
+        with (
+            patch("cja_auto_sdr.generator.validate_config_file", return_value=True),
+            patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "config", {})),
+            patch("cja_auto_sdr.generator.cjapy") as mock_cjapy,
+            patch("cja_auto_sdr.generator.make_api_call_with_retry", side_effect=RuntimeError("HTTP 403 Forbidden")),
+        ):
+            mock_cjapy.CJA.return_value = MagicMock()
+            result = run_dry_run(["dv_test"], "config.json", logger)
+        assert result is False
+        captured = capsys.readouterr()
+        assert "API connection failed: HTTP 403 Forbidden" in captured.out
+        assert "authentication or authorization failed" in captured.out
+
     def test_api_connection_unexpected_runtime_exception(self, capsys):
         """Unexpected runtime exceptions during API probe should still fail gracefully."""
         logger = logging.getLogger("test_dry_run_api_runtime")

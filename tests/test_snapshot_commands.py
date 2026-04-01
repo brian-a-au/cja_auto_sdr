@@ -165,6 +165,7 @@ class TestHandleSnapshotCommand:
         result = handle_snapshot_command(
             data_view_id="dv_123",
             snapshot_file=out_file,
+            quiet=True,
         )
 
         assert result is False
@@ -210,6 +211,7 @@ class TestHandleSnapshotCommand:
         result = handle_snapshot_command(
             data_view_id="dv_123",
             snapshot_file=out_file,
+            quiet=True,
         )
 
         assert result is False
@@ -232,6 +234,26 @@ class TestHandleSnapshotCommand:
         assert result is False
         captured = capsys.readouterr()
         assert "Failed to create snapshot: auth bootstrap failed" in captured.err
+
+    @patch("cja_auto_sdr.generator.cjapy")
+    @patch("cja_auto_sdr.generator.configure_cjapy")
+    def test_snapshot_constructor_hint_stays_on_stderr(self, mock_configure, mock_cjapy, tmp_path, capsys):
+        """Hint-bearing snapshot failures should keep the error and hint together on stderr."""
+        mock_configure.return_value = (True, "config", None)
+        mock_cjapy.CJA.side_effect = KeyError("content")
+
+        out_file = str(tmp_path / "snap.json")
+        result = handle_snapshot_command(
+            data_view_id="dv_123",
+            snapshot_file=out_file,
+            quiet=True,
+        )
+
+        assert result is False
+        captured = capsys.readouterr()
+        assert "Failed to create snapshot: 'content'" in captured.err
+        assert "AEP API" in captured.err
+        assert captured.out == ""
 
     @patch("cja_auto_sdr.generator.cjapy")
     @patch("cja_auto_sdr.generator.configure_cjapy")
@@ -1074,6 +1096,27 @@ class TestHandleDiffSnapshotCommand:
         assert success is False
         captured = capsys.readouterr()
         assert "Failed to compare against snapshot" in captured.err
+
+    @patch("cja_auto_sdr.generator.cjapy")
+    @patch("cja_auto_sdr.generator.configure_cjapy")
+    def test_diff_snapshot_constructor_hint_stays_on_stderr(self, mock_configure, mock_cjapy, tmp_path, capsys):
+        """Hint-bearing diff-snapshot failures should keep stderr together."""
+        mock_configure.return_value = (True, "config", None)
+        mock_cjapy.CJA.side_effect = RuntimeError("HTTP 403 Forbidden")
+
+        snap_file = str(tmp_path / "baseline.json")
+        _write_snapshot_file(snap_file)
+
+        success, _has_changes, _exit_code = handle_diff_snapshot_command(
+            data_view_id="dv_test",
+            snapshot_file=snap_file,
+            quiet=True,
+        )
+
+        assert success is False
+        captured = capsys.readouterr()
+        assert "Failed to compare against snapshot: HTTP 403 Forbidden" in captured.err
+        assert "authentication or authorization failed" in captured.err
 
     @patch("cja_auto_sdr.generator.cjapy")
     @patch("cja_auto_sdr.generator.configure_cjapy")
