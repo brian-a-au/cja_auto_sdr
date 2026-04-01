@@ -72,6 +72,7 @@ def resolve_data_view_names(
     profile: str | None = None,
     match_mode: str = "exact",
     include_diagnostics: bool = False,
+    emit_api_hints: bool = True,
 ):
     """Resolve data view names to IDs while preserving legacy return contracts."""
     generator = _generator_module()
@@ -256,7 +257,7 @@ def resolve_data_view_names(
     except generator.RECOVERABLE_CONFIG_API_EXCEPTIONS as e:
         error_message = f"Failed to resolve data view names: {e!s}"
         logger.error(error_message)
-        generator._print_api_hint(e)
+        generator._print_api_hint(e, enabled=emit_api_hints)
         resolution_diagnostics = generator.NameResolutionDiagnostics(
             error_type="connectivity_error",
             error_message=error_message,
@@ -270,7 +271,7 @@ def resolve_data_view_names(
     except (AttributeError, RuntimeError) as e:
         error_message = f"Failed to resolve data view names (unexpected): {e!s}"
         logger.error(error_message)
-        generator._print_api_hint(e)
+        generator._print_api_hint(e, enabled=emit_api_hints)
         logger.debug("Unexpected error during name resolution", exc_info=True)
         resolution_diagnostics = generator.NameResolutionDiagnostics(
             error_type="connectivity_error",

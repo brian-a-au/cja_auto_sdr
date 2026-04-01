@@ -2591,6 +2591,27 @@ class TestDiscoveryInspectionNameResolution:
         assert "resolver plain log line" not in stderr_output
 
     @patch("cja_auto_sdr.generator._cli_option_specified", _mock_cli_option_specified)
+    @patch("cja_auto_sdr.generator.configure_cjapy", side_effect=KeyError("content"))
+    @patch("cja_auto_sdr.generator.describe_dataview")
+    def test_machine_readable_resolution_hinted_failure_keeps_stderr_json_only(
+        self,
+        mock_fn,
+        _mock_configure,
+        capsys,
+    ):
+        """Hint-bearing resolution failures must not append plain-text guidance to stderr JSON."""
+        with pytest.raises(SystemExit) as exc_info:
+            with patch("cja_auto_sdr.generator.parse_arguments") as mock_pa:
+                mock_pa.return_value = parse_arguments(["--describe-dataview", "Broken View", "--output", "-"])
+                _main_impl(run_state={})
+
+        assert exc_info.value.code == 1
+        mock_fn.assert_not_called()
+        payload = json.loads(capsys.readouterr().err)
+        assert payload["error_type"] == "connectivity_error"
+        assert payload["error"] == "Failed to resolve data view names: 'content'"
+
+    @patch("cja_auto_sdr.generator._cli_option_specified", _mock_cli_option_specified)
     @patch("cja_auto_sdr.generator.prompt_for_selection")
     @patch("cja_auto_sdr.generator.resolve_data_view_names")
     @patch("cja_auto_sdr.generator.describe_dataview")

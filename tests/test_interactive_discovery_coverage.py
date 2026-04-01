@@ -528,6 +528,24 @@ class TestRunListCommand:
         assert "API timeout" in parsed["error"]
 
     @patch("cja_auto_sdr.generator.cjapy")
+    @patch("cja_auto_sdr.generator.configure_cjapy", side_effect=KeyError("content"))
+    def test_machine_readable_hinted_failure_keeps_stderr_json_only(self, _mock_config, _mock_cjapy, capsys):
+        """Hint-bearing discovery failures must not append plain text to stderr JSON."""
+        result = _run_list_command(
+            banner_text="TEST",
+            command_name="test",
+            fetch_and_format=lambda cja, mr: "data",
+            config_file="config.json",
+            output_format="json",
+        )
+        assert result is False
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        payload = json.loads(captured.err)
+        assert payload["error"] == "Failed to connect to CJA API: 'content'"
+        assert payload["error_type"] == "connectivity_error"
+
+    @patch("cja_auto_sdr.generator.cjapy")
     @patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "mock", None))
     def test_attribute_error_from_fetch_is_recoverable(self, _mock_config, mock_cjapy, capsys):
         """AttributeError in fetch callback should return False with a user-facing API error."""

@@ -739,8 +739,16 @@ RECOVERABLE_VALIDATION_EXCEPTIONS: tuple[type[Exception], ...] = VALIDATION_CATC
 RECOVERABLE_STATS_ROW_EXCEPTIONS: tuple[type[Exception], ...] = (Exception,)
 
 
-def _print_api_hint(exc: Exception, *, indent: str = "  ", file=None) -> None:
+def _print_api_hint(
+    exc: Exception,
+    *,
+    indent: str = "  ",
+    file=None,
+    enabled: bool = True,
+) -> None:
     """Print an actionable hint for *exc* if one is available."""
+    if not enabled:
+        return
     hint = api_connection_hint(exc)
     if hint:
         _file = file or sys.stderr
@@ -4348,6 +4356,7 @@ def resolve_data_view_names(
     profile: str | None = None,
     match_mode: str = "exact",
     include_diagnostics: bool = False,
+    emit_api_hints: bool = True,
 ) -> NameResolutionResult | NameResolutionResultWithDiagnostics:
     from cja_auto_sdr.cli.commands.stats import resolve_data_view_names as _impl
 
@@ -4359,6 +4368,7 @@ def resolve_data_view_names(
         profile=profile,
         match_mode=match_mode,
         include_diagnostics=include_diagnostics,
+        emit_api_hints=emit_api_hints,
     )
 
 
@@ -6666,6 +6676,7 @@ def _main_impl(run_state: dict[str, Any] | None = None):
                     profile=getattr(args, "profile", None),
                     match_mode=getattr(args, "name_match", "exact"),
                     include_diagnostics=True,
+                    emit_api_hints=not is_machine_readable_discovery,
                 )
                 resolved_ids, _, resolution_diagnostics = _coerce_name_resolution_result(resolution_result)
                 resolved_name_by_id = resolution_diagnostics.resolved_name_by_id
