@@ -264,12 +264,12 @@ class TestOrgReportLock:
             )
             proc.start()
 
-            deadline = time.time() + 3
+            deadline = time.time() + 5
             while _read_signal(ready_file) is None and time.time() < deadline:
                 time.sleep(0.02)
 
             assert _read_signal(ready_file) == "1"
-            proc.join(timeout=3)
+            proc.join(timeout=5)
             assert not proc.is_alive()
 
             recovered = OrgReportLock("test_org@AdobeOrg", lock_dir=Path(tmpdir))

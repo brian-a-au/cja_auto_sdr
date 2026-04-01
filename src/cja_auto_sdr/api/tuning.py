@@ -127,7 +127,10 @@ class APIWorkerTuner:
                     self._scale_ups += 1
                     self.logger.info(
                         "API tuner: scaling UP %s \u2192 %s workers (avg response: %.0fms < %sms threshold)",
-                        self._current_workers, new_workers, avg_time, self.config.scale_up_threshold_ms,
+                        self._current_workers,
+                        new_workers,
+                        avg_time,
+                        self.config.scale_up_threshold_ms,
                     )
 
             elif avg_time > self.config.scale_down_threshold_ms and self._current_workers > self.config.min_workers:
@@ -136,7 +139,10 @@ class APIWorkerTuner:
                 self._scale_downs += 1
                 self.logger.info(
                     "API tuner: scaling DOWN %s \u2192 %s workers (avg response: %.0fms > %sms threshold)",
-                    self._current_workers, new_workers, avg_time, self.config.scale_down_threshold_ms,
+                    self._current_workers,
+                    new_workers,
+                    avg_time,
+                    self.config.scale_down_threshold_ms,
                 )
 
             if new_workers is not None:

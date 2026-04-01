@@ -596,7 +596,9 @@ class OrgComponentAnalyzer:
             if pattern:
                 before = len(filtered)
                 filtered = [dv for dv in filtered if not pattern.search(dv.get("name", ""))]
-                self.logger.info("Exclude '%s' removed %s data views", self.config.exclude_pattern, before - len(filtered))
+                self.logger.info(
+                    "Exclude '%s' removed %s data views", self.config.exclude_pattern, before - len(filtered)
+                )
 
         # Track total available before sampling/limiting
         total_available = len(filtered)
