@@ -29,7 +29,7 @@ from cja_auto_sdr.core.exceptions import (
 _LEGACY_TEMP_CONFIG_PREFIXES = ("cja_env_config_", "cja_profile_test_")
 _LEGACY_TEMP_CONFIG_SUFFIX = ".json"
 _LEGACY_TEMP_CONFIG_MAX_AGE_SECONDS = 3600.0
-_temp_cleanup_done = False
+_temp_cleanup_next_check_monotonic = 0.0
 CredentialConfigValue = str | Sequence[str] | None
 
 
@@ -54,10 +54,15 @@ def _bootstrap_dotenv(logger: logging.Logger) -> None:
         logger.debug("Failed to load .env via python-dotenv: %s", e)
 
 
-def _cleanup_stale_temp_configs(logger: logging.Logger) -> None:
-    """Remove leftover temp credential files from older releases."""
+def _cleanup_stale_temp_configs(logger: logging.Logger) -> float:
+    """Remove leftover temp credential files from older releases.
+
+    Returns the number of seconds to wait before the next cleanup scan.
+    """
     temp_dir = Path(tempfile.gettempdir())
     now = time.time()
+    next_scan_in = _LEGACY_TEMP_CONFIG_MAX_AGE_SECONDS
+    retry_immediately = False
 
     try:
         candidates = set()
@@ -65,7 +70,7 @@ def _cleanup_stale_temp_configs(logger: logging.Logger) -> None:
             candidates.update(temp_dir.glob(f"{prefix}*{_LEGACY_TEMP_CONFIG_SUFFIX}"))
     except OSError as e:
         logger.debug("Failed to scan temp directory for stale config files: %s", e)
-        return
+        return 0.0
 
     removed = 0
     for candidate in candidates:
@@ -74,15 +79,20 @@ def _cleanup_stale_temp_configs(logger: logging.Logger) -> None:
         except OSError:
             continue
         if age_seconds < _LEGACY_TEMP_CONFIG_MAX_AGE_SECONDS:
+            next_scan_in = min(next_scan_in, _LEGACY_TEMP_CONFIG_MAX_AGE_SECONDS - age_seconds)
             continue
         try:
             candidate.unlink()
         except OSError:
+            retry_immediately = True
             continue
         removed += 1
 
     if removed:
         logger.debug("Removed %s stale temp credential file(s) from previous runs", removed)
+    if retry_immediately:
+        return 0.0
+    return max(0.0, next_scan_in)
 
 
 def _build_cjapy_config_kwargs(credentials: Mapping[str, CredentialConfigValue]) -> dict[str, str | None]:
@@ -109,10 +119,11 @@ def _config_from_env(credentials: dict[str, str], logger: logging.Logger):
         credentials: Dictionary of credentials from environment
         logger: Logger instance
     """
-    global _temp_cleanup_done  # noqa: PLW0603
-    if not _temp_cleanup_done:
-        _cleanup_stale_temp_configs(logger)
-        _temp_cleanup_done = True
+    global _temp_cleanup_next_check_monotonic  # noqa: PLW0603
+    now = time.monotonic()
+    if now >= _temp_cleanup_next_check_monotonic:
+        next_scan_in = _cleanup_stale_temp_configs(logger)
+        _temp_cleanup_next_check_monotonic = now + max(0.0, next_scan_in)
     cjapy.configure(**_build_cjapy_config_kwargs(credentials))
     logger.debug("Configured cjapy directly from in-memory credentials")
 
