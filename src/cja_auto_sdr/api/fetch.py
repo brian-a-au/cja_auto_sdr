@@ -215,7 +215,7 @@ class ParallelAPIFetcher:
         Wraps make_api_call_with_retry with timing measurement and tuner feedback.
         Only records timing on successful calls so retries don't inflate metrics.
         """
-        start_time = time.time()
+        start_time = time.perf_counter()
         result = make_api_call_with_retry(
             api_func,
             *args,
@@ -226,7 +226,7 @@ class ParallelAPIFetcher:
         )
         # Record response time only on success to avoid retry delays inflating metrics
         if self.tuner is not None:
-            duration_ms = (time.time() - start_time) * 1000
+            duration_ms = (time.perf_counter() - start_time) * 1000
             new_workers = self.tuner.record_response_time(duration_ms)
             if new_workers is not None:
                 self.max_workers = new_workers

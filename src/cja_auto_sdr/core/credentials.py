@@ -127,7 +127,7 @@ class CredentialLoader(ABC):
                 return filter_credentials(creds)
             return None
         except (OSError, json.JSONDecodeError) as e:
-            logger.debug(f"Failed to load credentials from {self.source_name}: {e}")
+            logger.debug("Failed to load credentials from %s: %s", self.source_name, e)
             return None
 
     @abstractmethod
@@ -300,7 +300,7 @@ class CredentialResolver:
         # Import here to avoid circular dependency — profile functions are still in generator.py
         from cja_auto_sdr.generator import load_profile_credentials
 
-        self.logger.info(f"Loading credentials from profile '{profile_name}'...")
+        self.logger.info("Loading credentials from profile '%s'...", profile_name)
         try:
             creds = load_profile_credentials(profile_name, self.logger)
             if creds:
@@ -311,9 +311,9 @@ class CredentialResolver:
                     source=f"profile:{profile_name}",
                 )
                 if is_valid:
-                    self.logger.info(f"Using credentials from profile '{profile_name}'")
+                    self.logger.info("Using credentials from profile '%s'", profile_name)
                     return creds, f"profile:{profile_name}"
-                self.logger.warning(f"Profile '{profile_name}' credentials have issues: {issues}")
+                self.logger.warning("Profile '%s' credentials have issues: %s", profile_name, issues)
         except ProfileNotFoundError as e:
             raise CredentialSourceError(
                 str(e),
@@ -364,7 +364,7 @@ class CredentialResolver:
         config_path = Path(config_file)
 
         if not config_path.exists():
-            self.logger.debug(f"Config file not found: {config_path}")
+            self.logger.debug("Config file not found: %s", config_path)
             return None, ""
 
         loader = JsonFileCredentialLoader(config_path)
@@ -378,7 +378,7 @@ class CredentialResolver:
                 source=f"config:{config_path.name}",
             )
             if is_valid:
-                self.logger.info(f"Using credentials from {config_file}")
+                self.logger.info("Using credentials from %s", config_file)
                 return creds, f"config:{config_path.name}"
             # Config file exists but has issues
             raise CredentialSourceError(
@@ -395,7 +395,7 @@ class CredentialResolver:
         self.logger.warning("=" * BANNER_WIDTH)
         self.logger.warning("NOTICE: Both environment variables AND config file detected")
         self.logger.warning("  Environment variables: ORG_ID, CLIENT_ID, SECRET, etc.")
-        self.logger.warning(f"  Config file: {config_path}")
+        self.logger.warning("  Config file: %s", config_path)
         self.logger.warning("  Using: ENVIRONMENT VARIABLES (takes precedence)")
         self.logger.warning("")
         self.logger.warning("To avoid confusion:")
@@ -448,7 +448,7 @@ def validate_env_credentials(credentials: dict[str, str], logger: logging.Logger
     # Use CREDENTIAL_FIELDS for required fields (single source of truth)
     for field in CREDENTIAL_FIELDS["required"]:
         if field not in credentials or not credentials[field].strip():
-            logger.debug(f"Missing required environment variable: {ENV_VAR_MAPPING.get(field, field)}")
+            logger.debug("Missing required environment variable: %s", ENV_VAR_MAPPING.get(field, field))
             return False
 
     # Use unified validation function
