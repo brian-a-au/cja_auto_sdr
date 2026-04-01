@@ -175,7 +175,7 @@ class OrgReportCache:
                 with open(self.cache_file, encoding="utf-8") as f:
                     self._cache = json.load(f)
             except (OSError, json.JSONDecodeError) as e:
-                self.logger.warning(f"Failed to load org report cache from {self.cache_file}: {e}")
+                self.logger.warning("Failed to load org report cache from %s: %s", self.cache_file, e)
                 self._cache = {}
 
     def _save_cache(self) -> None:
@@ -184,7 +184,7 @@ class OrgReportCache:
         try:
             write_json_atomic(self.cache_file, self._cache, indent=2, default=str)
         except OSError as e:
-            self.logger.warning(f"Failed to save org report cache to {self.cache_file}: {e}")
+            self.logger.warning("Failed to save org report cache to %s: %s", self.cache_file, e)
 
     @staticmethod
     def _sanitize_org_id(org_id: str | None) -> str:

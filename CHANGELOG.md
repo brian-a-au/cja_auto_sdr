@@ -7,13 +7,22 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.4] — 2026-04-01
+
+### Changed
+- Completed monotonic timing hardening: moved the remaining non-`generator.py` wall-clock duration path in `ParallelAPIFetcher._timed_api_call()` to `time.perf_counter()`.
+- Converted remaining eager f-string logging to lazy `%s`-style interpolation in startup/config/report-cache modules (`config_validation.py`, `credentials.py`, `profiles.py`, `stats.py`, `org/cache.py`).
+
+### Fixed
+- Corrected `v3.5.3` changelog entry: temp-file cleanup in `_config_from_env()` uses throttled monotonic rechecks, not a permanent one-shot guard.
+
 ## [3.5.3] — 2026-04-01
 
 ### Changed
 - Replaced wall-clock `time.time()` with `time.monotonic()` / `time.perf_counter()` for all in-process elapsed-time, cooldown, and TTL bookkeeping in circuit breaker, API tuner, validation caches, performance tracker, batch processor, CLI execution, and org analyzer.
 - Converted eager f-string logging to lazy `%s`-style interpolation across hot-path runtime modules outside `generator.py` (`api/`, `core/`, `pipeline/`, `org/`).
 - Extracted shared `_unique_error_key()` helper for cache fallback key generation using monotonic nanosecond resolution.
-- Added one-shot guard for legacy temp-file cleanup in `_config_from_env()` to avoid repeated `/tmp` scans.
+- Added throttled monotonic rechecks for legacy temp-file cleanup in `_config_from_env()` to avoid repeated `/tmp` scans while still periodically cleaning up stale temp configs.
 
 ## [3.5.2] — 2026-03-31
 

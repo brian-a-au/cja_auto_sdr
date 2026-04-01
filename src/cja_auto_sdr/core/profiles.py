@@ -169,11 +169,11 @@ def load_profile_credentials(profile_name: str, logger: logging.Logger) -> dict[
         )
 
     if json_source and env_credentials:
-        logger.debug(f"Profile '{profile_name}': merged config.json with .env overrides")
+        logger.debug("Profile '%s': merged config.json with .env overrides", profile_name)
     elif json_source:
-        logger.debug(f"Profile '{profile_name}': loaded from config.json")
+        logger.debug("Profile '%s': loaded from config.json", profile_name)
     else:
-        logger.debug(f"Profile '{profile_name}': loaded from .env")
+        logger.debug("Profile '%s': loaded from .env", profile_name)
 
     return credentials
 

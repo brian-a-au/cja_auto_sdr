@@ -537,6 +537,97 @@ class TestParallelAPIFetcherErrors:
             result = fetcher._timed_api_call(lambda: None, operation_name="test")
         assert result == "ok"
 
+    def test_timed_api_call_uses_monotonic_clock(self):
+        """_timed_api_call measures duration with perf_counter, not wall clock."""
+        from cja_auto_sdr.api.fetch import ParallelAPIFetcher
+        from cja_auto_sdr.core.config import APITuningConfig
+        from cja_auto_sdr.core.perf import PerformanceTracker
+
+        logger = _make_logger()
+        perf = PerformanceTracker(logger=logger)
+        cja = MagicMock()
+        config = APITuningConfig(min_workers=1, max_workers=5, sample_window=1, cooldown_seconds=0)
+        fetcher = ParallelAPIFetcher(
+            cja=cja, logger=logger, perf_tracker=perf, max_workers=3, quiet=True, tuning_config=config
+        )
+        # Simulate a deterministic 0.05s elapsed via patched perf_counter
+        clock = iter([100.0, 100.05])
+        with (
+            patch("cja_auto_sdr.api.fetch.time.perf_counter", side_effect=clock),
+            patch("cja_auto_sdr.api.fetch.make_api_call_with_retry", return_value="ok"),
+        ):
+            result = fetcher._timed_api_call(lambda: None, operation_name="test")
+        assert result == "ok"
+        # Tuner should have received ~50ms
+        stats = fetcher.get_tuner_statistics()
+        assert stats is not None
+        assert stats["total_requests"] >= 1
+
+    def test_timed_api_call_nonnegative_even_if_clock_wraps(self):
+        """Duration stays non-negative even with unusual perf_counter values."""
+        from cja_auto_sdr.api.fetch import ParallelAPIFetcher
+        from cja_auto_sdr.core.config import APITuningConfig
+        from cja_auto_sdr.core.perf import PerformanceTracker
+
+        logger = _make_logger()
+        perf = PerformanceTracker(logger=logger)
+        cja = MagicMock()
+        config = APITuningConfig(min_workers=1, max_workers=5, sample_window=1, cooldown_seconds=0)
+        fetcher = ParallelAPIFetcher(
+            cja=cja, logger=logger, perf_tracker=perf, max_workers=3, quiet=True, tuning_config=config
+        )
+        # perf_counter returns identical values → 0ms duration (non-negative)
+        clock = iter([42.0, 42.0])
+        with (
+            patch("cja_auto_sdr.api.fetch.time.perf_counter", side_effect=clock),
+            patch("cja_auto_sdr.api.fetch.make_api_call_with_retry", return_value="ok"),
+        ):
+            result = fetcher._timed_api_call(lambda: None, operation_name="test")
+        assert result == "ok"
+
+    def test_timed_api_call_no_tuner(self):
+        """_timed_api_call works without a tuner (no timing recorded)."""
+        from cja_auto_sdr.api.fetch import ParallelAPIFetcher
+        from cja_auto_sdr.core.perf import PerformanceTracker
+
+        logger = _make_logger()
+        perf = PerformanceTracker(logger=logger)
+        cja = MagicMock()
+        fetcher = ParallelAPIFetcher(
+            cja=cja, logger=logger, perf_tracker=perf, max_workers=3, quiet=True
+        )
+        assert fetcher.tuner is None
+        with patch("cja_auto_sdr.api.fetch.make_api_call_with_retry", return_value="data"):
+            result = fetcher._timed_api_call(lambda: None, operation_name="test")
+        assert result == "data"
+
+    def test_timed_api_call_max_workers_update(self):
+        """_timed_api_call updates max_workers only when tuner returns a new value."""
+        from cja_auto_sdr.api.fetch import ParallelAPIFetcher
+        from cja_auto_sdr.core.config import APITuningConfig
+        from cja_auto_sdr.core.perf import PerformanceTracker
+
+        logger = _make_logger()
+        perf = PerformanceTracker(logger=logger)
+        cja = MagicMock()
+        config = APITuningConfig(min_workers=1, max_workers=5, sample_window=1, cooldown_seconds=0)
+        fetcher = ParallelAPIFetcher(
+            cja=cja, logger=logger, perf_tracker=perf, max_workers=3, quiet=True, tuning_config=config
+        )
+        # Force the tuner to return a new worker count
+        fetcher.tuner.record_response_time = MagicMock(return_value=4)
+        clock = iter([0.0, 0.1])
+        with (
+            patch("cja_auto_sdr.api.fetch.time.perf_counter", side_effect=clock),
+            patch("cja_auto_sdr.api.fetch.make_api_call_with_retry", return_value="ok"),
+        ):
+            fetcher._timed_api_call(lambda: None, operation_name="test")
+        assert fetcher.max_workers == 4
+        fetcher.tuner.record_response_time.assert_called_once()
+        # Duration should be ~100ms
+        actual_ms = fetcher.tuner.record_response_time.call_args[0][0]
+        assert 99.0 <= actual_ms <= 101.0
+
 
 # ===================================================================
 # resilience.py — _parse_env_numeric and _effective_retry_config

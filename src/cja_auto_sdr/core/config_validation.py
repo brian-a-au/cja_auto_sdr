@@ -133,27 +133,27 @@ class ConfigValidator:
             valid, error = cls.validate_org_id(credentials["org_id"])
             if not valid:
                 issues.append(error)
-                logger.warning(f"Configuration issue: {error}")
+                logger.warning("Configuration issue: %s", error)
 
         # Validate CLIENT_ID
         if "client_id" in credentials:
             valid, error = cls.validate_client_id(credentials["client_id"])
             if not valid:
                 issues.append(error)
-                logger.warning(f"Configuration issue: {error}")
+                logger.warning("Configuration issue: %s", error)
 
         # Validate SECRET
         if "secret" in credentials:
             valid, error = cls.validate_secret(credentials["secret"])
             if not valid:
                 issues.append(error)
-                logger.warning(f"Configuration issue: {error}")
+                logger.warning("Configuration issue: %s", error)
 
         # Validate SCOPES (warning only - not strictly required)
         if "scopes" in credentials:
             valid, error, _missing = cls.validate_scopes(credentials["scopes"])
             if not valid:
-                logger.warning(f"Configuration warning: {error}")
+                logger.warning("Configuration warning: %s", error)
                 # Don't add to issues - scopes are a warning, not an error
 
         return issues
@@ -195,14 +195,15 @@ def validate_credentials(
     # Check for scopes (warning, not error)
     if "scopes" not in credentials or not credentials.get("scopes", "").strip():
         logger.warning(
-            f"Credentials from {source} missing OAuth scopes - "
+            "Credentials from %s missing OAuth scopes - "
             "recommend setting scopes (copy from Adobe Developer Console)",
+            source,
         )
 
     # Filter credentials to known fields only
     unknown_fields = set(credentials.keys()) - CREDENTIAL_FIELDS["all"]
     if unknown_fields:
-        logger.debug(f"Ignoring unknown fields from {source}: {', '.join(unknown_fields)}")
+        logger.debug("Ignoring unknown fields from %s: %s", source, ", ".join(unknown_fields))
 
     is_valid = (
         len(issues) == 0
@@ -212,7 +213,7 @@ def validate_credentials(
 
     if issues:
         for issue in issues:
-            logger.warning(f"Credential validation ({source}): {issue}")
+            logger.warning("Credential validation (%s): %s", source, issue)
 
     return is_valid, issues
 
@@ -243,7 +244,7 @@ def validate_config_file(config_file: str | Path, logger: logging.Logger) -> boo
     validation_warnings = []
 
     try:
-        logger.info(f"Validating configuration file: {config_file}")
+        logger.info("Validating configuration file: %s", config_file)
 
         config_path = Path(config_file)
 
@@ -258,7 +259,7 @@ def validate_config_file(config_file: str | Path, logger: logging.Logger) -> boo
 
         # Check if file is readable
         if not config_path.is_file():
-            logger.error(f"'{config_file}' is not a valid file")
+            logger.error("'%s' is not a valid file", config_file)
             return False
 
         # Validate JSON structure
@@ -333,7 +334,7 @@ def validate_config_file(config_file: str | Path, logger: logging.Logger) -> boo
         if validation_errors:
             logger.error("Configuration validation FAILED:")
             for error in validation_errors:
-                logger.error(f"  - {error}")
+                logger.error("  - %s", error)
             logger.error("")
 
             # Provide enhanced error message if missing credentials
@@ -354,15 +355,15 @@ def validate_config_file(config_file: str | Path, logger: logging.Logger) -> boo
         if validation_warnings:
             logger.warning("Configuration validation warnings:")
             for warning in validation_warnings:
-                logger.warning(f"  - {warning}")
+                logger.warning("  - %s", warning)
 
         logger.info("Configuration file validated successfully")
         return True
 
     except PermissionError as e:
-        logger.error(f"Permission denied reading config file: {e}")
+        logger.error("Permission denied reading config file: %s", e)
         logger.error("Check file permissions for the configuration file")
         return False
     except (OSError, AttributeError, TypeError, ValueError) as e:
-        logger.error(f"Unexpected error validating config file ({type(e).__name__}): {e!s}")
+        logger.error("Unexpected error validating config file (%s): %s", type(e).__name__, e)
         return False

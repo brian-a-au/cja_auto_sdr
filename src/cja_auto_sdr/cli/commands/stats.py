@@ -89,7 +89,7 @@ def resolve_data_view_names(
     unresolved_names: list[str] = []
 
     try:
-        logger.info(f"Resolving data view identifiers: {identifiers}")
+        logger.info("Resolving data view identifiers: %s", identifiers)
         success, source, credentials = generator.configure_cjapy(profile, config_file, logger)
         if not success:
             error_message = f"Failed to configure credentials: {source}"

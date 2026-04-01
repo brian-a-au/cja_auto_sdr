@@ -276,7 +276,8 @@ class TestValidateCredentials:
         }
         _is_valid, _issues = validate_credentials(credentials, logger, strict=False, source="test")
         logger.debug.assert_called()
-        debug_msg = logger.debug.call_args[0][0]
+        debug_call_args = logger.debug.call_args[0]
+        debug_msg = debug_call_args[0] % debug_call_args[1:]
         assert "unknown_field" in debug_msg or "another_unknown" in debug_msg
 
     def test_strict_mode_fails_on_validation_issues(self):
