@@ -224,7 +224,7 @@ def interactive_select_dataviews(config_file: str = "config.json", profile: str 
         return []
     except generator.RECOVERABLE_COMMAND_HANDLER_EXCEPTIONS as e:
         print(ConsoleColors.error(f"ERROR: Failed to connect to CJA API: {e!s}"))
-        generator._print_api_hint(e)
+        generator._print_api_hint(e, file=sys.stdout)
         return []
 
 
@@ -390,7 +390,7 @@ def interactive_wizard(config_file: str = "config.json", profile: str | None = N
         return None
     except generator.RECOVERABLE_COMMAND_HANDLER_EXCEPTIONS as e:
         print(ConsoleColors.error(f"ERROR: Failed to connect to CJA API: {e!s}"))
-        generator._print_api_hint(e)
+        generator._print_api_hint(e, file=sys.stdout)
         return None
 
     print()

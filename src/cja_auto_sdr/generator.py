@@ -5588,7 +5588,7 @@ def run_org_report(
 
     except RECOVERABLE_COMMAND_HANDLER_EXCEPTIONS as e:
         _status_print(ConsoleColors.error(f"ERROR: Org report failed: {e!s}"))
-        _print_api_hint(e)
+        _print_api_hint(e, file=status_stream)
         if isinstance(e, RECOVERABLE_ORG_REPORT_EXCEPTIONS):
             logger.exception("Org report error")
         else:

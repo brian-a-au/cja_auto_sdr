@@ -279,7 +279,14 @@ def api_connection_hint(exc: Exception) -> str | None:
             f"Hint: API response missing expected key '{key}'.\n"
             "      Check your OAuth credentials and Developer Console project configuration."
         )
-    status = getattr(exc, "status_code", None)
+    from cja_auto_sdr.core.discovery_exceptions import coerce_http_status_code, extract_http_status_codes
+
+    status = next((code for code in extract_http_status_codes(exc) if code in (401, 403)), None)
+    if status is None:
+        message_status = coerce_http_status_code(str(exc))
+        if message_status in (401, 403):
+            status = message_status
+
     if status in (401, 403):
         return (
             f"Hint: Received HTTP {status} — authentication or authorization failed.\n"

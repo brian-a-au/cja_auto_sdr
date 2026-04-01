@@ -658,6 +658,31 @@ class TestApiConnectionHint:
         assert hint is not None
         assert "HTTP 403" in hint
 
+    def test_wrapped_response_status_code_returns_auth_hint(self):
+        from cja_auto_sdr.cli.commands.config import _api_connection_hint
+
+        exc = Exception("Unauthorized wrapper")
+        exc.response = {"error": {"statusCode": "401"}}  # type: ignore[attr-defined]
+        hint = _api_connection_hint(exc)
+        assert hint is not None
+        assert "HTTP 401" in hint
+
+    def test_status_attribute_string_returns_auth_hint(self):
+        from cja_auto_sdr.cli.commands.config import _api_connection_hint
+
+        exc = Exception("wrapped auth failure")
+        exc.status = "HTTP 403 Forbidden"  # type: ignore[attr-defined]
+        hint = _api_connection_hint(exc)
+        assert hint is not None
+        assert "HTTP 403" in hint
+
+    def test_exception_text_http_status_returns_auth_hint(self):
+        from cja_auto_sdr.cli.commands.config import _api_connection_hint
+
+        hint = _api_connection_hint(RuntimeError("Request failed with HTTP 401 Unauthorized"))
+        assert hint is not None
+        assert "HTTP 401" in hint
+
     def test_generic_exception_returns_none(self):
         from cja_auto_sdr.cli.commands.config import _api_connection_hint
 
