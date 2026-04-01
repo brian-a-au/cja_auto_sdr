@@ -28,27 +28,11 @@ Before starting, ensure you have:
 
 - [ ] **Adobe CJA Access** - Access to Adobe CJA with at least one Data View configured
 - [ ] **Adobe Developer Console Access** - Permission to create API integrations
-- [ ] **Python 3.14+** - Check with `python3 --version` ([download Python](https://www.python.org/downloads/) if needed)
+- [ ] **uv package manager** (recommended) - Install from [astral.sh/uv](https://docs.astral.sh/uv/) (see [Step 2.1](#21-install-uv-package-manager) below). `uv` automatically manages Python for you — no separate Python install needed.
 - [ ] **Terminal/Command Line** - Basic familiarity with running commands ([terminal basics guide](https://developer.mozilla.org/en-US/docs/Learn/Tools_and_testing/Understanding_client-side_tools/Command_line))
 - [ ] **20 minutes** - Most time is spent on Adobe Developer Console setup
 
-### Verify Python Installation
-
-**macOS/Linux:**
-```bash
-$ python3 --version
-Python 3.14.x
-```
-
-**Windows (PowerShell):**
-```powershell
-> python --version
-Python 3.14.x
-```
-
-> **Note:** On macOS and Linux, use `python3` to ensure you're using Python 3. On Windows, the command is typically just `python`. You can also use `py --version` on Windows if the Python Launcher is installed.
-
-If Python isn't installed or is an older version, visit [python.org](https://www.python.org/downloads/) to download the latest version.
+> **Can't install uv?** You can use pip instead — you'll need Python 3.14+ installed manually ([download Python](https://www.python.org/downloads/)). See the [pip-based installation instructions](INSTALLATION.md#option-4-legacy-pip-with-virtual-environment) for the alternative workflow.
 
 ---
 
@@ -195,6 +179,7 @@ Installed 15 packages in 0.8s
 ```
 
 This command:
+- Downloads the required Python version automatically (if not already present)
 - Creates a [virtual environment](https://realpython.com/python-virtual-environments-a-primer/) in `.venv/` (isolates project dependencies)
 - Installs all required packages
 - Installs the `cja_auto_sdr` command
@@ -212,15 +197,14 @@ cja_auto_sdr 3.5.4
 
 ### Running Commands
 
-You have three equivalent options:
+You have two equivalent options:
 
 | Method | Command | Notes |
 |--------|---------|-------|
-| **uv run** | `uv run cja_auto_sdr ...` | Works immediately on macOS/Linux, may have issues on Windows |
+| **uv run** (recommended) | `uv run cja_auto_sdr ...` | No venv activation needed; works immediately on macOS/Linux |
 | **Activated venv** | `cja_auto_sdr ...` | After activating: `source .venv/bin/activate` (Unix) or `.venv\Scripts\activate` (Windows) |
-| **Direct script** | `cja_auto_sdr ...` | Most reliable on Windows |
 
-This guide uses `uv run`. Windows users should substitute with `cja_auto_sdr`. The command examples below omit the prefix for brevity.
+This guide uses `uv run` for all examples. Windows users who encounter issues with `uv run` should activate the venv and use `cja_auto_sdr` directly instead (see [Windows troubleshooting](#windows-uv-run-command-doesnt-work)).
 
 **Alternative: Manual activation**
 
@@ -548,7 +532,7 @@ Generating Excel file...
 ============================================================
 ```
 
-### 5.3 Locate Your Output
+### 5.4 Locate Your Output
 
 The generated file is in the current directory:
 
