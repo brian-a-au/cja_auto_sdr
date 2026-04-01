@@ -11,7 +11,6 @@ Validates that SharedValidationCache:
 8. Properly shuts down Manager resources
 """
 
-import time
 from concurrent.futures import ProcessPoolExecutor
 from unittest.mock import patch
 
@@ -31,6 +30,16 @@ def _shared_cache_processpool_worker(cache):
             cache.put(df, "Metrics", ["id"], ["id"], [{"source": "worker"}], cache_key)
             result, _ = cache.get(df, "Metrics", ["id"], ["id"])
         return {"status": "ok", "result": result, "stats": cache.get_statistics()}
+    except Exception as exc:
+        return {"status": "error", "error": f"{type(exc).__name__}: {exc}"}
+
+
+def _shared_cache_touch_worker(cache, item_id):
+    """Worker helper that touches a cached key to refresh its shared recency."""
+    df = pd.DataFrame({"id": [item_id]})
+    try:
+        result, _ = cache.get(df, "Metrics", ["id"], ["id"])
+        return {"status": "ok", "hit": result is not None, "stats": cache.get_statistics()}
     except Exception as exc:
         return {"status": "error", "error": f"{type(exc).__name__}: {exc}"}
 
@@ -258,6 +267,56 @@ class TestSharedValidationCacheEviction:
 
         cache.shutdown()
 
+    def test_access_recency_ignores_wall_clock_jumps(self):
+        """LRU recency should follow monotonic access order even if wall time jumps backward."""
+        wall_now = [1000.0]
+        monotonic_now = [10.0]
+
+        def mock_time():
+            return wall_now[0]
+
+        def mock_monotonic():
+            return monotonic_now[0]
+
+        with patch("cja_auto_sdr.api.cache.time") as mock_time_module:
+            mock_time_module.time = mock_time
+            mock_time_module.monotonic = mock_monotonic
+            mock_time_module.monotonic_ns = lambda: int(monotonic_now[0] * 1e9)
+            cache = SharedValidationCache(max_size=2, ttl_seconds=3600)
+
+            try:
+                df1 = pd.DataFrame({"id": ["a"]})
+                df2 = pd.DataFrame({"id": ["b"]})
+                df3 = pd.DataFrame({"id": ["c"]})
+
+                _, key1 = cache.get(df1, "Metrics", ["id"], ["id"])
+                cache.put(df1, "Metrics", ["id"], ["id"], [{"v": 1}], key1)
+
+                wall_now[0] = 1001.0
+                monotonic_now[0] = 20.0
+                _, key2 = cache.get(df2, "Metrics", ["id"], ["id"])
+                cache.put(df2, "Metrics", ["id"], ["id"], [{"v": 2}], key2)
+
+                # Wall clock jumps backward, but monotonic access ordering keeps advancing.
+                wall_now[0] = 10.0
+                monotonic_now[0] = 30.0
+                cache.get(df1, "Metrics", ["id"], ["id"])
+
+                wall_now[0] = 5.0
+                monotonic_now[0] = 40.0
+                _, key3 = cache.get(df3, "Metrics", ["id"], ["id"])
+                cache.put(df3, "Metrics", ["id"], ["id"], [{"v": 3}], key3)
+
+                result1, _ = cache.get(df1, "Metrics", ["id"], ["id"])
+                result2, _ = cache.get(df2, "Metrics", ["id"], ["id"])
+                result3, _ = cache.get(df3, "Metrics", ["id"], ["id"])
+
+                assert result1 is not None
+                assert result2 is None
+                assert result3 is not None
+            finally:
+                cache.shutdown()
+
     def test_put_defers_full_scans_until_capacity_pressure(self):
         """New keys below capacity should not trigger prune/reconcile full scans."""
         cache = SharedValidationCache(max_size=3, ttl_seconds=3600)
@@ -292,11 +351,13 @@ class TestSharedValidationCacheEviction:
         """Reconciliation should be skipped if expiration pruning already frees capacity."""
         fake_now = [1000000.0]
 
-        def mock_time():
+        def mock_monotonic():
             return fake_now[0]
 
         with patch("cja_auto_sdr.api.cache.time") as mock_time_module:
-            mock_time_module.time = mock_time
+            mock_time_module.time = mock_monotonic
+            mock_time_module.monotonic = mock_monotonic
+            mock_time_module.monotonic_ns = lambda: int(fake_now[0] * 1e9)
             cache = SharedValidationCache(max_size=2, ttl_seconds=1)
 
             try:
@@ -389,25 +450,37 @@ class TestSharedValidationCacheTTL:
     """Test TTL expiration behavior"""
 
     def test_expires_after_ttl(self, sample_metrics_df):
-        """Entries should expire after TTL"""
-        cache = SharedValidationCache(max_size=100, ttl_seconds=0.1)
+        """Entries should expire by monotonic elapsed time even if wall time jumps."""
+        wall_now = [1000.0]
+        monotonic_now = [10.0]
 
-        # Add entry
-        _, key = cache.get(sample_metrics_df, "Metrics", ["id"], ["id"])
-        cache.put(sample_metrics_df, "Metrics", ["id"], ["id"], [{"test": 1}], key)
+        def mock_time():
+            return wall_now[0]
 
-        # Should hit immediately
-        result1, _ = cache.get(sample_metrics_df, "Metrics", ["id"], ["id"])
-        assert result1 is not None
+        def mock_monotonic():
+            return monotonic_now[0]
 
-        # Wait for TTL
-        time.sleep(0.15)
+        with patch("cja_auto_sdr.api.cache.time") as mock_time_module:
+            mock_time_module.time = mock_time
+            mock_time_module.monotonic = mock_monotonic
+            mock_time_module.monotonic_ns = lambda: int(monotonic_now[0] * 1e9)
+            cache = SharedValidationCache(max_size=100, ttl_seconds=1)
 
-        # Should miss after TTL
-        result2, _ = cache.get(sample_metrics_df, "Metrics", ["id"], ["id"])
-        assert result2 is None
+            try:
+                _, key = cache.get(sample_metrics_df, "Metrics", ["id"], ["id"])
+                cache.put(sample_metrics_df, "Metrics", ["id"], ["id"], [{"test": 1}], key)
 
-        cache.shutdown()
+                wall_now[0] = 2000.0
+                monotonic_now[0] = 10.5
+                result1, _ = cache.get(sample_metrics_df, "Metrics", ["id"], ["id"])
+                assert result1 is not None
+
+                wall_now[0] = 1.0
+                monotonic_now[0] = 11.2
+                result2, _ = cache.get(sample_metrics_df, "Metrics", ["id"], ["id"])
+                assert result2 is None
+            finally:
+                cache.shutdown()
 
 
 class TestSharedValidationCacheStatistics:
@@ -526,6 +599,39 @@ class TestSharedValidationCacheSerialization:
             assert parent_stats["size"] == 1
             assert parent_stats["hits"] >= 1
             assert parent_stats["misses"] >= 1
+        finally:
+            cache.shutdown()
+
+    def test_worker_access_refreshes_lru_before_parent_eviction(self):
+        """A worker-process hit should keep that key hot for the parent's next eviction."""
+        cache = SharedValidationCache(max_size=2, ttl_seconds=3600)
+        df1 = pd.DataFrame({"id": ["a"]})
+        df2 = pd.DataFrame({"id": ["b"]})
+        df3 = pd.DataFrame({"id": ["c"]})
+
+        try:
+            _, key1 = cache.get(df1, "Metrics", ["id"], ["id"])
+            cache.put(df1, "Metrics", ["id"], ["id"], [{"v": 1}], key1)
+
+            _, key2 = cache.get(df2, "Metrics", ["id"], ["id"])
+            cache.put(df2, "Metrics", ["id"], ["id"], [{"v": 2}], key2)
+
+            with ProcessPoolExecutor(max_workers=1) as executor:
+                output = executor.submit(_shared_cache_touch_worker, cache, "a").result(timeout=30)
+
+            assert output["status"] == "ok", output.get("error", "worker failed")
+            assert output["hit"] is True
+
+            _, key3 = cache.get(df3, "Metrics", ["id"], ["id"])
+            cache.put(df3, "Metrics", ["id"], ["id"], [{"v": 3}], key3)
+
+            result1, _ = cache.get(df1, "Metrics", ["id"], ["id"])
+            result2, _ = cache.get(df2, "Metrics", ["id"], ["id"])
+            result3, _ = cache.get(df3, "Metrics", ["id"], ["id"])
+
+            assert result1 is not None
+            assert result2 is None
+            assert result3 is not None
         finally:
             cache.shutdown()
 

@@ -18,12 +18,12 @@ class PerformanceTracker:
 
     def start(self, operation_name: str):
         """Start timing an operation"""
-        self.start_times[operation_name] = time.time()
+        self.start_times[operation_name] = time.perf_counter()
 
     def end(self, operation_name: str):
         """End timing an operation"""
         if operation_name in self.start_times:
-            duration = time.time() - self.start_times[operation_name]
+            duration = time.perf_counter() - self.start_times[operation_name]
             if len(self.metrics) >= self.MAX_METRICS:
                 # Drop oldest entry to prevent unbounded growth
                 oldest = next(iter(self.metrics))
@@ -32,7 +32,7 @@ class PerformanceTracker:
 
             # Log individual operations only in DEBUG mode for performance
             if self.logger.isEnabledFor(logging.DEBUG):
-                self.logger.debug(f"\u23f1\ufe0f  {operation_name} completed in {duration:.2f}s")
+                self.logger.debug("\u23f1\ufe0f  %s completed in %.2fs", operation_name, duration)
 
             del self.start_times[operation_name]
 
@@ -60,15 +60,15 @@ class PerformanceTracker:
             self.logger.info("=" * BANNER_WIDTH)
             self.logger.info("VALIDATION CACHE STATISTICS")
             self.logger.info("=" * BANNER_WIDTH)
-            self.logger.info(f"Cache Hits:        {stats['hits']}")
-            self.logger.info(f"Cache Misses:      {stats['misses']}")
-            self.logger.info(f"Hit Rate:          {stats['hit_rate']:.1f}%")
-            self.logger.info(f"Cache Size:        {stats['size']}/{stats['max_size']}")
-            self.logger.info(f"Evictions:         {stats['evictions']}")
+            self.logger.info("Cache Hits:        %s", stats["hits"])
+            self.logger.info("Cache Misses:      %s", stats["misses"])
+            self.logger.info("Hit Rate:          %.1f%%", stats["hit_rate"])
+            self.logger.info("Cache Size:        %s/%s", stats["size"], stats["max_size"])
+            self.logger.info("Evictions:         %s", stats["evictions"])
 
             if stats["hits"] > 0:
                 # Assume average validation takes 50ms, cache lookup takes 1ms
                 time_saved = stats["hits"] * 0.049  # 49ms saved per hit
-                self.logger.info(f"Estimated Time Saved: {time_saved:.2f}s")
+                self.logger.info("Estimated Time Saved: %.2fs", time_saved)
 
             self.logger.info("=" * BANNER_WIDTH)

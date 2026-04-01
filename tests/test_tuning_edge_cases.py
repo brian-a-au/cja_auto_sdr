@@ -150,7 +150,7 @@ class TestCooldown:
 
         # Simulate cooldown expiry
         with patch("cja_auto_sdr.api.tuning.time") as mock_time:
-            mock_time.time.return_value = tuner._last_adjustment_time + 10  # Well past cooldown
+            mock_time.monotonic.return_value = tuner._last_adjustment_time + 10  # Well past cooldown
             result2 = tuner.record_response_time(100.0)
             assert result2 == 5
 

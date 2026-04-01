@@ -130,12 +130,12 @@ class BatchProcessor:
         self.batch_id = str(uuid.uuid4())[:8]
         base_logger = generator.setup_logging(batch_mode=True, log_level=self.log_level, log_format=self.log_format)
         self.logger = generator.with_log_context(base_logger, run_mode="batch", batch_id=self.batch_id)
-        self.logger.info(f"Batch ID: {self.batch_id}")
+        self.logger.info("Batch ID: %s", self.batch_id)
 
         self._shared_cache = None
         if self.shared_cache_enabled and self.enable_cache and not self.skip_validation:
             self._shared_cache = generator.SharedValidationCache(max_size=self.cache_size, ttl_seconds=self.cache_ttl)
-            self.logger.info(f"[{self.batch_id}] Shared validation cache enabled (max_size={self.cache_size})")
+            self.logger.info("[%s] Shared validation cache enabled (max_size=%s)", self.batch_id, self.cache_size)
 
         try:
             Path(self.output_dir).mkdir(parents=True, exist_ok=True)
@@ -155,16 +155,16 @@ class BatchProcessor:
         generator = _generator_module()
 
         self.logger.info("=" * generator.BANNER_WIDTH)
-        self.logger.info(f"[{self.batch_id}] BATCH PROCESSING START")
+        self.logger.info("[%s] BATCH PROCESSING START", self.batch_id)
         self.logger.info("=" * generator.BANNER_WIDTH)
-        self.logger.info(f"[{self.batch_id}] Data views to process: {len(data_view_ids)}")
-        self.logger.info(f"[{self.batch_id}] Parallel workers: {self.workers}")
-        self.logger.info(f"[{self.batch_id}] Continue on error: {self.continue_on_error}")
-        self.logger.info(f"[{self.batch_id}] Output directory: {self.output_dir}")
-        self.logger.info(f"[{self.batch_id}] Output format: {self.output_format}")
+        self.logger.info("[%s] Data views to process: %s", self.batch_id, len(data_view_ids))
+        self.logger.info("[%s] Parallel workers: %s", self.batch_id, self.workers)
+        self.logger.info("[%s] Continue on error: %s", self.batch_id, self.continue_on_error)
+        self.logger.info("[%s] Output directory: %s", self.batch_id, self.output_dir)
+        self.logger.info("[%s] Output format: %s", self.batch_id, self.output_format)
         self.logger.info("=" * generator.BANNER_WIDTH)
 
-        batch_start_time = time.time()
+        batch_start_time = time.monotonic()
         results = {"successful": [], "failed": [], "total": len(data_view_ids), "total_duration": 0}
 
         worker_args = [
@@ -223,29 +223,30 @@ class BatchProcessor:
                             if result.success:
                                 results["successful"].append(result)
                                 pbar.set_postfix_str(f"✓ {dv_id[:20]}", refresh=True)
-                                self.logger.info(f"[{self.batch_id}] ✓ {dv_id}: SUCCESS ({result.duration:.1f}s)")
+                                self.logger.info("[%s] ✓ %s: SUCCESS (%.1fs)", self.batch_id, dv_id, result.duration)
                             else:
                                 results["failed"].append(result)
                                 pbar.set_postfix_str(f"✗ {dv_id[:20]}", refresh=True)
-                                self.logger.error(f"[{self.batch_id}] ✗ {dv_id}: FAILED - {result.error_message}")
+                                self.logger.error("[%s] ✗ %s: FAILED - %s", self.batch_id, dv_id, result.error_message)
 
                                 if not self.continue_on_error:
                                     self.logger.warning(
-                                        f"[{self.batch_id}] Stopping batch processing due to error (use --continue-on-error to continue)",
+                                        "[%s] Stopping batch processing due to error (use --continue-on-error to continue)",
+                                        self.batch_id,
                                     )
                                     for pending in future_to_dv:
                                         pending.cancel()
                                     break
 
                         except (KeyboardInterrupt, SystemExit):
-                            self.logger.warning(f"[{self.batch_id}] Interrupted - cancelling remaining tasks...")
+                            self.logger.warning("[%s] Interrupted - cancelling remaining tasks...", self.batch_id)
                             for pending in future_to_dv:
                                 pending.cancel()
                             raise
                         except Exception as e:  # Intentional: batch worker resilience boundary
                             is_expected = isinstance(e, generator.RECOVERABLE_BATCH_WORKER_EXCEPTIONS)
                             prefix = "EXCEPTION" if is_expected else "UNEXPECTED EXCEPTION"
-                            self.logger.error(f"[{self.batch_id}] ✗ {dv_id}: {prefix} - {e!s}")
+                            self.logger.error("[%s] ✗ %s: %s - %s", self.batch_id, dv_id, prefix, e)
                             if not is_expected:
                                 self.logger.debug("Unexpected batch worker error", exc_info=True)
                             results["failed"].append(
@@ -261,7 +262,7 @@ class BatchProcessor:
                             )
 
                             if not self.continue_on_error:
-                                self.logger.warning(f"[{self.batch_id}] Stopping batch processing due to error")
+                                self.logger.warning("[%s] Stopping batch processing due to error", self.batch_id)
                                 for pending in future_to_dv:
                                     pending.cancel()
                                 break
@@ -271,8 +272,11 @@ class BatchProcessor:
             if self._shared_cache is not None:
                 cache_stats = self._shared_cache.get_statistics()
                 self.logger.info(
-                    f"[{self.batch_id}] Shared cache stats: {cache_stats['hits']} hits, "
-                    f"{cache_stats['misses']} misses ({cache_stats['hit_rate']:.1f}% hit rate)",
+                    "[%s] Shared cache stats: %s hits, %s misses (%.1f%% hit rate)",
+                    self.batch_id,
+                    cache_stats["hits"],
+                    cache_stats["misses"],
+                    cache_stats["hit_rate"],
                 )
                 emit_diagnostic(
                     self.logger,
@@ -287,7 +291,7 @@ class BatchProcessor:
                 self._shared_cache.shutdown()
                 self._shared_cache = None
 
-        results["total_duration"] = time.time() - batch_start_time
+        results["total_duration"] = time.monotonic() - batch_start_time
         self.print_summary(results)
         return results
 
@@ -306,18 +310,18 @@ class BatchProcessor:
 
         self.logger.info("")
         self.logger.info("=" * generator.BANNER_WIDTH)
-        self.logger.info(f"[{self.batch_id}] BATCH PROCESSING SUMMARY")
+        self.logger.info("[%s] BATCH PROCESSING SUMMARY", self.batch_id)
         self.logger.info("=" * generator.BANNER_WIDTH)
-        self.logger.info(f"[{self.batch_id}] Total data views: {total}")
-        self.logger.info(f"[{self.batch_id}] Successful: {successful_count}")
-        self.logger.info(f"[{self.batch_id}] Failed: {failed_count}")
-        self.logger.info(f"[{self.batch_id}] Success rate: {success_rate:.1f}%")
-        self.logger.info(f"[{self.batch_id}] Total output size: {total_size_formatted}")
-        self.logger.info(f"[{self.batch_id}] Total duration: {total_duration:.1f}s")
-        self.logger.info(f"[{self.batch_id}] Average per data view: {avg_duration:.1f}s")
+        self.logger.info("[%s] Total data views: %s", self.batch_id, total)
+        self.logger.info("[%s] Successful: %s", self.batch_id, successful_count)
+        self.logger.info("[%s] Failed: %s", self.batch_id, failed_count)
+        self.logger.info("[%s] Success rate: %.1f%%", self.batch_id, success_rate)
+        self.logger.info("[%s] Total output size: %s", self.batch_id, total_size_formatted)
+        self.logger.info("[%s] Total duration: %.1fs", self.batch_id, total_duration)
+        self.logger.info("[%s] Average per data view: %.1fs", self.batch_id, avg_duration)
         if total_duration > 0:
             throughput = total / total_duration
-            self.logger.info(f"[{self.batch_id}] Throughput: {throughput:.2f} views/second")
+            self.logger.info("[%s] Throughput: %.2f views/second", self.batch_id, throughput)
         self.logger.info("=" * generator.BANNER_WIDTH)
 
         print()
@@ -348,7 +352,11 @@ class BatchProcessor:
                 line = f"  {result.data_view_id:20s}  {result.data_view_name:30s}  {size_str:>10s}  {result.duration:5.1f}s"
                 print(generator.ConsoleColors.success("  ✓") + line[3:])
                 self.logger.info(
-                    f"  ✓ {result.data_view_id:20s}  {result.data_view_name:30s}  {size_str:>10s}  {result.duration:5.1f}s",
+                    "  ✓ %-20s  %-30s  %10s  %5.1fs",
+                    result.data_view_id,
+                    result.data_view_name,
+                    size_str,
+                    result.duration,
                 )
             print()
             self.logger.info("")
@@ -359,7 +367,7 @@ class BatchProcessor:
             for result in results["failed"]:
                 line = f"  {result.data_view_id:20s}  {result.error_message}"
                 print(generator.ConsoleColors.error("  ✗") + line[3:])
-                self.logger.info(f"  ✗ {result.data_view_id:20s}  {result.error_message}")
+                self.logger.info("  ✗ %-20s  %s", result.data_view_id, result.error_message)
             print()
             self.logger.info("")
 
@@ -370,5 +378,5 @@ class BatchProcessor:
             throughput = (total / total_duration) * 60
             print(f"Throughput: {throughput:.1f} data views per minute")
             print("=" * generator.BANNER_WIDTH)
-            self.logger.info(f"Throughput: {throughput:.1f} data views per minute")
+            self.logger.info("Throughput: %.1f data views per minute", throughput)
             self.logger.info("=" * generator.BANNER_WIDTH)

@@ -95,11 +95,12 @@ class TestValidationCache:
         """Cache entries should expire after TTL (deterministic, no sleep)"""
         fake_now = [1000000.0]
 
-        def mock_time():
+        def mock_monotonic():
             return fake_now[0]
 
         with patch("cja_auto_sdr.api.cache.time") as mock_time_module:
-            mock_time_module.time = mock_time
+            mock_time_module.monotonic = mock_monotonic
+            mock_time_module.monotonic_ns = lambda: int(fake_now[0] * 1e9)
 
             cache = ValidationCache(max_size=100, ttl_seconds=1)  # 1 second TTL
 
@@ -181,11 +182,12 @@ class TestValidationCache:
         """When full, expired entries should be reclaimed before any live-key eviction."""
         fake_now = [1000000.0]
 
-        def mock_time():
+        def mock_monotonic():
             return fake_now[0]
 
         with patch("cja_auto_sdr.api.cache.time") as mock_time_module:
-            mock_time_module.time = mock_time
+            mock_time_module.monotonic = mock_monotonic
+            mock_time_module.monotonic_ns = lambda: int(fake_now[0] * 1e9)
             cache = ValidationCache(max_size=2, ttl_seconds=1)
             df1 = pd.DataFrame({"id": [1], "name": ["a"], "type": ["x"]})
             df2 = pd.DataFrame({"id": [2], "name": ["b"], "type": ["y"]})

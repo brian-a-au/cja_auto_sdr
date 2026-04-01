@@ -314,7 +314,7 @@ def prepare_sdr_execution_context(
             )
         sys.exit(1)
 
-    processing_start_time = time.time()
+    processing_start_time = time.monotonic()
 
     api_tuning_config = None
     if getattr(args, "api_auto_tune", False):
@@ -452,7 +452,7 @@ def _run_quality_report_mode(
                 break
 
     if not args.quiet:
-        total_runtime = time.time() - processing_start_time
+        total_runtime = time.monotonic() - processing_start_time
         print()
         print(generator.ConsoleColors.bold(f"Total runtime: {total_runtime:.1f}s"))
 
@@ -534,7 +534,7 @@ def _run_batch_mode(
     successful_results = list(results.get("successful", []))
     processed_results = successful_results + list(results.get("failed", []))
 
-    total_runtime = time.time() - processing_start_time
+    total_runtime = time.monotonic() - processing_start_time
     print()
     print(generator.ConsoleColors.bold(f"Total runtime: {total_runtime:.1f}s"))
 
@@ -730,7 +730,7 @@ def _run_single_mode(
     )
     processed_results = [result]
 
-    total_runtime = time.time() - processing_start_time
+    total_runtime = time.monotonic() - processing_start_time
     print()
     if result.success:
         successful_results = [result]

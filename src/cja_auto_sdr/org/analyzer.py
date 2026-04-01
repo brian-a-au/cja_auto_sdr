@@ -369,7 +369,7 @@ class OrgComponentAnalyzer:
 
     def _run_analysis_impl(self) -> OrgReportResult:
         """Internal implementation of org-wide analysis (called within lock)."""
-        start_time = time.time()
+        start_time = time.monotonic()
         timestamp = datetime.now(UTC).isoformat()
         self._assert_lock_healthy()
 
@@ -389,15 +389,15 @@ class OrgComponentAnalyzer:
                 distribution=ComponentDistribution(),
                 similarity_pairs=None,
                 recommendations=[],
-                duration=time.time() - start_time,
+                duration=time.monotonic() - start_time,
                 is_sampled=is_sampled,
                 total_available_data_views=total_available,
             )
 
         if is_sampled:
-            self.logger.info(f"Sampled {len(data_views)} from {total_available} available data views")
+            self.logger.info("Sampled %s from %s available data views", len(data_views), total_available)
         else:
-            self.logger.info(f"Found {len(data_views)} data views to analyze")
+            self.logger.info("Found %s data views to analyze", len(data_views))
 
         # 2. Fetch components for each data view in parallel
         self.logger.info("Fetching components from all data views...")
@@ -408,7 +408,7 @@ class OrgComponentAnalyzer:
         self.logger.info("Building component index...")
         component_index = self._build_component_index(summaries)
         self._assert_lock_healthy()
-        self.logger.info(f"Indexed {len(component_index)} unique components")
+        self.logger.info("Indexed %s unique components", len(component_index))
 
         # 3.5. Check memory warning
         self._check_memory_warning(component_index)
@@ -447,7 +447,7 @@ class OrgComponentAnalyzer:
             self.logger.info("Computing similarity matrix...")
             similarity_pairs = self._compute_similarity_matrix(summaries, precomputed=pairwise_data)
             effective_threshold = effective_governance_overlap_threshold(self.config.overlap_threshold)
-            self.logger.info(f"Found {len(similarity_pairs)} pairs above threshold (>= {effective_threshold})")
+            self.logger.info("Found %s pairs above threshold (>= %s)", len(similarity_pairs), effective_threshold)
         elif self.config.org_stats_only:
             self.logger.info("Skipping similarity matrix (--org-stats mode)")
         elif self.config.skip_similarity:
@@ -459,7 +459,7 @@ class OrgComponentAnalyzer:
             self.logger.info("Computing data view clusters...")
             clusters = self._compute_clusters(summaries, precomputed=pairwise_data)
             if clusters:
-                self.logger.info(f"Found {len(clusters)} clusters")
+                self.logger.info("Found %s clusters", len(clusters))
 
         # 7. Generate recommendations
         self.logger.info("Generating recommendations...")
@@ -477,7 +477,7 @@ class OrgComponentAnalyzer:
                 len(component_index),
             )
             if thresholds_exceeded:
-                self.logger.warning(f"Governance thresholds exceeded: {len(governance_violations)} violation(s)")
+                self.logger.warning("Governance thresholds exceeded: %s violation(s)", len(governance_violations))
         self._assert_lock_healthy()
 
         # 9. Naming audit (Feature 3)
@@ -502,11 +502,11 @@ class OrgComponentAnalyzer:
             self.logger.info("Detecting stale components...")
             stale_components = self._detect_stale_components(component_index)
             if stale_components:
-                self.logger.info(f"Found {len(stale_components)} components with stale naming patterns")
+                self.logger.info("Found %s components with stale naming patterns", len(stale_components))
         self._assert_lock_healthy()
 
-        duration = time.time() - start_time
-        self.logger.info(f"Analysis complete in {duration:.2f}s")
+        duration = time.monotonic() - start_time
+        self.logger.info("Analysis complete in %.2fs", duration)
 
         return OrgReportResult(
             timestamp=timestamp,
@@ -556,7 +556,7 @@ class OrgComponentAnalyzer:
         try:
             return re.compile(pattern, re.IGNORECASE)
         except re.error as e:
-            self.logger.warning(f"Invalid {name} pattern: {e}")
+            self.logger.warning("Invalid %s pattern: %s", name, e)
             return None
 
     def _list_and_filter_data_views(self) -> tuple[list[dict[str, Any]], bool, int]:
@@ -571,7 +571,7 @@ class OrgComponentAnalyzer:
         try:
             all_data_views = self.cja.getDataViews()
         except Exception as e:  # Intentional: API boundary, return empty result to preserve command resilience.
-            self.logger.error(f"Failed to list data views: {e}")
+            self.logger.error("Failed to list data views: %s", e)
             return [], False, 0
 
         if all_data_views is None or len(all_data_views) == 0:
@@ -588,7 +588,7 @@ class OrgComponentAnalyzer:
             pattern = self._validate_regex_pattern(self.config.filter_pattern, "filter")
             if pattern:
                 filtered = [dv for dv in filtered if pattern.search(dv.get("name", ""))]
-                self.logger.info(f"Filter '{self.config.filter_pattern}' matched {len(filtered)} data views")
+                self.logger.info("Filter '%s' matched %s data views", self.config.filter_pattern, len(filtered))
 
         # Apply exclude filter
         if self.config.exclude_pattern:
@@ -596,7 +596,9 @@ class OrgComponentAnalyzer:
             if pattern:
                 before = len(filtered)
                 filtered = [dv for dv in filtered if not pattern.search(dv.get("name", ""))]
-                self.logger.info(f"Exclude '{self.config.exclude_pattern}' removed {before - len(filtered)} data views")
+                self.logger.info(
+                    "Exclude '%s' removed %s data views", self.config.exclude_pattern, before - len(filtered)
+                )
 
         # Track total available before sampling/limiting
         total_available = len(filtered)
@@ -610,11 +612,11 @@ class OrgComponentAnalyzer:
                 random.seed(self.config.sample_seed)
                 filtered = random.sample(filtered, self.config.sample_size)
             is_sampled = True
-            self.logger.info(f"Sampled {len(filtered)} data views (seed={self.config.sample_seed})")
+            self.logger.info("Sampled %s data views (seed=%s)", len(filtered), self.config.sample_seed)
 
         # Apply limit (after sampling)
         if self.config.limit and len(filtered) > self.config.limit:
-            self.logger.info(f"Limiting to first {self.config.limit} data views")
+            self.logger.info("Limiting to first %s data views", self.config.limit)
             filtered = filtered[: self.config.limit]
 
         return filtered, is_sampled, total_available
@@ -713,7 +715,7 @@ class OrgComponentAnalyzer:
                         to_fetch.append(dv)
 
                 if cache_hits > 0:
-                    self.logger.info(f"Cache: {cache_hits} hits, {len(to_fetch)} to fetch")
+                    self.logger.info("Cache: %s hits, %s to fetch", cache_hits, len(to_fetch))
         else:
             to_fetch = data_views
 
@@ -823,7 +825,7 @@ class OrgComponentAnalyzer:
         """
         dv_id = dv.get("id", "")
         dv_name = dv.get("name", "Unknown")
-        start_time = time.time()
+        start_time = time.monotonic()
 
         try:
             cja = self._get_thread_client()
@@ -942,7 +944,7 @@ class OrgComponentAnalyzer:
                 metric_count=len(metric_ids),
                 dimension_count=len(dimension_ids),
                 status=dv.get("status", "active"),
-                fetch_duration=time.time() - start_time,
+                fetch_duration=time.monotonic() - start_time,
                 metric_names=metric_names,
                 dimension_names=dimension_names,
                 standard_metric_count=standard_metric_count,
@@ -963,7 +965,7 @@ class OrgComponentAnalyzer:
                 data_view_id=dv_id,
                 data_view_name=dv_name,
                 error=error_msg,
-                fetch_duration=time.time() - start_time,
+                fetch_duration=time.monotonic() - start_time,
             )
 
     def _build_component_index(self, summaries: list[DataViewSummary]) -> dict[str, ComponentInfo]:
@@ -1289,7 +1291,7 @@ class OrgComponentAnalyzer:
         try:
             Z = linkage(condensed_dist, method=self.config.cluster_method)
         except Exception as e:  # Intentional: clustering is optional and should never fail the full org report.
-            self.logger.warning(f"Clustering failed: {e}")
+            self.logger.warning("Clustering failed: %s", e)
             return None
 
         # Determine optimal number of clusters using silhouette or fixed threshold

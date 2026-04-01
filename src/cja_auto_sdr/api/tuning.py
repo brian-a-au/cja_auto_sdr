@@ -66,7 +66,7 @@ class APIWorkerTuner:
 
         # Rolling window of response times
         self._response_times: list[float] = []
-        self._last_adjustment_time = 0.0
+        self._last_adjustment_time: float | None = None
 
         # Thread safety
         self._lock = threading.Lock()
@@ -110,8 +110,11 @@ class APIWorkerTuner:
                 return None
 
             # Check cooldown period
-            now = time.time()
-            if now - self._last_adjustment_time < self.config.cooldown_seconds:
+            now = time.monotonic()
+            if (
+                self._last_adjustment_time is not None
+                and now - self._last_adjustment_time < self.config.cooldown_seconds
+            ):
                 return None
 
             # Calculate average response time
@@ -126,8 +129,11 @@ class APIWorkerTuner:
                     new_workers = self._current_workers + 1
                     self._scale_ups += 1
                     self.logger.info(
-                        f"API tuner: scaling UP {self._current_workers} \u2192 {new_workers} workers "
-                        f"(avg response: {avg_time:.0f}ms < {self.config.scale_up_threshold_ms}ms threshold)",
+                        "API tuner: scaling UP %s \u2192 %s workers (avg response: %.0fms < %sms threshold)",
+                        self._current_workers,
+                        new_workers,
+                        avg_time,
+                        self.config.scale_up_threshold_ms,
                     )
 
             elif avg_time > self.config.scale_down_threshold_ms and self._current_workers > self.config.min_workers:
@@ -135,8 +141,11 @@ class APIWorkerTuner:
                 new_workers = self._current_workers - 1
                 self._scale_downs += 1
                 self.logger.info(
-                    f"API tuner: scaling DOWN {self._current_workers} \u2192 {new_workers} workers "
-                    f"(avg response: {avg_time:.0f}ms > {self.config.scale_down_threshold_ms}ms threshold)",
+                    "API tuner: scaling DOWN %s \u2192 %s workers (avg response: %.0fms > %sms threshold)",
+                    self._current_workers,
+                    new_workers,
+                    avg_time,
+                    self.config.scale_down_threshold_ms,
                 )
 
             if new_workers is not None:
@@ -179,5 +188,5 @@ class APIWorkerTuner:
             if workers is not None:
                 self._current_workers = max(self.config.min_workers, min(workers, self.config.max_workers))
             self._response_times.clear()
-            self._last_adjustment_time = 0.0
-            self.logger.debug(f"API tuner reset (workers: {self._current_workers})")
+            self._last_adjustment_time = None
+            self.logger.debug("API tuner reset (workers: %s)", self._current_workers)

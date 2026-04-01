@@ -668,12 +668,14 @@ def setup_logging(
 
     if logger.isEnabledFor(logging.INFO):
         if log_file is not None:
-            logger.info(f"Logging initialized. Log file: {log_file}")
+            logger.info("Logging initialized. Log file: %s", log_file)
         else:
             logger.info("Logging initialized. Console output only.")
-        logger.info(f"CJA SDR Generator version: {__version__}", extra={"sdr_version": __version__})
+        logger.info("CJA SDR Generator version: %s", __version__, extra={"sdr_version": __version__})
         logger.info(
-            f"Python {sys.version.split()[0]} on {sys.platform}",
+            "Python %s on %s",
+            sys.version.split()[0],
+            sys.platform,
             extra={"python_version": sys.version.split()[0], "platform": sys.platform},
         )
         try:
@@ -682,9 +684,9 @@ def setup_logging(
             dep_versions = dict.fromkeys(_CORE_DEPENDENCIES, "?")
             logger.debug("Failed to resolve dependency versions for startup logging", exc_info=True)
         dep_summary = ", ".join(f"{pkg}={ver}" for pkg, ver in dep_versions.items())
-        logger.info(f"Dependencies: {dep_summary}", extra={"dependency_versions": dep_versions})
-        logger.info(f"Log level: {log_level.upper()}", extra={"log_level": log_level.upper()})
-        logger.info(f"Run mode: {_infer_run_mode(data_view_id, batch_mode)}")
+        logger.info("Dependencies: %s", dep_summary, extra={"dependency_versions": dep_versions})
+        logger.info("Log level: %s", log_level.upper(), extra={"log_level": log_level.upper()})
+        logger.info("Run mode: %s", _infer_run_mode(data_view_id, batch_mode))
 
     # Flush handlers to ensure log file is not empty even on early exit
     for handler in logging.root.handlers:

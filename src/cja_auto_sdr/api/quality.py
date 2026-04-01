@@ -57,25 +57,25 @@ class DataQualityChecker:
         # Conditional logging based on log level for performance
         # Only log individual issues in DEBUG mode
         if self.logger.isEnabledFor(logging.DEBUG):
-            self.logger.debug(f"DQ Issue [{severity}] - {item_type}: {description}")
+            self.logger.debug("DQ Issue [%s] - %s: %s", severity, item_type, description)
         elif (
             self.log_high_severity_issues
             and severity in ["CRITICAL", "HIGH"]
             and self.logger.isEnabledFor(logging.WARNING)
         ):
             # In non-DEBUG modes, only log CRITICAL/HIGH severity issues
-            self.logger.warning(f"DQ Issue [{severity}] - {item_type}: {description}")
+            self.logger.warning("DQ Issue [%s] - %s: %s", severity, item_type, description)
         return issue
 
     def check_duplicates(self, df: pd.DataFrame, item_type: str):
         """Check for duplicate names in metrics or dimensions"""
         try:
             if df.empty:
-                self.logger.info(f"Skipping duplicate check for empty {item_type} dataframe")
+                self.logger.info("Skipping duplicate check for empty %s dataframe", item_type)
                 return
 
             if "name" not in df.columns:
-                self.logger.warning(f"'name' column not found in {item_type}. Skipping duplicate check.")
+                self.logger.warning("'name' column not found in %s. Skipping duplicate check.", item_type)
                 return
 
             duplicates = df["name"].value_counts()
@@ -97,7 +97,7 @@ class DataQualityChecker:
         """Validate that required fields are present"""
         try:
             if df.empty:
-                self.logger.info(f"Skipping required fields check for empty {item_type} dataframe")
+                self.logger.info("Skipping required fields check for empty %s dataframe", item_type)
                 return
 
             missing_fields = [field for field in required_fields if field not in df.columns]
@@ -118,7 +118,7 @@ class DataQualityChecker:
         """Check for null values in critical fields"""
         try:
             if df.empty:
-                self.logger.info(f"Skipping null value check for empty {item_type} dataframe")
+                self.logger.info("Skipping null value check for empty %s dataframe", item_type)
                 return
 
             for field in critical_fields:
@@ -141,11 +141,11 @@ class DataQualityChecker:
         """Check for items without descriptions"""
         try:
             if df.empty:
-                self.logger.info(f"Skipping description check for empty {item_type} dataframe")
+                self.logger.info("Skipping description check for empty %s dataframe", item_type)
                 return
 
             if "description" not in df.columns:
-                self.logger.info(f"'description' column not found in {item_type}")
+                self.logger.info("'description' column not found in %s", item_type)
                 return
 
             missing_desc = df[df["description"].isna() | (df["description"] == "")]
@@ -183,11 +183,11 @@ class DataQualityChecker:
         """Check for missing or invalid IDs"""
         try:
             if df.empty:
-                self.logger.info(f"Skipping ID validity check for empty {item_type} dataframe")
+                self.logger.info("Skipping ID validity check for empty %s dataframe", item_type)
                 return
 
             if "id" not in df.columns:
-                self.logger.warning(f"'id' column not found in {item_type}")
+                self.logger.warning("'id' column not found in %s", item_type)
                 return
 
             missing_ids = df[df["id"].isna() | (df["id"] == "")]
@@ -250,7 +250,7 @@ class DataQualityChecker:
                 if cached_issues is not None:
                     with self._issues_lock:
                         self.issues.extend(cached_issues)
-                    self.logger.debug(f"Using cached validation results for {item_type}")
+                    self.logger.debug("Using cached validation results for %s", item_type)
                     return
 
             # Check 1: Empty DataFrame (quick exit)
@@ -333,7 +333,7 @@ class DataQualityChecker:
                     )
 
             if self.logger.isEnabledFor(logging.DEBUG):
-                self.logger.debug(f"Optimized validation complete for {item_type}: {len(df)} items checked")
+                self.logger.debug("Optimized validation complete for %s: %s items checked", item_type, len(df))
 
             if self.validation_cache is not None:
                 self.validation_cache.put(df, item_type, required_fields, critical_fields, local_issues, cache_key)
@@ -388,14 +388,14 @@ class DataQualityChecker:
                         try:
                             future.result()
                             pbar.set_postfix_str(f"\u2713 {task_name}", refresh=True)
-                            self.logger.debug(f"\u2713 {task_name.capitalize()} validation completed")
+                            self.logger.debug("\u2713 %s validation completed", task_name.capitalize())
                         except Exception as e:  # Intentional: Future result collection must handle any worker exception
                             pbar.set_postfix_str(f"\u2717 {task_name}", refresh=True)
-                            self.logger.error(f"\u2717 {task_name.capitalize()} validation failed: {e}")
+                            self.logger.error("\u2717 %s validation failed: %s", task_name.capitalize(), e)
                             self.logger.exception("Full error details:")
                         pbar.update(1)
 
-            self.logger.info(f"Parallel validation complete. Found {len(self.issues)} issue(s)")
+            self.logger.info("Parallel validation complete. Found %s issue(s)", len(self.issues))
 
         except Exception as e:  # Intentional: Parallel executor boundary; thread pool can surface heterogeneous errors
             self.logger.error(_format_error_msg("in parallel validation", error=e))
@@ -439,7 +439,7 @@ class DataQualityChecker:
 
             # Limit to top N issues if max_issues > 0
             if max_issues > 0 and len(df) > max_issues:
-                self.logger.info(f"Limiting data quality issues to top {max_issues} (of {len(df)} total)")
+                self.logger.info("Limiting data quality issues to top %s (of %s total)", max_issues, len(df))
                 df = df.head(max_issues)
 
             return df
@@ -470,12 +470,12 @@ class DataQualityChecker:
             sev = issue["Severity"]
             severity_counts[sev] = severity_counts.get(sev, 0) + 1
 
-        self.logger.info(f"Data quality validation complete: {len(self.issues)} issue(s) found")
+        self.logger.info("Data quality validation complete: %s issue(s) found", len(self.issues))
 
         if self.logger.isEnabledFor(logging.INFO):
             for sev in ["CRITICAL", "HIGH", "MEDIUM", "LOW"]:
                 if sev in severity_counts:
-                    self.logger.info(f"  {sev}: {severity_counts[sev]}")
+                    self.logger.info("  %s: %s", sev, severity_counts[sev])
         elif self.logger.isEnabledFor(logging.WARNING):
             # Minimal warning-level telemetry for production mode.
             high_severity = {
@@ -483,4 +483,4 @@ class DataQualityChecker:
             }
             if high_severity:
                 details = ", ".join(f"{sev}: {count}" for sev, count in high_severity.items())
-                self.logger.warning(f"Data quality high-severity summary: {details}")
+                self.logger.warning("Data quality high-severity summary: %s", details)

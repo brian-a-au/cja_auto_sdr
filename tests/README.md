@@ -141,7 +141,7 @@ tests/
 └── README.md                        # This file
 ```
 
-**Total: 7,661 comprehensive tests**
+**Total: 7,666 comprehensive tests**
 
 ### Test Count Breakdown
 
@@ -150,16 +150,16 @@ tests/
 
 | Category | Tests | Files | Notes |
 |----------|-------|-------|-------|
-| `unit` | 7,555 | 123 | Default primary category for files without explicit integration/e2e/smoke scope |
+| `unit` | 7,560 | 123 | Default primary category for files without explicit integration/e2e/smoke scope |
 | `integration` | 73 | 3 | Cross-module integration suites |
 | `e2e` | 23 | 2 | End-to-end suites with a mocked external boundary |
 | `smoke` | 10 | 1 | Lightweight command-mode coverage |
 | `slow` | 7 | 1 | Overlay marker; these tests are also counted in a primary category |
-| **Primary Total** | **7,661** | **129** | **unit + integration + e2e + smoke** |
+| **Primary Total** | **7,666** | **129** | **unit + integration + e2e + smoke** |
 
 | CI Slice | Tests | Files | Selector |
 |----------|-------|-------|----------|
-| `test-unit` | 7,548 | 122 | `-m "unit and not slow"` |
+| `test-unit` | 7,553 | 122 | `-m "unit and not slow"` |
 | `test-integration` | 103 | 6 | `-m "integration or e2e or slow"` |
 | `smoke-test` | 10 | 1 | `-m smoke` |
 
@@ -186,7 +186,7 @@ tests/
 | `test_utils.py` | 50 | Utility functions and helpers |
 | `test_excel_formatting.py` | 28 | Excel sheet formatting and styling |
 | `test_parallel_api_fetcher.py` | 35 | Parallel API data fetching |
-| `test_api_tuning.py` | 24 | API worker auto-tuning |
+| `test_api_tuning.py` | 25 | API worker auto-tuning |
 | `test_error_messages.py` | 23 | Enhanced error messages and guidance |
 | `test_explain_exit_code.py` | 44 | --explain-exit-code shared explainer, parser, fast-path, and run-summary behavior |
 | `test_circuit_breaker.py` | 25 | Circuit breaker pattern |
@@ -196,7 +196,7 @@ tests/
 | `test_process_single_dataview.py` | 44 | End-to-end single data view processing |
 | `test_optimized_validation.py` | 16 | Optimized data quality validation |
 | `test_name_resolution.py` | 24 | Data view name to ID resolution |
-| `test_shared_cache.py` | 26 | Shared validation cache |
+| `test_shared_cache.py` | 28 | Shared validation cache |
 | `test_logging_optimization.py` | 17 | Logging performance optimizations |
 | `test_env_credentials.py` | 15 | Environment variable credentials |
 | `test_dry_run.py` | 15 | Dry-run mode functionality |
@@ -215,7 +215,7 @@ tests/
 | `test_main_entry_points.py` | 43 | main() and _main_impl() entry points, dispatch, run_state, run summary |
 | `test_quality_policy_and_run_summary.py` | 169 | Quality policy functions and run summary/status inference |
 | `test_e2e_integration.py` | 16 | End-to-end integration tests with real pipeline, mocked API boundary |
-| `test_api_client.py` | 29 | API client exception paths and error handling |
+| `test_api_client.py` | 31 | API client exception paths and error handling |
 | `test_config_validation.py` | 55 | Configuration validation logic |
 | `test_credentials.py` | 73 | Credential resolution and source selection |
 | `test_perf.py` | 7 | Performance utilities (cache eviction, statistics) |
@@ -298,7 +298,7 @@ tests/
 | `test_agent_workflows.py` | 69 | Agent workflow shell script validation tests |
 | `test_manifest_agent_contract.py` | 16 | Manifest vs runtime capability drift tests |
 | `test_tool_manifests.py` | 40 | Tool manifest schema and content tests |
-| **Total** | **7,661** | **Collected via pytest --collect-only** |
+| **Total** | **7,666** | **Collected via pytest --collect-only** |
 
 ## Running Tests
 
@@ -756,13 +756,13 @@ the `tests/README.md` inventory tree or count table.
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (7,661 tests total)
+- [x] Comprehensive test coverage (7,666 tests total)
 - [x] Org-wide analysis tests (test_org_report.py) - 211 tests (including large org scaling, output path aliases, memory warnings, smart cache invalidation)
 - [x] Org-wide analysis integration tests (test_org_report_integration.py) - 17 tests (end-to-end flows, caching, filtering, governance thresholds)
 - [x] Profile management tests (test_profiles.py) - 78 tests
-- [x] API worker auto-tuning tests (test_api_tuning.py) - 24 tests
+- [x] API worker auto-tuning tests (test_api_tuning.py) - 25 tests
 - [x] Circuit breaker pattern tests (test_circuit_breaker.py) - 25 tests
-- [x] Shared validation cache tests (test_shared_cache.py) - 26 tests
+- [x] Shared validation cache tests (test_shared_cache.py) - 28 tests
 - [x] Calculated metrics inventory tests (test_calculated_metrics_inventory.py) - 366 tests
 - [x] Segments inventory tests (test_segments_inventory.py) - 48 tests
 - [x] Derived fields inventory tests (test_derived_inventory.py) - 62 tests

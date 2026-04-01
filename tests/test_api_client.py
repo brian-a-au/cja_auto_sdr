@@ -23,6 +23,7 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import cja_auto_sdr.api.client as _client_module
 from cja_auto_sdr.api.client import (
     _bootstrap_dotenv,
     _config_from_env,
@@ -34,6 +35,12 @@ from cja_auto_sdr.core.exceptions import (
     ProfileConfigError,
     ProfileNotFoundError,
 )
+
+
+@pytest.fixture(autouse=True)
+def _reset_temp_cleanup_guard():
+    """Reset temp-cleanup scheduling state between tests."""
+    _client_module._temp_cleanup_next_check_monotonic = 0.0
 
 
 @pytest.fixture
@@ -181,7 +188,7 @@ class TestConfigFromEnvCleanup:
         _config_from_env(credentials, mock_logger)
 
         assert not stale_file.exists()
-        assert any("Removed 1 stale temp credential file" in str(call) for call in mock_logger.debug.call_args_list)
+        mock_logger.debug.assert_any_call("Removed %s stale temp credential file(s) from previous runs", 1)
 
     @patch("cja_auto_sdr.api.client.cjapy")
     @patch("cja_auto_sdr.api.client.tempfile.gettempdir")
@@ -202,7 +209,7 @@ class TestConfigFromEnvCleanup:
         _config_from_env(credentials, mock_logger)
 
         assert not stale_file.exists()
-        assert any("Removed 1 stale temp credential file" in str(call) for call in mock_logger.debug.call_args_list)
+        mock_logger.debug.assert_any_call("Removed %s stale temp credential file(s) from previous runs", 1)
 
     @patch("cja_auto_sdr.api.client.cjapy")
     @patch("cja_auto_sdr.api.client.tempfile.gettempdir")
@@ -216,6 +223,64 @@ class TestConfigFromEnvCleanup:
         _config_from_env(credentials, mock_logger)
 
         assert recent_file.exists()
+
+    @patch("cja_auto_sdr.api.client.cjapy")
+    @patch("cja_auto_sdr.api.client._cleanup_stale_temp_configs")
+    def test_stale_cleanup_is_throttled_until_due(self, mock_cleanup, mock_cjapy, mock_logger):
+        """The temp-directory scan should only rerun once the scheduled recheck time arrives."""
+        credentials = {"org_id": "test@AdobeOrg", "client_id": "x", "secret": "y"}
+        mock_cleanup.side_effect = [30.0, 30.0]
+
+        with patch("cja_auto_sdr.api.client.time.monotonic", side_effect=[100.0, 110.0, 131.0]):
+            _config_from_env(credentials, mock_logger)
+            _config_from_env(credentials, mock_logger)
+            _config_from_env(credentials, mock_logger)
+
+        assert mock_cjapy.configure.call_count == 3
+        assert mock_cleanup.call_count == 2
+        mock_cleanup.assert_any_call(mock_logger)
+
+    @patch("cja_auto_sdr.api.client.cjapy")
+    @patch("cja_auto_sdr.api.client.tempfile.gettempdir")
+    def test_recent_temp_configs_are_removed_after_scheduled_recheck(
+        self,
+        mock_gettempdir,
+        mock_cjapy,
+        mock_logger,
+        tmp_path,
+    ):
+        """Legacy temp files skipped while recent should be deleted once they later become stale."""
+        mock_gettempdir.return_value = str(tmp_path)
+        credentials = {"org_id": "test@AdobeOrg", "client_id": "x", "secret": "y"}
+        recent_file = tmp_path / "cja_env_config_recent.json"
+        current_times = {"wall": 10_000.0, "mono": 100.0}
+        recent_file.write_text("{}", encoding="utf-8")
+        os.utime(
+            recent_file,
+            (
+                current_times["wall"] - (_client_module._LEGACY_TEMP_CONFIG_MAX_AGE_SECONDS - 10.0),
+                current_times["wall"] - (_client_module._LEGACY_TEMP_CONFIG_MAX_AGE_SECONDS - 10.0),
+            ),
+        )
+
+        with (
+            patch("cja_auto_sdr.api.client.time.time", side_effect=lambda: current_times["wall"]),
+            patch("cja_auto_sdr.api.client.time.monotonic", side_effect=lambda: current_times["mono"]),
+        ):
+            _config_from_env(credentials, mock_logger)
+            assert recent_file.exists()
+
+            current_times["wall"] += 5.0
+            current_times["mono"] += 5.0
+            _config_from_env(credentials, mock_logger)
+            assert recent_file.exists()
+
+            current_times["wall"] += 6.0
+            current_times["mono"] += 6.0
+            _config_from_env(credentials, mock_logger)
+
+        assert not recent_file.exists()
+        assert mock_cjapy.configure.call_count == 3
 
 
 # ==================== configure_cjapy default logger (lines 96-97) ====================
