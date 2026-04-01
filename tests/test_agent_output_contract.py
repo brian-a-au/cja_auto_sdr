@@ -312,9 +312,7 @@ class TestResolverPipeline:
         mock_fn.return_value = lambda opt, **kw: False
         args = _make_args(agent_mode=True, output="-")
         args.run_summary_json = None
-        output_path = resolve_agent_output_path(
-            args, output_format="excel", stdout_formats=ORG_REPORT_STDOUT_FORMATS
-        )
+        output_path = resolve_agent_output_path(args, output_format="excel", stdout_formats=ORG_REPORT_STDOUT_FORMATS)
         quiet = resolve_agent_quiet(args, output_path=output_path)
         assert output_path is None
         assert quiet is False
@@ -324,9 +322,7 @@ class TestResolverPipeline:
         mock_fn.return_value = lambda opt, **kw: False
         args = _make_args(agent_mode=True, output="-")
         args.run_summary_json = "-"
-        output_path = resolve_agent_output_path(
-            args, output_format="excel", stdout_formats=ORG_REPORT_STDOUT_FORMATS
-        )
+        output_path = resolve_agent_output_path(args, output_format="excel", stdout_formats=ORG_REPORT_STDOUT_FORMATS)
         quiet = resolve_agent_quiet(args, output_path=output_path)
         assert output_path is None
         assert quiet is True  # run_summary_json still targeting stdout

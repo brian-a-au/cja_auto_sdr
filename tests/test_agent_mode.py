@@ -420,9 +420,7 @@ class TestAgentModeConsoleStdoutIntentional:
             ),
             patch("cja_auto_sdr.generator.handle_diff_command", return_value=(True, False, None)) as mock_diff,
         ):
-            exit_code = _run_main_impl(
-                ["--diff", "dv_source", "dv_target", "--agent-mode", "--format", "json"]
-            )
+            exit_code = _run_main_impl(["--diff", "dv_source", "dv_target", "--agent-mode", "--format", "json"])
 
         assert exit_code == 0
         assert mock_diff.call_args.kwargs["output_to_stdout"] is True
@@ -435,9 +433,7 @@ class TestAgentModeRunSummaryJsonStdout:
     def test_run_summary_json_stdout_forces_quiet_for_org_report(self):
         """run-summary-json targeting stdout forces quiet even without agent-mode."""
         with patch("cja_auto_sdr.generator.run_org_report", return_value=(True, False)) as mock_run:
-            exit_code = _run_main_impl(
-                ["--org-report", "--format", "console", "--run-summary-json", "-"]
-            )
+            exit_code = _run_main_impl(["--org-report", "--format", "console", "--run-summary-json", "-"])
 
         assert exit_code == 0
         assert mock_run.call_args.kwargs["quiet"] is True
@@ -482,9 +478,7 @@ class TestAgentModeFileOnlyNeverSilent:
             ),
             patch("cja_auto_sdr.generator.handle_diff_command", return_value=(True, False, None)) as mock_diff,
         ):
-            exit_code = _run_main_impl(
-                ["--diff", "dv_source", "dv_target", "--agent-mode", "--format", "csv"]
-            )
+            exit_code = _run_main_impl(["--diff", "dv_source", "dv_target", "--agent-mode", "--format", "csv"])
 
         assert exit_code == 0
         assert mock_diff.call_args.kwargs["output_to_stdout"] is False
@@ -498,9 +492,7 @@ class TestAgentModeFileOnlyNeverSilent:
             ),
             patch("cja_auto_sdr.generator.handle_diff_command", return_value=(True, False, None)) as mock_diff,
         ):
-            exit_code = _run_main_impl(
-                ["--diff", "dv_source", "dv_target", "--agent-mode", "--format", "excel"]
-            )
+            exit_code = _run_main_impl(["--diff", "dv_source", "dv_target", "--agent-mode", "--format", "excel"])
 
         assert exit_code == 0
         assert mock_diff.call_args.kwargs["output_to_stdout"] is False
