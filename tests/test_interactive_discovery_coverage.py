@@ -582,6 +582,27 @@ class TestRunListCommand:
 
     @patch("cja_auto_sdr.generator.cjapy")
     @patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "mock", None))
+    def test_key_error_from_fetch_does_not_emit_api_hint(self, _mock_config, mock_cjapy, capsys):
+        """Non-API KeyErrors should not print Adobe credential remediation text."""
+        mock_cjapy.CJA.return_value = Mock()
+
+        def _raise_key_error(_cja, _machine_readable):
+            raise KeyError("name")
+
+        result = _run_list_command(
+            banner_text="TEST",
+            command_name="test",
+            fetch_and_format=_raise_key_error,
+            config_file="config.json",
+        )
+        assert result is False
+        out = capsys.readouterr().out
+        assert "Failed to connect to CJA API: 'name'" in out
+        assert "AEP API" not in out
+        assert "OAuth credentials" not in out
+
+    @patch("cja_auto_sdr.generator.cjapy")
+    @patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "mock", None))
     def test_cja_constructor_exception_is_recoverable(self, _mock_config, mock_cjapy, capsys):
         """Bare constructor failures from cjapy should return a controlled command error."""
         mock_cjapy.CJA.side_effect = Exception("auth bootstrap failed")

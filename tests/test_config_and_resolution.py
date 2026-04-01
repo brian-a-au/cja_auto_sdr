@@ -18,7 +18,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 import pandas as pd
 import pytest
@@ -1175,6 +1175,28 @@ class TestShowStats:
         payload = json.loads(captured.err)
         assert payload["error"] == "Failed to get stats: 'content'"
         assert payload["error_type"] == "connectivity_error"
+
+    @patch("cja_auto_sdr.cli.commands.stats._collect_stats_row_with_fallback", side_effect=KeyError("name"))
+    @patch("cja_auto_sdr.generator.cjapy")
+    @patch("cja_auto_sdr.generator.configure_cjapy")
+    def test_local_stats_key_error_does_not_emit_api_hint(
+        self,
+        mock_config,
+        mock_cjapy,
+        _mock_collect,
+        capsys: pytest.CaptureFixture,
+    ) -> None:
+        """Local stats-processing KeyErrors should not claim an auth/config issue."""
+        from cja_auto_sdr.generator import show_stats
+
+        mock_config.return_value = (True, "file", None)
+        mock_cjapy.CJA.return_value = Mock()
+
+        assert show_stats(["dv_test"]) is False
+        captured = capsys.readouterr()
+        assert "Failed to get stats: 'name'" in captured.out
+        assert "AEP API" not in captured.out
+        assert "OAuth credentials" not in captured.out
 
     @patch("cja_auto_sdr.generator.cjapy")
     @patch("cja_auto_sdr.generator.configure_cjapy")

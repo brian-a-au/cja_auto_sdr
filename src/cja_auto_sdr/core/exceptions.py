@@ -260,34 +260,58 @@ class MemoryLimitExceeded(CJASDRError):
         super().__init__(message)
 
 
+_AUTH_FAILURE_HTTP_STATUSES = frozenset({401, 403})
+_AUTH_FAILURE_MESSAGE_MARKERS = ("http", "unauthorized", "forbidden")
+
+
+def _api_auth_failure_status_from_message(message: str) -> int | None:
+    """Return 401/403 when *message* clearly looks like an auth failure."""
+    normalized = message.casefold().strip()
+    if not normalized or not any(marker in normalized for marker in _AUTH_FAILURE_MESSAGE_MARKERS):
+        return None
+
+    from cja_auto_sdr.core.discovery_exceptions import coerce_http_status_code
+
+    status = coerce_http_status_code(message)
+    if status in _AUTH_FAILURE_HTTP_STATUSES:
+        return status
+    if "unauthorized" in normalized:
+        return 401
+    if "forbidden" in normalized:
+        return 403
+    return None
+
+
+def _api_auth_failure_status(exc: Exception) -> int | None:
+    """Extract a 401/403 status from structured error metadata or message text."""
+    from cja_auto_sdr.core.discovery_exceptions import extract_http_status_codes
+
+    for status in extract_http_status_codes(exc):
+        if status in _AUTH_FAILURE_HTTP_STATUSES:
+            return status
+    return _api_auth_failure_status_from_message(str(exc))
+
+
 def api_connection_hint(exc: Exception) -> str | None:
     """Return an actionable hint for common API connection failures.
 
-    Maps opaque exceptions (e.g. ``KeyError('content')``) to plain-English
-    guidance so users don't have to guess what went wrong.
+    Keep this intentionally conservative because many CLI command boundaries
+    catch broad runtime exceptions. Only emit hints for well-known API/auth
+    signatures so local parsing bugs do not masquerade as credential problems.
     """
     if isinstance(exc, KeyError):
         key = str(exc).strip("'\"")
-        if key == "content":
-            return (
-                "Hint: This usually means the API returned an empty or malformed response.\n"
-                "      Verify that both the CJA API and AEP API are added to your Adobe\n"
-                "      Developer Console project, and that the service account is granted\n"
-                "      access to the correct product profiles."
-            )
+        if key != "content":
+            return None
         return (
-            f"Hint: API response missing expected key '{key}'.\n"
-            "      Check your OAuth credentials and Developer Console project configuration."
+            "Hint: This usually means the API returned an empty or malformed response.\n"
+            "      Verify that both the CJA API and AEP API are added to your Adobe\n"
+            "      Developer Console project, and that the service account is granted\n"
+            "      access to the correct product profiles."
         )
-    from cja_auto_sdr.core.discovery_exceptions import coerce_http_status_code, extract_http_status_codes
 
-    status = next((code for code in extract_http_status_codes(exc) if code in (401, 403)), None)
-    if status is None:
-        message_status = coerce_http_status_code(str(exc))
-        if message_status in (401, 403):
-            status = message_status
-
-    if status in (401, 403):
+    status = _api_auth_failure_status(exc)
+    if status in _AUTH_FAILURE_HTTP_STATUSES:
         return (
             f"Hint: Received HTTP {status} — authentication or authorization failed.\n"
             "      Verify your client_id, client_secret, and OAuth scopes match the\n"

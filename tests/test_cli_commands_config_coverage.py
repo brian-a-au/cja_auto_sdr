@@ -631,13 +631,11 @@ class TestApiConnectionHint:
         assert "AEP API" in hint
         assert "product profiles" in hint
 
-    def test_key_error_other_key_returns_generic_hint(self):
+    def test_key_error_other_key_returns_none(self):
         from cja_auto_sdr.cli.commands.config import _api_connection_hint
 
         hint = _api_connection_hint(KeyError("globalCompanyId"))
-        assert hint is not None
-        assert "globalCompanyId" in hint
-        assert "OAuth credentials" in hint
+        assert hint is None
 
     def test_http_401_returns_auth_hint(self):
         from cja_auto_sdr.cli.commands.config import _api_connection_hint
@@ -682,6 +680,12 @@ class TestApiConnectionHint:
         hint = _api_connection_hint(RuntimeError("Request failed with HTTP 401 Unauthorized"))
         assert hint is not None
         assert "HTTP 401" in hint
+
+    def test_unrelated_numeric_runtime_text_returns_none(self):
+        from cja_auto_sdr.cli.commands.config import _api_connection_hint
+
+        hint = _api_connection_hint(RuntimeError("expected 403 columns in export"))
+        assert hint is None
 
     def test_generic_exception_returns_none(self):
         from cja_auto_sdr.cli.commands.config import _api_connection_hint
