@@ -33,29 +33,19 @@ def _diff_output_to_stdout_requested(
 def _resolve_diff_output_path(args: argparse.Namespace, *, output_format: str) -> str | None:
     """Resolve the effective diff-family output path after agent-mode defaults.
 
-    Keep the parser contract literal, but suppress inherited agent-mode stdout
-    only when the caller did not explicitly pass ``--output`` and the chosen
-    diff format is not the supported JSON stdout path.
+    Delegates to the shared agent-output contract resolver with the diff
+    command-family stdout capability set.
     """
-    output_path = getattr(args, "output", None)
-    if not getattr(args, "agent_mode", False):
-        return output_path
+    from cja_auto_sdr.cli.agent_output import DIFF_STDOUT_FORMATS, resolve_agent_output_path
 
-    generator = _generator_module()
-    if generator._cli_option_specified("--output"):
-        return output_path
-
-    if output_format == "json":
-        return output_path
-    return None
+    return resolve_agent_output_path(args, output_format=output_format, stdout_formats=DIFF_STDOUT_FORMATS)
 
 
 def _resolve_diff_quiet(args: argparse.Namespace, *, output_path: str | None) -> bool:
     """Resolve the effective diff-family quiet flag after output coercion."""
-    generator = _generator_module()
-    if generator._cli_option_specified("--quiet"):
-        return True
-    return getattr(args, "run_summary_json", None) in ("-", "stdout") or output_path in ("-", "stdout")
+    from cja_auto_sdr.cli.agent_output import resolve_agent_quiet
+
+    return resolve_agent_quiet(args, output_path=output_path)
 
 
 def _exit_with_diff_result(

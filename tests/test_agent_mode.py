@@ -365,3 +365,143 @@ class TestAgentModeOrgReportRuntime:
         assert exit_code == 0
         assert mock_run.call_args.kwargs["output_path"] is None
         assert mock_run.call_args.kwargs["quiet"] is True
+
+
+# ---------------------------------------------------------------------------
+# v3.5.1 Targeted Regression Tests — Output Contract Hardening
+# ---------------------------------------------------------------------------
+
+
+class TestAgentModeExplicitOutputWins:
+    """Explicit --output must always override agent-mode stdout suppression."""
+
+    def test_explicit_output_file_wins_for_diff_file_only_format(self):
+        with (
+            patch(
+                "cja_auto_sdr.generator.resolve_data_view_names",
+                side_effect=[(["dv_source"], {}), (["dv_target"], {})],
+            ),
+            patch("cja_auto_sdr.generator.handle_diff_command", return_value=(True, False, None)) as mock_diff,
+        ):
+            exit_code = _run_main_impl(
+                ["--diff", "dv_source", "dv_target", "--agent-mode", "--format", "markdown", "--output", "/tmp/out.md"]
+            )
+
+        assert exit_code == 0
+        # Explicit --output must survive even though markdown is file-only
+        assert mock_diff.call_args.kwargs["output_to_stdout"] is False
+
+    def test_explicit_output_stdout_wins_for_org_report_json(self):
+        with patch("cja_auto_sdr.generator.run_org_report", return_value=(True, False)) as mock_run:
+            exit_code = _run_main_impl(["--org-report", "--agent-mode", "--format", "json", "--output", "-"])
+
+        assert exit_code == 0
+        assert mock_run.call_args.kwargs["output_path"] == "-"
+        assert mock_run.call_args.kwargs["quiet"] is True
+
+
+class TestAgentModeConsoleStdoutIntentional:
+    """Console-producing modes must render when stdout is the intentional destination."""
+
+    def test_org_report_console_format_agent_mode_keeps_stdout(self):
+        with patch("cja_auto_sdr.generator.run_org_report", return_value=(True, False)) as mock_run:
+            exit_code = _run_main_impl(["--org-report", "--agent-mode", "--format", "console"])
+
+        assert exit_code == 0
+        # Console is stdout-capable for org-report — output must not be suppressed
+        assert mock_run.call_args.kwargs["output_path"] == "-"
+        assert mock_run.call_args.kwargs["quiet"] is True
+
+    def test_diff_json_agent_mode_keeps_stdout(self):
+        with (
+            patch(
+                "cja_auto_sdr.generator.resolve_data_view_names",
+                side_effect=[(["dv_source"], {}), (["dv_target"], {})],
+            ),
+            patch("cja_auto_sdr.generator.handle_diff_command", return_value=(True, False, None)) as mock_diff,
+        ):
+            exit_code = _run_main_impl(
+                ["--diff", "dv_source", "dv_target", "--agent-mode", "--format", "json"]
+            )
+
+        assert exit_code == 0
+        assert mock_diff.call_args.kwargs["output_to_stdout"] is True
+        assert mock_diff.call_args.kwargs["quiet"] is True
+
+
+class TestAgentModeRunSummaryJsonStdout:
+    """--run-summary-json - must keep quiet semantics correct."""
+
+    def test_run_summary_json_stdout_forces_quiet_for_org_report(self):
+        """run-summary-json targeting stdout forces quiet even without agent-mode."""
+        with patch("cja_auto_sdr.generator.run_org_report", return_value=(True, False)) as mock_run:
+            exit_code = _run_main_impl(
+                ["--org-report", "--format", "console", "--run-summary-json", "-"]
+            )
+
+        assert exit_code == 0
+        assert mock_run.call_args.kwargs["quiet"] is True
+
+    def test_run_summary_json_file_does_not_force_quiet(self):
+        """run-summary-json to a file does not force quiet when output is suppressed."""
+        with patch("cja_auto_sdr.generator.run_org_report", return_value=(True, False)) as mock_run:
+            exit_code = _run_main_impl(
+                ["--org-report", "--agent-mode", "--format", "excel", "--run-summary-json", "/tmp/summary.json"]
+            )
+
+        assert exit_code == 0
+        # Neither output nor run_summary_json target stdout — quiet is False
+        assert mock_run.call_args.kwargs["output_path"] is None
+        assert mock_run.call_args.kwargs["quiet"] is False
+
+
+class TestAgentModeFileOnlyNeverSilent:
+    """File-producing agent flows must not go silent (quiet=False when stdout suppressed)."""
+
+    def test_org_report_csv_agent_mode_not_silent(self):
+        with patch("cja_auto_sdr.generator.run_org_report", return_value=(True, False)) as mock_run:
+            exit_code = _run_main_impl(["--org-report", "--agent-mode", "--format", "csv"])
+
+        assert exit_code == 0
+        assert mock_run.call_args.kwargs["output_path"] is None
+        assert mock_run.call_args.kwargs["quiet"] is False
+
+    def test_org_report_html_agent_mode_not_silent(self):
+        with patch("cja_auto_sdr.generator.run_org_report", return_value=(True, False)) as mock_run:
+            exit_code = _run_main_impl(["--org-report", "--agent-mode", "--format", "html"])
+
+        assert exit_code == 0
+        assert mock_run.call_args.kwargs["output_path"] is None
+        assert mock_run.call_args.kwargs["quiet"] is False
+
+    def test_diff_csv_agent_mode_not_silent(self):
+        with (
+            patch(
+                "cja_auto_sdr.generator.resolve_data_view_names",
+                side_effect=[(["dv_source"], {}), (["dv_target"], {})],
+            ),
+            patch("cja_auto_sdr.generator.handle_diff_command", return_value=(True, False, None)) as mock_diff,
+        ):
+            exit_code = _run_main_impl(
+                ["--diff", "dv_source", "dv_target", "--agent-mode", "--format", "csv"]
+            )
+
+        assert exit_code == 0
+        assert mock_diff.call_args.kwargs["output_to_stdout"] is False
+        assert mock_diff.call_args.kwargs["quiet"] is False
+
+    def test_diff_excel_agent_mode_not_silent(self):
+        with (
+            patch(
+                "cja_auto_sdr.generator.resolve_data_view_names",
+                side_effect=[(["dv_source"], {}), (["dv_target"], {})],
+            ),
+            patch("cja_auto_sdr.generator.handle_diff_command", return_value=(True, False, None)) as mock_diff,
+        ):
+            exit_code = _run_main_impl(
+                ["--diff", "dv_source", "dv_target", "--agent-mode", "--format", "excel"]
+            )
+
+        assert exit_code == 0
+        assert mock_diff.call_args.kwargs["output_to_stdout"] is False
+        assert mock_diff.call_args.kwargs["quiet"] is False
