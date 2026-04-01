@@ -834,3 +834,40 @@ class TestListProfilesOrgId:
         by_name = {profile["name"]: profile for profile in data["profiles"]}
         assert by_name["good"]["org_id"] == "GOOD@AdobeOrg"
         assert by_name["bad"]["org_id"] is None
+
+    def test_listing_logs_debug_when_org_id_read_fails(self, tmp_path, caplog, capsys):
+        """Debug log is emitted when org_id read fails for a profile."""
+        import logging
+
+        profiles_dir = tmp_path / "profiles"
+        profiles_dir.mkdir()
+
+        good = profiles_dir / "good"
+        good.mkdir()
+        (good / "config.json").write_text('{"org_id": "GOOD@AdobeOrg"}')
+
+        bad = profiles_dir / "bad"
+        bad.mkdir()
+        (bad / "config.json").write_text('{"org_id": "BAD@AdobeOrg"}')
+
+        original = _read_profile_org_id
+
+        def side_effect(profile_path):
+            if profile_path == bad:
+                raise OSError("boom")
+            return original(profile_path)
+
+        with (
+            patch("cja_auto_sdr.generator.get_profiles_dir", return_value=profiles_dir),
+            patch("cja_auto_sdr.generator._read_profile_org_id", side_effect=side_effect),
+            caplog.at_level(logging.DEBUG, logger="cja_auto_sdr.core.profiles"),
+        ):
+            result = list_profiles(output_format="json")
+
+        assert result is True
+        assert "Failed to read org_id from profile 'bad'" in caplog.text
+
+        data = json.loads(capsys.readouterr().out)
+        by_name = {profile["name"]: profile for profile in data["profiles"]}
+        assert by_name["good"]["org_id"] == "GOOD@AdobeOrg"
+        assert by_name["bad"]["org_id"] is None
