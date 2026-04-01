@@ -86,7 +86,7 @@ Choose **OAuth Server-to-Server** (recommended):
 
 ### 1.5 Add the Adobe Experience Platform (AEP) API
 
-> **⚠ Required — do not skip this step.** Your project needs **both** the CJA API (added above) **and** the [Adobe Experience Platform API](https://developer.adobe.com/experience-platform-apis/). The AEP API associates your service account with an Experience Platform product profile, which is required for CJA API authentication. Without it, API calls will fail with a generic error (e.g. `API connection failed: 'content'`).
+> **⚠ Required — do not skip this step.** Your project needs **both** the CJA API (added above) **and** the [Adobe Experience Platform API](https://developer.adobe.com/experience-platform-apis/). The AEP API associates your service account with an Experience Platform product profile, which is required for CJA API authentication. Without it, `--validate-config` will report the failure with guidance on how to fix it.
 
 1. In your project, click **"Add API"** again
 2. Search for **"Experience Platform API"** (under Adobe Experience Platform)
