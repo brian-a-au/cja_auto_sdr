@@ -195,8 +195,7 @@ def validate_credentials(
     # Check for scopes (warning, not error)
     if "scopes" not in credentials or not credentials.get("scopes", "").strip():
         logger.warning(
-            "Credentials from %s missing OAuth scopes - "
-            "recommend setting scopes (copy from Adobe Developer Console)",
+            "Credentials from %s missing OAuth scopes - recommend setting scopes (copy from Adobe Developer Console)",
             source,
         )
 

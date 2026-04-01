@@ -593,9 +593,7 @@ class TestParallelAPIFetcherErrors:
         logger = _make_logger()
         perf = PerformanceTracker(logger=logger)
         cja = MagicMock()
-        fetcher = ParallelAPIFetcher(
-            cja=cja, logger=logger, perf_tracker=perf, max_workers=3, quiet=True
-        )
+        fetcher = ParallelAPIFetcher(cja=cja, logger=logger, perf_tracker=perf, max_workers=3, quiet=True)
         assert fetcher.tuner is None
         with patch("cja_auto_sdr.api.fetch.make_api_call_with_retry", return_value="data"):
             result = fetcher._timed_api_call(lambda: None, operation_name="test")
