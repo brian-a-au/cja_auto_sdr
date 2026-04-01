@@ -1,10 +1,10 @@
 """Tests for the centralised agent-output contract resolver.
 
-These tests validate the single authoritative runtime interpretation of the
-agent-facing output contract introduced by v3.5.1.  They cover:
+These tests validate the shared runtime interpretation of the agent-facing
+output contract introduced by v3.5.1. They cover:
 
 * Capability table completeness and immutability
-* ``resolve_agent_output_path`` for each command family
+* ``resolve_agent_output_path`` for the command families that use it directly
 * ``resolve_agent_quiet`` recomputation from resolved output state
 * ``is_stdout_path`` alias handling
 """
@@ -46,9 +46,13 @@ class TestCapabilityTables:
         for fmt in ("csv", "html", "markdown", "excel"):
             assert fmt not in ORG_REPORT_STDOUT_FORMATS
 
-    def test_discovery_stdout_formats_covers_all_known_formats(self):
-        for fmt in ("json", "csv", "table", "console"):
+    def test_discovery_stdout_formats_cover_machine_readable_stdout(self):
+        for fmt in ("json", "csv"):
             assert fmt in DISCOVERY_STDOUT_FORMATS
+
+    def test_discovery_stdout_formats_exclude_console_rendering(self):
+        for fmt in ("table", "console"):
+            assert fmt not in DISCOVERY_STDOUT_FORMATS
 
     def test_tables_are_frozensets(self):
         assert isinstance(DIFF_STDOUT_FORMATS, frozenset)
@@ -176,7 +180,8 @@ class TestResolveAgentOutputPath:
         result = resolve_agent_output_path(args, output_format="csv", stdout_formats=ORG_REPORT_STDOUT_FORMATS)
         assert result is None
 
-    # -- Discovery (all formats allowed) --
+    # -- Discovery capability tables are consumed by discovery-specific runtime
+    # resolution rather than resolve_agent_output_path directly. --
 
     @patch("cja_auto_sdr.cli.agent_output._cli_option_specified_fn")
     def test_agent_mode_discovery_csv_keeps_stdout(self, mock_fn):
@@ -186,11 +191,11 @@ class TestResolveAgentOutputPath:
         assert result == "-"
 
     @patch("cja_auto_sdr.cli.agent_output._cli_option_specified_fn")
-    def test_agent_mode_discovery_table_keeps_stdout(self, mock_fn):
+    def test_agent_mode_discovery_table_is_not_stdout_capable(self, mock_fn):
         mock_fn.return_value = lambda opt, **kw: False
         args = _make_args(agent_mode=True, output="-")
         result = resolve_agent_output_path(args, output_format="table", stdout_formats=DISCOVERY_STDOUT_FORMATS)
-        assert result == "-"
+        assert result is None
 
     # -- stdout alias --
 

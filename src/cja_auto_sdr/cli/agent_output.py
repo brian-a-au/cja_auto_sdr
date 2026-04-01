@@ -1,9 +1,9 @@
 """Centralized agent-mode output contract resolution.
 
-This module is the **single authoritative source** for translating parser-era
-``--agent-mode`` defaults into runtime-effective output state.  Every command
-family that participates in the agent-output contract should call through here
-rather than re-deriving stdout suppression and ``quiet`` rules locally.
+This module is the code-owned source of truth for agent-output capability
+definitions and runtime-effective output state. Diff and org-report delegate
+output-path and ``quiet`` recomputation here directly; discovery consumes the
+same capability tables for its stdout normalization logic.
 
 Design invariants
 -----------------
@@ -18,7 +18,11 @@ Design invariants
 from __future__ import annotations
 
 import argparse
+import sys
+from functools import lru_cache
 from typing import TYPE_CHECKING
+
+from cja_auto_sdr.cli.option_resolution import resolve_long_option_token
 
 if TYPE_CHECKING:
     from collections.abc import Container
@@ -43,8 +47,8 @@ DIFF_STDOUT_FORMATS: frozenset[str] = frozenset({"json"})
 ORG_REPORT_STDOUT_FORMATS: frozenset[str] = frozenset({"json", "console"})
 """Org-report formats that may emit directly to stdout."""
 
-DISCOVERY_STDOUT_FORMATS: frozenset[str] = frozenset({"json", "csv", "table", "console"})
-"""Discovery formats that may emit directly to stdout (effectively all)."""
+DISCOVERY_STDOUT_FORMATS: frozenset[str] = frozenset({"json", "csv"})
+"""Discovery formats that remain stdout-capable under the agent-output contract."""
 
 
 # ---------------------------------------------------------------------------
@@ -59,10 +63,37 @@ def is_stdout_path(path: str | None) -> bool:
     return path in _STDOUT_ALIASES
 
 
-def _cli_option_specified_fn():
-    """Lazy import of ``_cli_option_specified`` from generator."""
-    from cja_auto_sdr.generator import _cli_option_specified
+@lru_cache(maxsize=1)
+def _known_long_options() -> frozenset[str]:
+    """Return canonical long-option strings from the configured CLI parser."""
+    from cja_auto_sdr.cli.parser import parse_arguments
 
+    parser = parse_arguments(return_parser=True, enable_autocomplete=False)
+    return frozenset(
+        option for action in parser._actions for option in action.option_strings if option.startswith("--")
+    )
+
+
+def _cli_option_specified(option_name: str, argv: list[str] | None = None) -> bool:
+    """Return True if an option was explicitly provided via long-form token."""
+    tokens = argv if argv is not None else sys.argv[1:]
+    known_long_options = _known_long_options() if option_name.startswith("--") else frozenset()
+
+    for token in tokens:
+        if token == option_name or token.startswith(f"{option_name}="):
+            return True
+
+        if (
+            option_name.startswith("--")
+            and resolve_long_option_token(token, known_long_options).canonical_option == option_name
+        ):
+            return True
+
+    return False
+
+
+def _cli_option_specified_fn():
+    """Indirection seam for tests patching explicit-option detection."""
     return _cli_option_specified
 
 

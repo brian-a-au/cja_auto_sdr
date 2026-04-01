@@ -115,10 +115,10 @@ class TestDiscoveryManifestContract:
     def test_manifest_format_enum_is_nonempty(self):
         assert self.format_enum, "discovery manifest must declare format enum"
 
-    def test_all_discovery_formats_are_stdout_capable(self):
-        """Every discovery format should be in the stdout set (all support stdout)."""
-        assert self.format_enum <= DISCOVERY_STDOUT_FORMATS, (
-            f"Discovery formats {self.format_enum} not all in DISCOVERY_STDOUT_FORMATS {DISCOVERY_STDOUT_FORMATS}"
+    def test_agent_stdout_formats_are_subset_of_manifest_enum(self):
+        """Runtime stdout-capable discovery formats must appear in the manifest enum."""
+        assert DISCOVERY_STDOUT_FORMATS <= self.format_enum, (
+            f"DISCOVERY_STDOUT_FORMATS {DISCOVERY_STDOUT_FORMATS} not in manifest enum {self.format_enum}"
         )
 
     def test_agent_mode_description_mentions_json(self):

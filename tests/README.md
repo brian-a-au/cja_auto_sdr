@@ -141,7 +141,7 @@ tests/
 └── README.md                        # This file
 ```
 
-**Total: 7,654 comprehensive tests**
+**Total: 7,660 comprehensive tests**
 
 ### Test Count Breakdown
 
@@ -150,16 +150,16 @@ tests/
 
 | Category | Tests | Files | Notes |
 |----------|-------|-------|-------|
-| `unit` | 7,548 | 123 | Default primary category for files without explicit integration/e2e/smoke scope |
+| `unit` | 7,554 | 123 | Default primary category for files without explicit integration/e2e/smoke scope |
 | `integration` | 73 | 3 | Cross-module integration suites |
 | `e2e` | 23 | 2 | End-to-end suites with a mocked external boundary |
 | `smoke` | 10 | 1 | Lightweight command-mode coverage |
 | `slow` | 7 | 1 | Overlay marker; these tests are also counted in a primary category |
-| **Primary Total** | **7,654** | **129** | **unit + integration + e2e + smoke** |
+| **Primary Total** | **7,660** | **129** | **unit + integration + e2e + smoke** |
 
 | CI Slice | Tests | Files | Selector |
 |----------|-------|-------|----------|
-| `test-unit` | 7,541 | 122 | `-m "unit and not slow"` |
+| `test-unit` | 7,547 | 122 | `-m "unit and not slow"` |
 | `test-integration` | 103 | 6 | `-m "integration or e2e or slow"` |
 | `smoke-test` | 10 | 1 | `-m smoke` |
 
@@ -258,7 +258,7 @@ tests/
 | `test_generator_mock_contract.py` | 2 | Generator mock symbol contract tests |
 | `test_completion.py` | 56 | Shell completion flag (--completion bash/zsh/fish) |
 | `test_exception_narrowing.py` | 50 | Exception narrowing boundary tests |
-| `test_coverage_hardening.py` | 99 | Coverage hardening tests |
+| `test_coverage_hardening.py` | 100 | Coverage hardening tests |
 | `test_trending_models.py` | 53 | Trending dataclass construction and bridge tests |
 | `test_trending_discovery.py` | 88 | Snapshot cache discovery, deltas, drift scoring |
 | `test_trending_cli.py` | 9 | --trending-window CLI flag parsing |
@@ -292,13 +292,13 @@ tests/
 | `test_advisories.py` | 53 | Advisory model, builder, and rollup tests |
 | `test_agent_contract_docs.py` | 27 | Agent contract documentation validation tests |
 | `test_agent_contract_samples.py` | 6 | Agent contract sample fixture validation tests |
-| `test_agent_mode.py` | 54 | --agent-mode CLI preset and resolution tests |
-| `test_agent_output_contract.py` | 38 | Centralized agent-output contract resolver tests |
+| `test_agent_mode.py` | 58 | --agent-mode CLI preset and resolution tests |
+| `test_agent_output_contract.py` | 39 | Centralized agent-output contract resolver tests |
 | `test_agent_playbooks.py` | 38 | Agent playbook structural validation tests |
 | `test_agent_workflows.py` | 69 | Agent workflow shell script validation tests |
 | `test_manifest_agent_contract.py` | 16 | Manifest vs runtime capability drift tests |
 | `test_tool_manifests.py` | 40 | Tool manifest schema and content tests |
-| **Total** | **7,654** | **Collected via pytest --collect-only** |
+| **Total** | **7,660** | **Collected via pytest --collect-only** |
 
 ## Running Tests
 
@@ -756,7 +756,7 @@ the `tests/README.md` inventory tree or count table.
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (7,654 tests total)
+- [x] Comprehensive test coverage (7,660 tests total)
 - [x] Org-wide analysis tests (test_org_report.py) - 211 tests (including large org scaling, output path aliases, memory warnings, smart cache invalidation)
 - [x] Org-wide analysis integration tests (test_org_report_integration.py) - 17 tests (end-to-end flows, caching, filtering, governance thresholds)
 - [x] Profile management tests (test_profiles.py) - 77 tests

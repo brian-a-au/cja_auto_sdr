@@ -101,6 +101,11 @@ class TestAgentModeResolution:
         assert args.format == "csv"
         assert args.output == "-"
 
+    def test_discovery_console_override_preserves_parser_defaults_before_runtime_resolution(self):
+        args = parse_arguments(["--list-dataviews", "--agent-mode", "--format", "console"])
+        assert args.format == "console"
+        assert args.output == "-"
+
     def test_agent_mode_on_org_report(self):
         args = parse_arguments(["--org-report", "--agent-mode"])
         assert args.format == "json"
@@ -255,6 +260,34 @@ class TestDiffStdoutAliasRuntime:
 
         assert exit_code == 0
         assert mock_compare.call_args.kwargs["output_to_stdout"] is True
+
+
+class TestAgentModeDiscoveryStdoutContract:
+    """Verify discovery runtime resolution consumes the shared stdout contract."""
+
+    def test_discovery_csv_agent_mode_keeps_stdout(self):
+        with patch("cja_auto_sdr.generator.list_dataviews", return_value=True) as mock_list:
+            exit_code = _run_main_impl(["--list-dataviews", "--agent-mode", "--format", "csv"])
+
+        assert exit_code == 0
+        assert mock_list.call_args.kwargs["output_format"] == "csv"
+        assert mock_list.call_args.kwargs["output_file"] == "-"
+
+    def test_discovery_console_agent_mode_normalizes_back_to_json(self):
+        with patch("cja_auto_sdr.generator.list_dataviews", return_value=True) as mock_list:
+            exit_code = _run_main_impl(["--list-dataviews", "--agent-mode", "--format", "console"])
+
+        assert exit_code == 0
+        assert mock_list.call_args.kwargs["output_format"] == "json"
+        assert mock_list.call_args.kwargs["output_file"] == "-"
+
+    def test_inspection_console_agent_mode_normalizes_back_to_json(self):
+        with patch("cja_auto_sdr.generator.describe_dataview", return_value=True) as mock_describe:
+            exit_code = _run_main_impl(["--describe-dataview", "dv_123", "--agent-mode", "--format", "console"])
+
+        assert exit_code == 0
+        assert mock_describe.call_args.kwargs["output_format"] == "json"
+        assert mock_describe.call_args.kwargs["output_file"] == "-"
 
 
 class TestAgentModeDiffRuntime:

@@ -363,6 +363,8 @@ def _emit_json_output(
 
 def _resolve_discovery_output_format(raw_format: str | None, *, output_to_stdout: bool) -> str:
     """Normalize discovery output format with stdout piping semantics."""
+    from cja_auto_sdr.cli.agent_output import DISCOVERY_STDOUT_FORMATS
+
     # Local import to avoid circular dependency: generator -> discovery -> generator
     from cja_auto_sdr.generator import _resolve_command_output_format
 
@@ -372,8 +374,8 @@ def _resolve_discovery_output_format(raw_format: str | None, *, output_to_stdout
         fallback_format="table",
         output_to_stdout=output_to_stdout,
         stdout_fallback_format="json",
-        stdout_allowed_formats={"json", "csv"},
-        warning_scope="this command",
+        stdout_allowed_formats=DISCOVERY_STDOUT_FORMATS,
+        warning_scope="discovery commands",
     )
 
 
