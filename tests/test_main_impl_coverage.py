@@ -1985,6 +1985,30 @@ class TestRunDryRunAPIValidation:
         captured = capsys.readouterr()
         assert "dv_err: Error - per-view runtime failure" in captured.out
 
+    def test_dv_validation_http_403_uses_data_view_access_hint(self, capsys):
+        """Per-data-view 403 failures should mention no-access/not-found guidance."""
+        logger = logging.getLogger("test_dry_run_dv_403_hint")
+        with (
+            patch("cja_auto_sdr.generator.validate_config_file", return_value=True),
+            patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "config", {})),
+            patch("cja_auto_sdr.generator.cjapy") as mock_cjapy,
+            patch("cja_auto_sdr.generator.make_api_call_with_retry") as mock_retry,
+        ):
+            mock_cja = MagicMock()
+            mock_cjapy.CJA.return_value = mock_cja
+
+            mock_retry.side_effect = [
+                [],  # getDataViews
+                RuntimeError("HTTP 403 Forbidden"),
+            ]
+
+            result = run_dry_run(["dv_forbidden"], "config.json", logger)
+        assert result is False
+        captured = capsys.readouterr()
+        assert "dv_forbidden: Error - HTTP 403 Forbidden" in captured.out
+        assert "accessing this data view" in captured.out
+        assert "have access to it" in captured.out
+
     def test_dv_validation_retryable_error_continues_to_next_view(self, capsys):
         """Retryable transport failure for one data view should not abort the full loop."""
         logger = logging.getLogger("test_dry_run_retryable_continue")

@@ -260,20 +260,29 @@ class MemoryLimitExceeded(CJASDRError):
         super().__init__(message)
 
 
-_AUTH_FAILURE_HTTP_STATUSES = frozenset({401, 403})
-_AUTH_FAILURE_MESSAGE_MARKERS = ("http", "unauthorized", "forbidden")
+_API_CONNECTION_HINT_HTTP_STATUSES = frozenset({401, 403})
+_API_CONNECTION_HINT_MESSAGE_MARKERS = ("http", "unauthorized", "forbidden")
+_DATAVIEW_LOOKUP_HINT_CONTEXT = "data_view_lookup"
 
 
-def _api_auth_failure_status_from_message(message: str) -> int | None:
+def _normalize_api_connection_hint_context(context: str | None) -> str | None:
+    """Normalize hint context names so callers can use readable variants."""
+    if context is None:
+        return None
+    normalized = context.casefold().strip().replace("-", "_").replace(" ", "_")
+    return normalized or None
+
+
+def _api_connection_hint_status_from_message(message: str) -> int | None:
     """Return 401/403 when *message* clearly looks like an auth failure."""
     normalized = message.casefold().strip()
-    if not normalized or not any(marker in normalized for marker in _AUTH_FAILURE_MESSAGE_MARKERS):
+    if not normalized or not any(marker in normalized for marker in _API_CONNECTION_HINT_MESSAGE_MARKERS):
         return None
 
     from cja_auto_sdr.core.discovery_exceptions import coerce_http_status_code
 
     status = coerce_http_status_code(message)
-    if status in _AUTH_FAILURE_HTTP_STATUSES:
+    if status in _API_CONNECTION_HINT_HTTP_STATUSES:
         return status
     if "unauthorized" in normalized:
         return 401
@@ -282,22 +291,27 @@ def _api_auth_failure_status_from_message(message: str) -> int | None:
     return None
 
 
-def _api_auth_failure_status(exc: Exception) -> int | None:
+def _api_connection_hint_status(exc: Exception) -> int | None:
     """Extract a 401/403 status from structured error metadata or message text."""
     from cja_auto_sdr.core.discovery_exceptions import extract_http_status_codes
 
     for status in extract_http_status_codes(exc):
-        if status in _AUTH_FAILURE_HTTP_STATUSES:
+        if status in _API_CONNECTION_HINT_HTTP_STATUSES:
             return status
-    return _api_auth_failure_status_from_message(str(exc))
+    return _api_connection_hint_status_from_message(str(exc))
 
 
-def api_connection_hint(exc: Exception) -> str | None:
+def api_connection_hint(exc: Exception, *, context: str | None = None) -> str | None:
     """Return an actionable hint for common API connection failures.
 
     Keep this intentionally conservative because many CLI command boundaries
     catch broad runtime exceptions. Only emit hints for well-known API/auth
     signatures so local parsing bugs do not masquerade as credential problems.
+
+    Recognized *context* values:
+      - ``"data_view_lookup"``: tailor HTTP 403 guidance for specific
+        getDataView / single-data-view fetch failures that commonly mean
+        "not found" or "no access" in this codebase.
     """
     if isinstance(exc, KeyError):
         key = str(exc).strip("'\"")
@@ -310,11 +324,31 @@ def api_connection_hint(exc: Exception) -> str | None:
             "      access to the correct product profiles."
         )
 
-    status = _api_auth_failure_status(exc)
-    if status in _AUTH_FAILURE_HTTP_STATUSES:
+    status = _api_connection_hint_status(exc)
+    normalized_context = _normalize_api_connection_hint_context(context)
+
+    if status == 401:
         return (
-            f"Hint: Received HTTP {status} — authentication or authorization failed.\n"
+            "Hint: Received HTTP 401 — authentication failed.\n"
             "      Verify your client_id, client_secret, and OAuth scopes match the\n"
             "      Developer Console configuration."
+        )
+    if status == 403 and normalized_context == _DATAVIEW_LOOKUP_HINT_CONTEXT:
+        return (
+            "Hint: Received HTTP 403 while accessing this data view.\n"
+            "      In CJA this often means the data view does not exist or you do not\n"
+            "      have access to it. Verify the data view ID and confirm this account\n"
+            "      is granted access through the appropriate product profile.\n"
+            "      If other API calls also fail with 403, then re-check your client_id,\n"
+            "      client_secret, and OAuth scopes."
+        )
+    if status == 403:
+        return (
+            "Hint: Received HTTP 403 — authentication or authorization failed, or the\n"
+            "      requested resource is not accessible.\n"
+            "      Verify your client_id, client_secret, and OAuth scopes match the\n"
+            "      Developer Console configuration. For specific data-view lookups,\n"
+            "      also verify that the data view exists and that this account can\n"
+            "      access it."
         )
     return None

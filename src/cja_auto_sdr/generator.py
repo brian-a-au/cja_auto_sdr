@@ -745,11 +745,12 @@ def _print_api_hint(
     indent: str = "  ",
     file=None,
     enabled: bool = True,
+    context: str | None = None,
 ) -> None:
     """Print an actionable hint for *exc* if one is available."""
     if not enabled:
         return
-    hint = api_connection_hint(exc)
+    hint = api_connection_hint(exc, context=context)
     if hint:
         _file = file or sys.stderr
         print(file=_file)
@@ -2676,11 +2677,11 @@ def process_inventory_summary(
         dv_name = lookup_data.get("name", data_view_id) if isinstance(lookup_data, dict) else data_view_id
     except RECOVERABLE_CONFIG_API_EXCEPTIONS as e:
         print(ConsoleColors.error(f"ERROR: Failed to fetch data view: {e}"), file=sys.stderr)
-        _print_api_hint(e)
+        _print_api_hint(e, context="data_view_lookup")
         return {"error": str(e)}
     except (RuntimeError, AttributeError) as e:  # Residual non-API failures (e.g. cjapy internals)
         print(ConsoleColors.error(f"ERROR: Failed to fetch data view (unexpected): {e}"), file=sys.stderr)
-        _print_api_hint(e)
+        _print_api_hint(e, context="data_view_lookup")
         logger.debug("Unexpected error fetching data view", exc_info=True)
         return {"error": str(e)}
 
@@ -4008,13 +4009,13 @@ def run_dry_run(data_views: list[str], config_file: str, logger: logging.Logger,
             raise
         except RECOVERABLE_CONFIG_API_EXCEPTIONS as e:
             print(f"  ✗ {dv_id}: Error - {e!s}")
-            _print_api_hint(e, file=sys.stdout)
+            _print_api_hint(e, file=sys.stdout, context="data_view_lookup")
             invalid_count += 1
             all_passed = False
         except (RuntimeError, AttributeError) as e:  # Residual non-API failures (e.g. cjapy internals)
             logger.debug(f"Unexpected dry-run validation error for {dv_id}: {e!s}", exc_info=True)
             print(f"  ✗ {dv_id}: Error - {_dry_run_error_text(e)}")
-            _print_api_hint(e, file=sys.stdout)
+            _print_api_hint(e, file=sys.stdout, context="data_view_lookup")
             invalid_count += 1
             all_passed = False
 

@@ -655,6 +655,18 @@ class TestApiConnectionHint:
         hint = _api_connection_hint(exc)
         assert hint is not None
         assert "HTTP 403" in hint
+        assert "resource is not accessible" in hint
+
+    def test_http_403_data_view_lookup_context_mentions_no_access(self):
+        from cja_auto_sdr.cli.commands.config import _api_connection_hint
+
+        exc = Exception("Forbidden")
+        exc.status_code = 403
+        hint = _api_connection_hint(exc, context="data_view_lookup")
+        assert hint is not None
+        assert "accessing this data view" in hint
+        assert "have access to it" in hint
+        assert "client_id" in hint
 
     def test_wrapped_response_status_code_returns_auth_hint(self):
         from cja_auto_sdr.cli.commands.config import _api_connection_hint

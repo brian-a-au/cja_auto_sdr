@@ -27,7 +27,7 @@ def _generator_module():
     return _generator
 
 
-def _api_connection_hint(exc: Exception) -> str | None:
+def _api_connection_hint(exc: Exception, *, context: str | None = None) -> str | None:
     """Return an actionable hint for common API connection failures.
 
     Thin wrapper around :func:`core.exceptions.api_connection_hint` so that
@@ -35,7 +35,7 @@ def _api_connection_hint(exc: Exception) -> str | None:
     """
     from cja_auto_sdr.core.exceptions import api_connection_hint
 
-    return api_connection_hint(exc)
+    return api_connection_hint(exc, context=context)
 
 
 def _print_api_connection_failure(
