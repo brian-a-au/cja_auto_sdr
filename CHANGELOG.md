@@ -14,7 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Command-family stdout capability tables (`DIFF_STDOUT_FORMATS`, `ORG_REPORT_STDOUT_FORMATS`, `DISCOVERY_STDOUT_FORMATS`) as code-owned constants
 - Manifest validation tests that fail when tool manifests drift from runtime capability definitions
 - Targeted regression tests for output-resolution and quiet recomputation edge cases
-- Live agent smoke matrix documentation in `docs/AGENT_AUTOMATION.md`
+- Discovery commands now participate in the shared agent-output contract
 
 ### Changed
 - Diff-family output resolution now delegates to shared `resolve_agent_output_path()` and `resolve_agent_quiet()`
