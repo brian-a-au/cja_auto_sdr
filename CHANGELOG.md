@@ -7,6 +7,18 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.2] — 2026-03-31
+
+### Security
+- Upgraded `pygments` 2.19.2 -> 2.20.0 to pick up the CVE-2026-4539 fix.
+
+### Fixed
+- Added debug logging for profile `org_id` read failures during `--profile-list`.
+
+### Changed
+- Upgraded `numpy` 2.4.3 -> 2.4.4.
+- Upgraded `requests` 2.33.0 -> 2.33.1.
+
 ## [3.5.1] — 2026-03-31
 
 ### Added

@@ -257,6 +257,11 @@ def list_profiles(output_format: str = "table") -> bool:
             try:
                 org_id = generator._read_profile_org_id(item)
             except Exception:
+                logging.getLogger(__name__).debug(
+                    "Failed to read org_id from profile '%s': skipping",
+                    profile_name,
+                    exc_info=True,
+                )
                 org_id = None
 
             profiles.append(
