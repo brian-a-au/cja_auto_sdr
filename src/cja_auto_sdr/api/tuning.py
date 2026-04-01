@@ -66,7 +66,7 @@ class APIWorkerTuner:
 
         # Rolling window of response times
         self._response_times: list[float] = []
-        self._last_adjustment_time = 0.0
+        self._last_adjustment_time: float | None = None
 
         # Thread safety
         self._lock = threading.Lock()
@@ -111,7 +111,10 @@ class APIWorkerTuner:
 
             # Check cooldown period
             now = time.monotonic()
-            if now - self._last_adjustment_time < self.config.cooldown_seconds:
+            if (
+                self._last_adjustment_time is not None
+                and now - self._last_adjustment_time < self.config.cooldown_seconds
+            ):
                 return None
 
             # Calculate average response time
@@ -185,5 +188,5 @@ class APIWorkerTuner:
             if workers is not None:
                 self._current_workers = max(self.config.min_workers, min(workers, self.config.max_workers))
             self._response_times.clear()
-            self._last_adjustment_time = 0.0
+            self._last_adjustment_time = None
             self.logger.debug("API tuner reset (workers: %s)", self._current_workers)

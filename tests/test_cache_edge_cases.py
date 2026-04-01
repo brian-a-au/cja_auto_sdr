@@ -105,15 +105,17 @@ class TestErrorPathKeyGeneration:
             patch.object(cache.logger, "warning"),
             patch(
                 "cja_auto_sdr.api.cache.time.monotonic_ns",
-                side_effect=[1_000_000_000, 1_500_000_000],
+                return_value=1_000_000_000,
             ) as mock_ns,
         ):
             key1 = cache._generate_cache_key("not_a_dataframe", "Metrics", ["id"], ["id"])
             key2 = cache._generate_cache_key("not_a_dataframe", "Metrics", ["id"], ["id"])
-        # Error-path keys intentionally embed a monotonic nanosecond timestamp
-        # so failures cannot collide and accidentally turn into cache hits.
-        assert key1 == "error:1000000000"
-        assert key2 == "error:1500000000"
+        # Error-path keys intentionally include a monotonic timestamp plus
+        # extra uniqueness so repeated failures cannot accidentally collide
+        # into cache hits even if the clock reading repeats.
+        assert key1.startswith("error:1000000000:")
+        assert key2.startswith("error:1000000000:")
+        assert key1 != key2
         assert mock_ns.call_count == 2
 
 

@@ -3,6 +3,7 @@
 import atexit
 import contextlib
 import hashlib
+import itertools
 import logging
 import multiprocessing
 import threading
@@ -14,10 +15,25 @@ import pandas as pd
 
 from cja_auto_sdr.core.constants import CACHE_KEY_HASH_LENGTH
 
+_ERROR_KEY_COUNTER = itertools.count()
+
 
 def _unique_error_key() -> str:
     """Return a unique cache key that forces a miss on key-generation failure."""
-    return f"error:{time.monotonic_ns()}"
+    return (
+        f"error:{time.monotonic_ns()}:"
+        f"{multiprocessing.current_process().pid}:{threading.get_ident()}:{next(_ERROR_KEY_COUNTER)}"
+    )
+
+
+def _local_cache_clock() -> float:
+    """Return a monotonic clock for in-process cache bookkeeping."""
+    return time.monotonic()
+
+
+def _shared_cache_clock() -> float:
+    """Return a monotonic clock for same-host Manager-backed cache state."""
+    return time.monotonic()
 
 
 def _validate_cache_params(max_size: int, ttl_seconds: int) -> None:
@@ -146,7 +162,7 @@ class ValidationCache:
             cached_issues, timestamp = self._cache[cache_key]
 
             # Check TTL expiration
-            age = time.monotonic() - timestamp
+            age = _local_cache_clock() - timestamp
             if age > self.ttl_seconds:
                 if debug_enabled:
                     self.logger.debug("Cache EXPIRED: %s (age: %.1fs)", item_type, age)
@@ -187,7 +203,7 @@ class ValidationCache:
         debug_enabled = self.logger.isEnabledFor(logging.DEBUG)
 
         with self._lock:
-            now = time.monotonic()
+            now = _local_cache_clock()
 
             if cache_key not in self._cache:
                 self._ensure_capacity_for_new_entry(now, debug_enabled)
@@ -433,14 +449,14 @@ class SharedValidationCache:
             cached_issues, timestamp = cached_data
 
             # Check TTL expiration
-            age = time.monotonic() - timestamp
+            age = _shared_cache_clock() - timestamp
             if age > self.ttl_seconds:
                 self._remove_entry(cache_key)
                 self._stats["misses"] = self._stats.get("misses", 0) + 1
                 return None, cache_key
 
             # Cache hit - update access time and stats
-            self._access_times[cache_key] = time.monotonic()
+            self._access_times[cache_key] = _shared_cache_clock()
             self._stats["hits"] = self._stats.get("hits", 0) + 1
 
             # Return copy to prevent mutation
@@ -528,7 +544,7 @@ class SharedValidationCache:
             cache_key = self._generate_cache_key(df, item_type, required_fields, critical_fields)
 
         with self._lock:
-            now = time.monotonic()
+            now = _shared_cache_clock()
 
             if cache_key not in self._cache:
                 self._ensure_capacity_for_new_entry(now)
@@ -547,7 +563,7 @@ class SharedValidationCache:
             self._access_times.clear()
             return False
 
-        current_time = now if now is not None else time.monotonic()
+        current_time = now if now is not None else _shared_cache_clock()
         if not access_times_reconciled:
             self._reconcile_access_times(current_time)
 

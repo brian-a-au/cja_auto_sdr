@@ -13,8 +13,8 @@ Validates that APIWorkerTuner:
 
 import os
 import sys
-import time
 from concurrent.futures import ThreadPoolExecutor
+from unittest.mock import patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from cja_auto_sdr.generator import APITuningConfig, APIWorkerTuner
@@ -194,7 +194,7 @@ class TestAPIWorkerTunerCooldown:
         assert tuner.current_workers == 4  # No change due to cooldown
 
     def test_allows_adjustment_after_cooldown(self):
-        """Should allow adjustment after cooldown expires"""
+        """Should allow adjustment after cooldown expires (deterministic, no sleep)"""
         config = APITuningConfig(
             min_workers=1,
             max_workers=10,
@@ -202,20 +202,46 @@ class TestAPIWorkerTunerCooldown:
             sample_window=3,
             cooldown_seconds=0.1,  # 100ms cooldown
         )
-        tuner = APIWorkerTuner(config=config, initial_workers=3)
+        fake_now = [100.0]
 
-        # First adjustment
-        for i in range(3):
-            tuner.record_response_time(50)
+        with patch("cja_auto_sdr.api.tuning.time.monotonic", side_effect=lambda: fake_now[0]):
+            tuner = APIWorkerTuner(config=config, initial_workers=3)
+
+            # First adjustment
+            for _ in range(3):
+                tuner.record_response_time(50)
+            assert tuner.current_workers == 4
+
+            # Still cooling down
+            fake_now[0] += 0.05
+            for _ in range(3):
+                tuner.record_response_time(50)
+            assert tuner.current_workers == 4
+
+            # Cooldown elapsed
+            fake_now[0] += 0.1
+            for _ in range(3):
+                tuner.record_response_time(50)
+            assert tuner.current_workers == 5
+
+    def test_first_adjustment_bypasses_cooldown_sentinel(self):
+        """The first adjustment should not be blocked when monotonic starts below cooldown."""
+        config = APITuningConfig(
+            min_workers=1,
+            max_workers=10,
+            scale_up_threshold_ms=200,
+            sample_window=3,
+            cooldown_seconds=10.0,
+        )
+
+        with patch("cja_auto_sdr.api.tuning.time.monotonic", return_value=5.0):
+            tuner = APIWorkerTuner(config=config, initial_workers=3)
+
+            for _ in range(3):
+                result = tuner.record_response_time(50)
+
+        assert result == 4
         assert tuner.current_workers == 4
-
-        # Wait for cooldown
-        time.sleep(0.15)
-
-        # Should allow second adjustment
-        for i in range(3):
-            tuner.record_response_time(50)
-        assert tuner.current_workers == 5
 
 
 class TestAPIWorkerTunerStatistics:
