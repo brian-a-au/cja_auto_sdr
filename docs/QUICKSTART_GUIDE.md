@@ -86,7 +86,7 @@ Choose **OAuth Server-to-Server** (recommended):
 
 ### 1.5 Add the Adobe Experience Platform (AEP) API
 
-> **Important:** The [Adobe Experience Platform API](https://developer.adobe.com/experience-platform-apis/) must be added to your project. This associates your service account with an Experience Platform product profile, which is required for CJA API authentication.
+> **⚠ Required — do not skip this step.** Your project needs **both** the CJA API (added above) **and** the [Adobe Experience Platform API](https://developer.adobe.com/experience-platform-apis/). The AEP API associates your service account with an Experience Platform product profile, which is required for CJA API authentication. Without it, API calls will fail with a generic error (e.g. `API connection failed: 'content'`).
 
 1. In your project, click **"Add API"** again
 2. Search for **"Experience Platform API"** (under Adobe Experience Platform)
@@ -97,10 +97,10 @@ Choose **OAuth Server-to-Server** (recommended):
 
 1. Select **"OAuth Server-to-Server"** (same as CJA)
 2. Click **"Next"**
-3. Select a product profile (this associates your service account with Experience Platform)
+3. Select a product profile — this grants the **service account** (not your user account) access to Experience Platform
 4. Click **"Save configured API"**
 
-> **Note:** If you don't see any product profiles, contact your Adobe Admin Console administrator to ensure your user has been added to an AEP product profile.
+> **Note:** If you don't see any product profiles, contact your Adobe Admin Console administrator to ensure your organization has AEP product profiles configured. The service account must be explicitly granted access — your own user permissions do not carry over to API calls.
 
 ### 1.7 Verify Both APIs Are Added
 
@@ -119,7 +119,9 @@ After setup, you'll see your credentials. You need these four values:
 | **Organization ID** | Top-right of console, or project overview | `ABC123@AdobeOrg` |
 | **Client ID** | OAuth Server-to-Server > Credentials | `cm12345abcdef...` |
 | **Client Secret** | Click "Retrieve client secret" | `p8e-ABC123...` |
-| **Scopes** | OAuth Server-to-Server > Scopes | Usually pre-filled |
+| **Scopes** | OAuth Server-to-Server > Scopes | Pre-filled after both APIs are added |
+
+> **Tip:** Copy your scopes **after** adding both the CJA and AEP APIs. The Developer Console aggregates scopes from all APIs in your project, so copying before both are added may give you an incomplete set.
 
 > **Important:** Keep these credentials secure. Never commit them to version control.
 
@@ -337,13 +339,13 @@ Before generating reports, verify everything is configured correctly.
 
 ### 4.1 Validate Configuration
 
-First, check that your credentials are valid:
+First, check that your credentials are valid and can reach the API:
 
 ```bash
 uv run cja_auto_sdr --validate-config
 ```
 
-This verifies your configuration without making API calls.
+This runs a 5-step check: environment, dependencies, credentials, API connectivity, and output permissions. If the API connection step fails, see [API Permission Errors](TROUBLESHOOTING.md#api-permission-errors) for common causes.
 
 ### 4.2 Test API Connection
 

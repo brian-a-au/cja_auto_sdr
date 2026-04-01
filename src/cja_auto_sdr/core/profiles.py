@@ -688,9 +688,18 @@ def test_profile(profile_name: str) -> bool:
         print()
         print(ConsoleColors.error("Profile test: FAILED"), file=sys.stderr)
         print()
+        from cja_auto_sdr.cli.commands.config import _api_connection_hint
+
+        hint = _api_connection_hint(e)
+        if hint:
+            for line in hint.splitlines():
+                print(ConsoleColors.warning(f"  {line}"))
+            print()
         print("Common issues:")
         print("  - Invalid client_id or secret")
         print("  - Incorrect OAuth scopes")
         print("  - API project not provisioned for CJA")
+        print("  - Missing AEP API in Developer Console project")
+        print("  - Service account not granted product profile access")
         print()
         return False

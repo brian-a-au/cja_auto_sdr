@@ -613,3 +613,87 @@ class TestValidateConfigOutputDirErrorMessages:
 
         assert result is False
         assert "Cannot determine writable parent" in captured.out
+
+
+# ---------------------------------------------------------------------------
+# _api_connection_hint — diagnostic hint generation
+# ---------------------------------------------------------------------------
+
+
+class TestApiConnectionHint:
+    """Tests for _api_connection_hint helper."""
+
+    def test_key_error_content_returns_aep_hint(self):
+        from cja_auto_sdr.cli.commands.config import _api_connection_hint
+
+        hint = _api_connection_hint(KeyError("content"))
+        assert hint is not None
+        assert "AEP API" in hint
+        assert "product profiles" in hint
+
+    def test_key_error_other_key_returns_generic_hint(self):
+        from cja_auto_sdr.cli.commands.config import _api_connection_hint
+
+        hint = _api_connection_hint(KeyError("globalCompanyId"))
+        assert hint is not None
+        assert "globalCompanyId" in hint
+        assert "OAuth credentials" in hint
+
+    def test_http_401_returns_auth_hint(self):
+        from cja_auto_sdr.cli.commands.config import _api_connection_hint
+
+        exc = Exception("Unauthorized")
+        exc.status_code = 401
+        hint = _api_connection_hint(exc)
+        assert hint is not None
+        assert "HTTP 401" in hint
+        assert "client_id" in hint
+
+    def test_http_403_returns_auth_hint(self):
+        from cja_auto_sdr.cli.commands.config import _api_connection_hint
+
+        exc = Exception("Forbidden")
+        exc.status_code = 403
+        hint = _api_connection_hint(exc)
+        assert hint is not None
+        assert "HTTP 403" in hint
+
+    def test_generic_exception_returns_none(self):
+        from cja_auto_sdr.cli.commands.config import _api_connection_hint
+
+        hint = _api_connection_hint(ValueError("something else"))
+        assert hint is None
+
+
+# ---------------------------------------------------------------------------
+# validate_config_only — hint output in step [4/5]
+# ---------------------------------------------------------------------------
+
+
+class TestValidateConfigHintOutput:
+    """Verify that API connection failure in validate_config_only prints hints."""
+
+    def test_key_error_content_shows_hint_in_output(self, capsys):
+        from cja_auto_sdr.cli.commands.config import validate_config_only
+
+        gen = _make_generator_mock(
+            python_version_info=(3, 14, 0),
+            recoverable_exceptions=(KeyError,),
+        )
+        gen.load_credentials_from_env.return_value = {
+            "org_id": "org@AdobeOrg",
+            "client_id": "cid12345678",
+            "secret": "sec12345678",
+            "scopes": "openid",
+        }
+        gen.validate_env_credentials.return_value = True
+        gen.cjapy.CJA.return_value.getDataViews.side_effect = KeyError("content")
+
+        with patch("cja_auto_sdr.cli.commands.config._generator_module", return_value=gen):
+            with patch("cja_auto_sdr.cli.commands.config._check_output_dir_access"):
+                result = validate_config_only()
+
+        assert result is False
+        captured = capsys.readouterr()
+        assert "API connection failed" in captured.out
+        assert "AEP API" in captured.out

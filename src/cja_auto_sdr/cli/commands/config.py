@@ -27,6 +27,35 @@ def _generator_module():
     return _generator
 
 
+def _api_connection_hint(exc: Exception) -> str | None:
+    """Return an actionable hint for common API connection failures.
+
+    Maps opaque exceptions (e.g. ``KeyError('content')``) to plain-English
+    guidance so users don't have to guess what went wrong.
+    """
+    if isinstance(exc, KeyError):
+        key = str(exc).strip("'\"")
+        if key == "content":
+            return (
+                "Hint: This usually means the API returned an empty or malformed response.\n"
+                "      Verify that both the CJA API and AEP API are added to your Adobe\n"
+                "      Developer Console project, and that the service account is granted\n"
+                "      access to the correct product profiles."
+            )
+        return (
+            f"Hint: API response missing expected key '{key}'.\n"
+            "      Check your OAuth credentials and Developer Console project configuration."
+        )
+    status = getattr(exc, "status_code", None)
+    if status in (401, 403):
+        return (
+            f"Hint: Received HTTP {status} — authentication or authorization failed.\n"
+            "      Verify your client_id, client_secret, and OAuth scopes match the\n"
+            "      Developer Console configuration."
+        )
+    return None
+
+
 def generate_sample_config(output_path: str = "config.sample.json") -> bool:
     """Generate a sample configuration file."""
     generator = _generator_module()
@@ -458,6 +487,11 @@ def validate_config_only(
         raise
     except generator.RECOVERABLE_CONFIG_API_EXCEPTIONS as e:
         print(generator.ConsoleColors.error(f"  \u2717 API connection failed: {e!s}"))
+        hint = _api_connection_hint(e)
+        if hint:
+            print()
+            for line in hint.splitlines():
+                print(generator.ConsoleColors.warning(f"    {line}"))
         all_passed = False
     except (AttributeError, RuntimeError) as e:
         print(generator.ConsoleColors.error(f"  \u2717 API connection failed (unexpected): {e!s}"))
