@@ -1848,6 +1848,22 @@ class TestRunDryRunAPIValidation:
         assert "API connection failed: HTTP 403 Forbidden" in captured.out
         assert "authentication or authorization failed" in captured.out
 
+    def test_api_connection_plain_exception_auth_error_shows_hint(self, capsys):
+        """Bare Exception auth failures during API probe should still fail gracefully with a hint."""
+        logger = logging.getLogger("test_dry_run_api_plain_exception_hint")
+        with (
+            patch("cja_auto_sdr.generator.validate_config_file", return_value=True),
+            patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "config", {})),
+            patch("cja_auto_sdr.generator.cjapy") as mock_cjapy,
+            patch("cja_auto_sdr.generator.make_api_call_with_retry", side_effect=Exception("HTTP 403 Forbidden")),
+        ):
+            mock_cjapy.CJA.return_value = MagicMock()
+            result = run_dry_run(["dv_test"], "config.json", logger)
+        assert result is False
+        captured = capsys.readouterr()
+        assert "API connection failed: HTTP 403 Forbidden" in captured.out
+        assert "authentication or authorization failed" in captured.out
+
     def test_api_connection_unexpected_runtime_exception(self, capsys):
         """Unexpected runtime exceptions during API probe should still fail gracefully."""
         logger = logging.getLogger("test_dry_run_api_runtime")
@@ -2009,6 +2025,30 @@ class TestRunDryRunAPIValidation:
         assert "accessing this data view" in captured.out
         assert "have access to it" in captured.out
 
+    def test_dv_validation_plain_exception_http_403_uses_data_view_access_hint(self, capsys):
+        """Plain Exception 403s during per-view lookup should stay controlled and lookup-scoped."""
+        logger = logging.getLogger("test_dry_run_dv_plain_403_hint")
+        with (
+            patch("cja_auto_sdr.generator.validate_config_file", return_value=True),
+            patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "config", {})),
+            patch("cja_auto_sdr.generator.cjapy") as mock_cjapy,
+            patch("cja_auto_sdr.generator.make_api_call_with_retry") as mock_retry,
+        ):
+            mock_cja = MagicMock()
+            mock_cjapy.CJA.return_value = mock_cja
+
+            mock_retry.side_effect = [
+                [],  # getDataViews
+                Exception("HTTP 403 Forbidden"),
+            ]
+
+            result = run_dry_run(["dv_forbidden"], "config.json", logger)
+        assert result is False
+        captured = capsys.readouterr()
+        assert "dv_forbidden: Error - HTTP 403 Forbidden" in captured.out
+        assert "accessing this data view" in captured.out
+        assert "have access to it" in captured.out
+
     def test_dv_component_validation_http_403_uses_generic_auth_hint(self, capsys):
         """Later component-count 403s should not be mislabeled as lookup failures."""
         logger = logging.getLogger("test_dry_run_dv_component_403_hint")
@@ -2020,6 +2060,34 @@ class TestRunDryRunAPIValidation:
             patch(
                 "cja_auto_sdr.generator._count_component_items_for_fetch_spec_with_retry",
                 side_effect=RuntimeError("HTTP 403 Forbidden"),
+            ),
+        ):
+            mock_cja = MagicMock()
+            mock_cjapy.CJA.return_value = mock_cja
+
+            mock_retry.side_effect = [
+                [],  # getDataViews
+                {"id": "dv_components", "name": "Component DV"},
+            ]
+
+            result = run_dry_run(["dv_components"], "config.json", logger)
+        assert result is False
+        captured = capsys.readouterr()
+        assert "dv_components: Error - HTTP 403 Forbidden" in captured.out
+        assert "authentication or authorization failed" in captured.out
+        assert "accessing this data view" not in captured.out
+
+    def test_dv_component_validation_plain_exception_uses_generic_auth_hint(self, capsys):
+        """Plain Exception 403s during component counts should use the generic auth hint."""
+        logger = logging.getLogger("test_dry_run_dv_component_plain_403_hint")
+        with (
+            patch("cja_auto_sdr.generator.validate_config_file", return_value=True),
+            patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "config", {})),
+            patch("cja_auto_sdr.generator.cjapy") as mock_cjapy,
+            patch("cja_auto_sdr.generator.make_api_call_with_retry") as mock_retry,
+            patch(
+                "cja_auto_sdr.generator._count_component_items_for_fetch_spec_with_retry",
+                side_effect=Exception("HTTP 403 Forbidden"),
             ),
         ):
             mock_cja = MagicMock()

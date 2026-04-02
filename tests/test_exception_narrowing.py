@@ -190,12 +190,12 @@ class TestRequireAccessibleDataviewExceptionNarrowing:
 
 
 # ===========================================================================
-# Group A: process_inventory_summary  (fallback -> (RuntimeError, AttributeError))
+# Group A: process_inventory_summary  (fallback -> plain Exception, except SystemError)
 # ===========================================================================
 
 
 class TestProcessInventorySummaryExceptionNarrowing:
-    """Verify process_inventory_summary fallback catches (RuntimeError, AttributeError)."""
+    """Verify process_inventory_summary fallback catches third-party Exception failures."""
 
     def _run_with_side_effect(self, exc):
         """Mock CJA init + dataviews.get_single raising *exc*."""
@@ -228,6 +228,12 @@ class TestProcessInventorySummaryExceptionNarrowing:
         result = self._run_with_side_effect(ConfigurationError("invalid auth bootstrap"))
         assert "error" in result
         assert "invalid auth bootstrap" in result["error"]
+
+    def test_plain_exception_caught(self):
+        """Bare Exception from cjapy bootstrap should return a controlled error payload."""
+        result = self._run_with_side_effect(Exception("auth bootstrap failed"))
+        assert "error" in result
+        assert "auth bootstrap failed" in result["error"]
 
     def test_system_error_propagates(self):
         """SystemError is NOT in either handler -> propagates."""

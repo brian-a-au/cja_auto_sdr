@@ -2685,6 +2685,13 @@ def process_inventory_summary(
         _print_api_hint(e, context="data_view_lookup")
         logger.debug("Unexpected error fetching data view", exc_info=True)
         return {"error": str(e)}
+    except Exception as e:
+        if isinstance(e, SystemError):
+            raise
+        print(ConsoleColors.error(f"ERROR: Failed to fetch data view (unexpected): {e}"), file=sys.stderr)
+        _print_api_hint(e, context="data_view_lookup")
+        logger.debug("Unexpected error fetching data view", exc_info=True)
+        return {"error": str(e)}
 
     if not quiet:
         print(ConsoleColors.info(f"Fetching inventory data for: {dv_name}"))
@@ -3938,6 +3945,12 @@ def run_dry_run(data_views: list[str], config_file: str, logger: logging.Logger,
         logger.debug("Unexpected dry-run API connection failure", exc_info=True)
         all_passed = False
         return _fail_dry_run_api_connection(e)
+    except Exception as e:
+        if isinstance(e, SystemError):
+            raise
+        logger.debug("Unexpected dry-run API connection failure", exc_info=True)
+        all_passed = False
+        return _fail_dry_run_api_connection(e)
 
     # Step 3: Validate each data view
     print()
@@ -3987,6 +4000,14 @@ def run_dry_run(data_views: list[str], config_file: str, logger: logging.Logger,
             invalid_count += 1
             all_passed = False
             continue
+        except Exception as e:
+            if isinstance(e, SystemError):
+                raise
+            logger.debug(f"Unexpected dry-run validation error for {dv_id}: {e!s}", exc_info=True)
+            _print_dry_run_data_view_error(e, context="data_view_lookup")
+            invalid_count += 1
+            all_passed = False
+            continue
 
         if dv_info is None:
             print(f"  ✗ {dv_id}: Not found or no access")
@@ -4023,6 +4044,14 @@ def run_dry_run(data_views: list[str], config_file: str, logger: logging.Logger,
             all_passed = False
             continue
         except (RuntimeError, AttributeError) as e:  # Residual non-API failures (e.g. cjapy internals)
+            logger.debug(f"Unexpected dry-run component validation error for {dv_id}: {e!s}", exc_info=True)
+            _print_dry_run_data_view_error(e)
+            invalid_count += 1
+            all_passed = False
+            continue
+        except Exception as e:
+            if isinstance(e, SystemError):
+                raise
             logger.debug(f"Unexpected dry-run component validation error for {dv_id}: {e!s}", exc_info=True)
             _print_dry_run_data_view_error(e)
             invalid_count += 1
