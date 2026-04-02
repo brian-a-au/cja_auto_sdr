@@ -2009,6 +2009,34 @@ class TestRunDryRunAPIValidation:
         assert "accessing this data view" in captured.out
         assert "have access to it" in captured.out
 
+    def test_dv_component_validation_http_403_uses_generic_auth_hint(self, capsys):
+        """Later component-count 403s should not be mislabeled as lookup failures."""
+        logger = logging.getLogger("test_dry_run_dv_component_403_hint")
+        with (
+            patch("cja_auto_sdr.generator.validate_config_file", return_value=True),
+            patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "config", {})),
+            patch("cja_auto_sdr.generator.cjapy") as mock_cjapy,
+            patch("cja_auto_sdr.generator.make_api_call_with_retry") as mock_retry,
+            patch(
+                "cja_auto_sdr.generator._count_component_items_for_fetch_spec_with_retry",
+                side_effect=RuntimeError("HTTP 403 Forbidden"),
+            ),
+        ):
+            mock_cja = MagicMock()
+            mock_cjapy.CJA.return_value = mock_cja
+
+            mock_retry.side_effect = [
+                [],  # getDataViews
+                {"id": "dv_components", "name": "Component DV"},
+            ]
+
+            result = run_dry_run(["dv_components"], "config.json", logger)
+        assert result is False
+        captured = capsys.readouterr()
+        assert "dv_components: Error - HTTP 403 Forbidden" in captured.out
+        assert "authentication or authorization failed" in captured.out
+        assert "accessing this data view" not in captured.out
+
     def test_dv_validation_retryable_error_continues_to_next_view(self, capsys):
         """Retryable transport failure for one data view should not abort the full loop."""
         logger = logging.getLogger("test_dry_run_retryable_continue")

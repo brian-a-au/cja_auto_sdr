@@ -279,6 +279,29 @@ class TestHandleSnapshotCommand:
 
     @patch("cja_auto_sdr.generator.cjapy")
     @patch("cja_auto_sdr.generator.configure_cjapy")
+    def test_snapshot_component_403_shows_generic_auth_hint(self, mock_configure, mock_cjapy, tmp_path, capsys):
+        """Component-fetch 403s during snapshot build should not imply lookup failure."""
+        mock_configure.return_value = (True, "config", None)
+        mock_cja = MagicMock()
+        mock_cjapy.CJA.return_value = mock_cja
+        mock_cja.getDataView.return_value = {"name": "DV", "owner": "o", "description": ""}
+        mock_cja.getMetrics.side_effect = RuntimeError("HTTP 403 Forbidden")
+
+        out_file = str(tmp_path / "snap.json")
+        result = handle_snapshot_command(
+            data_view_id="dv_123",
+            snapshot_file=out_file,
+            quiet=True,
+        )
+
+        assert result is False
+        captured = capsys.readouterr()
+        assert "Failed to create snapshot: HTTP 403 Forbidden" in captured.err
+        assert "authentication or authorization failed" in captured.err
+        assert "accessing this data view" not in captured.err
+
+    @patch("cja_auto_sdr.generator.cjapy")
+    @patch("cja_auto_sdr.generator.configure_cjapy")
     def test_snapshot_with_profile(self, mock_configure, mock_cjapy, tmp_path):
         """Profile parameter is passed to configure_cjapy."""
         mock_configure.return_value = (True, "config", None)
@@ -1163,6 +1186,32 @@ class TestHandleDiffSnapshotCommand:
         assert "Failed to compare against snapshot: HTTP 403 Forbidden" in captured.err
         assert "accessing this data view" in captured.err
         assert "have access to it" in captured.err
+
+    @patch("cja_auto_sdr.generator.cjapy")
+    @patch("cja_auto_sdr.generator.configure_cjapy")
+    def test_diff_snapshot_component_403_shows_generic_auth_hint(self, mock_configure, mock_cjapy, tmp_path, capsys):
+        """Component-fetch 403s during diff-snapshot should use the generic auth hint."""
+        mock_configure.return_value = (True, "config", None)
+        mock_cja = MagicMock()
+        mock_cjapy.CJA.return_value = mock_cja
+        mock_cja.getDataView.return_value = {"name": "Test DV", "owner": "o", "description": ""}
+        mock_cja.getMetrics.return_value = MagicMock(empty=False, to_dict=MagicMock(return_value=[]))
+        mock_cja.getDimensions.side_effect = RuntimeError("HTTP 403 Forbidden")
+
+        snap_file = str(tmp_path / "baseline.json")
+        _write_snapshot_file(snap_file)
+
+        success, _has_changes, _exit_code = handle_diff_snapshot_command(
+            data_view_id="dv_test",
+            snapshot_file=snap_file,
+            quiet=True,
+        )
+
+        assert success is False
+        captured = capsys.readouterr()
+        assert "Failed to compare against snapshot: HTTP 403 Forbidden" in captured.err
+        assert "authentication or authorization failed" in captured.err
+        assert "accessing this data view" not in captured.err
 
     @patch("cja_auto_sdr.generator.cjapy")
     @patch("cja_auto_sdr.generator.configure_cjapy")

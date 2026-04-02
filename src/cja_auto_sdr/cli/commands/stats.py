@@ -269,7 +269,9 @@ def resolve_data_view_names(
             resolution_diagnostics,
             include_diagnostics=include_diagnostics,
         )
-    except (AttributeError, RuntimeError) as e:
+    except Exception as e:
+        if isinstance(e, SystemError):
+            raise
         error_message = f"Failed to resolve data view names (unexpected): {e!s}"
         logger.error(error_message)
         generator._print_api_hint(e, enabled=emit_api_hints)

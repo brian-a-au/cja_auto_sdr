@@ -34,12 +34,12 @@ def _make_logger() -> logging.Logger:
 
 
 # ===========================================================================
-# Group B: test_profile  (catches RECOVERABLE_CONFIG_API_EXCEPTIONS)
+# Group B: test_profile  (catches RECOVERABLE_CONFIG_API_EXCEPTIONS + plain Exception fallback)
 # ===========================================================================
 
 
 class TestTestProfileExceptionNarrowing:
-    """Verify test_profile catches recoverable API/bootstrap failures and propagates others."""
+    """Verify test_profile catches recoverable/bootstrap failures and propagates others."""
 
     def _run_with_side_effect(self, exc, tmp_path, capsys):
         """Helper: invoke test_profile with in-memory cjapy configuration raising *exc*."""
@@ -73,10 +73,22 @@ class TestTestProfileExceptionNarrowing:
         assert result is False
         assert "FAILED" in capsys.readouterr().err
 
-    def test_runtime_error_propagates(self, tmp_path, capsys):
-        """RuntimeError is NOT in RECOVERABLE_API_EXCEPTIONS -> propagates."""
-        with pytest.raises(RuntimeError, match="should escape"):
-            self._run_with_side_effect(RuntimeError("should escape"), tmp_path, capsys)
+    def test_runtime_error_caught(self, tmp_path, capsys):
+        """RuntimeError in the fallback tuple should return a controlled failure."""
+        result = self._run_with_side_effect(RuntimeError("should not escape"), tmp_path, capsys)
+        assert result is False
+        assert "FAILED" in capsys.readouterr().err
+
+    def test_attribute_error_caught(self, tmp_path, capsys):
+        """AttributeError in the fallback tuple should return a controlled failure."""
+        result = self._run_with_side_effect(AttributeError("missing bootstrap field"), tmp_path, capsys)
+        assert result is False
+
+    def test_plain_exception_caught(self, tmp_path, capsys):
+        """Bare Exception from bootstrap should return a controlled failure."""
+        result = self._run_with_side_effect(Exception("auth bootstrap failed"), tmp_path, capsys)
+        assert result is False
+        assert "FAILED" in capsys.readouterr().err
 
     def test_system_error_propagates(self, tmp_path, capsys):
         """SystemError is NOT in RECOVERABLE_API_EXCEPTIONS -> propagates."""
@@ -224,12 +236,12 @@ class TestProcessInventorySummaryExceptionNarrowing:
 
 
 # ===========================================================================
-# Group A: validate_config_only  (fallback -> (RuntimeError, AttributeError))
+# Group A: validate_config_only  (fallback -> plain Exception, except SystemError)
 # ===========================================================================
 
 
 class TestValidateConfigOnlyExceptionNarrowing:
-    """Verify validate_config_only fallback catches (RuntimeError, AttributeError)."""
+    """Verify validate_config_only fallback catches third-party Exception failures."""
 
     def _run_with_cja_side_effect(self, exc):
         """Mock credential resolution + cjapy.CJA() raising *exc*."""
@@ -260,6 +272,11 @@ class TestValidateConfigOnlyExceptionNarrowing:
         result = self._run_with_cja_side_effect(ConfigurationError("invalid oauth configuration"))
         assert result is False
 
+    def test_plain_exception_caught(self):
+        """Bare Exception from CJA bootstrap should return False."""
+        result = self._run_with_cja_side_effect(Exception("auth bootstrap failed"))
+        assert result is False
+
     def test_system_error_propagates(self):
         """SystemError is NOT in either handler -> propagates."""
         with pytest.raises(SystemError, match="should escape"):
@@ -281,6 +298,21 @@ class TestResolveDataViewNamesExceptionBoundary:
         assert name_map == {}
         assert diagnostics.error_type == "connectivity_error"
         assert "bad org credentials" in diagnostics.error_message
+
+    def test_plain_exception_returns_connectivity_diagnostics(self):
+        """Bare Exception from cjapy bootstrap should produce controlled diagnostics."""
+        with patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "env", {})):
+            with patch("cja_auto_sdr.generator.cjapy") as mock_cjapy:
+                mock_cjapy.CJA.side_effect = Exception("auth bootstrap failed")
+                ids, name_map, diagnostics = generator.resolve_data_view_names(
+                    ["My DV"],
+                    include_diagnostics=True,
+                )
+
+        assert ids == []
+        assert name_map == {}
+        assert diagnostics.error_type == "connectivity_error"
+        assert "auth bootstrap failed" in diagnostics.error_message
 
 
 # ===========================================================================

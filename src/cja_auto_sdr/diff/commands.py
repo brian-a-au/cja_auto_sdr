@@ -50,9 +50,9 @@ def _populate_diff_advisory_rollup(
         logging.getLogger("diff").debug("Advisory rollup computation failed", exc_info=True)
 
 
-def _emit_api_failure_hint(generator: Any, exc: Exception, *, context: str | None = None) -> None:
+def _emit_api_failure_hint(generator: Any, exc: Exception) -> None:
     """Print a diff/snapshot API hint to stderr when one is available."""
-    generator._print_api_hint(exc, file=sys.stderr, context=context)
+    generator._print_api_hint(exc, file=sys.stderr)
 
 
 def handle_snapshot_command(
@@ -104,7 +104,7 @@ def handle_snapshot_command(
             )
         except generator.RECOVERABLE_COMMAND_HANDLER_EXCEPTIONS as e:
             print(generator.ConsoleColors.error(f"ERROR: Failed to create snapshot: {e!s}"), file=sys.stderr)
-            _emit_api_failure_hint(generator, e, context="data_view_lookup")
+            _emit_api_failure_hint(generator, e)
             return False
         saved_path = snapshot_manager.save_snapshot(snapshot, snapshot_file)
 
@@ -273,7 +273,7 @@ def handle_diff_command(
             target_snapshot = snapshot_manager.create_snapshot(cja, target_id, quiet or quiet_diff)
         except generator.RECOVERABLE_COMMAND_HANDLER_EXCEPTIONS as e:
             print(generator.ConsoleColors.error(f"ERROR: Failed to compare data views: {e!s}"), file=sys.stderr)
-            _emit_api_failure_hint(generator, e, context="data_view_lookup")
+            _emit_api_failure_hint(generator, e)
             logger.debug("Diff comparison failed during data view fetch", exc_info=True)
             return False, False, None
 
@@ -572,7 +572,7 @@ def handle_diff_snapshot_command(
             target_snapshot = snapshot_manager.create_snapshot(cja, data_view_id, quiet or quiet_diff)
         except generator.RECOVERABLE_COMMAND_HANDLER_EXCEPTIONS as e:
             print(generator.ConsoleColors.error(f"ERROR: Failed to compare against snapshot: {e!s}"), file=sys.stderr)
-            _emit_api_failure_hint(generator, e, context="data_view_lookup")
+            _emit_api_failure_hint(generator, e)
             logger.debug("Diff-snapshot comparison failed during data view fetch", exc_info=True)
             return False, False, None
 

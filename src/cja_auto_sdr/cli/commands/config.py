@@ -486,7 +486,9 @@ def validate_config_only(
     except generator.RECOVERABLE_CONFIG_API_EXCEPTIONS as e:
         _print_api_connection_failure(generator, e)
         all_passed = False
-    except (AttributeError, RuntimeError) as e:
+    except Exception as e:
+        if isinstance(e, SystemError):
+            raise
         _print_api_connection_failure(generator, e, unexpected=True)
         logging.getLogger(__name__).debug("Unexpected validate-config error", exc_info=True)
         all_passed = False

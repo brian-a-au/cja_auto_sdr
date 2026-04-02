@@ -1282,6 +1282,7 @@ def _refetch_git_snapshot_for_commit(
             )
     except RECOVERABLE_GIT_SNAPSHOT_REFETCH_EXCEPTIONS as e:
         print(ConsoleColors.warning(f"  Could not fetch snapshot data: {e}"))
+        _print_api_hint(e, file=sys.stdout)
     return snapshot
 
 
@@ -3862,6 +3863,11 @@ def run_dry_run(data_views: list[str], config_file: str, logger: logging.Logger,
         print("=" * BANNER_WIDTH)
         return False
 
+    def _print_dry_run_data_view_error(error: Exception, *, context: str | None = None) -> None:
+        """Print a consistent per-data-view validation error and optional remediation hint."""
+        print(f"  ✗ {dv_id}: Error - {_dry_run_error_text(error)}")
+        _print_api_hint(error, file=sys.stdout, context=context)
+
     # Step 1: Validate credentials
     print("[1/3] Validating credentials...")
     if profile:
@@ -3966,58 +3972,72 @@ def run_dry_run(data_views: list[str], config_file: str, logger: logging.Logger,
                 raw_dv_info,
                 data_view_id=dv_id,
             )
-            if dv_info is not None:
-                dv_name = dv_info.get("name", "Unknown")
-
-                # Fetch component counts for predictions
-                metrics_count = _count_component_items_for_fetch_spec_with_retry(
-                    cja,
-                    dv_id,
-                    _METRICS_COMPONENT_FETCH_SPEC,
-                    logger=logger,
-                )
-                dimensions_count = _count_component_items_for_fetch_spec_with_retry(
-                    cja,
-                    dv_id,
-                    _DIMENSIONS_COMPONENT_FETCH_SPEC,
-                    logger=logger,
-                )
-
-                total_metrics += metrics_count
-                total_dimensions += dimensions_count
-                dv_details.append(
-                    {"id": dv_id, "name": dv_name, "metrics": metrics_count, "dimensions": dimensions_count},
-                )
-
-                print(f"  ✓ {dv_id}: {dv_name}")
-                print(f"      Components: {metrics_count} metrics, {dimensions_count} dimensions")
-                valid_count += 1
-            else:
-                print(f"  ✗ {dv_id}: Not found or no access")
-                print(f"      Lookup validation failed: {lookup_failure_reason}")
-                logger.debug(
-                    "Dry-run rejected lookup payload for %s: reason=%s raw_type=%s",
-                    dv_id,
-                    lookup_failure_reason,
-                    lookup_raw_type,
-                )
-                invalid_count += 1
-                all_passed = False
         except (KeyboardInterrupt, SystemExit):
             print()
             print(ConsoleColors.warning("Validation cancelled."))
             raise
         except RECOVERABLE_CONFIG_API_EXCEPTIONS as e:
-            print(f"  ✗ {dv_id}: Error - {e!s}")
-            _print_api_hint(e, file=sys.stdout, context="data_view_lookup")
+            _print_dry_run_data_view_error(e, context="data_view_lookup")
             invalid_count += 1
             all_passed = False
+            continue
         except (RuntimeError, AttributeError) as e:  # Residual non-API failures (e.g. cjapy internals)
             logger.debug(f"Unexpected dry-run validation error for {dv_id}: {e!s}", exc_info=True)
-            print(f"  ✗ {dv_id}: Error - {_dry_run_error_text(e)}")
-            _print_api_hint(e, file=sys.stdout, context="data_view_lookup")
+            _print_dry_run_data_view_error(e, context="data_view_lookup")
             invalid_count += 1
             all_passed = False
+            continue
+
+        if dv_info is None:
+            print(f"  ✗ {dv_id}: Not found or no access")
+            print(f"      Lookup validation failed: {lookup_failure_reason}")
+            logger.debug(
+                "Dry-run rejected lookup payload for %s: reason=%s raw_type=%s",
+                dv_id,
+                lookup_failure_reason,
+                lookup_raw_type,
+            )
+            invalid_count += 1
+            all_passed = False
+            continue
+
+        dv_name = dv_info.get("name", "Unknown")
+
+        try:
+            # Fetch component counts for predictions.
+            metrics_count = _count_component_items_for_fetch_spec_with_retry(
+                cja,
+                dv_id,
+                _METRICS_COMPONENT_FETCH_SPEC,
+                logger=logger,
+            )
+            dimensions_count = _count_component_items_for_fetch_spec_with_retry(
+                cja,
+                dv_id,
+                _DIMENSIONS_COMPONENT_FETCH_SPEC,
+                logger=logger,
+            )
+        except RECOVERABLE_CONFIG_API_EXCEPTIONS as e:
+            _print_dry_run_data_view_error(e)
+            invalid_count += 1
+            all_passed = False
+            continue
+        except (RuntimeError, AttributeError) as e:  # Residual non-API failures (e.g. cjapy internals)
+            logger.debug(f"Unexpected dry-run component validation error for {dv_id}: {e!s}", exc_info=True)
+            _print_dry_run_data_view_error(e)
+            invalid_count += 1
+            all_passed = False
+            continue
+
+        total_metrics += metrics_count
+        total_dimensions += dimensions_count
+        dv_details.append(
+            {"id": dv_id, "name": dv_name, "metrics": metrics_count, "dimensions": dimensions_count},
+        )
+
+        print(f"  ✓ {dv_id}: {dv_name}")
+        print(f"      Components: {metrics_count} metrics, {dimensions_count} dimensions")
+        valid_count += 1
 
     # Calculate time estimates
     # Based on benchmarks: ~0.5s per component for validation, ~0.1s without

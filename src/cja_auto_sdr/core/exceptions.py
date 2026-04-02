@@ -263,6 +263,7 @@ class MemoryLimitExceeded(CJASDRError):
 _API_CONNECTION_HINT_HTTP_STATUSES = frozenset({401, 403})
 _API_CONNECTION_HINT_MESSAGE_MARKERS = ("http", "unauthorized", "forbidden")
 _DATAVIEW_LOOKUP_HINT_CONTEXT = "data_view_lookup"
+_API_CONNECTION_HINT_CONTEXT_ATTR = "_cja_api_hint_context"
 
 
 def _normalize_api_connection_hint_context(context: str | None) -> str | None:
@@ -271,6 +272,19 @@ def _normalize_api_connection_hint_context(context: str | None) -> str | None:
         return None
     normalized = context.casefold().strip().replace("-", "_").replace(" ", "_")
     return normalized or None
+
+
+def attach_api_connection_hint_context(exc: Exception, *, context: str | None) -> Exception:
+    """Attach API-hint context metadata to *exc* and return the same exception."""
+    if context is not None:
+        setattr(exc, _API_CONNECTION_HINT_CONTEXT_ATTR, context)
+    return exc
+
+
+def _exception_api_connection_hint_context(exc: Exception) -> str | None:
+    """Return an API-hint context attached to *exc*, when present."""
+    context = getattr(exc, _API_CONNECTION_HINT_CONTEXT_ATTR, None)
+    return context if isinstance(context, str) else None
 
 
 def _api_connection_hint_status_from_message(message: str) -> int | None:
@@ -325,7 +339,9 @@ def api_connection_hint(exc: Exception, *, context: str | None = None) -> str | 
         )
 
     status = _api_connection_hint_status(exc)
-    normalized_context = _normalize_api_connection_hint_context(context)
+    normalized_context = _normalize_api_connection_hint_context(
+        context if context is not None else _exception_api_connection_hint_context(exc),
+    )
 
     if status == 401:
         return (
