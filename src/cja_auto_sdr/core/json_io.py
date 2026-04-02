@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import contextlib
+import ctypes
+import ctypes.util
 import errno
 import json
 import os
 import stat
+import sys
 import uuid
 from collections.abc import Callable
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -153,20 +157,84 @@ def _cleanup_tmp_path(tmp_path: Path) -> None:
         tmp_path.unlink()
 
 
+def _os_path_has_xattrs(path: Path) -> bool | None:
+    """Return whether *path* has xattrs using the stdlib probe when available."""
+    listxattr = getattr(os, "listxattr", None)
+    if listxattr is None:
+        return None
+    return bool(listxattr(path))
+
+
+@lru_cache(maxsize=1)
+def _native_listxattr_probe() -> Callable[[Path], bool] | None:
+    """Return a native libc-backed xattr probe for runtimes missing ``os.listxattr``."""
+    if os.name == "nt":
+        return None
+
+    libc_name = ctypes.util.find_library("c")
+    if not libc_name:
+        return None
+
+    try:
+        libc = ctypes.CDLL(libc_name, use_errno=True)
+    except OSError:
+        return None
+
+    listxattr = getattr(libc, "listxattr", None)
+    if listxattr is None:
+        return None
+
+    if sys.platform == "darwin":
+        listxattr.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_size_t, ctypes.c_int]
+
+        def probe(path: Path) -> bool:
+            ctypes.set_errno(0)
+            size = listxattr(os.fsencode(os.fspath(path)), None, 0, 0)
+            if size < 0:
+                err = ctypes.get_errno()
+                raise OSError(err, os.strerror(err), str(path))
+            return size > 0
+
+    else:
+        listxattr.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_size_t]
+
+        def probe(path: Path) -> bool:
+            ctypes.set_errno(0)
+            size = listxattr(os.fsencode(os.fspath(path)), None, 0)
+            if size < 0:
+                err = ctypes.get_errno()
+                raise OSError(err, os.strerror(err), str(path))
+            return size > 0
+
+    listxattr.restype = ctypes.c_ssize_t
+    return probe
+
+
+def _native_path_has_xattrs(path: Path) -> bool | None:
+    """Return whether *path* has xattrs using a native fallback when available."""
+    probe = _native_listxattr_probe()
+    if probe is None:
+        return None
+    return probe(path)
+
+
 def _path_has_extended_metadata(path: Path) -> bool:
     """Return True when *path* may carry metadata that replace would drop.
 
-    If xattr inspection is unavailable or rejected for the path, err on the
-    side of compatibility and keep existing files on the direct-write path
-    instead of silently resetting ACL-like or filesystem-managed metadata.
+    Prefer the stdlib xattr probe when available, then fall back to the native
+    libc entry point on Unix runtimes that omit ``os.listxattr``. If the path
+    still cannot be inspected, err on the side of compatibility and keep
+    existing files on the direct-write path instead of silently resetting
+    ACL-like or filesystem-managed metadata.
     """
-    listxattr = getattr(os, "listxattr", None)
-    if listxattr is None:
-        return True
-    try:
-        return bool(listxattr(path))
-    except OSError:
-        return True
+    for probe in (_os_path_has_xattrs, _native_path_has_xattrs):
+        try:
+            has_xattrs = probe(path)
+        except OSError:
+            return True
+        if has_xattrs is not None:
+            return has_xattrs
+    return True
 
 
 def _existing_file_supports_atomic_replace(path: Path) -> bool:

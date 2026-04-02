@@ -237,17 +237,33 @@ class TestWriteJsonAtomicCompatible:
         assert out.stat().st_ino == inode_before
         assert json.loads(out.read_text(encoding="utf-8")) == {"updated": True}
 
-    def test_existing_file_without_xattr_introspection_falls_back_to_direct_write(self, tmp_path, monkeypatch):
-        out = tmp_path / "acl-managed.json"
+    def test_existing_file_without_os_listxattr_uses_native_probe_for_atomic_overwrite(self, tmp_path, monkeypatch):
+        out = tmp_path / "native-probe.json"
         out.write_text('{"old": true}\n', encoding="utf-8")
         inode_before = out.stat().st_ino
 
         monkeypatch.delattr(json_io.os, "listxattr", raising=False)
 
-        write_json_atomic_compatible(out, {"updated": True})
+        with patch("cja_auto_sdr.core.json_io._native_path_has_xattrs", return_value=False) as mock_native_probe:
+            write_json_atomic_compatible(out, {"updated": True})
+
+        assert out.stat().st_ino != inode_before
+        assert json.loads(out.read_text(encoding="utf-8")) == {"updated": True}
+        mock_native_probe.assert_called_once_with(out)
+
+    def test_existing_file_without_any_xattr_probe_falls_back_to_direct_write(self, tmp_path, monkeypatch):
+        out = tmp_path / "no-probe.json"
+        out.write_text('{"old": true}\n', encoding="utf-8")
+        inode_before = out.stat().st_ino
+
+        monkeypatch.delattr(json_io.os, "listxattr", raising=False)
+
+        with patch("cja_auto_sdr.core.json_io._native_path_has_xattrs", return_value=None) as mock_native_probe:
+            write_json_atomic_compatible(out, {"updated": True})
 
         assert out.stat().st_ino == inode_before
         assert json.loads(out.read_text(encoding="utf-8")) == {"updated": True}
+        mock_native_probe.assert_called_once_with(out)
 
     def test_replace_denied_overwrite_falls_back_to_direct_write(self, tmp_path):
         out = tmp_path / "rename-denied.json"
@@ -466,6 +482,20 @@ class TestWriteTextAtomicCompatible:
 
         assert out.stat().st_ino == inode_before
         assert out.read_text(encoding="utf-8") == "new"
+
+    def test_existing_file_without_os_listxattr_uses_native_probe_for_atomic_overwrite(self, tmp_path, monkeypatch):
+        out = tmp_path / "native-probe.md"
+        out.write_text("old", encoding="utf-8")
+        inode_before = out.stat().st_ino
+
+        monkeypatch.delattr(json_io.os, "listxattr", raising=False)
+
+        with patch("cja_auto_sdr.core.json_io._native_path_has_xattrs", return_value=False) as mock_native_probe:
+            write_text_atomic_compatible(out, "new")
+
+        assert out.stat().st_ino != inode_before
+        assert out.read_text(encoding="utf-8") == "new"
+        mock_native_probe.assert_called_once_with(out)
 
     def test_replace_denied_overwrite_falls_back_to_direct_write(self, tmp_path):
         out = tmp_path / "rename-denied.md"
