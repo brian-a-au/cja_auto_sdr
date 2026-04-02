@@ -245,10 +245,10 @@ class TestWriteTextAtomicCompatible:
         out = out_dir / "report.md"
         out.write_text("old", encoding="utf-8")
 
-        os.chmod(out_dir, 0o555)
+        os.chmod(out_dir, 0o555)  # noqa: S103
         try:
             write_text_atomic_compatible(out, "new content")
         finally:
-            os.chmod(out_dir, 0o755)
+            os.chmod(out_dir, 0o755)  # noqa: S103
 
         assert out.read_text(encoding="utf-8") == "new content"
