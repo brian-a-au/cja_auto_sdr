@@ -25,6 +25,16 @@ class _StringOnlyValue:
         return "serialized-via-default"
 
 
+def _near_name_max_path(tmp_path: Path, suffix: str) -> Path:
+    if not hasattr(os, "pathconf"):
+        pytest.skip("requires os.pathconf support")
+    name_max = os.pathconf(str(tmp_path), "PC_NAME_MAX")
+    if name_max <= len(suffix) + 1:
+        pytest.skip("filesystem name limit too small for test fixture")
+    stem = "a" * (name_max - len(suffix) - 1)
+    return tmp_path / f"{stem}{suffix}"
+
+
 def test_write_json_atomic_supports_default_sort_keys_and_trailing_newline(tmp_path):
     output_path = tmp_path / "payload.json"
 
@@ -132,6 +142,13 @@ class TestWriteJsonAtomicCompatible:
             "z_key": "serialized-via-default",
         }
 
+    def test_near_name_max_path_uses_short_temp_name(self, tmp_path):
+        out = _near_name_max_path(tmp_path, ".json")
+
+        write_json_atomic_compatible(out, {"ok": True})
+
+        assert json.loads(out.read_text(encoding="utf-8")) == {"ok": True}
+
     def test_follows_existing_symlink(self, tmp_path):
         real_file = tmp_path / "real.json"
         real_file.write_text("{}", encoding="utf-8")
@@ -165,6 +182,18 @@ class TestWriteJsonAtomicCompatible:
         assert out.stat().st_ino == inode_before
         assert alias.stat().st_ino == inode_before
         assert json.loads(alias.read_text(encoding="utf-8")) == {"updated": True}
+
+    @pytest.mark.skipif(not hasattr(os, "listxattr"), reason="requires os.listxattr support")
+    def test_xattr_bearing_file_falls_back_to_direct_write(self, tmp_path):
+        out = tmp_path / "tagged.json"
+        out.write_text('{"old": true}\n', encoding="utf-8")
+        inode_before = out.stat().st_ino
+
+        with patch("cja_auto_sdr.core.json_io.os.listxattr", return_value=["user.test"]):
+            write_json_atomic_compatible(out, {"updated": True})
+
+        assert out.stat().st_ino == inode_before
+        assert json.loads(out.read_text(encoding="utf-8")) == {"updated": True}
 
     def test_explicit_file_mode_overrides_existing(self, tmp_path):
         out = tmp_path / "out.json"
@@ -279,6 +308,13 @@ class TestWriteTextAtomicCompatible:
         write_text_atomic_compatible(out, "<html>hello</html>")
         assert out.read_text(encoding="utf-8") == "<html>hello</html>"
 
+    def test_near_name_max_path_uses_short_temp_name(self, tmp_path):
+        out = _near_name_max_path(tmp_path, ".md")
+
+        write_text_atomic_compatible(out, "ok")
+
+        assert out.read_text(encoding="utf-8") == "ok"
+
     def test_follows_existing_symlink(self, tmp_path):
         real_file = tmp_path / "real.md"
         real_file.write_text("old", encoding="utf-8")
@@ -312,6 +348,18 @@ class TestWriteTextAtomicCompatible:
         assert out.stat().st_ino == inode_before
         assert alias.stat().st_ino == inode_before
         assert alias.read_text(encoding="utf-8") == "new"
+
+    @pytest.mark.skipif(not hasattr(os, "listxattr"), reason="requires os.listxattr support")
+    def test_xattr_bearing_file_falls_back_to_direct_write(self, tmp_path):
+        out = tmp_path / "tagged.md"
+        out.write_text("old", encoding="utf-8")
+        inode_before = out.stat().st_ino
+
+        with patch("cja_auto_sdr.core.json_io.os.listxattr", return_value=["user.test"]):
+            write_text_atomic_compatible(out, "new")
+
+        assert out.stat().st_ino == inode_before
+        assert out.read_text(encoding="utf-8") == "new"
 
     def test_explicit_file_mode_overrides_existing(self, tmp_path):
         out = tmp_path / "out.md"
