@@ -17,6 +17,10 @@ _DIRECTORY_FSYNC_BEST_EFFORT_ERRNOS = {
     errno.EPERM,
     getattr(errno, "ENOTSUP", errno.EINVAL),
 }
+_REPLACE_FALLBACK_ERRNOS = {
+    errno.EACCES,
+    errno.EPERM,
+}
 _LISTXATTR_UNSUPPORTED_ERRNOS = {
     errno.EINVAL,
     getattr(errno, "ENOTSUP", errno.EINVAL),
@@ -141,6 +145,12 @@ def _compatible_tmp_path(directory: Path) -> Path:
     return directory / f".{uuid.uuid4().hex}.tmp"
 
 
+def _cleanup_tmp_path(tmp_path: Path) -> None:
+    """Best-effort temp-file cleanup for compatibility helper fallbacks/errors."""
+    with contextlib.suppress(OSError):
+        tmp_path.unlink()
+
+
 def _path_has_extended_metadata(path: Path) -> bool:
     """Return True when *path* may carry metadata that replace would drop.
 
@@ -166,8 +176,19 @@ def _existing_file_supports_atomic_replace(path: Path) -> bool:
     return existing_stat.st_nlink <= 1 and not _path_has_extended_metadata(path)
 
 
+def _should_fallback_after_replace_error(exc: OSError) -> bool:
+    """Return True when a failed replace should retry the compatible direct-write path."""
+    return isinstance(exc, PermissionError) or exc.errno in _REPLACE_FALLBACK_ERRNOS
+
+
 def _should_use_atomic_compatible_write(target_path: Path, resolved: Path, temp_dir: Path) -> bool:
-    """Use atomic replace only when it preserves plain open() success semantics."""
+    """Use atomic replace only when preflight suggests it preserves open() semantics.
+
+    Some ACL/filesystem configurations still reject the final rename step even
+    when the destination remains writable via ``open(path, "w")``. The shared
+    compatible write runner handles those late failures with a direct-write
+    retry.
+    """
     if target_path.is_symlink():
         if resolved.exists():
             return (
@@ -230,6 +251,40 @@ def _write_direct_json_compatible(
         os.chmod(path, file_mode)
 
 
+def _stage_json_write(
+    tmp_path: Path,
+    payload: Any,
+    *,
+    indent: int | None,
+    ensure_ascii: bool,
+    sort_keys: bool,
+    default: Callable[[Any], Any] | None,
+    trailing_newline: bool,
+) -> None:
+    """Write JSON content to a staged temp file and fsync it."""
+    with open(tmp_path, "w", encoding="utf-8") as f:
+        json.dump(
+            payload,
+            f,
+            indent=indent,
+            ensure_ascii=ensure_ascii,
+            sort_keys=sort_keys,
+            default=default,
+        )
+        if trailing_newline:
+            f.write("\n")
+        f.flush()
+        os.fsync(f.fileno())
+
+
+def _stage_text_write(tmp_path: Path, content: str, *, encoding: str) -> None:
+    """Write text content to a staged temp file and fsync it."""
+    with open(tmp_path, "w", encoding=encoding) as f:
+        f.write(content)
+        f.flush()
+        os.fsync(f.fileno())
+
+
 def _apply_existing_metadata(tmp_path: Path, resolved: Path, file_mode: int | None) -> bool:
     """Copy resolved destination metadata onto *tmp_path* when overwriting.
 
@@ -266,6 +321,48 @@ def _apply_existing_metadata(tmp_path: Path, resolved: Path, file_mode: int | No
     return True
 
 
+def _write_atomic_compatible(
+    *,
+    target_path: Path,
+    resolved: Path,
+    temp_dir: Path,
+    file_mode: int | None,
+    direct_write: Callable[[], None],
+    stage_write: Callable[[Path], None],
+) -> Path:
+    """Run the shared compatibility-preserving atomic flow with direct-write fallback."""
+    if not _should_use_atomic_compatible_write(target_path, resolved, temp_dir):
+        direct_write()
+        return target_path
+
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    tmp_path = _compatible_tmp_path(temp_dir)
+
+    try:
+        stage_write(tmp_path)
+
+        if not _apply_existing_metadata(tmp_path, resolved, file_mode):
+            _cleanup_tmp_path(tmp_path)
+            direct_write()
+            return target_path
+
+        try:
+            os.replace(tmp_path, resolved)
+        except OSError as exc:
+            if not _should_fallback_after_replace_error(exc):
+                raise
+            _cleanup_tmp_path(tmp_path)
+            direct_write()
+            return target_path
+
+        _fsync_directory(temp_dir)
+    except BaseException:
+        _cleanup_tmp_path(tmp_path)
+        raise
+
+    return target_path
+
+
 def write_json_atomic_compatible(
     path: str | Path,
     payload: Any,
@@ -287,13 +384,19 @@ def write_json_atomic_compatible(
     * keeps stdlib ``json.dump(..., ensure_ascii=True)`` escaping by default
     * falls back to direct writes when atomic replace would break hard links
       or drop extended metadata / unpreservable owner-group metadata
+    * retries the compatible direct-write path if the final replace step is
+      denied even though the destination remains directly writable
     """
     target_path = Path(path)
     target_path.parent.mkdir(parents=True, exist_ok=True)
 
     resolved, temp_dir = _resolve_dest(target_path)
-    if not _should_use_atomic_compatible_write(target_path, resolved, temp_dir):
-        _write_direct_json_compatible(
+    return _write_atomic_compatible(
+        target_path=target_path,
+        resolved=resolved,
+        temp_dir=temp_dir,
+        file_mode=file_mode,
+        direct_write=lambda: _write_direct_json_compatible(
             target_path,
             payload,
             indent=indent,
@@ -302,49 +405,17 @@ def write_json_atomic_compatible(
             default=default,
             file_mode=file_mode,
             trailing_newline=trailing_newline,
-        )
-        return target_path
-
-    temp_dir.mkdir(parents=True, exist_ok=True)
-    tmp_path = _compatible_tmp_path(temp_dir)
-
-    try:
-        with open(tmp_path, "w", encoding="utf-8") as f:
-            json.dump(
-                payload,
-                f,
-                indent=indent,
-                ensure_ascii=ensure_ascii,
-                sort_keys=sort_keys,
-                default=default,
-            )
-            if trailing_newline:
-                f.write("\n")
-            f.flush()
-            os.fsync(f.fileno())
-
-        if not _apply_existing_metadata(tmp_path, resolved, file_mode):
-            with contextlib.suppress(OSError):
-                tmp_path.unlink()
-            _write_direct_json_compatible(
-                target_path,
-                payload,
-                indent=indent,
-                ensure_ascii=ensure_ascii,
-                sort_keys=sort_keys,
-                default=default,
-                file_mode=file_mode,
-                trailing_newline=trailing_newline,
-            )
-            return target_path
-        os.replace(tmp_path, resolved)
-        _fsync_directory(temp_dir)
-    except BaseException:
-        with contextlib.suppress(OSError):
-            tmp_path.unlink()
-        raise
-
-    return target_path
+        ),
+        stage_write=lambda tmp_path: _stage_json_write(
+            tmp_path,
+            payload,
+            indent=indent,
+            ensure_ascii=ensure_ascii,
+            sort_keys=sort_keys,
+            default=default,
+            trailing_newline=trailing_newline,
+        ),
+    )
 
 
 def write_text_atomic_compatible(
@@ -362,29 +433,16 @@ def write_text_atomic_compatible(
     target_path.parent.mkdir(parents=True, exist_ok=True)
 
     resolved, temp_dir = _resolve_dest(target_path)
-    if not _should_use_atomic_compatible_write(target_path, resolved, temp_dir):
-        _write_direct_text_compatible(target_path, content, encoding=encoding, file_mode=file_mode)
-        return target_path
-
-    temp_dir.mkdir(parents=True, exist_ok=True)
-    tmp_path = _compatible_tmp_path(temp_dir)
-
-    try:
-        with open(tmp_path, "w", encoding=encoding) as f:
-            f.write(content)
-            f.flush()
-            os.fsync(f.fileno())
-
-        if not _apply_existing_metadata(tmp_path, resolved, file_mode):
-            with contextlib.suppress(OSError):
-                tmp_path.unlink()
-            _write_direct_text_compatible(target_path, content, encoding=encoding, file_mode=file_mode)
-            return target_path
-        os.replace(tmp_path, resolved)
-        _fsync_directory(temp_dir)
-    except BaseException:
-        with contextlib.suppress(OSError):
-            tmp_path.unlink()
-        raise
-
-    return target_path
+    return _write_atomic_compatible(
+        target_path=target_path,
+        resolved=resolved,
+        temp_dir=temp_dir,
+        file_mode=file_mode,
+        direct_write=lambda: _write_direct_text_compatible(
+            target_path,
+            content,
+            encoding=encoding,
+            file_mode=file_mode,
+        ),
+        stage_write=lambda tmp_path: _stage_text_write(tmp_path, content, encoding=encoding),
+    )

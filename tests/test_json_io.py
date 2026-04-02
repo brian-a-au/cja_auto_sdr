@@ -207,6 +207,24 @@ class TestWriteJsonAtomicCompatible:
         assert out.stat().st_ino == inode_before
         assert json.loads(out.read_text(encoding="utf-8")) == {"updated": True}
 
+    def test_replace_denied_overwrite_falls_back_to_direct_write(self, tmp_path):
+        out = tmp_path / "rename-denied.json"
+        out.write_text('{"old": true}\n', encoding="utf-8")
+        inode_before = out.stat().st_ino
+
+        with (
+            patch("cja_auto_sdr.core.json_io._path_has_extended_metadata", return_value=False),
+            patch(
+                "cja_auto_sdr.core.json_io.os.replace",
+                side_effect=PermissionError(errno.EPERM, "replace denied"),
+            ),
+        ):
+            write_json_atomic_compatible(out, {"updated": True})
+
+        assert out.stat().st_ino == inode_before
+        assert json.loads(out.read_text(encoding="utf-8")) == {"updated": True}
+        assert list(tmp_path.glob(".*tmp")) == []
+
     def test_explicit_file_mode_overrides_existing(self, tmp_path):
         out = tmp_path / "out.json"
         out.write_text("{}", encoding="utf-8")
@@ -406,6 +424,24 @@ class TestWriteTextAtomicCompatible:
 
         assert out.stat().st_ino == inode_before
         assert out.read_text(encoding="utf-8") == "new"
+
+    def test_replace_denied_overwrite_falls_back_to_direct_write(self, tmp_path):
+        out = tmp_path / "rename-denied.md"
+        out.write_text("old", encoding="utf-8")
+        inode_before = out.stat().st_ino
+
+        with (
+            patch("cja_auto_sdr.core.json_io._path_has_extended_metadata", return_value=False),
+            patch(
+                "cja_auto_sdr.core.json_io.os.replace",
+                side_effect=PermissionError(errno.EPERM, "replace denied"),
+            ),
+        ):
+            write_text_atomic_compatible(out, "new")
+
+        assert out.stat().st_ino == inode_before
+        assert out.read_text(encoding="utf-8") == "new"
+        assert list(tmp_path.glob(".*tmp")) == []
 
     def test_explicit_file_mode_overrides_existing(self, tmp_path):
         out = tmp_path / "out.md"
