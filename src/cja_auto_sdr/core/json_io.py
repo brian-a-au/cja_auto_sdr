@@ -98,10 +98,13 @@ def write_json_atomic(
 # ---------------------------------------------------------------------------
 # Compatibility-preserving atomic helpers (v3.5.7)
 # ---------------------------------------------------------------------------
-# These follow symlinks and preserve existing file modes on overwrite.
+# These follow symlinks and preserve existing file metadata on overwrite.
 # They use temp-file-and-rename only when that path preserves the success/fail
 # semantics of a plain ``open(path, "w")`` call; otherwise they fall back to a
-# direct write so compatibility wins over hardening.
+# direct write so compatibility wins over hardening. In particular, overwrites
+# with extra hard links or unpreservable owner/group metadata stay on the
+# direct-write path because replacing the inode would change user-visible
+# behavior.
 # ---------------------------------------------------------------------------
 
 
@@ -127,15 +130,55 @@ def _file_supports_direct_overwrite(path: Path) -> bool:
     return path.is_file() and os.access(path, os.W_OK)
 
 
+def _current_process_group_ids() -> set[int]:
+    """Return the effective and supplementary groups for the current process."""
+    group_ids: set[int] = set()
+    if hasattr(os, "getegid"):
+        group_ids.add(os.getegid())
+    if hasattr(os, "getgroups"):
+        with contextlib.suppress(OSError):
+            group_ids.update(os.getgroups())
+    return group_ids
+
+
+def _can_preserve_existing_owner_group(existing_stat: os.stat_result) -> bool:
+    """Return True when an atomic overwrite can replay existing owner/group metadata."""
+    if os.name == "nt" or not hasattr(os, "chown"):
+        return True
+    if hasattr(os, "geteuid") and os.geteuid() == 0:
+        return True
+    if hasattr(os, "geteuid") and existing_stat.st_uid != os.geteuid():
+        return False
+    group_ids = _current_process_group_ids()
+    return not group_ids or existing_stat.st_gid in group_ids
+
+
+def _existing_file_supports_atomic_replace(path: Path) -> bool:
+    """Return True when replacing *path* preserves direct-overwrite semantics."""
+    try:
+        existing_stat = path.stat()
+    except FileNotFoundError:
+        return False
+    return existing_stat.st_nlink <= 1 and _can_preserve_existing_owner_group(existing_stat)
+
+
 def _should_use_atomic_compatible_write(target_path: Path, resolved: Path, temp_dir: Path) -> bool:
     """Use atomic replace only when it preserves plain open() success semantics."""
     if target_path.is_symlink():
         if resolved.exists():
-            return _file_supports_direct_overwrite(resolved) and _directory_supports_atomic_replace(temp_dir)
+            return (
+                _file_supports_direct_overwrite(resolved)
+                and _directory_supports_atomic_replace(temp_dir)
+                and _existing_file_supports_atomic_replace(resolved)
+            )
         return _directory_supports_atomic_replace(temp_dir)
 
     if target_path.exists():
-        return _file_supports_direct_overwrite(target_path) and _directory_supports_atomic_replace(temp_dir)
+        return (
+            _file_supports_direct_overwrite(target_path)
+            and _directory_supports_atomic_replace(temp_dir)
+            and _existing_file_supports_atomic_replace(target_path)
+        )
 
     return _directory_supports_atomic_replace(temp_dir)
 
@@ -183,21 +226,31 @@ def _write_direct_json_compatible(
         os.chmod(path, file_mode)
 
 
-def _apply_existing_mode(tmp_path: Path, resolved: Path, file_mode: int | None) -> None:
-    """Copy the resolved destination's permission bits onto *tmp_path*.
+def _apply_existing_metadata(tmp_path: Path, resolved: Path, file_mode: int | None) -> None:
+    """Copy resolved destination metadata onto *tmp_path* when overwriting.
 
     If *file_mode* is explicitly provided it takes precedence.  When the
     destination does not yet exist the temp file keeps the mode it was
     created with (umask-driven), matching ``open(..., "w")`` semantics.
     """
+    try:
+        existing_stat = resolved.stat()
+    except FileNotFoundError:
+        existing_stat = None
+
     if file_mode is not None:
         os.chmod(tmp_path, file_mode)
+    elif existing_stat is not None:
+        os.chmod(tmp_path, stat.S_IMODE(existing_stat.st_mode))
+
+    if existing_stat is None or os.name == "nt" or not hasattr(os, "chown"):
         return
-    try:
-        existing_mode = stat.S_IMODE(resolved.stat().st_mode)
-        os.chmod(tmp_path, existing_mode)
-    except FileNotFoundError:
-        pass  # new file — keep umask-driven mode
+
+    tmp_stat = tmp_path.stat()
+    uid = existing_stat.st_uid if tmp_stat.st_uid != existing_stat.st_uid else -1
+    gid = existing_stat.st_gid if tmp_stat.st_gid != existing_stat.st_gid else -1
+    if uid != -1 or gid != -1:
+        os.chown(tmp_path, uid, gid)
 
 
 def write_json_atomic_compatible(
@@ -216,9 +269,11 @@ def write_json_atomic_compatible(
     Unlike :func:`write_json_atomic` this helper:
 
     * follows existing symlinks (writes through to the resolved target)
-    * preserves the existing destination file's mode on overwrite
+    * preserves the existing destination file's overwrite-visible metadata
     * honours the process umask for new files (unless *file_mode* is given)
     * keeps stdlib ``json.dump(..., ensure_ascii=True)`` escaping by default
+    * falls back to direct writes when atomic replace would break hard links
+      or change unpreservable owner/group metadata
     """
     target_path = Path(path)
     target_path.parent.mkdir(parents=True, exist_ok=True)
@@ -255,7 +310,7 @@ def write_json_atomic_compatible(
             f.flush()
             os.fsync(f.fileno())
 
-        _apply_existing_mode(tmp_path, resolved, file_mode)
+        _apply_existing_metadata(tmp_path, resolved, file_mode)
         os.replace(tmp_path, resolved)
         _fsync_directory(temp_dir)
     except BaseException:
@@ -294,7 +349,7 @@ def write_text_atomic_compatible(
             f.flush()
             os.fsync(f.fileno())
 
-        _apply_existing_mode(tmp_path, resolved, file_mode)
+        _apply_existing_metadata(tmp_path, resolved, file_mode)
         os.replace(tmp_path, resolved)
         _fsync_directory(temp_dir)
     except BaseException:

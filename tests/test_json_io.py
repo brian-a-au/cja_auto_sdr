@@ -5,6 +5,7 @@ import json
 import os
 import stat
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -151,6 +152,20 @@ class TestWriteJsonAtomicCompatible:
 
         assert stat.S_IMODE(out.stat().st_mode) == 0o644
 
+    @pytest.mark.skipif(not hasattr(os, "link"), reason="requires hard-link support")
+    def test_hard_linked_overwrite_falls_back_to_direct_write(self, tmp_path):
+        out = tmp_path / "out.json"
+        alias = tmp_path / "latest.json"
+        out.write_text('{"old": true}\n', encoding="utf-8")
+        os.link(out, alias)
+        inode_before = out.stat().st_ino
+
+        write_json_atomic_compatible(out, {"updated": True})
+
+        assert out.stat().st_ino == inode_before
+        assert alias.stat().st_ino == inode_before
+        assert json.loads(alias.read_text(encoding="utf-8")) == {"updated": True}
+
     def test_explicit_file_mode_overrides_existing(self, tmp_path):
         out = tmp_path / "out.json"
         out.write_text("{}", encoding="utf-8")
@@ -230,6 +245,31 @@ class TestWriteJsonAtomicCompatible:
         raw = out.read_text(encoding="utf-8")
         assert "\u00e9l\u00e8ve" in raw
 
+    @pytest.mark.skipif(os.name == "nt" or not hasattr(os, "chown"), reason="requires POSIX os.chown")
+    def test_apply_existing_metadata_replays_owner_group(self, tmp_path):
+        resolved = tmp_path / "resolved.json"
+        staged = tmp_path / ".resolved.json.tmp"
+        resolved.write_text("{}", encoding="utf-8")
+        staged.write_text("{}", encoding="utf-8")
+        original_stat = Path.stat
+
+        def fake_stat(self):
+            if self == resolved:
+                return SimpleNamespace(st_mode=stat.S_IFREG | 0o640, st_uid=123, st_gid=456, st_nlink=1)
+            if self == staged:
+                return SimpleNamespace(st_uid=789, st_gid=987)
+            return original_stat(self)
+
+        with (
+            patch("pathlib.Path.stat", autospec=True, side_effect=fake_stat),
+            patch("cja_auto_sdr.core.json_io.os.chmod") as mock_chmod,
+            patch("cja_auto_sdr.core.json_io.os.chown") as mock_chown,
+        ):
+            json_io._apply_existing_metadata(staged, resolved, None)
+
+        mock_chmod.assert_called_once_with(staged, 0o640)
+        mock_chown.assert_called_once_with(staged, 123, 456)
+
 
 class TestWriteTextAtomicCompatible:
     """Tests for write_text_atomic_compatible."""
@@ -258,6 +298,20 @@ class TestWriteTextAtomicCompatible:
         write_text_atomic_compatible(out, "new")
 
         assert stat.S_IMODE(out.stat().st_mode) == 0o644
+
+    @pytest.mark.skipif(not hasattr(os, "link"), reason="requires hard-link support")
+    def test_hard_linked_overwrite_falls_back_to_direct_write(self, tmp_path):
+        out = tmp_path / "out.md"
+        alias = tmp_path / "latest.md"
+        out.write_text("old", encoding="utf-8")
+        os.link(out, alias)
+        inode_before = out.stat().st_ino
+
+        write_text_atomic_compatible(out, "new")
+
+        assert out.stat().st_ino == inode_before
+        assert alias.stat().st_ino == inode_before
+        assert alias.read_text(encoding="utf-8") == "new"
 
     def test_explicit_file_mode_overrides_existing(self, tmp_path):
         out = tmp_path / "out.md"
