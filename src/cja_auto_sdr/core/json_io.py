@@ -107,9 +107,10 @@ def write_json_atomic(
 # They use temp-file-and-rename only when that path preserves the success/fail
 # semantics of a plain ``open(path, "w")`` call; otherwise they fall back to a
 # direct write so compatibility wins over hardening. In particular, overwrites
-# with extra hard links, extended metadata, or unpreservable owner/group
-# metadata stay on the direct-write path because replacing the inode would
-# change user-visible behavior.
+# with extra hard links or extended metadata stay on the direct-write path
+# because replacing the inode would change user-visible behavior. Owner/group
+# replay is decided after staging because temp files in inherited-group
+# directories can already match the destination without requiring ``chown``.
 # ---------------------------------------------------------------------------
 
 
@@ -140,35 +141,18 @@ def _compatible_tmp_path(directory: Path) -> Path:
     return directory / f".{uuid.uuid4().hex}.tmp"
 
 
-def _current_process_group_ids() -> set[int]:
-    """Return the effective and supplementary groups for the current process."""
-    group_ids: set[int] = set()
-    if hasattr(os, "getegid"):
-        group_ids.add(os.getegid())
-    if hasattr(os, "getgroups"):
-        with contextlib.suppress(OSError):
-            group_ids.update(os.getgroups())
-    return group_ids
-
-
-def _can_preserve_existing_owner_group(existing_stat: os.stat_result) -> bool:
-    """Return True when an atomic overwrite can replay existing owner/group metadata."""
-    if os.name == "nt" or not hasattr(os, "chown"):
-        return True
-    if hasattr(os, "geteuid") and os.geteuid() == 0:
-        return True
-    if hasattr(os, "geteuid") and existing_stat.st_uid != os.geteuid():
-        return False
-    group_ids = _current_process_group_ids()
-    return not group_ids or existing_stat.st_gid in group_ids
-
-
 def _path_has_extended_metadata(path: Path) -> bool:
-    """Return True when *path* carries xattrs/ACL-like metadata that replace would drop."""
-    if not hasattr(os, "listxattr"):
-        return False
+    """Return True when *path* may carry metadata that replace would drop.
+
+    If the runtime cannot inspect xattrs, err on the side of compatibility and
+    treat existing files as metadata-bearing so callers stay on the direct-write
+    path instead of silently resetting ACL-like metadata.
+    """
+    listxattr = getattr(os, "listxattr", None)
+    if listxattr is None:
+        return True
     try:
-        return bool(os.listxattr(path))
+        return bool(listxattr(path))
     except OSError as exc:
         return exc.errno not in _LISTXATTR_UNSUPPORTED_ERRNOS
 
@@ -179,11 +163,7 @@ def _existing_file_supports_atomic_replace(path: Path) -> bool:
         existing_stat = path.stat()
     except FileNotFoundError:
         return False
-    return (
-        existing_stat.st_nlink <= 1
-        and _can_preserve_existing_owner_group(existing_stat)
-        and not _path_has_extended_metadata(path)
-    )
+    return existing_stat.st_nlink <= 1 and not _path_has_extended_metadata(path)
 
 
 def _should_use_atomic_compatible_write(target_path: Path, resolved: Path, temp_dir: Path) -> bool:
@@ -250,12 +230,15 @@ def _write_direct_json_compatible(
         os.chmod(path, file_mode)
 
 
-def _apply_existing_metadata(tmp_path: Path, resolved: Path, file_mode: int | None) -> None:
+def _apply_existing_metadata(tmp_path: Path, resolved: Path, file_mode: int | None) -> bool:
     """Copy resolved destination metadata onto *tmp_path* when overwriting.
 
     If *file_mode* is explicitly provided it takes precedence.  When the
     destination does not yet exist the temp file keeps the mode it was
     created with (umask-driven), matching ``open(..., "w")`` semantics.
+
+    Returns ``False`` when owner/group replay would require privileges the
+    current process does not have, so callers can fall back to direct writes.
     """
     try:
         existing_stat = resolved.stat()
@@ -268,13 +251,19 @@ def _apply_existing_metadata(tmp_path: Path, resolved: Path, file_mode: int | No
         os.chmod(tmp_path, stat.S_IMODE(existing_stat.st_mode))
 
     if existing_stat is None or os.name == "nt" or not hasattr(os, "chown"):
-        return
+        return True
 
     tmp_stat = tmp_path.stat()
     uid = existing_stat.st_uid if tmp_stat.st_uid != existing_stat.st_uid else -1
     gid = existing_stat.st_gid if tmp_stat.st_gid != existing_stat.st_gid else -1
     if uid != -1 or gid != -1:
-        os.chown(tmp_path, uid, gid)
+        try:
+            os.chown(tmp_path, uid, gid)
+        except OSError as exc:
+            if exc.errno in {errno.EACCES, errno.EPERM}:
+                return False
+            raise
+    return True
 
 
 def write_json_atomic_compatible(
@@ -334,7 +323,20 @@ def write_json_atomic_compatible(
             f.flush()
             os.fsync(f.fileno())
 
-        _apply_existing_metadata(tmp_path, resolved, file_mode)
+        if not _apply_existing_metadata(tmp_path, resolved, file_mode):
+            with contextlib.suppress(OSError):
+                tmp_path.unlink()
+            _write_direct_json_compatible(
+                target_path,
+                payload,
+                indent=indent,
+                ensure_ascii=ensure_ascii,
+                sort_keys=sort_keys,
+                default=default,
+                file_mode=file_mode,
+                trailing_newline=trailing_newline,
+            )
+            return target_path
         os.replace(tmp_path, resolved)
         _fsync_directory(temp_dir)
     except BaseException:
@@ -373,7 +375,11 @@ def write_text_atomic_compatible(
             f.flush()
             os.fsync(f.fileno())
 
-        _apply_existing_metadata(tmp_path, resolved, file_mode)
+        if not _apply_existing_metadata(tmp_path, resolved, file_mode):
+            with contextlib.suppress(OSError):
+                tmp_path.unlink()
+            _write_direct_text_compatible(target_path, content, encoding=encoding, file_mode=file_mode)
+            return target_path
         os.replace(tmp_path, resolved)
         _fsync_directory(temp_dir)
     except BaseException:

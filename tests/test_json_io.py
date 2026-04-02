@@ -195,6 +195,18 @@ class TestWriteJsonAtomicCompatible:
         assert out.stat().st_ino == inode_before
         assert json.loads(out.read_text(encoding="utf-8")) == {"updated": True}
 
+    def test_existing_file_without_xattr_introspection_falls_back_to_direct_write(self, tmp_path, monkeypatch):
+        out = tmp_path / "acl-managed.json"
+        out.write_text('{"old": true}\n', encoding="utf-8")
+        inode_before = out.stat().st_ino
+
+        monkeypatch.delattr(json_io.os, "listxattr", raising=False)
+
+        write_json_atomic_compatible(out, {"updated": True})
+
+        assert out.stat().st_ino == inode_before
+        assert json.loads(out.read_text(encoding="utf-8")) == {"updated": True}
+
     def test_explicit_file_mode_overrides_existing(self, tmp_path):
         out = tmp_path / "out.json"
         out.write_text("{}", encoding="utf-8")
@@ -298,6 +310,40 @@ class TestWriteJsonAtomicCompatible:
 
         mock_chmod.assert_called_once_with(staged, 0o640)
         mock_chown.assert_called_once_with(staged, 123, 456)
+
+    @pytest.mark.skipif(os.name == "nt" or not hasattr(os, "chown"), reason="requires POSIX os.chown")
+    def test_inherited_group_atomic_overwrite_does_not_require_chown(self, tmp_path):
+        out = tmp_path / "report.json"
+        out.write_text('{"old": true}\n', encoding="utf-8")
+        inode_before = out.stat().st_ino
+        existing_stat = out.stat()
+        staged = tmp_path / ".stage.tmp"
+        inherited_gid = existing_stat.st_gid + 1000
+        original_stat = Path.stat
+
+        def fake_stat(self):
+            if self == out:
+                return SimpleNamespace(
+                    st_mode=existing_stat.st_mode,
+                    st_uid=existing_stat.st_uid,
+                    st_gid=inherited_gid,
+                    st_nlink=1,
+                )
+            if self == staged:
+                return SimpleNamespace(st_uid=existing_stat.st_uid, st_gid=inherited_gid)
+            return original_stat(self)
+
+        with (
+            patch("cja_auto_sdr.core.json_io._compatible_tmp_path", return_value=staged),
+            patch("cja_auto_sdr.core.json_io._path_has_extended_metadata", return_value=False),
+            patch("pathlib.Path.stat", autospec=True, side_effect=fake_stat),
+            patch("cja_auto_sdr.core.json_io.os.chown") as mock_chown,
+        ):
+            write_json_atomic_compatible(out, {"updated": True})
+
+        assert out.stat().st_ino != inode_before
+        assert json.loads(out.read_text(encoding="utf-8")) == {"updated": True}
+        mock_chown.assert_not_called()
 
 
 class TestWriteTextAtomicCompatible:
