@@ -98,9 +98,10 @@ def write_json_atomic(
 # ---------------------------------------------------------------------------
 # Compatibility-preserving atomic helpers (v3.5.7)
 # ---------------------------------------------------------------------------
-# These follow symlinks and preserve existing file modes on overwrite,
-# matching the semantics of a plain ``open(path, "w")`` call while still
-# providing temp-file-and-rename durability.
+# These follow symlinks and preserve existing file modes on overwrite.
+# They use temp-file-and-rename only when that path preserves the success/fail
+# semantics of a plain ``open(path, "w")`` call; otherwise they fall back to a
+# direct write so compatibility wins over hardening.
 # ---------------------------------------------------------------------------
 
 
@@ -110,8 +111,76 @@ def _resolve_dest(target_path: Path) -> tuple[Path, Path]:
     Returns ``(resolved_path, temp_dir)`` where *temp_dir* is the parent of
     the resolved target so the temp file lives on the same filesystem.
     """
-    resolved = target_path.resolve()
-    return resolved, resolved.parent
+    if target_path.is_symlink():
+        resolved = target_path.resolve()
+        return resolved, resolved.parent
+    return target_path, target_path.parent
+
+
+def _directory_supports_atomic_replace(directory: Path) -> bool:
+    """Return True when *directory* can accept temp-file creation and replace."""
+    return directory.exists() and os.access(directory, os.W_OK | os.X_OK)
+
+
+def _file_supports_direct_overwrite(path: Path) -> bool:
+    """Return True when a plain ``open(path, "w")`` overwrite should succeed."""
+    return path.is_file() and os.access(path, os.W_OK)
+
+
+def _should_use_atomic_compatible_write(target_path: Path, resolved: Path, temp_dir: Path) -> bool:
+    """Use atomic replace only when it preserves plain open() success semantics."""
+    if target_path.is_symlink():
+        if resolved.exists():
+            return _file_supports_direct_overwrite(resolved) and _directory_supports_atomic_replace(temp_dir)
+        return _directory_supports_atomic_replace(temp_dir)
+
+    if target_path.exists():
+        return _file_supports_direct_overwrite(target_path) and _directory_supports_atomic_replace(temp_dir)
+
+    return _directory_supports_atomic_replace(temp_dir)
+
+
+def _write_direct_text_compatible(
+    path: Path,
+    content: str,
+    *,
+    encoding: str,
+    file_mode: int | None = None,
+) -> None:
+    """Write directly to preserve edge-case ``open(..., "w")`` semantics."""
+    with open(path, "w", encoding=encoding) as f:
+        f.write(content)
+
+    if file_mode is not None:
+        os.chmod(path, file_mode)
+
+
+def _write_direct_json_compatible(
+    path: Path,
+    payload: Any,
+    *,
+    indent: int | None,
+    ensure_ascii: bool,
+    sort_keys: bool,
+    default: Callable[[Any], Any] | None,
+    file_mode: int | None,
+    trailing_newline: bool,
+) -> None:
+    """Write JSON directly to preserve edge-case ``open(..., "w")`` semantics."""
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(
+            payload,
+            f,
+            indent=indent,
+            ensure_ascii=ensure_ascii,
+            sort_keys=sort_keys,
+            default=default,
+        )
+        if trailing_newline:
+            f.write("\n")
+
+    if file_mode is not None:
+        os.chmod(path, file_mode)
 
 
 def _apply_existing_mode(tmp_path: Path, resolved: Path, file_mode: int | None) -> None:
@@ -154,6 +223,19 @@ def write_json_atomic_compatible(
     target_path.parent.mkdir(parents=True, exist_ok=True)
 
     resolved, temp_dir = _resolve_dest(target_path)
+    if not _should_use_atomic_compatible_write(target_path, resolved, temp_dir):
+        _write_direct_json_compatible(
+            target_path,
+            payload,
+            indent=indent,
+            ensure_ascii=ensure_ascii,
+            sort_keys=sort_keys,
+            default=default,
+            file_mode=file_mode,
+            trailing_newline=trailing_newline,
+        )
+        return target_path
+
     temp_dir.mkdir(parents=True, exist_ok=True)
     tmp_path = temp_dir / f".{resolved.name}.{uuid.uuid4().hex}.tmp"
 
@@ -198,6 +280,10 @@ def write_text_atomic_compatible(
     target_path.parent.mkdir(parents=True, exist_ok=True)
 
     resolved, temp_dir = _resolve_dest(target_path)
+    if not _should_use_atomic_compatible_write(target_path, resolved, temp_dir):
+        _write_direct_text_compatible(target_path, content, encoding=encoding, file_mode=file_mode)
+        return target_path
+
     temp_dir.mkdir(parents=True, exist_ok=True)
     tmp_path = temp_dir / f".{resolved.name}.{uuid.uuid4().hex}.tmp"
 

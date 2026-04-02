@@ -16,6 +16,8 @@ from cja_auto_sdr.core.json_io import (
     write_text_atomic_compatible,
 )
 
+_SKIP_PERMISSION_SEMANTICS = os.name == "nt" or getattr(os, "geteuid", lambda: -1)() == 0
+
 
 class _StringOnlyValue:
     def __str__(self) -> str:
@@ -146,6 +148,29 @@ class TestWriteJsonAtomicCompatible:
         mode = stat.S_IMODE(out.stat().st_mode)
         assert mode & 0o600 == 0o600  # owner rw at minimum
 
+    @pytest.mark.skipif(_SKIP_PERMISSION_SEMANTICS, reason="requires POSIX non-root permission semantics")
+    def test_read_only_existing_file_matches_open_permissions(self, tmp_path):
+        out = tmp_path / "readonly.json"
+        out.write_text("{}", encoding="utf-8")
+        os.chmod(out, 0o444)
+
+        with pytest.raises(PermissionError):
+            write_json_atomic_compatible(out, {"blocked": True})
+
+        assert out.read_text(encoding="utf-8") == "{}"
+
+    def test_broken_symlink_does_not_create_missing_target_parent(self, tmp_path):
+        links_dir = tmp_path / "links"
+        links_dir.mkdir()
+        link = links_dir / "out.json"
+        link.symlink_to("../missing/out.json")
+
+        with pytest.raises(FileNotFoundError):
+            write_json_atomic_compatible(link, {"blocked": True})
+
+        assert link.is_symlink()
+        assert not (tmp_path / "missing").exists()
+
     def test_temp_cleanup_on_failure(self, tmp_path):
         out = tmp_path / "fail.json"
         with (
@@ -212,3 +237,18 @@ class TestWriteTextAtomicCompatible:
 
         remaining = list(tmp_path.glob(".*tmp"))
         assert remaining == []
+
+    @pytest.mark.skipif(_SKIP_PERMISSION_SEMANTICS, reason="requires POSIX non-root permission semantics")
+    def test_non_writable_directory_falls_back_to_direct_overwrite(self, tmp_path):
+        out_dir = tmp_path / "output"
+        out_dir.mkdir()
+        out = out_dir / "report.md"
+        out.write_text("old", encoding="utf-8")
+
+        os.chmod(out_dir, 0o555)
+        try:
+            write_text_atomic_compatible(out, "new content")
+        finally:
+            os.chmod(out_dir, 0o755)
+
+        assert out.read_text(encoding="utf-8") == "new content"
