@@ -1510,9 +1510,51 @@ class TestDataViewCache:
         cache.__init__()
         cache.set_ttl(1)
         cache.set("key1", [{"id": "dv1"}])
-        # Manually set timestamp to past to simulate expiry
-        cache._cache["key1"] = (cache._cache["key1"][0], time.time() - 2)
+        # Manually set timestamp to past to simulate expiry (monotonic clock)
+        cache._cache["key1"] = (cache._cache["key1"][0], time.monotonic() - 2)
         assert cache.get("key1") is None
+
+    def test_cache_ttl_hit_before_expiry(self) -> None:
+        """Cache returns data when TTL has not expired."""
+        from cja_auto_sdr.generator import DataViewCache
+
+        cache = DataViewCache.__new__(DataViewCache)
+        cache._initialized = False
+        cache.__init__()
+        cache.set_ttl(300)
+        cache.set("key1", [{"id": "dv1"}])
+        assert cache.get("key1") == [{"id": "dv1"}]
+
+    def test_cache_ttl_uses_monotonic_clock(self) -> None:
+        """Cache expiry is immune to wall-clock rollback."""
+        import time
+        from unittest.mock import patch
+
+        from cja_auto_sdr.generator import DataViewCache
+
+        cache = DataViewCache.__new__(DataViewCache)
+        cache._initialized = False
+        cache.__init__()
+        cache.set_ttl(10)
+
+        # Store with a known monotonic baseline
+        mono_base = 1000.0
+        with patch("cja_auto_sdr.generator.time") as mock_time:
+            mock_time.monotonic.return_value = mono_base
+            mock_time.perf_counter = time.perf_counter
+            cache.set("key1", [{"id": "dv1"}])
+
+        # 5 seconds later (within TTL) — should hit
+        with patch("cja_auto_sdr.generator.time") as mock_time:
+            mock_time.monotonic.return_value = mono_base + 5
+            mock_time.perf_counter = time.perf_counter
+            assert cache.get("key1") == [{"id": "dv1"}]
+
+        # 11 seconds later (past TTL) — should miss
+        with patch("cja_auto_sdr.generator.time") as mock_time:
+            mock_time.monotonic.return_value = mono_base + 11
+            mock_time.perf_counter = time.perf_counter
+            assert cache.get("key1") is None
 
 
 # ---------------------------------------------------------------------------

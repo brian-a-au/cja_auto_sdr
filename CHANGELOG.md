@@ -7,6 +7,13 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.6] — 2026-04-01
+
+### Changed
+- Completed generator elapsed-duration timing hardening: moved all remaining `process_single_dataview()` and `main()` duration-only paths from `time.time()` to `time.perf_counter()`.
+- Hardened `DataViewCache` in-process TTL bookkeeping from `time.time()` to `time.monotonic()`, making cache expiry immune to wall-clock jumps.
+- Converted touched generator duration-banner and exception-handler log lines from eager f-string interpolation to lazy `%s`-style logger interpolation.
+
 ## [3.5.5] — 2026-04-01
 
 ### Added

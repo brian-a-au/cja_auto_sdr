@@ -2207,3 +2207,79 @@ class TestProcessingResultDataclass:
 
         formatted = result.file_size_formatted
         assert "KB" in formatted or "B" in formatted
+
+
+# ---------------------------------------------------------------------------
+# Elapsed-duration timing hardening (v3.5.6)
+# ---------------------------------------------------------------------------
+
+
+class TestElapsedDurationTimingHardening:
+    """Verify process_single_dataview uses perf_counter for duration, not wall-clock."""
+
+    def test_duration_uses_perf_counter(self) -> None:
+        """Duration is derived from perf_counter, not time.time."""
+        import time
+        from unittest.mock import MagicMock, patch
+
+        from cja_auto_sdr.generator import process_single_dataview
+
+        perf_start = 100.0
+        perf_end = 102.5
+
+        mock_time = MagicMock(wraps=time)
+        mock_time.perf_counter = MagicMock(side_effect=[perf_start, perf_end, perf_end])
+        mock_time.monotonic = time.monotonic
+
+        with (
+            patch("cja_auto_sdr.generator.time", mock_time),
+            patch("cja_auto_sdr.generator.initialize_cja", side_effect=RuntimeError("test")),
+            patch("cja_auto_sdr.generator.setup_logging", return_value=MagicMock()),
+            patch("cja_auto_sdr.generator.with_log_context", return_value=MagicMock()),
+            patch("cja_auto_sdr.generator.flush_logging_handlers"),
+            patch("cja_auto_sdr.generator.PerformanceTracker"),
+        ):
+            result = process_single_dataview(data_view_id="dv_test")
+
+        assert result.success is False
+        assert result.duration >= 0
+        assert abs(result.duration - 2.5) < 0.01
+
+    def test_failure_banner_duration_text_shape(self) -> None:
+        """Failure banners emit 'Duration: X.XXs' format using perf_counter."""
+        import time
+        from unittest.mock import MagicMock, patch
+
+        from cja_auto_sdr.generator import process_single_dataview
+
+        counter = iter([500.0, 503.75, 503.75, 503.75, 503.75])
+
+        mock_time = MagicMock(wraps=time)
+        mock_time.perf_counter = MagicMock(side_effect=counter)
+        mock_time.monotonic = time.monotonic
+
+        captured_messages: list[str] = []
+
+        def capture_info(msg, *args):
+            captured_messages.append(msg % args if args else msg)
+
+        mock_logger = MagicMock()
+        mock_logger.info = MagicMock(side_effect=capture_info)
+        mock_logger.debug = MagicMock()
+        mock_logger.critical = MagicMock()
+        mock_logger.exception = MagicMock()
+
+        with (
+            patch("cja_auto_sdr.generator.time", mock_time),
+            patch("cja_auto_sdr.generator.initialize_cja", side_effect=RuntimeError("boom")),
+            patch("cja_auto_sdr.generator.setup_logging", return_value=mock_logger),
+            patch("cja_auto_sdr.generator.with_log_context", return_value=mock_logger),
+            patch("cja_auto_sdr.generator.flush_logging_handlers"),
+            patch("cja_auto_sdr.generator.PerformanceTracker"),
+        ):
+            result = process_single_dataview(data_view_id="dv_test")
+
+        assert result.success is False
+        duration_lines = [m for m in captured_messages if "Duration:" in m]
+        assert len(duration_lines) >= 1
+        assert duration_lines[0] == "Duration: 3.75s"

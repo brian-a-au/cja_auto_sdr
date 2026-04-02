@@ -2181,7 +2181,7 @@ def _build_run_summary_payload(
         "environment": _collect_environment_info(),
         "started_at": summary_start,
         "ended_at": datetime.now(UTC).isoformat(),
-        "duration_seconds": round(time.time() - summary_start_perf, 3),
+        "duration_seconds": round(time.perf_counter() - summary_start_perf, 3),
         "exit_code": exit_code,
         "status": _infer_run_status(exit_code, run_state),
         "mode": run_state.get("mode", "unknown"),
@@ -2909,7 +2909,7 @@ def process_single_dataview(
     production_mode = processing_config.production_mode
     batch_id = processing_config.batch_id
 
-    start_time = time.time()
+    start_time = time.perf_counter()
 
     # Setup logging for this data view
     base_logger = setup_logging(data_view_id, batch_mode=False, log_level=log_level, log_format=log_format)
@@ -2941,7 +2941,7 @@ def process_single_dataview(
             data_view_id=data_view_id,
             data_view_name=data_view_name,
             success=success,
-            duration=time.time() - start_time if duration is None else duration,
+            duration=time.perf_counter() - start_time if duration is None else duration,
             partial_reasons=partial_reasons if partial_reasons_override is None else partial_reasons_override,
             **kwargs,
         )
@@ -3077,9 +3077,9 @@ def process_single_dataview(
                 logger.info("=" * BANNER_WIDTH)
                 logger.info("EXECUTION FAILED")
                 logger.info("=" * BANNER_WIDTH)
-                logger.info(f"Data View: {dv_name} ({data_view_id})")
+                logger.info("Data View: %s (%s)", dv_name, data_view_id)
                 logger.info("Error: Component fetch failed")
-                logger.info(f"Duration: {time.time() - start_time:.2f}s")
+                logger.info("Duration: %.2fs", time.perf_counter() - start_time)
                 logger.info("=" * BANNER_WIDTH)
                 flush_logging_handlers(logger)
                 failed_endpoints = sorted({part.split(":", 1)[0].strip() for part in component_failures if part})
@@ -3150,12 +3150,12 @@ def process_single_dataview(
                 logger.info("=" * BANNER_WIDTH)
                 logger.info("EXECUTION FAILED")
                 logger.info("=" * BANNER_WIDTH)
-                logger.info(f"Data View: {dv_name} ({data_view_id})")
+                logger.info("Data View: %s (%s)", dv_name, data_view_id)
                 if missing_all_standard_components:
                     logger.info("Error: No metrics or dimensions found")
                 else:
-                    logger.info(f"Error: Required component payloads were empty: {empty_required_components}")
-                logger.info(f"Duration: {time.time() - start_time:.2f}s")
+                    logger.info("Error: Required component payloads were empty: %s", empty_required_components)
+                logger.info("Duration: %.2fs", time.perf_counter() - start_time)
                 logger.info("=" * BANNER_WIDTH)
                 # Flush handlers to ensure log is written
                 flush_logging_handlers(logger)
@@ -3214,9 +3214,9 @@ def process_single_dataview(
                 logger.info("=" * BANNER_WIDTH)
                 logger.info("EXECUTION FAILED")
                 logger.info("=" * BANNER_WIDTH)
-                logger.info(f"Data View: {dv_name} ({data_view_id})")
+                logger.info("Data View: %s (%s)", dv_name, data_view_id)
                 logger.info("Error: Data quality validation failed")
-                logger.info(f"Duration: {time.time() - start_time:.2f}s")
+                logger.info("Duration: %.2fs", time.perf_counter() - start_time)
                 logger.info("=" * BANNER_WIDTH)
                 flush_logging_handlers(logger)
                 return _finalize_result(
@@ -3694,7 +3694,7 @@ def process_single_dataview(
             if show_timings:
                 print(perf_tracker.get_summary())
 
-            duration = time.time() - start_time
+            duration = time.perf_counter() - start_time
 
             # Calculate total file size
             total_size = 0
@@ -3754,14 +3754,14 @@ def process_single_dataview(
             )
 
         except PermissionError as e:
-            logger.critical(f"Permission denied writing to {output_path}. File may be open in another program.")
+            logger.critical("Permission denied writing to %s. File may be open in another program.", output_path)
             logger.critical("Please close the file and try again.")
             logger.info("=" * BANNER_WIDTH)
             logger.info("EXECUTION FAILED")
             logger.info("=" * BANNER_WIDTH)
-            logger.info(f"Data View: {dv_name} ({data_view_id})")
+            logger.info("Data View: %s (%s)", dv_name, data_view_id)
             logger.info("Error: Permission denied")
-            logger.info(f"Duration: {time.time() - start_time:.2f}s")
+            logger.info("Duration: %.2fs", time.perf_counter() - start_time)
             logger.info("=" * BANNER_WIDTH)
             flush_logging_handlers(logger)
             return _finalize_result(
@@ -3772,14 +3772,14 @@ def process_single_dataview(
                 failure_reason="output_permission_denied",
             )
         except (OSError, KeyError, TypeError, ValueError) as e:
-            logger.critical(f"Failed to generate output file: {e!s}")
+            logger.critical("Failed to generate output file: %s", e)
             logger.exception("Full exception details:")
             logger.info("=" * BANNER_WIDTH)
             logger.info("EXECUTION FAILED")
             logger.info("=" * BANNER_WIDTH)
-            logger.info(f"Data View: {dv_name} ({data_view_id})")
-            logger.info(f"Error: {e!s}")
-            logger.info(f"Duration: {time.time() - start_time:.2f}s")
+            logger.info("Data View: %s (%s)", dv_name, data_view_id)
+            logger.info("Error: %s", e)
+            logger.info("Duration: %.2fs", time.perf_counter() - start_time)
             logger.info("=" * BANNER_WIDTH)
             flush_logging_handlers(logger)
             return _finalize_result(
@@ -3791,14 +3791,14 @@ def process_single_dataview(
             )
 
     except Exception as e:  # Intentional: top-level processing boundary for API + runtime errors
-        logger.critical(f"Unexpected error processing data view {data_view_id}: {e!s}")
+        logger.critical("Unexpected error processing data view %s: %s", data_view_id, e)
         logger.exception("Full exception details:")
         logger.info("=" * BANNER_WIDTH)
         logger.info("EXECUTION FAILED")
         logger.info("=" * BANNER_WIDTH)
-        logger.info(f"Data View ID: {data_view_id}")
-        logger.info(f"Error: {e!s}")
-        logger.info(f"Duration: {time.time() - start_time:.2f}s")
+        logger.info("Data View ID: %s", data_view_id)
+        logger.info("Error: %s", e)
+        logger.info("Duration: %.2fs", time.perf_counter() - start_time)
         logger.info("=" * BANNER_WIDTH)
         flush_logging_handlers(logger)
         return _finalize_result(
@@ -4247,7 +4247,7 @@ class DataViewCache:
         with self._lock:
             if cache_key in self._cache:
                 data, timestamp = self._cache[cache_key]
-                if time.time() - timestamp < self._ttl_seconds:
+                if time.monotonic() - timestamp < self._ttl_seconds:
                     return data
                 # Expired - remove from cache
                 del self._cache[cache_key]
@@ -4262,7 +4262,7 @@ class DataViewCache:
             data: List of data view dicts to cache
         """
         with self._lock:
-            self._cache[cache_key] = (data, time.time())
+            self._cache[cache_key] = (data, time.monotonic())
 
     def clear(self) -> None:
         """Clear all cached data."""
@@ -7089,7 +7089,7 @@ def main():
     """Main entry point with optional run summary emission."""
 
     summary_start = datetime.now(UTC).isoformat()
-    summary_start_perf = time.time()
+    summary_start_perf = time.perf_counter()
     run_state: dict[str, Any] = {
         "mode": "unknown",
         "data_view_inputs": [],
