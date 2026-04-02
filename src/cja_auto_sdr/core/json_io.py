@@ -21,7 +21,9 @@ _REPLACE_FALLBACK_ERRNOS = {
     errno.EACCES,
     errno.EPERM,
 }
-_LISTXATTR_UNSUPPORTED_ERRNOS = {
+_METADATA_REPLAY_FALLBACK_ERRNOS = {
+    errno.EACCES,
+    errno.EPERM,
     errno.EINVAL,
     getattr(errno, "ENOTSUP", errno.EINVAL),
     getattr(errno, "EOPNOTSUPP", getattr(errno, "ENOTSUP", errno.EINVAL)),
@@ -154,17 +156,17 @@ def _cleanup_tmp_path(tmp_path: Path) -> None:
 def _path_has_extended_metadata(path: Path) -> bool:
     """Return True when *path* may carry metadata that replace would drop.
 
-    If the runtime cannot inspect xattrs, err on the side of compatibility and
-    treat existing files as metadata-bearing so callers stay on the direct-write
-    path instead of silently resetting ACL-like metadata.
+    If xattr inspection is unavailable or rejected for the path, err on the
+    side of compatibility and keep existing files on the direct-write path
+    instead of silently resetting ACL-like or filesystem-managed metadata.
     """
     listxattr = getattr(os, "listxattr", None)
     if listxattr is None:
         return True
     try:
         return bool(listxattr(path))
-    except OSError as exc:
-        return exc.errno not in _LISTXATTR_UNSUPPORTED_ERRNOS
+    except OSError:
+        return True
 
 
 def _existing_file_supports_atomic_replace(path: Path) -> bool:
@@ -179,6 +181,11 @@ def _existing_file_supports_atomic_replace(path: Path) -> bool:
 def _should_fallback_after_replace_error(exc: OSError) -> bool:
     """Return True when a failed replace should retry the compatible direct-write path."""
     return isinstance(exc, PermissionError) or exc.errno in _REPLACE_FALLBACK_ERRNOS
+
+
+def _should_fallback_after_metadata_replay_error(exc: OSError) -> bool:
+    """Return True when replaying staged-file metadata should defer to direct writes."""
+    return isinstance(exc, PermissionError) or exc.errno in _METADATA_REPLAY_FALLBACK_ERRNOS
 
 
 def _should_use_atomic_compatible_write(target_path: Path, resolved: Path, temp_dir: Path) -> bool:
@@ -292,18 +299,28 @@ def _apply_existing_metadata(tmp_path: Path, resolved: Path, file_mode: int | No
     destination does not yet exist the temp file keeps the mode it was
     created with (umask-driven), matching ``open(..., "w")`` semantics.
 
-    Returns ``False`` when owner/group replay would require privileges the
-    current process does not have, so callers can fall back to direct writes.
+    Returns ``False`` when mode or owner/group replay is rejected for the
+    staged temp file, so callers can fall back to direct writes that preserve
+    the original inode and metadata.
     """
     try:
         existing_stat = resolved.stat()
     except FileNotFoundError:
         existing_stat = None
 
+    mode_to_apply: int | None = None
     if file_mode is not None:
-        os.chmod(tmp_path, file_mode)
+        mode_to_apply = file_mode
     elif existing_stat is not None:
-        os.chmod(tmp_path, stat.S_IMODE(existing_stat.st_mode))
+        mode_to_apply = stat.S_IMODE(existing_stat.st_mode)
+
+    if mode_to_apply is not None:
+        try:
+            os.chmod(tmp_path, mode_to_apply)
+        except OSError as exc:
+            if _should_fallback_after_metadata_replay_error(exc):
+                return False
+            raise
 
     if existing_stat is None or os.name == "nt" or not hasattr(os, "chown"):
         return True
@@ -315,7 +332,7 @@ def _apply_existing_metadata(tmp_path: Path, resolved: Path, file_mode: int | No
         try:
             os.chown(tmp_path, uid, gid)
         except OSError as exc:
-            if exc.errno in {errno.EACCES, errno.EPERM}:
+            if _should_fallback_after_metadata_replay_error(exc):
                 return False
             raise
     return True

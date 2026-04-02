@@ -169,6 +169,32 @@ class TestWriteJsonAtomicCompatible:
 
         assert stat.S_IMODE(out.stat().st_mode) == 0o644
 
+    def test_staged_mode_replay_rejection_falls_back_to_direct_write(self, tmp_path):
+        out = tmp_path / "mode-rejected.json"
+        out.write_text('{"old": true}\n', encoding="utf-8")
+        os.chmod(out, 0o640)
+        inode_before = out.stat().st_ino
+        staged = tmp_path / ".stage.tmp"
+        real_chmod = os.chmod
+        fallback_errno = getattr(errno, "EOPNOTSUPP", getattr(errno, "ENOTSUP", errno.EPERM))
+
+        def fail_staged_chmod(path, mode):
+            if Path(path) == staged:
+                raise OSError(fallback_errno, "chmod rejected")
+            return real_chmod(path, mode)
+
+        with (
+            patch("cja_auto_sdr.core.json_io._compatible_tmp_path", return_value=staged),
+            patch("cja_auto_sdr.core.json_io._path_has_extended_metadata", return_value=False),
+            patch("cja_auto_sdr.core.json_io.os.chmod", side_effect=fail_staged_chmod),
+        ):
+            write_json_atomic_compatible(out, {"updated": True})
+
+        assert out.stat().st_ino == inode_before
+        assert stat.S_IMODE(out.stat().st_mode) == 0o640
+        assert json.loads(out.read_text(encoding="utf-8")) == {"updated": True}
+        assert not staged.exists()
+
     @pytest.mark.skipif(not hasattr(os, "link"), reason="requires hard-link support")
     def test_hard_linked_overwrite_falls_back_to_direct_write(self, tmp_path):
         out = tmp_path / "out.json"
@@ -190,6 +216,22 @@ class TestWriteJsonAtomicCompatible:
         inode_before = out.stat().st_ino
 
         with patch("cja_auto_sdr.core.json_io.os.listxattr", return_value=["user.test"]):
+            write_json_atomic_compatible(out, {"updated": True})
+
+        assert out.stat().st_ino == inode_before
+        assert json.loads(out.read_text(encoding="utf-8")) == {"updated": True}
+
+    @pytest.mark.skipif(not hasattr(os, "listxattr"), reason="requires os.listxattr support")
+    def test_unsupported_xattr_probe_falls_back_to_direct_write(self, tmp_path):
+        out = tmp_path / "unsupported-xattrs.json"
+        out.write_text('{"old": true}\n', encoding="utf-8")
+        inode_before = out.stat().st_ino
+        unsupported_errno = getattr(errno, "EOPNOTSUPP", getattr(errno, "ENOTSUP", errno.EINVAL))
+
+        with patch(
+            "cja_auto_sdr.core.json_io.os.listxattr",
+            side_effect=OSError(unsupported_errno, "xattrs unsupported"),
+        ):
             write_json_atomic_compatible(out, {"updated": True})
 
         assert out.stat().st_ino == inode_before
