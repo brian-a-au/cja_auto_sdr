@@ -613,3 +613,154 @@ class TestValidateConfigOutputDirErrorMessages:
 
         assert result is False
         assert "Cannot determine writable parent" in captured.out
+
+
+# ---------------------------------------------------------------------------
+# _api_connection_hint — diagnostic hint generation
+# ---------------------------------------------------------------------------
+
+
+class TestApiConnectionHint:
+    """Tests for _api_connection_hint helper."""
+
+    def test_key_error_content_returns_aep_hint(self):
+        from cja_auto_sdr.cli.commands.config import _api_connection_hint
+
+        hint = _api_connection_hint(KeyError("content"))
+        assert hint is not None
+        assert "AEP API" in hint
+        assert "product profiles" in hint
+
+    def test_key_error_other_key_returns_none(self):
+        from cja_auto_sdr.cli.commands.config import _api_connection_hint
+
+        hint = _api_connection_hint(KeyError("globalCompanyId"))
+        assert hint is None
+
+    def test_http_401_returns_auth_hint(self):
+        from cja_auto_sdr.cli.commands.config import _api_connection_hint
+
+        exc = Exception("Unauthorized")
+        exc.status_code = 401
+        hint = _api_connection_hint(exc)
+        assert hint is not None
+        assert "HTTP 401" in hint
+        assert "client_id" in hint
+
+    def test_http_403_returns_auth_hint(self):
+        from cja_auto_sdr.cli.commands.config import _api_connection_hint
+
+        exc = Exception("Forbidden")
+        exc.status_code = 403
+        hint = _api_connection_hint(exc)
+        assert hint is not None
+        assert "HTTP 403" in hint
+        assert "resource is not accessible" in hint
+
+    def test_http_403_data_view_lookup_context_mentions_no_access(self):
+        from cja_auto_sdr.cli.commands.config import _api_connection_hint
+
+        exc = Exception("Forbidden")
+        exc.status_code = 403
+        hint = _api_connection_hint(exc, context="data_view_lookup")
+        assert hint is not None
+        assert "accessing this data view" in hint
+        assert "have access to it" in hint
+        assert "client_id" in hint
+
+    def test_wrapped_response_status_code_returns_auth_hint(self):
+        from cja_auto_sdr.cli.commands.config import _api_connection_hint
+
+        exc = Exception("Unauthorized wrapper")
+        exc.response = {"error": {"statusCode": "401"}}  # type: ignore[attr-defined]
+        hint = _api_connection_hint(exc)
+        assert hint is not None
+        assert "HTTP 401" in hint
+
+    def test_status_attribute_string_returns_auth_hint(self):
+        from cja_auto_sdr.cli.commands.config import _api_connection_hint
+
+        exc = Exception("wrapped auth failure")
+        exc.status = "HTTP 403 Forbidden"  # type: ignore[attr-defined]
+        hint = _api_connection_hint(exc)
+        assert hint is not None
+        assert "HTTP 403" in hint
+
+    def test_exception_text_http_status_returns_auth_hint(self):
+        from cja_auto_sdr.cli.commands.config import _api_connection_hint
+
+        hint = _api_connection_hint(RuntimeError("Request failed with HTTP 401 Unauthorized"))
+        assert hint is not None
+        assert "HTTP 401" in hint
+
+    def test_unrelated_numeric_runtime_text_returns_none(self):
+        from cja_auto_sdr.cli.commands.config import _api_connection_hint
+
+        hint = _api_connection_hint(RuntimeError("expected 403 columns in export"))
+        assert hint is None
+
+    def test_generic_exception_returns_none(self):
+        from cja_auto_sdr.cli.commands.config import _api_connection_hint
+
+        hint = _api_connection_hint(ValueError("something else"))
+        assert hint is None
+
+
+# ---------------------------------------------------------------------------
+# validate_config_only — hint output in step [4/5]
+# ---------------------------------------------------------------------------
+
+
+class TestValidateConfigHintOutput:
+    """Verify that API connection failure in validate_config_only prints hints."""
+
+    def test_key_error_content_shows_hint_in_output(self, capsys):
+        from cja_auto_sdr.cli.commands.config import validate_config_only
+
+        gen = _make_generator_mock(
+            python_version_info=(3, 14, 0),
+            recoverable_exceptions=(KeyError,),
+        )
+        gen.load_credentials_from_env.return_value = {
+            "org_id": "org@AdobeOrg",
+            "client_id": "cid12345678",
+            "secret": "sec12345678",
+            "scopes": "openid",
+        }
+        gen.validate_env_credentials.return_value = True
+        gen.cjapy.CJA.return_value.getDataViews.side_effect = KeyError("content")
+
+        with patch("cja_auto_sdr.cli.commands.config._generator_module", return_value=gen):
+            with patch("cja_auto_sdr.cli.commands.config._check_output_dir_access"):
+                result = validate_config_only()
+
+        assert result is False
+        captured = capsys.readouterr()
+        assert "API connection failed" in captured.out
+        assert "AEP API" in captured.out
+
+    def test_runtime_http_403_shows_hint_in_fallback_output(self, capsys):
+        from cja_auto_sdr.cli.commands.config import validate_config_only
+
+        gen = _make_generator_mock(
+            python_version_info=(3, 14, 0),
+            recoverable_exceptions=(KeyError,),
+        )
+        gen.load_credentials_from_env.return_value = {
+            "org_id": "org@AdobeOrg",
+            "client_id": "cid12345678",
+            "secret": "sec12345678",
+            "scopes": "openid",
+        }
+        gen.validate_env_credentials.return_value = True
+        gen.cjapy.CJA.return_value.getDataViews.side_effect = RuntimeError("HTTP 403 Forbidden")
+
+        with patch("cja_auto_sdr.cli.commands.config._generator_module", return_value=gen):
+            with patch("cja_auto_sdr.cli.commands.config._check_output_dir_access"):
+                result = validate_config_only()
+
+        assert result is False
+        captured = capsys.readouterr()
+        assert "API connection failed: HTTP 403 Forbidden" in captured.out
+        assert "authentication or authorization failed" in captured.out
+        assert "unexpected" not in captured.out

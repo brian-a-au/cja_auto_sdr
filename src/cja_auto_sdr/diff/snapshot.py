@@ -8,8 +8,17 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from cja_auto_sdr.core.colors import ConsoleColors
 from cja_auto_sdr.core.error_policies import RECOVERABLE_OPTIONAL_ENRICHMENT_EXCEPTIONS
+from cja_auto_sdr.core.exceptions import attach_api_connection_hint_context
 from cja_auto_sdr.core.json_io import write_json_atomic
 from cja_auto_sdr.diff.models import DataViewSnapshot
+
+_SNAPSHOT_FAILURE_STAGE_ATTR = "_cja_snapshot_failure_stage"
+
+
+def _annotate_snapshot_failure(exc: Exception, *, stage: str, api_hint_context: str | None = None) -> Exception:
+    """Attach snapshot-stage metadata to *exc* so callers can emit accurate hints."""
+    setattr(exc, _SNAPSHOT_FAILURE_STAGE_ATTR, stage)
+    return attach_api_connection_hint_context(exc, context=api_hint_context)
 
 
 class SnapshotManager:
@@ -102,9 +111,20 @@ class SnapshotManager:
         """Create a snapshot from a live data view."""
         self.logger.info(f"Creating snapshot for data view: {data_view_id}")
 
-        dv_info = cja.getDataView(data_view_id)
+        try:
+            dv_info = cja.getDataView(data_view_id)
+        except Exception as exc:
+            raise _annotate_snapshot_failure(
+                exc,
+                stage="data_view_lookup",
+                api_hint_context="data_view_lookup",
+            ) from exc
         if not dv_info:
-            raise ValueError(f"Failed to fetch data view info for {data_view_id}")
+            raise _annotate_snapshot_failure(
+                ValueError(f"Failed to fetch data view info for {data_view_id}"),
+                stage="data_view_lookup",
+                api_hint_context="data_view_lookup",
+            )
 
         dv_name = dv_info.get("name", "Unknown")
         dv_owner = dv_info.get("owner", {})
@@ -112,14 +132,20 @@ class SnapshotManager:
         dv_description = dv_info.get("description", "")
 
         self.logger.info("Fetching metrics...")
-        metrics_df = cja.getMetrics(data_view_id, inclType=True, full=True)
+        try:
+            metrics_df = cja.getMetrics(data_view_id, inclType=True, full=True)
+        except Exception as exc:
+            raise _annotate_snapshot_failure(exc, stage="metrics_fetch") from exc
         metrics_list = []
         if metrics_df is not None and not metrics_df.empty:
             metrics_list = metrics_df.to_dict("records")
         self.logger.info(f"  Fetched {len(metrics_list)} metrics")
 
         self.logger.info("Fetching dimensions...")
-        dimensions_df = cja.getDimensions(data_view_id, inclType=True, full=True)
+        try:
+            dimensions_df = cja.getDimensions(data_view_id, inclType=True, full=True)
+        except Exception as exc:
+            raise _annotate_snapshot_failure(exc, stage="dimensions_fetch") from exc
         dimensions_list = []
         if dimensions_df is not None and not dimensions_df.empty:
             dimensions_list = dimensions_df.to_dict("records")

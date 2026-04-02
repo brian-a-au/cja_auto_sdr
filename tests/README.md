@@ -141,7 +141,7 @@ tests/
 └── README.md                        # This file
 ```
 
-**Total: 7,670 comprehensive tests**
+**Total: 7,719 comprehensive tests**
 
 ### Test Count Breakdown
 
@@ -150,16 +150,16 @@ tests/
 
 | Category | Tests | Files | Notes |
 |----------|-------|-------|-------|
-| `unit` | 7,564 | 123 | Default primary category for files without explicit integration/e2e/smoke scope |
+| `unit` | 7,613 | 123 | Default primary category for files without explicit integration/e2e/smoke scope |
 | `integration` | 73 | 3 | Cross-module integration suites |
 | `e2e` | 23 | 2 | End-to-end suites with a mocked external boundary |
 | `smoke` | 10 | 1 | Lightweight command-mode coverage |
 | `slow` | 7 | 1 | Overlay marker; these tests are also counted in a primary category |
-| **Primary Total** | **7,670** | **129** | **unit + integration + e2e + smoke** |
+| **Primary Total** | **7,719** | **129** | **unit + integration + e2e + smoke** |
 
 | CI Slice | Tests | Files | Selector |
 |----------|-------|-------|----------|
-| `test-unit` | 7,557 | 122 | `-m "unit and not slow"` |
+| `test-unit` | 7,606 | 122 | `-m "unit and not slow"` |
 | `test-integration` | 103 | 6 | `-m "integration or e2e or slow"` |
 | `smoke-test` | 10 | 1 | `-m smoke` |
 
@@ -235,18 +235,18 @@ tests/
 | `test_generator_discovery_compat_coverage.py` | 42 | Generator discovery helper parity with extracted list-command implementations |
 | `test_segments_coverage.py` | 78 | Segment comparison operators, container types, sequence variants |
 | `test_diff_inventory_output.py` | 96 | Inventory diff output across all formats (console, JSON, HTML, Excel, MD, CSV) |
-| `test_cli_command_handlers.py` | 150 | CLI dispatch for --stats, --org-report, --list-snapshots, discovery inspection, diff config unpacking |
-| `test_profile_management.py` | 51 | Interactive profile creation, import, test, show |
-| `test_snapshot_commands.py` | 59 | Snapshot creation, comparison, name resolution |
-| `test_config_and_resolution.py` | 108 | Config status, validation, stats, name resolution |
+| `test_cli_command_handlers.py` | 156 | CLI dispatch for --stats, --org-report, --list-snapshots, discovery inspection, diff config unpacking |
+| `test_profile_management.py` | 53 | Interactive profile creation, import, test, show |
+| `test_snapshot_commands.py` | 65 | Snapshot creation, comparison, name resolution |
+| `test_config_and_resolution.py` | 112 | Config status, validation, stats, name resolution |
 | `test_derived_fields_edge_cases.py` | 34 | Derived fields edge cases and coverage |
 | `test_diff_command_coverage.py` | 45 | Diff command edge cases and coverage |
-| `test_generator_interactive_and_console.py` | 36 | Generator interactive and console tests |
+| `test_generator_interactive_and_console.py` | 37 | Generator interactive and console tests |
 | `test_generator_remaining_coverage.py` | 82 | Generator remaining coverage edge cases |
-| `test_interactive_discovery_coverage.py` | 112 | Interactive discovery and helpers coverage |
+| `test_interactive_discovery_coverage.py` | 117 | Interactive discovery and helpers coverage |
 | `test_lock_backends.py` | 46 | Lock backends edge cases and coverage |
-| `test_main_impl_cli_coverage.py` | 90 | _main_impl CLI path coverage |
-| `test_main_impl_coverage.py` | 57 | _main_impl coverage edge cases |
+| `test_main_impl_cli_coverage.py` | 91 | _main_impl CLI path coverage |
+| `test_main_impl_coverage.py` | 64 | _main_impl coverage edge cases |
 | `test_org_cache_branches.py` | 51 | Org cache branch coverage |
 | `test_org_writer_compat_contracts.py` | 107 | Org writer compatibility boundary contract tests |
 | `test_org_writer_coverage.py` | 143 | Org writer edge cases and coverage |
@@ -257,7 +257,7 @@ tests/
 | `test_cli_smoke_modes.py` | 10 | CLI smoke tests for core command modes |
 | `test_generator_mock_contract.py` | 2 | Generator mock symbol contract tests |
 | `test_completion.py` | 56 | Shell completion flag (--completion bash/zsh/fish) |
-| `test_exception_narrowing.py` | 50 | Exception narrowing boundary tests |
+| `test_exception_narrowing.py` | 55 | Exception narrowing boundary tests |
 | `test_coverage_hardening.py` | 100 | Coverage hardening tests |
 | `test_trending_models.py` | 53 | Trending dataclass construction and bridge tests |
 | `test_trending_discovery.py` | 88 | Snapshot cache discovery, deltas, drift scoring |
@@ -269,7 +269,7 @@ tests/
 | `test_org_trending_adversarial.py` | 51 | Adversarial and stress tests for trending |
 | `test_cli_diff_contracts.py` | 70 | CLI/diff public API contract tests |
 | `test_list_command_edge_cases.py` | 58 | List command edge cases and coverage |
-| `test_cli_commands_config_coverage.py` | 25 | Config command edge cases and coverage |
+| `test_cli_commands_config_coverage.py` | 37 | Config command edge cases and coverage |
 | `test_cli_execution.py` | 27 | CLI execution edge cases and coverage |
 | `test_diff_git_coverage.py` | 27 | Diff/git subprocess error path coverage |
 | `test_generator_trending_coverage.py` | 19 | Generator trending integration coverage |
@@ -298,7 +298,7 @@ tests/
 | `test_agent_workflows.py` | 69 | Agent workflow shell script validation tests |
 | `test_manifest_agent_contract.py` | 16 | Manifest vs runtime capability drift tests |
 | `test_tool_manifests.py` | 40 | Tool manifest schema and content tests |
-| **Total** | **7,670** | **Collected via pytest --collect-only** |
+| **Total** | **7,719** | **Collected via pytest --collect-only** |
 
 ## Running Tests
 
@@ -756,7 +756,7 @@ the `tests/README.md` inventory tree or count table.
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (7,670 tests total)
+- [x] Comprehensive test coverage (7,719 tests total)
 - [x] Org-wide analysis tests (test_org_report.py) - 211 tests (including large org scaling, output path aliases, memory warnings, smart cache invalidation)
 - [x] Org-wide analysis integration tests (test_org_report_integration.py) - 17 tests (end-to-end flows, caching, filtering, governance thresholds)
 - [x] Profile management tests (test_profiles.py) - 78 tests

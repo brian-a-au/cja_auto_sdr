@@ -50,6 +50,11 @@ def _populate_diff_advisory_rollup(
         logging.getLogger("diff").debug("Advisory rollup computation failed", exc_info=True)
 
 
+def _emit_api_failure_hint(generator: Any, exc: Exception) -> None:
+    """Print a diff/snapshot API hint to stderr when one is available."""
+    generator._print_api_hint(exc, file=sys.stderr)
+
+
 def handle_snapshot_command(
     data_view_id: str,
     snapshot_file: str,
@@ -89,13 +94,18 @@ def handle_snapshot_command(
         cja = generator.cjapy.CJA()
 
         snapshot_manager = generator.SnapshotManager(logger)
-        snapshot = snapshot_manager.create_snapshot(
-            cja,
-            data_view_id,
-            quiet,
-            include_calculated_metrics=include_calculated_metrics,
-            include_segments=include_segments,
-        )
+        try:
+            snapshot = snapshot_manager.create_snapshot(
+                cja,
+                data_view_id,
+                quiet,
+                include_calculated_metrics=include_calculated_metrics,
+                include_segments=include_segments,
+            )
+        except generator.RECOVERABLE_COMMAND_HANDLER_EXCEPTIONS as e:
+            print(generator.ConsoleColors.error(f"ERROR: Failed to create snapshot: {e!s}"), file=sys.stderr)
+            _emit_api_failure_hint(generator, e)
+            return False
         saved_path = snapshot_manager.save_snapshot(snapshot, snapshot_file)
 
         if not quiet:
@@ -119,6 +129,7 @@ def handle_snapshot_command(
         raise
     except generator.RECOVERABLE_COMMAND_HANDLER_EXCEPTIONS as e:
         print(generator.ConsoleColors.error(f"ERROR: Failed to create snapshot: {e!s}"), file=sys.stderr)
+        _emit_api_failure_hint(generator, e)
         return False
 
 
@@ -253,12 +264,18 @@ def handle_diff_command(
         cja = generator.cjapy.CJA()
 
         snapshot_manager = generator.SnapshotManager(logger)
-        if not quiet and not quiet_diff:
-            print("Fetching source data view...")
-        source_snapshot = snapshot_manager.create_snapshot(cja, source_id, quiet or quiet_diff)
-        if not quiet and not quiet_diff:
-            print("Fetching target data view...")
-        target_snapshot = snapshot_manager.create_snapshot(cja, target_id, quiet or quiet_diff)
+        try:
+            if not quiet and not quiet_diff:
+                print("Fetching source data view...")
+            source_snapshot = snapshot_manager.create_snapshot(cja, source_id, quiet or quiet_diff)
+            if not quiet and not quiet_diff:
+                print("Fetching target data view...")
+            target_snapshot = snapshot_manager.create_snapshot(cja, target_id, quiet or quiet_diff)
+        except generator.RECOVERABLE_COMMAND_HANDLER_EXCEPTIONS as e:
+            print(generator.ConsoleColors.error(f"ERROR: Failed to compare data views: {e!s}"), file=sys.stderr)
+            _emit_api_failure_hint(generator, e)
+            logger.debug("Diff comparison failed during data view fetch", exc_info=True)
+            return False, False, None
 
         if auto_snapshot:
             os.makedirs(snapshot_dir, exist_ok=True)
@@ -363,6 +380,7 @@ def handle_diff_command(
         raise
     except generator.RECOVERABLE_COMMAND_HANDLER_EXCEPTIONS as e:
         print(generator.ConsoleColors.error(f"ERROR: Failed to compare data views: {e!s}"), file=sys.stderr)
+        _emit_api_failure_hint(generator, e)
         logger.debug("Diff comparison failed", exc_info=True)
         return False, False, None
 
@@ -548,9 +566,15 @@ def handle_diff_snapshot_command(
             return False, False, None
         cja = generator.cjapy.CJA()
 
-        if not quiet and not quiet_diff:
-            print("Fetching current data view state...")
-        target_snapshot = snapshot_manager.create_snapshot(cja, data_view_id, quiet or quiet_diff)
+        try:
+            if not quiet and not quiet_diff:
+                print("Fetching current data view state...")
+            target_snapshot = snapshot_manager.create_snapshot(cja, data_view_id, quiet or quiet_diff)
+        except generator.RECOVERABLE_COMMAND_HANDLER_EXCEPTIONS as e:
+            print(generator.ConsoleColors.error(f"ERROR: Failed to compare against snapshot: {e!s}"), file=sys.stderr)
+            _emit_api_failure_hint(generator, e)
+            logger.debug("Diff-snapshot comparison failed during data view fetch", exc_info=True)
+            return False, False, None
 
         if include_calc_metrics or include_segments:
             if not quiet and not quiet_diff:
@@ -686,6 +710,7 @@ def handle_diff_snapshot_command(
         raise
     except generator.RECOVERABLE_COMMAND_HANDLER_EXCEPTIONS as e:
         print(generator.ConsoleColors.error(f"ERROR: Failed to compare against snapshot: {e!s}"), file=sys.stderr)
+        _emit_api_failure_hint(generator, e)
         logger.debug("Diff-snapshot comparison failed", exc_info=True)
         return False, False, None
 

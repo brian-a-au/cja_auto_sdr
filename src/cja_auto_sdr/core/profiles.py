@@ -16,7 +16,7 @@ from cja_auto_sdr.api.quality_policy import _canonical_quality_policy_key
 from cja_auto_sdr.core.colors import ConsoleColors
 from cja_auto_sdr.core.constants import BANNER_WIDTH, CREDENTIAL_FIELDS, ENV_VAR_MAPPING
 from cja_auto_sdr.core.credentials import filter_credentials
-from cja_auto_sdr.core.exceptions import ProfileConfigError, ProfileNotFoundError
+from cja_auto_sdr.core.exceptions import ProfileConfigError, ProfileNotFoundError, api_connection_hint
 from cja_auto_sdr.core.json_io import write_json_atomic
 
 __all__ = [
@@ -663,6 +663,28 @@ def test_profile(profile_name: str) -> bool:
 
     print("3. Testing API connectivity...")
 
+    def _print_profile_test_failure(exc: Exception) -> bool:
+        """Render a controlled profile-test failure with optional remediation hint."""
+        print(ConsoleColors.error("   API connection: FAILED"), file=sys.stderr)
+        print(ConsoleColors.error(f"   Error: {exc}"), file=sys.stderr)
+        print(file=sys.stderr)
+        print(ConsoleColors.error("Profile test: FAILED"), file=sys.stderr)
+        print(file=sys.stderr)
+
+        hint = api_connection_hint(exc)
+        if hint:
+            for line in hint.splitlines():
+                print(ConsoleColors.warning(f"  {line}"))
+            print()
+        print("Common issues:")
+        print("  - Invalid client_id or secret")
+        print("  - Incorrect OAuth scopes")
+        print("  - API project not provisioned for CJA")
+        print("  - Missing AEP API in Developer Console project")
+        print("  - Service account not granted product profile access")
+        print()
+        return False
+
     try:
         generator._config_from_env(credentials, logger)
         cja = generator.cjapy.CJA()
@@ -683,14 +705,9 @@ def test_profile(profile_name: str) -> bool:
         print()
         return True
     except generator.RECOVERABLE_CONFIG_API_EXCEPTIONS as e:
-        print(ConsoleColors.error("   API connection: FAILED"), file=sys.stderr)
-        print(ConsoleColors.error(f"   Error: {e}"), file=sys.stderr)
-        print()
-        print(ConsoleColors.error("Profile test: FAILED"), file=sys.stderr)
-        print()
-        print("Common issues:")
-        print("  - Invalid client_id or secret")
-        print("  - Incorrect OAuth scopes")
-        print("  - API project not provisioned for CJA")
-        print()
-        return False
+        return _print_profile_test_failure(e)
+    except Exception as e:
+        if isinstance(e, SystemError):
+            raise
+        logger.debug("Unexpected profile-test connectivity error", exc_info=True)
+        return _print_profile_test_failure(e)

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import logging
+import sys
 from typing import Any
 
 import cjapy
@@ -72,6 +73,7 @@ def resolve_data_view_names(
     profile: str | None = None,
     match_mode: str = "exact",
     include_diagnostics: bool = False,
+    emit_api_hints: bool = True,
 ):
     """Resolve data view names to IDs while preserving legacy return contracts."""
     generator = _generator_module()
@@ -256,6 +258,7 @@ def resolve_data_view_names(
     except generator.RECOVERABLE_CONFIG_API_EXCEPTIONS as e:
         error_message = f"Failed to resolve data view names: {e!s}"
         logger.error(error_message)
+        generator._print_api_hint(e, enabled=emit_api_hints)
         resolution_diagnostics = generator.NameResolutionDiagnostics(
             error_type="connectivity_error",
             error_message=error_message,
@@ -266,9 +269,12 @@ def resolve_data_view_names(
             resolution_diagnostics,
             include_diagnostics=include_diagnostics,
         )
-    except (AttributeError, RuntimeError) as e:
+    except Exception as e:
+        if isinstance(e, SystemError):
+            raise
         error_message = f"Failed to resolve data view names (unexpected): {e!s}"
         logger.error(error_message)
+        generator._print_api_hint(e, enabled=emit_api_hints)
         logger.debug("Unexpected error during name resolution", exc_info=True)
         resolution_diagnostics = generator.NameResolutionDiagnostics(
             error_type="connectivity_error",
@@ -477,4 +483,5 @@ def show_stats(
             error_type="connectivity_error",
             human_to_stderr=False,
         )
+        generator._print_api_hint(e, enabled=not is_machine_readable, file=sys.stdout)
         return False

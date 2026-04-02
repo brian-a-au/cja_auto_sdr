@@ -7,6 +7,21 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.5] — 2026-04-01
+
+### Added
+- Centralized `api_connection_hint()` in `core/exceptions.py` — maps cryptic API exceptions to plain-English guidance across 12 error paths.
+- `_print_api_hint()` in `generator.py` — consistent stderr hint printer with machine-readable suppression gate.
+- Actionable hints for `--validate-config`, `--profile-test`, `--org-report`, `--batch`, `--diff`, `--stats`, discovery commands, and interactive mode.
+
+### Changed
+- Streamlined QUICKSTART_GUIDE.md prerequisites around uv (auto-manages Python), added pip fallback, elevated AEP API requirement.
+- Added `--validate-config` error patterns section to TROUBLESHOOTING.md.
+
+### Fixed
+- Hardened all hint call sites against unexpected exception shapes (`AttributeError`, missing `.response`).
+- Narrowed 403 hints to avoid false positives on data view lookup failures.
+
 ## [3.5.4] — 2026-04-01
 
 ### Changed

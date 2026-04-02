@@ -634,6 +634,47 @@ class TestTestProfile:
         assert "Profile test: FAILED" in captured.err
         assert "Common issues:" in captured.out
 
+    def test_runtime_auth_failure_shows_hint(self, tmp_path, capsys):
+        """Bare runtime auth failures should return a controlled hinted failure."""
+        profile_dir = tmp_path / "orgs" / "runtime-auth-fail"
+        _write_config_json(profile_dir)
+
+        with (
+            patch("cja_auto_sdr.generator.get_profile_path", return_value=profile_dir),
+            patch("cja_auto_sdr.generator.cjapy"),
+            patch("cja_auto_sdr.generator.ConfigValidator") as mock_validator,
+            patch("cja_auto_sdr.generator._config_from_env", side_effect=RuntimeError("HTTP 403 Forbidden")),
+        ):
+            mock_validator.validate_all.return_value = []
+            result = run_test_profile("runtime-auth-fail")
+
+        assert result is False
+        captured = capsys.readouterr()
+        assert "Profile test: FAILED" in captured.err
+        assert "HTTP 403 Forbidden" in captured.err
+        assert "authentication or authorization failed" in captured.out
+
+    def test_plain_constructor_failure_returns_controlled_failure(self, tmp_path, capsys):
+        """Bare constructor failures should still return a controlled profile-test error."""
+        profile_dir = tmp_path / "orgs" / "plain-cja-fail"
+        _write_config_json(profile_dir)
+
+        with (
+            patch("cja_auto_sdr.generator.get_profile_path", return_value=profile_dir),
+            patch("cja_auto_sdr.generator.cjapy") as mock_cjapy,
+            patch("cja_auto_sdr.generator.ConfigValidator") as mock_validator,
+            patch("cja_auto_sdr.generator._config_from_env") as mock_config_from_env,
+        ):
+            mock_cjapy.CJA.side_effect = Exception("auth bootstrap failed")
+            mock_validator.validate_all.return_value = []
+            result = run_test_profile("plain-cja-fail")
+
+        assert result is False
+        mock_config_from_env.assert_called_once()
+        captured = capsys.readouterr()
+        assert "Profile test: FAILED" in captured.err
+        assert "auth bootstrap failed" in captured.err
+
     def test_validation_warnings_displayed(self, tmp_path, capsys):
         """Validation warnings should be displayed but not block the test."""
         profile_dir = tmp_path / "orgs" / "warnings"

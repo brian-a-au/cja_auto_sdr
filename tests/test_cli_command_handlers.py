@@ -163,6 +163,62 @@ class TestProcessInventorySummary:
     @patch("cja_auto_sdr.generator.initialize_cja")
     @patch("cja_auto_sdr.generator.with_log_context")
     @patch("cja_auto_sdr.generator.setup_logging")
+    def test_data_view_fetch_http_403_shows_lookup_access_hint(
+        self,
+        mock_setup,
+        mock_ctx,
+        mock_init,
+        mock_display,
+        capsys,
+    ):
+        """Inventory summary 403 lookup failures should mention no-access guidance."""
+        mock_setup.return_value = logging.getLogger("test")
+        mock_ctx.return_value = logging.getLogger("test")
+
+        mock_cja = MagicMock()
+        mock_cja.dataviews.get_single.side_effect = RuntimeError("HTTP 403 Forbidden")
+        mock_init.return_value = mock_cja
+
+        result = process_inventory_summary("dv_bad_id", config_file="config.json")
+
+        assert "error" in result
+        captured = capsys.readouterr()
+        assert "Failed to fetch data view (unexpected): HTTP 403 Forbidden" in captured.err
+        assert "accessing this data view" in captured.err
+        assert "have access to it" in captured.err
+
+    @patch("cja_auto_sdr.generator.display_inventory_summary")
+    @patch("cja_auto_sdr.generator.initialize_cja")
+    @patch("cja_auto_sdr.generator.with_log_context")
+    @patch("cja_auto_sdr.generator.setup_logging")
+    def test_data_view_fetch_plain_exception_http_403_shows_lookup_access_hint(
+        self,
+        mock_setup,
+        mock_ctx,
+        mock_init,
+        mock_display,
+        capsys,
+    ):
+        """Plain Exception 403 lookup failures should stay controlled and hinted."""
+        mock_setup.return_value = logging.getLogger("test")
+        mock_ctx.return_value = logging.getLogger("test")
+
+        mock_cja = MagicMock()
+        mock_cja.dataviews.get_single.side_effect = Exception("HTTP 403 Forbidden")
+        mock_init.return_value = mock_cja
+
+        result = process_inventory_summary("dv_bad_id", config_file="config.json")
+
+        assert "error" in result
+        captured = capsys.readouterr()
+        assert "Failed to fetch data view (unexpected): HTTP 403 Forbidden" in captured.err
+        assert "accessing this data view" in captured.err
+        assert "have access to it" in captured.err
+
+    @patch("cja_auto_sdr.generator.display_inventory_summary")
+    @patch("cja_auto_sdr.generator.initialize_cja")
+    @patch("cja_auto_sdr.generator.with_log_context")
+    @patch("cja_auto_sdr.generator.setup_logging")
     def test_successful_fetch_no_inventory(self, mock_setup, mock_ctx, mock_init, mock_display):
         """Successful fetch with no inventory flags returns display_inventory_summary result."""
         mock_setup.return_value = logging.getLogger("test")
@@ -751,6 +807,73 @@ class TestHandleDiffCommand:
         assert success is False
         assert has_changes is False
         assert exit_override is None
+
+    @patch("cja_auto_sdr.generator.cjapy")
+    @patch("cja_auto_sdr.generator.configure_cjapy")
+    def test_diff_plain_hint_stays_on_stderr(self, mock_conf, mock_cjapy, capsys):
+        """Hint-bearing diff failures should keep the error and remediation text on stderr."""
+        mock_conf.return_value = (True, "config_path", {})
+        mock_cjapy.CJA.side_effect = KeyError("content")
+
+        success, has_changes, exit_override = handle_diff_command(
+            source_id="dv_a",
+            target_id="dv_b",
+            quiet=True,
+        )
+
+        assert success is False
+        assert has_changes is False
+        assert exit_override is None
+        captured = capsys.readouterr()
+        assert "Failed to compare data views: 'content'" in captured.err
+        assert "AEP API" in captured.err
+        assert captured.out == ""
+
+    @patch("cja_auto_sdr.generator.cjapy")
+    @patch("cja_auto_sdr.generator.configure_cjapy")
+    def test_diff_lookup_403_shows_data_view_access_hint(self, mock_conf, mock_cjapy, capsys):
+        """Lookup 403s during diff should keep the narrower data-view guidance."""
+        mock_conf.return_value = (True, "config_path", {})
+        mock_cja = MagicMock()
+        mock_cjapy.CJA.return_value = mock_cja
+        mock_cja.getDataView.side_effect = RuntimeError("HTTP 403 Forbidden")
+
+        success, has_changes, exit_override = handle_diff_command(
+            source_id="dv_a",
+            target_id="dv_b",
+            quiet=True,
+        )
+
+        assert success is False
+        assert has_changes is False
+        assert exit_override is None
+        captured = capsys.readouterr()
+        assert "Failed to compare data views: HTTP 403 Forbidden" in captured.err
+        assert "accessing this data view" in captured.err
+
+    @patch("cja_auto_sdr.generator.cjapy")
+    @patch("cja_auto_sdr.generator.configure_cjapy")
+    def test_diff_component_403_shows_generic_auth_hint(self, mock_conf, mock_cjapy, capsys):
+        """Component-fetch 403s during diff should avoid lookup-specific remediation."""
+        mock_conf.return_value = (True, "config_path", {})
+        mock_cja = MagicMock()
+        mock_cjapy.CJA.return_value = mock_cja
+        mock_cja.getDataView.return_value = {"name": "DV", "owner": "o", "description": ""}
+        mock_cja.getMetrics.side_effect = RuntimeError("HTTP 403 Forbidden")
+
+        success, has_changes, exit_override = handle_diff_command(
+            source_id="dv_a",
+            target_id="dv_b",
+            quiet=True,
+        )
+
+        assert success is False
+        assert has_changes is False
+        assert exit_override is None
+        captured = capsys.readouterr()
+        assert "Failed to compare data views: HTTP 403 Forbidden" in captured.err
+        assert "authentication or authorization failed" in captured.err
+        assert "accessing this data view" not in captured.err
 
     @patch("cja_auto_sdr.generator.SnapshotManager")
     @patch("cja_auto_sdr.generator.cjapy")
@@ -2589,6 +2712,27 @@ class TestDiscoveryInspectionNameResolution:
         payload = json.loads(stderr_output)
         assert payload["error_type"] == "configuration_error"
         assert "resolver plain log line" not in stderr_output
+
+    @patch("cja_auto_sdr.generator._cli_option_specified", _mock_cli_option_specified)
+    @patch("cja_auto_sdr.generator.configure_cjapy", side_effect=KeyError("content"))
+    @patch("cja_auto_sdr.generator.describe_dataview")
+    def test_machine_readable_resolution_hinted_failure_keeps_stderr_json_only(
+        self,
+        mock_fn,
+        _mock_configure,
+        capsys,
+    ):
+        """Hint-bearing resolution failures must not append plain-text guidance to stderr JSON."""
+        with pytest.raises(SystemExit) as exc_info:
+            with patch("cja_auto_sdr.generator.parse_arguments") as mock_pa:
+                mock_pa.return_value = parse_arguments(["--describe-dataview", "Broken View", "--output", "-"])
+                _main_impl(run_state={})
+
+        assert exc_info.value.code == 1
+        mock_fn.assert_not_called()
+        payload = json.loads(capsys.readouterr().err)
+        assert payload["error_type"] == "connectivity_error"
+        assert payload["error"] == "Failed to resolve data view names: 'content'"
 
     @patch("cja_auto_sdr.generator._cli_option_specified", _mock_cli_option_specified)
     @patch("cja_auto_sdr.generator.prompt_for_selection")

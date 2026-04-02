@@ -171,6 +171,7 @@ from cja_auto_sdr.core.exceptions import (
     ProfileNotFoundError,
     RetryableHTTPError,
     ValidationError,
+    api_connection_hint,
 )
 from cja_auto_sdr.core.locks.manager import normalize_lock_stale_threshold_seconds
 from cja_auto_sdr.core.version import __version__
@@ -738,6 +739,25 @@ RECOVERABLE_VALIDATION_EXCEPTIONS: tuple[type[Exception], ...] = VALIDATION_CATC
 RECOVERABLE_STATS_ROW_EXCEPTIONS: tuple[type[Exception], ...] = (Exception,)
 
 
+def _print_api_hint(
+    exc: Exception,
+    *,
+    indent: str = "  ",
+    file=None,
+    enabled: bool = True,
+    context: str | None = None,
+) -> None:
+    """Print an actionable hint for *exc* if one is available."""
+    if not enabled:
+        return
+    hint = api_connection_hint(exc, context=context)
+    if hint:
+        _file = file or sys.stderr
+        print(file=_file)
+        for line in hint.splitlines():
+            print(ConsoleColors.warning(f"{indent}{line}"), file=_file)
+
+
 def _log_optional_inventory_failure(
     logger: Any,
     *,
@@ -1262,6 +1282,7 @@ def _refetch_git_snapshot_for_commit(
             )
     except RECOVERABLE_GIT_SNAPSHOT_REFETCH_EXCEPTIONS as e:
         print(ConsoleColors.warning(f"  Could not fetch snapshot data: {e}"))
+        _print_api_hint(e, file=sys.stdout)
     return snapshot
 
 
@@ -2657,9 +2678,18 @@ def process_inventory_summary(
         dv_name = lookup_data.get("name", data_view_id) if isinstance(lookup_data, dict) else data_view_id
     except RECOVERABLE_CONFIG_API_EXCEPTIONS as e:
         print(ConsoleColors.error(f"ERROR: Failed to fetch data view: {e}"), file=sys.stderr)
+        _print_api_hint(e, context="data_view_lookup")
         return {"error": str(e)}
     except (RuntimeError, AttributeError) as e:  # Residual non-API failures (e.g. cjapy internals)
         print(ConsoleColors.error(f"ERROR: Failed to fetch data view (unexpected): {e}"), file=sys.stderr)
+        _print_api_hint(e, context="data_view_lookup")
+        logger.debug("Unexpected error fetching data view", exc_info=True)
+        return {"error": str(e)}
+    except Exception as e:
+        if isinstance(e, SystemError):
+            raise
+        print(ConsoleColors.error(f"ERROR: Failed to fetch data view (unexpected): {e}"), file=sys.stderr)
+        _print_api_hint(e, context="data_view_lookup")
         logger.debug("Unexpected error fetching data view", exc_info=True)
         return {"error": str(e)}
 
@@ -3830,6 +3860,21 @@ def run_dry_run(data_views: list[str], config_file: str, logger: logging.Logger,
         text = str(error).strip()
         return text or error.__class__.__name__
 
+    def _fail_dry_run_api_connection(error: Exception) -> bool:
+        """Print a consistent step-[2/3] API probe failure and stop the dry-run."""
+        print(f"  ✗ API connection failed: {_dry_run_error_text(error)}")
+        _print_api_hint(error, file=sys.stdout)
+        print()
+        print("=" * BANNER_WIDTH)
+        print("DRY-RUN FAILED - Cannot connect to CJA API")
+        print("=" * BANNER_WIDTH)
+        return False
+
+    def _print_dry_run_data_view_error(error: Exception, *, context: str | None = None) -> None:
+        """Print a consistent per-data-view validation error and optional remediation hint."""
+        print(f"  ✗ {dv_id}: Error - {_dry_run_error_text(error)}")
+        _print_api_hint(error, file=sys.stdout, context=context)
+
     # Step 1: Validate credentials
     print("[1/3] Validating credentials...")
     if profile:
@@ -3894,22 +3939,18 @@ def run_dry_run(data_views: list[str], config_file: str, logger: logging.Logger,
         print(ConsoleColors.warning("Dry-run cancelled."))
         raise
     except RECOVERABLE_CONFIG_API_EXCEPTIONS as e:
-        print(f"  ✗ API connection failed: {_dry_run_error_text(e)}")
         all_passed = False
-        print()
-        print("=" * BANNER_WIDTH)
-        print("DRY-RUN FAILED - Cannot connect to CJA API")
-        print("=" * BANNER_WIDTH)
-        return False
+        return _fail_dry_run_api_connection(e)
     except (RuntimeError, AttributeError) as e:  # Residual non-API failures (e.g. cjapy internals)
         logger.debug("Unexpected dry-run API connection failure", exc_info=True)
-        print(f"  ✗ API connection failed: {_dry_run_error_text(e)}")
         all_passed = False
-        print()
-        print("=" * BANNER_WIDTH)
-        print("DRY-RUN FAILED - Cannot connect to CJA API")
-        print("=" * BANNER_WIDTH)
-        return False
+        return _fail_dry_run_api_connection(e)
+    except Exception as e:
+        if isinstance(e, SystemError):
+            raise
+        logger.debug("Unexpected dry-run API connection failure", exc_info=True)
+        all_passed = False
+        return _fail_dry_run_api_connection(e)
 
     # Step 3: Validate each data view
     print()
@@ -3944,56 +3985,88 @@ def run_dry_run(data_views: list[str], config_file: str, logger: logging.Logger,
                 raw_dv_info,
                 data_view_id=dv_id,
             )
-            if dv_info is not None:
-                dv_name = dv_info.get("name", "Unknown")
-
-                # Fetch component counts for predictions
-                metrics_count = _count_component_items_for_fetch_spec_with_retry(
-                    cja,
-                    dv_id,
-                    _METRICS_COMPONENT_FETCH_SPEC,
-                    logger=logger,
-                )
-                dimensions_count = _count_component_items_for_fetch_spec_with_retry(
-                    cja,
-                    dv_id,
-                    _DIMENSIONS_COMPONENT_FETCH_SPEC,
-                    logger=logger,
-                )
-
-                total_metrics += metrics_count
-                total_dimensions += dimensions_count
-                dv_details.append(
-                    {"id": dv_id, "name": dv_name, "metrics": metrics_count, "dimensions": dimensions_count},
-                )
-
-                print(f"  ✓ {dv_id}: {dv_name}")
-                print(f"      Components: {metrics_count} metrics, {dimensions_count} dimensions")
-                valid_count += 1
-            else:
-                print(f"  ✗ {dv_id}: Not found or no access")
-                print(f"      Lookup validation failed: {lookup_failure_reason}")
-                logger.debug(
-                    "Dry-run rejected lookup payload for %s: reason=%s raw_type=%s",
-                    dv_id,
-                    lookup_failure_reason,
-                    lookup_raw_type,
-                )
-                invalid_count += 1
-                all_passed = False
         except (KeyboardInterrupt, SystemExit):
             print()
             print(ConsoleColors.warning("Validation cancelled."))
             raise
         except RECOVERABLE_CONFIG_API_EXCEPTIONS as e:
-            print(f"  ✗ {dv_id}: Error - {e!s}")
+            _print_dry_run_data_view_error(e, context="data_view_lookup")
             invalid_count += 1
             all_passed = False
+            continue
         except (RuntimeError, AttributeError) as e:  # Residual non-API failures (e.g. cjapy internals)
             logger.debug(f"Unexpected dry-run validation error for {dv_id}: {e!s}", exc_info=True)
-            print(f"  ✗ {dv_id}: Error - {_dry_run_error_text(e)}")
+            _print_dry_run_data_view_error(e, context="data_view_lookup")
             invalid_count += 1
             all_passed = False
+            continue
+        except Exception as e:
+            if isinstance(e, SystemError):
+                raise
+            logger.debug(f"Unexpected dry-run validation error for {dv_id}: {e!s}", exc_info=True)
+            _print_dry_run_data_view_error(e, context="data_view_lookup")
+            invalid_count += 1
+            all_passed = False
+            continue
+
+        if dv_info is None:
+            print(f"  ✗ {dv_id}: Not found or no access")
+            print(f"      Lookup validation failed: {lookup_failure_reason}")
+            logger.debug(
+                "Dry-run rejected lookup payload for %s: reason=%s raw_type=%s",
+                dv_id,
+                lookup_failure_reason,
+                lookup_raw_type,
+            )
+            invalid_count += 1
+            all_passed = False
+            continue
+
+        dv_name = dv_info.get("name", "Unknown")
+
+        try:
+            # Fetch component counts for predictions.
+            metrics_count = _count_component_items_for_fetch_spec_with_retry(
+                cja,
+                dv_id,
+                _METRICS_COMPONENT_FETCH_SPEC,
+                logger=logger,
+            )
+            dimensions_count = _count_component_items_for_fetch_spec_with_retry(
+                cja,
+                dv_id,
+                _DIMENSIONS_COMPONENT_FETCH_SPEC,
+                logger=logger,
+            )
+        except RECOVERABLE_CONFIG_API_EXCEPTIONS as e:
+            _print_dry_run_data_view_error(e)
+            invalid_count += 1
+            all_passed = False
+            continue
+        except (RuntimeError, AttributeError) as e:  # Residual non-API failures (e.g. cjapy internals)
+            logger.debug(f"Unexpected dry-run component validation error for {dv_id}: {e!s}", exc_info=True)
+            _print_dry_run_data_view_error(e)
+            invalid_count += 1
+            all_passed = False
+            continue
+        except Exception as e:
+            if isinstance(e, SystemError):
+                raise
+            logger.debug(f"Unexpected dry-run component validation error for {dv_id}: {e!s}", exc_info=True)
+            _print_dry_run_data_view_error(e)
+            invalid_count += 1
+            all_passed = False
+            continue
+
+        total_metrics += metrics_count
+        total_dimensions += dimensions_count
+        dv_details.append(
+            {"id": dv_id, "name": dv_name, "metrics": metrics_count, "dimensions": dimensions_count},
+        )
+
+        print(f"  ✓ {dv_id}: {dv_name}")
+        print(f"      Components: {metrics_count} metrics, {dimensions_count} dimensions")
+        valid_count += 1
 
     # Calculate time estimates
     # Based on benchmarks: ~0.5s per component for validation, ~0.1s without
@@ -4333,6 +4406,7 @@ def resolve_data_view_names(
     profile: str | None = None,
     match_mode: str = "exact",
     include_diagnostics: bool = False,
+    emit_api_hints: bool = True,
 ) -> NameResolutionResult | NameResolutionResultWithDiagnostics:
     from cja_auto_sdr.cli.commands.stats import resolve_data_view_names as _impl
 
@@ -4344,6 +4418,7 @@ def resolve_data_view_names(
         profile=profile,
         match_mode=match_mode,
         include_diagnostics=include_diagnostics,
+        emit_api_hints=emit_api_hints,
     )
 
 
@@ -5563,6 +5638,7 @@ def run_org_report(
 
     except RECOVERABLE_COMMAND_HANDLER_EXCEPTIONS as e:
         _status_print(ConsoleColors.error(f"ERROR: Org report failed: {e!s}"))
+        _print_api_hint(e, file=status_stream)
         if isinstance(e, RECOVERABLE_ORG_REPORT_EXCEPTIONS):
             logger.exception("Org report error")
         else:
@@ -6650,6 +6726,7 @@ def _main_impl(run_state: dict[str, Any] | None = None):
                     profile=getattr(args, "profile", None),
                     match_mode=getattr(args, "name_match", "exact"),
                     include_diagnostics=True,
+                    emit_api_hints=not is_machine_readable_discovery,
                 )
                 resolved_ids, _, resolution_diagnostics = _coerce_name_resolution_result(resolution_result)
                 resolved_name_by_id = resolution_diagnostics.resolved_name_by_id

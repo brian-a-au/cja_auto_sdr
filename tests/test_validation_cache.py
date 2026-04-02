@@ -388,44 +388,57 @@ class TestValidationCache:
         assert stats["size"] == 1
 
     @pytest.mark.slow
-    def test_performance_improvement(self, sample_metrics_df):
-        """Cache should provide significant performance improvement"""
-        logger = logging.getLogger("test")
-        cache = ValidationCache(max_size=100, ttl_seconds=3600, logger=logger)
+    def test_performance_improvement(self, large_sample_dataframe):
+        """Cache should provide measurable benefit on a realistic dataset."""
+        logger = logging.getLogger("test.validation_cache.performance")
+        logger.setLevel(logging.WARNING)
+        logger.propagate = False
+        if not logger.handlers:
+            logger.addHandler(logging.NullHandler())
 
-        # Time without cache
-        checker_no_cache = DataQualityChecker(logger, validation_cache=None)
-        start = time.time()
-        for _ in range(10):
-            checker_no_cache.issues = []  # Reset
-            checker_no_cache.check_all_quality_issues_optimized(
-                sample_metrics_df,
-                "Metrics",
-                ["id", "name", "type"],
-                ["id", "name", "description"],
-            )
-        time_no_cache = time.time() - start
+        required_fields = ["id", "name", "type"]
+        critical_fields = ["id", "name", "description"]
+        repetitions = 10
+        samples = 5
 
-        # Time with cache
-        checker_with_cache = DataQualityChecker(logger, validation_cache=cache)
-        start = time.time()
-        for _ in range(10):
-            checker_with_cache.issues = []  # Reset
-            checker_with_cache.check_all_quality_issues_optimized(
-                sample_metrics_df,
-                "Metrics",
-                ["id", "name", "type"],
-                ["id", "name", "description"],
-            )
-        time_with_cache = time.time() - start
+        def _run_iterations(checker: DataQualityChecker) -> None:
+            for _ in range(repetitions):
+                checker.issues = []  # Reset
+                checker.check_all_quality_issues_optimized(
+                    large_sample_dataframe,
+                    "Metrics",
+                    required_fields,
+                    critical_fields,
+                )
 
-        # Cache should be faster (at least 5% improvement)
+        no_cache_runs = []
+        with_cache_runs = []
+
+        for _ in range(samples):
+            checker_no_cache = DataQualityChecker(logger, validation_cache=None)
+            start = time.perf_counter()
+            _run_iterations(checker_no_cache)
+            no_cache_runs.append(time.perf_counter() - start)
+
+            cache = ValidationCache(max_size=100, ttl_seconds=3600, logger=logger)
+            checker_with_cache = DataQualityChecker(logger, validation_cache=cache)
+            start = time.perf_counter()
+            _run_iterations(checker_with_cache)
+            with_cache_runs.append(time.perf_counter() - start)
+
+            stats = cache.get_statistics()
+            assert stats["hits"] == repetitions - 1
+            assert stats["misses"] == 1
+
+        time_no_cache = sorted(no_cache_runs)[len(no_cache_runs) // 2]
+        time_with_cache = sorted(with_cache_runs)[len(with_cache_runs) // 2]
+
         improvement = (time_no_cache - time_with_cache) / time_no_cache * 100
         print(
-            f"\nPerformance: no_cache={time_no_cache:.3f}s, with_cache={time_with_cache:.3f}s, improvement={improvement:.1f}%",
+            f"\nPerformance (median of {samples} runs, dataset size={len(large_sample_dataframe)}): "
+            f"no_cache={time_no_cache:.3f}s, with_cache={time_with_cache:.3f}s, improvement={improvement:.1f}%",
         )
 
-        # Should be at least 5% faster (conservative for small datasets on slow CI runners)
         assert improvement >= 5, f"Cache only improved performance by {improvement:.1f}% (expected >= 5%)"
 
     def test_cache_clear(self, sample_metrics_df):

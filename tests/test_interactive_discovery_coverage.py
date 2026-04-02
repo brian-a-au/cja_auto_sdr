@@ -528,6 +528,40 @@ class TestRunListCommand:
         assert "API timeout" in parsed["error"]
 
     @patch("cja_auto_sdr.generator.cjapy")
+    @patch("cja_auto_sdr.generator.configure_cjapy", side_effect=KeyError("content"))
+    def test_machine_readable_hinted_failure_keeps_stderr_json_only(self, _mock_config, _mock_cjapy, capsys):
+        """Hint-bearing discovery failures must not append plain text to stderr JSON."""
+        result = _run_list_command(
+            banner_text="TEST",
+            command_name="test",
+            fetch_and_format=lambda cja, mr: "data",
+            config_file="config.json",
+            output_format="json",
+        )
+        assert result is False
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        payload = json.loads(captured.err)
+        assert payload["error"] == "Failed to connect to CJA API: 'content'"
+        assert payload["error_type"] == "connectivity_error"
+
+    @patch("cja_auto_sdr.generator.cjapy")
+    @patch("cja_auto_sdr.generator.configure_cjapy", side_effect=KeyError("content"))
+    def test_human_readable_hinted_failure_writes_hint_to_stdout(self, _mock_config, _mock_cjapy, capsys):
+        """Human-readable discovery errors should keep the hint on stdout with the banner."""
+        result = _run_list_command(
+            banner_text="TEST",
+            command_name="test",
+            fetch_and_format=lambda cja, mr: "data",
+            config_file="config.json",
+        )
+        assert result is False
+        captured = capsys.readouterr()
+        assert "Failed to connect to CJA API: 'content'" in captured.out
+        assert "AEP API" in captured.out
+        assert captured.err == ""
+
+    @patch("cja_auto_sdr.generator.cjapy")
     @patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "mock", None))
     def test_attribute_error_from_fetch_is_recoverable(self, _mock_config, mock_cjapy, capsys):
         """AttributeError in fetch callback should return False with a user-facing API error."""
@@ -545,6 +579,27 @@ class TestRunListCommand:
         assert result is False
         out = capsys.readouterr().out
         assert "Failed to connect to CJA API: missing getDataViews" in out
+
+    @patch("cja_auto_sdr.generator.cjapy")
+    @patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "mock", None))
+    def test_key_error_from_fetch_does_not_emit_api_hint(self, _mock_config, mock_cjapy, capsys):
+        """Non-API KeyErrors should not print Adobe credential remediation text."""
+        mock_cjapy.CJA.return_value = Mock()
+
+        def _raise_key_error(_cja, _machine_readable):
+            raise KeyError("name")
+
+        result = _run_list_command(
+            banner_text="TEST",
+            command_name="test",
+            fetch_and_format=_raise_key_error,
+            config_file="config.json",
+        )
+        assert result is False
+        out = capsys.readouterr().out
+        assert "Failed to connect to CJA API: 'name'" in out
+        assert "AEP API" not in out
+        assert "OAuth credentials" not in out
 
     @patch("cja_auto_sdr.generator.cjapy")
     @patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "mock", None))
@@ -666,6 +721,21 @@ class TestInteractiveSelectDataviews:
         assert result == []
         out = capsys.readouterr().out
         assert "Failed to connect to CJA API: network error" in out
+
+    @patch("cja_auto_sdr.generator.cjapy")
+    @patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "mock", None))
+    def test_hint_stays_on_stdout_for_interactive_select(self, _cfg, mock_cjapy, capsys):
+        """Hint-bearing interactive selection failures should not split streams."""
+        mock_cja = Mock()
+        mock_cja.getDataViews.side_effect = KeyError("content")
+        mock_cjapy.CJA.return_value = mock_cja
+
+        result = interactive_select_dataviews("config.json")
+        assert result == []
+        captured = capsys.readouterr()
+        assert "Failed to connect to CJA API: 'content'" in captured.out
+        assert "AEP API" in captured.out
+        assert captured.err == ""
 
     @patch("cja_auto_sdr.generator.cjapy")
     @patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "mock", None))
@@ -1068,6 +1138,21 @@ class TestInteractiveWizard:
         assert result is None
         out = capsys.readouterr().out
         assert "Failed to connect to CJA API: API down" in out
+
+    @patch("cja_auto_sdr.generator.cjapy")
+    @patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "mock", None))
+    def test_hint_stays_on_stdout_for_interactive_wizard(self, _cfg, mock_cjapy, capsys):
+        """Hint-bearing wizard startup failures should keep the error and hint together."""
+        mock_cja = Mock()
+        mock_cja.getDataViews.side_effect = KeyError("content")
+        mock_cjapy.CJA.return_value = mock_cja
+
+        result = interactive_wizard("config.json")
+        assert result is None
+        captured = capsys.readouterr()
+        assert "Failed to connect to CJA API: 'content'" in captured.out
+        assert "AEP API" in captured.out
+        assert captured.err == ""
 
     @patch("cja_auto_sdr.generator.cjapy")
     @patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "mock", None))

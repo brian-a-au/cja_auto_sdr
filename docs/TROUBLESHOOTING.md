@@ -387,12 +387,51 @@ uv pip list | grep cjapy
 
 ---
 
+## `--validate-config` Errors
+
+The `--validate-config` command runs 5 checks. If Step [4/5] (API connection) fails, the error message comes directly from the API response and can be cryptic. Here are the most common ones:
+
+### `API connection failed: 'content'`
+
+**Cause:** The API returned an empty or malformed response. This almost always means the Developer Console project is missing the AEP API, or the service account has not been granted product profile access.
+
+**Solution:**
+
+1. Verify **both** the CJA API and AEP API are added to your project (see [Quickstart Guide — Step 1.5](QUICKSTART_GUIDE.md#15-add-the-adobe-experience-platform-aep-api))
+2. Verify the service account is assigned to the correct product profiles for both APIs
+3. Wait 5-10 minutes after making permission changes, then re-run `--validate-config`
+
+For detailed steps, see [Missing AEP API Integration](#missing-aep-api-integration) below.
+
+### `API connection failed: HTTP 401` or `HTTP 403`
+
+**Cause:** Authentication or authorization failed — invalid credentials or insufficient permissions.
+
+**Solution:**
+
+1. Re-check your `client_id` and `client_secret` against the Developer Console
+2. Verify your OAuth scopes match the Developer Console exactly (copy scopes **after** adding both APIs)
+3. Ensure the service account has product profile access in [Admin Console](https://adminconsole.adobe.com/)
+
+### `API connection failed (unexpected): ...`
+
+**Cause:** An unexpected error during the API connection test — could be a network issue, proxy misconfiguration, or internal library error.
+
+**Solution:**
+
+1. Check your network connectivity
+2. Re-run with `--log-level DEBUG` to see the full traceback
+3. If the issue persists, try `--config-status` first to validate credentials without an API call
+
+---
+
 ## API Permission Errors
 
 ### Missing AEP API Integration
 
 **Symptoms:**
 ```
+✗ API connection failed: 'content'
 ERROR - Failed to fetch segments: 403 Forbidden
 ERROR - Unable to retrieve calculated metrics
 WARNING - Inventory features may be unavailable
