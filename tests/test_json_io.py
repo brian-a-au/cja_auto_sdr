@@ -4,8 +4,9 @@ import errno
 import json
 import os
 import stat
+import subprocess
+import sys
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -33,6 +34,22 @@ def _near_name_max_path(tmp_path: Path, suffix: str) -> Path:
         pytest.skip("filesystem name limit too small for test fixture")
     stem = "a" * (name_max - len(suffix) - 1)
     return tmp_path / f"{stem}{suffix}"
+
+
+def _set_test_xattr(path: Path, *, value: bytes = b"cja-auto-sdr") -> tuple[str, bytes]:
+    if not all(hasattr(os, attr) for attr in ("setxattr", "getxattr", "listxattr")):
+        pytest.skip("requires xattr support")
+
+    name = "user.cja_auto_sdr"
+    try:
+        os.setxattr(path, name, value)
+    except OSError as exc:
+        pytest.skip(f"xattrs unsupported on test filesystem: {exc}")
+    return name, value
+
+
+def _ls_acl_text(path: Path) -> str:
+    return subprocess.check_output(["ls", "-le", str(path)], text=True)
 
 
 def test_write_json_atomic_supports_default_sort_keys_and_trailing_newline(tmp_path):
@@ -169,34 +186,8 @@ class TestWriteJsonAtomicCompatible:
 
         assert stat.S_IMODE(out.stat().st_mode) == 0o644
 
-    def test_staged_mode_replay_rejection_falls_back_to_direct_write(self, tmp_path):
-        out = tmp_path / "mode-rejected.json"
-        out.write_text('{"old": true}\n', encoding="utf-8")
-        os.chmod(out, 0o640)
-        inode_before = out.stat().st_ino
-        staged = tmp_path / ".stage.tmp"
-        real_chmod = os.chmod
-        fallback_errno = getattr(errno, "EOPNOTSUPP", getattr(errno, "ENOTSUP", errno.EPERM))
-
-        def fail_staged_chmod(path, mode):
-            if Path(path) == staged:
-                raise OSError(fallback_errno, "chmod rejected")
-            return real_chmod(path, mode)
-
-        with (
-            patch("cja_auto_sdr.core.json_io._compatible_tmp_path", return_value=staged),
-            patch("cja_auto_sdr.core.json_io._path_has_extended_metadata", return_value=False),
-            patch("cja_auto_sdr.core.json_io.os.chmod", side_effect=fail_staged_chmod),
-        ):
-            write_json_atomic_compatible(out, {"updated": True})
-
-        assert out.stat().st_ino == inode_before
-        assert stat.S_IMODE(out.stat().st_mode) == 0o640
-        assert json.loads(out.read_text(encoding="utf-8")) == {"updated": True}
-        assert not staged.exists()
-
     @pytest.mark.skipif(not hasattr(os, "link"), reason="requires hard-link support")
-    def test_hard_linked_overwrite_falls_back_to_direct_write(self, tmp_path):
+    def test_hard_linked_overwrite_preserves_existing_inode(self, tmp_path):
         out = tmp_path / "out.json"
         alias = tmp_path / "latest.json"
         out.write_text('{"old": true}\n', encoding="utf-8")
@@ -209,79 +200,36 @@ class TestWriteJsonAtomicCompatible:
         assert alias.stat().st_ino == inode_before
         assert json.loads(alias.read_text(encoding="utf-8")) == {"updated": True}
 
-    @pytest.mark.skipif(not hasattr(os, "listxattr"), reason="requires os.listxattr support")
-    def test_xattr_bearing_file_falls_back_to_direct_write(self, tmp_path):
+    def test_xattr_bearing_file_preserves_existing_inode_and_xattrs(self, tmp_path):
         out = tmp_path / "tagged.json"
         out.write_text('{"old": true}\n', encoding="utf-8")
+        attr_name, attr_value = _set_test_xattr(out)
         inode_before = out.stat().st_ino
 
-        with patch("cja_auto_sdr.core.json_io.os.listxattr", return_value=["user.test"]):
-            write_json_atomic_compatible(out, {"updated": True})
-
+        write_json_atomic_compatible(out, {"updated": True})
         assert out.stat().st_ino == inode_before
+        assert os.getxattr(out, attr_name) == attr_value
         assert json.loads(out.read_text(encoding="utf-8")) == {"updated": True}
 
-    @pytest.mark.skipif(not hasattr(os, "listxattr"), reason="requires os.listxattr support")
-    def test_unsupported_xattr_probe_falls_back_to_direct_write(self, tmp_path):
-        out = tmp_path / "unsupported-xattrs.json"
+    @pytest.mark.skipif(sys.platform != "darwin", reason="requires macOS ACL support")
+    def test_acl_bearing_file_preserves_existing_inode_and_acl(self, tmp_path):
+        out = tmp_path / "acl.json"
         out.write_text('{"old": true}\n', encoding="utf-8")
+        user = subprocess.check_output(["id", "-un"], text=True).strip()
+        acl_entry = f"user:{user} allow read"
+        result = subprocess.run(["chmod", "+a", acl_entry, str(out)], capture_output=True, text=True)
+        if result.returncode != 0:
+            pytest.skip(f"chmod +a unsupported in test environment: {result.stderr.strip()}")
         inode_before = out.stat().st_ino
-        unsupported_errno = getattr(errno, "EOPNOTSUPP", getattr(errno, "ENOTSUP", errno.EINVAL))
+        before_acl = _ls_acl_text(out)
 
-        with patch(
-            "cja_auto_sdr.core.json_io.os.listxattr",
-            side_effect=OSError(unsupported_errno, "xattrs unsupported"),
-        ):
-            write_json_atomic_compatible(out, {"updated": True})
+        write_json_atomic_compatible(out, {"updated": True})
 
+        after_acl = _ls_acl_text(out)
         assert out.stat().st_ino == inode_before
+        assert "allow read" in before_acl
+        assert "allow read" in after_acl
         assert json.loads(out.read_text(encoding="utf-8")) == {"updated": True}
-
-    def test_existing_file_without_os_listxattr_uses_native_probe_for_atomic_overwrite(self, tmp_path, monkeypatch):
-        out = tmp_path / "native-probe.json"
-        out.write_text('{"old": true}\n', encoding="utf-8")
-        inode_before = out.stat().st_ino
-
-        monkeypatch.delattr(json_io.os, "listxattr", raising=False)
-
-        with patch("cja_auto_sdr.core.json_io._native_path_has_xattrs", return_value=False) as mock_native_probe:
-            write_json_atomic_compatible(out, {"updated": True})
-
-        assert out.stat().st_ino != inode_before
-        assert json.loads(out.read_text(encoding="utf-8")) == {"updated": True}
-        mock_native_probe.assert_called_once_with(out)
-
-    def test_existing_file_without_any_xattr_probe_falls_back_to_direct_write(self, tmp_path, monkeypatch):
-        out = tmp_path / "no-probe.json"
-        out.write_text('{"old": true}\n', encoding="utf-8")
-        inode_before = out.stat().st_ino
-
-        monkeypatch.delattr(json_io.os, "listxattr", raising=False)
-
-        with patch("cja_auto_sdr.core.json_io._native_path_has_xattrs", return_value=None) as mock_native_probe:
-            write_json_atomic_compatible(out, {"updated": True})
-
-        assert out.stat().st_ino == inode_before
-        assert json.loads(out.read_text(encoding="utf-8")) == {"updated": True}
-        mock_native_probe.assert_called_once_with(out)
-
-    def test_replace_denied_overwrite_falls_back_to_direct_write(self, tmp_path):
-        out = tmp_path / "rename-denied.json"
-        out.write_text('{"old": true}\n', encoding="utf-8")
-        inode_before = out.stat().st_ino
-
-        with (
-            patch("cja_auto_sdr.core.json_io._path_has_extended_metadata", return_value=False),
-            patch(
-                "cja_auto_sdr.core.json_io.os.replace",
-                side_effect=PermissionError(errno.EPERM, "replace denied"),
-            ),
-        ):
-            write_json_atomic_compatible(out, {"updated": True})
-
-        assert out.stat().st_ino == inode_before
-        assert json.loads(out.read_text(encoding="utf-8")) == {"updated": True}
-        assert list(tmp_path.glob(".*tmp")) == []
 
     def test_explicit_file_mode_overrides_existing(self, tmp_path):
         out = tmp_path / "out.json"
@@ -323,8 +271,20 @@ class TestWriteJsonAtomicCompatible:
         assert link.is_symlink()
         assert not (tmp_path / "missing").exists()
 
+    def test_symlink_to_missing_target_creates_resolved_file(self, tmp_path):
+        target_dir = tmp_path / "target"
+        target_dir.mkdir()
+        target = target_dir / "created.json"
+        link = tmp_path / "link.json"
+        link.symlink_to(target)
+
+        write_json_atomic_compatible(link, {"created": True})
+
+        assert link.is_symlink()
+        assert json.loads(target.read_text(encoding="utf-8")) == {"created": True}
+
     @pytest.mark.skipif(_SKIP_PERMISSION_SEMANTICS, reason="requires POSIX non-root permission semantics")
-    def test_non_writable_directory_falls_back_to_direct_overwrite(self, tmp_path):
+    def test_non_writable_directory_preserves_existing_overwrite_behavior(self, tmp_path):
         out_dir = tmp_path / "output"
         out_dir.mkdir()
         out = out_dir / "report.json"
@@ -350,6 +310,17 @@ class TestWriteJsonAtomicCompatible:
         remaining = list(tmp_path.glob(".*tmp"))
         assert remaining == []
 
+    def test_atomic_create_replace_failure_cleans_up_temp_file(self, tmp_path):
+        out = tmp_path / "create-fail.json"
+        with (
+            patch("cja_auto_sdr.core.json_io.os.replace", side_effect=PermissionError(errno.EPERM, "replace denied")),
+            pytest.raises(PermissionError, match="replace denied"),
+        ):
+            write_json_atomic_compatible(out, {"created": True})
+
+        assert not out.exists()
+        assert list(tmp_path.glob(".*tmp")) == []
+
     def test_ensure_ascii_matches_json_dump_default(self, tmp_path):
         out = tmp_path / "unicode.json"
         write_json_atomic_compatible(out, {"name": "\u00e9l\u00e8ve"})
@@ -361,65 +332,6 @@ class TestWriteJsonAtomicCompatible:
         write_json_atomic_compatible(out, {"name": "\u00e9l\u00e8ve"}, ensure_ascii=False)
         raw = out.read_text(encoding="utf-8")
         assert "\u00e9l\u00e8ve" in raw
-
-    @pytest.mark.skipif(os.name == "nt" or not hasattr(os, "chown"), reason="requires POSIX os.chown")
-    def test_apply_existing_metadata_replays_owner_group(self, tmp_path):
-        resolved = tmp_path / "resolved.json"
-        staged = tmp_path / ".resolved.json.tmp"
-        resolved.write_text("{}", encoding="utf-8")
-        staged.write_text("{}", encoding="utf-8")
-        original_stat = Path.stat
-
-        def fake_stat(self):
-            if self == resolved:
-                return SimpleNamespace(st_mode=stat.S_IFREG | 0o640, st_uid=123, st_gid=456, st_nlink=1)
-            if self == staged:
-                return SimpleNamespace(st_uid=789, st_gid=987)
-            return original_stat(self)
-
-        with (
-            patch("pathlib.Path.stat", autospec=True, side_effect=fake_stat),
-            patch("cja_auto_sdr.core.json_io.os.chmod") as mock_chmod,
-            patch("cja_auto_sdr.core.json_io.os.chown") as mock_chown,
-        ):
-            json_io._apply_existing_metadata(staged, resolved, None)
-
-        mock_chmod.assert_called_once_with(staged, 0o640)
-        mock_chown.assert_called_once_with(staged, 123, 456)
-
-    @pytest.mark.skipif(os.name == "nt" or not hasattr(os, "chown"), reason="requires POSIX os.chown")
-    def test_inherited_group_atomic_overwrite_does_not_require_chown(self, tmp_path):
-        out = tmp_path / "report.json"
-        out.write_text('{"old": true}\n', encoding="utf-8")
-        inode_before = out.stat().st_ino
-        existing_stat = out.stat()
-        staged = tmp_path / ".stage.tmp"
-        inherited_gid = existing_stat.st_gid + 1000
-        original_stat = Path.stat
-
-        def fake_stat(self):
-            if self == out:
-                return SimpleNamespace(
-                    st_mode=existing_stat.st_mode,
-                    st_uid=existing_stat.st_uid,
-                    st_gid=inherited_gid,
-                    st_nlink=1,
-                )
-            if self == staged:
-                return SimpleNamespace(st_uid=existing_stat.st_uid, st_gid=inherited_gid)
-            return original_stat(self)
-
-        with (
-            patch("cja_auto_sdr.core.json_io._compatible_tmp_path", return_value=staged),
-            patch("cja_auto_sdr.core.json_io._path_has_extended_metadata", return_value=False),
-            patch("pathlib.Path.stat", autospec=True, side_effect=fake_stat),
-            patch("cja_auto_sdr.core.json_io.os.chown") as mock_chown,
-        ):
-            write_json_atomic_compatible(out, {"updated": True})
-
-        assert out.stat().st_ino != inode_before
-        assert json.loads(out.read_text(encoding="utf-8")) == {"updated": True}
-        mock_chown.assert_not_called()
 
 
 class TestWriteTextAtomicCompatible:
@@ -458,7 +370,7 @@ class TestWriteTextAtomicCompatible:
         assert stat.S_IMODE(out.stat().st_mode) == 0o644
 
     @pytest.mark.skipif(not hasattr(os, "link"), reason="requires hard-link support")
-    def test_hard_linked_overwrite_falls_back_to_direct_write(self, tmp_path):
+    def test_hard_linked_overwrite_preserves_existing_inode(self, tmp_path):
         out = tmp_path / "out.md"
         alias = tmp_path / "latest.md"
         out.write_text("old", encoding="utf-8")
@@ -471,49 +383,16 @@ class TestWriteTextAtomicCompatible:
         assert alias.stat().st_ino == inode_before
         assert alias.read_text(encoding="utf-8") == "new"
 
-    @pytest.mark.skipif(not hasattr(os, "listxattr"), reason="requires os.listxattr support")
-    def test_xattr_bearing_file_falls_back_to_direct_write(self, tmp_path):
+    def test_xattr_bearing_file_preserves_existing_inode_and_xattrs(self, tmp_path):
         out = tmp_path / "tagged.md"
         out.write_text("old", encoding="utf-8")
+        attr_name, attr_value = _set_test_xattr(out)
         inode_before = out.stat().st_ino
 
-        with patch("cja_auto_sdr.core.json_io.os.listxattr", return_value=["user.test"]):
-            write_text_atomic_compatible(out, "new")
-
+        write_text_atomic_compatible(out, "new")
         assert out.stat().st_ino == inode_before
+        assert os.getxattr(out, attr_name) == attr_value
         assert out.read_text(encoding="utf-8") == "new"
-
-    def test_existing_file_without_os_listxattr_uses_native_probe_for_atomic_overwrite(self, tmp_path, monkeypatch):
-        out = tmp_path / "native-probe.md"
-        out.write_text("old", encoding="utf-8")
-        inode_before = out.stat().st_ino
-
-        monkeypatch.delattr(json_io.os, "listxattr", raising=False)
-
-        with patch("cja_auto_sdr.core.json_io._native_path_has_xattrs", return_value=False) as mock_native_probe:
-            write_text_atomic_compatible(out, "new")
-
-        assert out.stat().st_ino != inode_before
-        assert out.read_text(encoding="utf-8") == "new"
-        mock_native_probe.assert_called_once_with(out)
-
-    def test_replace_denied_overwrite_falls_back_to_direct_write(self, tmp_path):
-        out = tmp_path / "rename-denied.md"
-        out.write_text("old", encoding="utf-8")
-        inode_before = out.stat().st_ino
-
-        with (
-            patch("cja_auto_sdr.core.json_io._path_has_extended_metadata", return_value=False),
-            patch(
-                "cja_auto_sdr.core.json_io.os.replace",
-                side_effect=PermissionError(errno.EPERM, "replace denied"),
-            ),
-        ):
-            write_text_atomic_compatible(out, "new")
-
-        assert out.stat().st_ino == inode_before
-        assert out.read_text(encoding="utf-8") == "new"
-        assert list(tmp_path.glob(".*tmp")) == []
 
     def test_explicit_file_mode_overrides_existing(self, tmp_path):
         out = tmp_path / "out.md"
@@ -536,7 +415,7 @@ class TestWriteTextAtomicCompatible:
         assert remaining == []
 
     @pytest.mark.skipif(_SKIP_PERMISSION_SEMANTICS, reason="requires POSIX non-root permission semantics")
-    def test_non_writable_directory_falls_back_to_direct_overwrite(self, tmp_path):
+    def test_non_writable_directory_preserves_existing_overwrite_behavior(self, tmp_path):
         out_dir = tmp_path / "output"
         out_dir.mkdir()
         out = out_dir / "report.md"

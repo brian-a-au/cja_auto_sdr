@@ -1,16 +1,11 @@
 from __future__ import annotations
 
 import contextlib
-import ctypes
-import ctypes.util
 import errno
 import json
 import os
-import stat
-import sys
 import uuid
 from collections.abc import Callable
-from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -20,17 +15,6 @@ _DIRECTORY_FSYNC_BEST_EFFORT_ERRNOS = {
     errno.EINVAL,
     errno.EPERM,
     getattr(errno, "ENOTSUP", errno.EINVAL),
-}
-_REPLACE_FALLBACK_ERRNOS = {
-    errno.EACCES,
-    errno.EPERM,
-}
-_METADATA_REPLAY_FALLBACK_ERRNOS = {
-    errno.EACCES,
-    errno.EPERM,
-    errno.EINVAL,
-    getattr(errno, "ENOTSUP", errno.EINVAL),
-    getattr(errno, "EOPNOTSUPP", getattr(errno, "ENOTSUP", errno.EINVAL)),
 }
 
 
@@ -113,14 +97,10 @@ def write_json_atomic(
 # ---------------------------------------------------------------------------
 # Compatibility-preserving atomic helpers (v3.5.7)
 # ---------------------------------------------------------------------------
-# These follow symlinks and preserve existing file metadata on overwrite.
-# They use temp-file-and-rename only when that path preserves the success/fail
-# semantics of a plain ``open(path, "w")`` call; otherwise they fall back to a
-# direct write so compatibility wins over hardening. In particular, overwrites
-# with extra hard links or extended metadata stay on the direct-write path
-# because replacing the inode would change user-visible behavior. Owner/group
-# replay is decided after staging because temp files in inherited-group
-# directories can already match the destination without requiring ``chown``.
+# These preserve ``open(path, "w")`` overwrite semantics for existing files by
+# writing through the existing inode directly, including symlink-following.
+# For create-new paths they still use temp-file-and-rename so new artifacts get
+# durable atomic creation without silently changing overwrite-visible behavior.
 # ---------------------------------------------------------------------------
 
 
@@ -141,11 +121,6 @@ def _directory_supports_atomic_replace(directory: Path) -> bool:
     return directory.exists() and os.access(directory, os.W_OK | os.X_OK)
 
 
-def _file_supports_direct_overwrite(path: Path) -> bool:
-    """Return True when a plain ``open(path, "w")`` overwrite should succeed."""
-    return path.is_file() and os.access(path, os.W_OK)
-
-
 def _compatible_tmp_path(directory: Path) -> Path:
     """Return a short temp-file path that fits even when target names are near NAME_MAX."""
     return directory / f".{uuid.uuid4().hex}.tmp"
@@ -157,130 +132,11 @@ def _cleanup_tmp_path(tmp_path: Path) -> None:
         tmp_path.unlink()
 
 
-def _os_path_has_xattrs(path: Path) -> bool | None:
-    """Return whether *path* has xattrs using the stdlib probe when available."""
-    listxattr = getattr(os, "listxattr", None)
-    if listxattr is None:
-        return None
-    return bool(listxattr(path))
-
-
-@lru_cache(maxsize=1)
-def _native_listxattr_probe() -> Callable[[Path], bool] | None:
-    """Return a native libc-backed xattr probe for runtimes missing ``os.listxattr``."""
-    if os.name == "nt":
-        return None
-
-    libc_name = ctypes.util.find_library("c")
-    if not libc_name:
-        return None
-
-    try:
-        libc = ctypes.CDLL(libc_name, use_errno=True)
-    except OSError:
-        return None
-
-    listxattr = getattr(libc, "listxattr", None)
-    if listxattr is None:
-        return None
-
-    if sys.platform == "darwin":
-        listxattr.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_size_t, ctypes.c_int]
-
-        def probe(path: Path) -> bool:
-            ctypes.set_errno(0)
-            size = listxattr(os.fsencode(os.fspath(path)), None, 0, 0)
-            if size < 0:
-                err = ctypes.get_errno()
-                raise OSError(err, os.strerror(err), str(path))
-            return size > 0
-
-    else:
-        listxattr.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_size_t]
-
-        def probe(path: Path) -> bool:
-            ctypes.set_errno(0)
-            size = listxattr(os.fsencode(os.fspath(path)), None, 0)
-            if size < 0:
-                err = ctypes.get_errno()
-                raise OSError(err, os.strerror(err), str(path))
-            return size > 0
-
-    listxattr.restype = ctypes.c_ssize_t
-    return probe
-
-
-def _native_path_has_xattrs(path: Path) -> bool | None:
-    """Return whether *path* has xattrs using a native fallback when available."""
-    probe = _native_listxattr_probe()
-    if probe is None:
-        return None
-    return probe(path)
-
-
-def _path_has_extended_metadata(path: Path) -> bool:
-    """Return True when *path* may carry metadata that replace would drop.
-
-    Prefer the stdlib xattr probe when available, then fall back to the native
-    libc entry point on Unix runtimes that omit ``os.listxattr``. If the path
-    still cannot be inspected, err on the side of compatibility and keep
-    existing files on the direct-write path instead of silently resetting
-    ACL-like or filesystem-managed metadata.
-    """
-    for probe in (_os_path_has_xattrs, _native_path_has_xattrs):
-        try:
-            has_xattrs = probe(path)
-        except OSError:
-            return True
-        if has_xattrs is not None:
-            return has_xattrs
-    return True
-
-
-def _existing_file_supports_atomic_replace(path: Path) -> bool:
-    """Return True when replacing *path* preserves direct-overwrite semantics."""
-    try:
-        existing_stat = path.stat()
-    except FileNotFoundError:
-        return False
-    return existing_stat.st_nlink <= 1 and not _path_has_extended_metadata(path)
-
-
-def _should_fallback_after_replace_error(exc: OSError) -> bool:
-    """Return True when a failed replace should retry the compatible direct-write path."""
-    return isinstance(exc, PermissionError) or exc.errno in _REPLACE_FALLBACK_ERRNOS
-
-
-def _should_fallback_after_metadata_replay_error(exc: OSError) -> bool:
-    """Return True when replaying staged-file metadata should defer to direct writes."""
-    return isinstance(exc, PermissionError) or exc.errno in _METADATA_REPLAY_FALLBACK_ERRNOS
-
-
-def _should_use_atomic_compatible_write(target_path: Path, resolved: Path, temp_dir: Path) -> bool:
-    """Use atomic replace only when preflight suggests it preserves open() semantics.
-
-    Some ACL/filesystem configurations still reject the final rename step even
-    when the destination remains writable via ``open(path, "w")``. The shared
-    compatible write runner handles those late failures with a direct-write
-    retry.
-    """
+def _target_exists_for_compatible_write(target_path: Path, resolved: Path) -> bool:
+    """Return True when the effective destination already exists."""
     if target_path.is_symlink():
-        if resolved.exists():
-            return (
-                _file_supports_direct_overwrite(resolved)
-                and _directory_supports_atomic_replace(temp_dir)
-                and _existing_file_supports_atomic_replace(resolved)
-            )
-        return _directory_supports_atomic_replace(temp_dir)
-
-    if target_path.exists():
-        return (
-            _file_supports_direct_overwrite(target_path)
-            and _directory_supports_atomic_replace(temp_dir)
-            and _existing_file_supports_atomic_replace(target_path)
-        )
-
-    return _directory_supports_atomic_replace(temp_dir)
+        return resolved.exists()
+    return target_path.exists()
 
 
 def _write_direct_text_compatible(
@@ -290,9 +146,11 @@ def _write_direct_text_compatible(
     encoding: str,
     file_mode: int | None = None,
 ) -> None:
-    """Write directly to preserve edge-case ``open(..., "w")`` semantics."""
+    """Write directly to preserve inode-backed overwrite semantics."""
     with open(path, "w", encoding=encoding) as f:
         f.write(content)
+        f.flush()
+        os.fsync(f.fileno())
 
     if file_mode is not None:
         os.chmod(path, file_mode)
@@ -309,7 +167,7 @@ def _write_direct_json_compatible(
     file_mode: int | None,
     trailing_newline: bool,
 ) -> None:
-    """Write JSON directly to preserve edge-case ``open(..., "w")`` semantics."""
+    """Write JSON directly to preserve inode-backed overwrite semantics."""
     with open(path, "w", encoding="utf-8") as f:
         json.dump(
             payload,
@@ -321,6 +179,8 @@ def _write_direct_json_compatible(
         )
         if trailing_newline:
             f.write("\n")
+        f.flush()
+        os.fsync(f.fileno())
 
     if file_mode is not None:
         os.chmod(path, file_mode)
@@ -360,53 +220,7 @@ def _stage_text_write(tmp_path: Path, content: str, *, encoding: str) -> None:
         os.fsync(f.fileno())
 
 
-def _apply_existing_metadata(tmp_path: Path, resolved: Path, file_mode: int | None) -> bool:
-    """Copy resolved destination metadata onto *tmp_path* when overwriting.
-
-    If *file_mode* is explicitly provided it takes precedence.  When the
-    destination does not yet exist the temp file keeps the mode it was
-    created with (umask-driven), matching ``open(..., "w")`` semantics.
-
-    Returns ``False`` when mode or owner/group replay is rejected for the
-    staged temp file, so callers can fall back to direct writes that preserve
-    the original inode and metadata.
-    """
-    try:
-        existing_stat = resolved.stat()
-    except FileNotFoundError:
-        existing_stat = None
-
-    mode_to_apply: int | None = None
-    if file_mode is not None:
-        mode_to_apply = file_mode
-    elif existing_stat is not None:
-        mode_to_apply = stat.S_IMODE(existing_stat.st_mode)
-
-    if mode_to_apply is not None:
-        try:
-            os.chmod(tmp_path, mode_to_apply)
-        except OSError as exc:
-            if _should_fallback_after_metadata_replay_error(exc):
-                return False
-            raise
-
-    if existing_stat is None or os.name == "nt" or not hasattr(os, "chown"):
-        return True
-
-    tmp_stat = tmp_path.stat()
-    uid = existing_stat.st_uid if tmp_stat.st_uid != existing_stat.st_uid else -1
-    gid = existing_stat.st_gid if tmp_stat.st_gid != existing_stat.st_gid else -1
-    if uid != -1 or gid != -1:
-        try:
-            os.chown(tmp_path, uid, gid)
-        except OSError as exc:
-            if _should_fallback_after_metadata_replay_error(exc):
-                return False
-            raise
-    return True
-
-
-def _write_atomic_compatible(
+def _write_new_atomic_compatible(
     *,
     target_path: Path,
     resolved: Path,
@@ -415,31 +229,18 @@ def _write_atomic_compatible(
     direct_write: Callable[[], None],
     stage_write: Callable[[Path], None],
 ) -> Path:
-    """Run the shared compatibility-preserving atomic flow with direct-write fallback."""
-    if not _should_use_atomic_compatible_write(target_path, resolved, temp_dir):
+    """Atomically create a new compatible destination when the parent allows it."""
+    if not _directory_supports_atomic_replace(temp_dir):
         direct_write()
         return target_path
 
-    temp_dir.mkdir(parents=True, exist_ok=True)
     tmp_path = _compatible_tmp_path(temp_dir)
 
     try:
         stage_write(tmp_path)
-
-        if not _apply_existing_metadata(tmp_path, resolved, file_mode):
-            _cleanup_tmp_path(tmp_path)
-            direct_write()
-            return target_path
-
-        try:
-            os.replace(tmp_path, resolved)
-        except OSError as exc:
-            if not _should_fallback_after_replace_error(exc):
-                raise
-            _cleanup_tmp_path(tmp_path)
-            direct_write()
-            return target_path
-
+        if file_mode is not None:
+            os.chmod(tmp_path, file_mode)
+        os.replace(tmp_path, resolved)
         _fsync_directory(temp_dir)
     except BaseException:
         _cleanup_tmp_path(tmp_path)
@@ -459,38 +260,44 @@ def write_json_atomic_compatible(
     file_mode: int | None = None,
     trailing_newline: bool = True,
 ) -> Path:
-    """Atomically write JSON while preserving symlink-following and file-mode semantics.
+    """Write JSON compatibly, preserving overwrite-visible path semantics.
 
     Unlike :func:`write_json_atomic` this helper:
 
     * follows existing symlinks (writes through to the resolved target)
-    * preserves the existing destination file's overwrite-visible metadata
+    * preserves the existing destination inode on overwrite
     * honours the process umask for new files (unless *file_mode* is given)
     * keeps stdlib ``json.dump(..., ensure_ascii=True)`` escaping by default
-    * falls back to direct writes when atomic replace would break hard links
-      or drop extended metadata / unpreservable owner-group metadata
-    * retries the compatible direct-write path if the final replace step is
-      denied even though the destination remains directly writable
+    * uses temp-file-and-replace only for create-new paths where that does not
+      change existing overwrite semantics
     """
     target_path = Path(path)
     target_path.parent.mkdir(parents=True, exist_ok=True)
 
     resolved, temp_dir = _resolve_dest(target_path)
-    return _write_atomic_compatible(
-        target_path=target_path,
-        resolved=resolved,
-        temp_dir=temp_dir,
-        file_mode=file_mode,
-        direct_write=lambda: _write_direct_json_compatible(
-            target_path,
-            payload,
+
+    def direct_write() -> None:
+        _write_direct_json_compatible(
+            path=target_path,
+            payload=payload,
             indent=indent,
             ensure_ascii=ensure_ascii,
             sort_keys=sort_keys,
             default=default,
             file_mode=file_mode,
             trailing_newline=trailing_newline,
-        ),
+        )
+
+    if _target_exists_for_compatible_write(target_path, resolved):
+        direct_write()
+        return target_path
+
+    return _write_new_atomic_compatible(
+        target_path=target_path,
+        resolved=resolved,
+        temp_dir=temp_dir,
+        file_mode=file_mode,
+        direct_write=direct_write,
         stage_write=lambda tmp_path: _stage_json_write(
             tmp_path,
             payload,
@@ -510,7 +317,7 @@ def write_text_atomic_compatible(
     encoding: str = "utf-8",
     file_mode: int | None = None,
 ) -> Path:
-    """Atomically write text while preserving symlink-following and file-mode semantics.
+    """Write text compatibly, preserving overwrite-visible path semantics.
 
     This is the text-file counterpart of :func:`write_json_atomic_compatible`.
     """
@@ -518,16 +325,24 @@ def write_text_atomic_compatible(
     target_path.parent.mkdir(parents=True, exist_ok=True)
 
     resolved, temp_dir = _resolve_dest(target_path)
-    return _write_atomic_compatible(
+
+    def direct_write() -> None:
+        _write_direct_text_compatible(
+            path=target_path,
+            content=content,
+            encoding=encoding,
+            file_mode=file_mode,
+        )
+
+    if _target_exists_for_compatible_write(target_path, resolved):
+        direct_write()
+        return target_path
+
+    return _write_new_atomic_compatible(
         target_path=target_path,
         resolved=resolved,
         temp_dir=temp_dir,
         file_mode=file_mode,
-        direct_write=lambda: _write_direct_text_compatible(
-            target_path,
-            content,
-            encoding=encoding,
-            file_mode=file_mode,
-        ),
+        direct_write=direct_write,
         stage_write=lambda tmp_path: _stage_text_write(tmp_path, content, encoding=encoding),
     )
