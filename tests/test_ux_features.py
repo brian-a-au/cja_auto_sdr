@@ -982,6 +982,23 @@ class TestDisplayInventorySummary:
         assert saved_data["data_view_id"] == "dv_json_test"
         assert saved_data["data_view_name"] == "JSON Test View"
 
+    def test_summary_json_output_preserves_ascii_escaped_json(self, tmp_path):
+        from cja_auto_sdr.generator import display_inventory_summary
+
+        display_inventory_summary(
+            data_view_id="dv_unicode_test",
+            data_view_name="Vue \u00e9l\u00e8ve",
+            output_format="json",
+            output_dir=str(tmp_path),
+            quiet=True,
+        )
+
+        json_files = list(tmp_path.glob("*_inventory_summary.json"))
+        assert len(json_files) == 1
+
+        raw = json_files[0].read_text(encoding="utf-8")
+        assert "\\u00e9l\\u00e8ve" in raw
+
     def test_summary_high_complexity_threshold(self, tmp_path):
         """Test that high-complexity items are collected at threshold 70"""
         from unittest.mock import MagicMock

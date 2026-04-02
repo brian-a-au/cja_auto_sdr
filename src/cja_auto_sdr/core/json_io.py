@@ -205,7 +205,7 @@ def write_json_atomic_compatible(
     payload: Any,
     *,
     indent: int | None = 2,
-    ensure_ascii: bool = False,
+    ensure_ascii: bool = True,
     sort_keys: bool = False,
     default: Callable[[Any], Any] | None = None,
     file_mode: int | None = None,
@@ -218,6 +218,7 @@ def write_json_atomic_compatible(
     * follows existing symlinks (writes through to the resolved target)
     * preserves the existing destination file's mode on overwrite
     * honours the process umask for new files (unless *file_mode* is given)
+    * keeps stdlib ``json.dump(..., ensure_ascii=True)`` escaping by default
     """
     target_path = Path(path)
     target_path.parent.mkdir(parents=True, exist_ok=True)

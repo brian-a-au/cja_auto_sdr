@@ -191,6 +191,21 @@ class TestWriteJsonAtomicCompatible:
         assert link.is_symlink()
         assert not (tmp_path / "missing").exists()
 
+    @pytest.mark.skipif(_SKIP_PERMISSION_SEMANTICS, reason="requires POSIX non-root permission semantics")
+    def test_non_writable_directory_falls_back_to_direct_overwrite(self, tmp_path):
+        out_dir = tmp_path / "output"
+        out_dir.mkdir()
+        out = out_dir / "report.json"
+        out.write_text('{"old": true}', encoding="utf-8")
+
+        os.chmod(out_dir, 0o555)  # noqa: S103
+        try:
+            write_json_atomic_compatible(out, {"new": True})
+        finally:
+            os.chmod(out_dir, 0o755)  # noqa: S103
+
+        assert json.loads(out.read_text(encoding="utf-8")) == {"new": True}
+
     def test_temp_cleanup_on_failure(self, tmp_path):
         out = tmp_path / "fail.json"
         with (
@@ -203,11 +218,17 @@ class TestWriteJsonAtomicCompatible:
         remaining = list(tmp_path.glob(".*tmp"))
         assert remaining == []
 
-    def test_ensure_ascii_false_by_default(self, tmp_path):
+    def test_ensure_ascii_matches_json_dump_default(self, tmp_path):
         out = tmp_path / "unicode.json"
         write_json_atomic_compatible(out, {"name": "\u00e9l\u00e8ve"})
         raw = out.read_text(encoding="utf-8")
-        assert "\u00e9l\u00e8ve" in raw  # not escaped
+        assert "\\u00e9l\\u00e8ve" in raw
+
+    def test_ensure_ascii_false_when_requested(self, tmp_path):
+        out = tmp_path / "unicode.json"
+        write_json_atomic_compatible(out, {"name": "\u00e9l\u00e8ve"}, ensure_ascii=False)
+        raw = out.read_text(encoding="utf-8")
+        assert "\u00e9l\u00e8ve" in raw
 
 
 class TestWriteTextAtomicCompatible:
@@ -250,7 +271,7 @@ class TestWriteTextAtomicCompatible:
     def test_temp_cleanup_on_failure(self, tmp_path):
         out = tmp_path / "fail.txt"
         with (
-            patch("builtins.open", side_effect=OSError("disk full")),
+            patch("cja_auto_sdr.core.json_io.os.fsync", side_effect=OSError("disk full")),
             pytest.raises(OSError, match="disk full"),
         ):
             write_text_atomic_compatible(out, "content")

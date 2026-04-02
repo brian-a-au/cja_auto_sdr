@@ -204,7 +204,14 @@ def display_inventory_summary(
     if output_format in ("json", "all"):
         safe_name = re.sub(r"[^\w\-]", "_", data_view_name)[:50]
         json_path = Path(output_dir) / f"{safe_name}_inventory_summary.json"
-        write_json_atomic_compatible(json_path, summary, indent=2, default=str, trailing_newline=False)
+        write_json_atomic_compatible(
+            json_path,
+            summary,
+            indent=2,
+            ensure_ascii=True,
+            default=str,
+            trailing_newline=False,
+        )
         if not quiet:
             print(f"Summary saved to: {json_path}")
 
