@@ -141,7 +141,7 @@ tests/
 └── README.md                        # This file
 ```
 
-**Total: 7,719 comprehensive tests**
+**Total: 7,725 comprehensive tests**
 
 ### Test Count Breakdown
 
@@ -150,16 +150,16 @@ tests/
 
 | Category | Tests | Files | Notes |
 |----------|-------|-------|-------|
-| `unit` | 7,613 | 123 | Default primary category for files without explicit integration/e2e/smoke scope |
+| `unit` | 7,619 | 123 | Default primary category for files without explicit integration/e2e/smoke scope |
 | `integration` | 73 | 3 | Cross-module integration suites |
 | `e2e` | 23 | 2 | End-to-end suites with a mocked external boundary |
 | `smoke` | 10 | 1 | Lightweight command-mode coverage |
 | `slow` | 7 | 1 | Overlay marker; these tests are also counted in a primary category |
-| **Primary Total** | **7,719** | **129** | **unit + integration + e2e + smoke** |
+| **Primary Total** | **7,725** | **129** | **unit + integration + e2e + smoke** |
 
 | CI Slice | Tests | Files | Selector |
 |----------|-------|-------|----------|
-| `test-unit` | 7,606 | 122 | `-m "unit and not slow"` |
+| `test-unit` | 7,612 | 122 | `-m "unit and not slow"` |
 | `test-integration` | 103 | 6 | `-m "integration or e2e or slow"` |
 | `smoke-test` | 10 | 1 | `-m smoke` |
 
@@ -193,7 +193,7 @@ tests/
 | `test_retry.py` | 25 | Retry with exponential backoff |
 | `test_batch_processor.py` | 26 | Batch processing of multiple data views |
 | `test_validation_cache.py` | 25 | Validation result caching |
-| `test_process_single_dataview.py` | 44 | End-to-end single data view processing |
+| `test_process_single_dataview.py` | 46 | End-to-end single data view processing |
 | `test_optimized_validation.py` | 16 | Optimized data quality validation |
 | `test_name_resolution.py` | 24 | Data view name to ID resolution |
 | `test_shared_cache.py` | 28 | Shared validation cache |
@@ -213,7 +213,7 @@ tests/
 | `test_output_extraction_contracts.py` | 345 | Extraction contracts for output.diff and output.inventory |
 | `test_malformed_api_responses.py` | 20 | Negative tests for malformed/unexpected API responses |
 | `test_main_entry_points.py` | 43 | main() and _main_impl() entry points, dispatch, run_state, run summary |
-| `test_quality_policy_and_run_summary.py` | 169 | Quality policy functions and run summary/status inference |
+| `test_quality_policy_and_run_summary.py` | 171 | Quality policy functions and run summary/status inference |
 | `test_e2e_integration.py` | 16 | End-to-end integration tests with real pipeline, mocked API boundary |
 | `test_api_client.py` | 31 | API client exception paths and error handling |
 | `test_config_validation.py` | 55 | Configuration validation logic |
@@ -238,7 +238,7 @@ tests/
 | `test_cli_command_handlers.py` | 156 | CLI dispatch for --stats, --org-report, --list-snapshots, discovery inspection, diff config unpacking |
 | `test_profile_management.py` | 53 | Interactive profile creation, import, test, show |
 | `test_snapshot_commands.py` | 65 | Snapshot creation, comparison, name resolution |
-| `test_config_and_resolution.py` | 112 | Config status, validation, stats, name resolution |
+| `test_config_and_resolution.py` | 114 | Config status, validation, stats, name resolution |
 | `test_derived_fields_edge_cases.py` | 34 | Derived fields edge cases and coverage |
 | `test_diff_command_coverage.py` | 45 | Diff command edge cases and coverage |
 | `test_generator_interactive_and_console.py` | 37 | Generator interactive and console tests |
@@ -298,7 +298,7 @@ tests/
 | `test_agent_workflows.py` | 69 | Agent workflow shell script validation tests |
 | `test_manifest_agent_contract.py` | 16 | Manifest vs runtime capability drift tests |
 | `test_tool_manifests.py` | 40 | Tool manifest schema and content tests |
-| **Total** | **7,719** | **Collected via pytest --collect-only** |
+| **Total** | **7,725** | **Collected via pytest --collect-only** |
 
 ## Running Tests
 
@@ -756,7 +756,7 @@ the `tests/README.md` inventory tree or count table.
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (7,719 tests total)
+- [x] Comprehensive test coverage (7,725 tests total)
 - [x] Org-wide analysis tests (test_org_report.py) - 211 tests (including large org scaling, output path aliases, memory warnings, smart cache invalidation)
 - [x] Org-wide analysis integration tests (test_org_report_integration.py) - 17 tests (end-to-end flows, caching, filtering, governance thresholds)
 - [x] Profile management tests (test_profiles.py) - 78 tests

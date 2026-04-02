@@ -2293,3 +2293,78 @@ class TestDiffAdvisoryRollupRunSummaryContract:
         rollup = runtime_details["advisory_rollup"]
         assert rollup["severity"] == "critical"
         assert "breaking_changes" in rollup["types"]
+
+
+# ---------------------------------------------------------------------------
+# Run-summary elapsed-duration timing hardening (v3.5.6)
+# ---------------------------------------------------------------------------
+
+
+class TestRunSummaryTimingHardening:
+    """Verify run-summary uses perf_counter for duration while keeping wall-clock timestamps."""
+
+    def test_duration_seconds_uses_perf_counter(self) -> None:
+        """_build_run_summary_payload derives duration_seconds from perf_counter, not wall-clock."""
+        from cja_auto_sdr.generator import _build_run_summary_payload
+
+        run_state: dict = {
+            "mode": "single",
+            "processed_results": [],
+            "data_view_inputs": [],
+            "resolved_data_views": [],
+        }
+        # Simulate perf_counter start at 1000.0; current perf_counter returns 1005.25
+        import time
+        from unittest.mock import MagicMock, patch
+
+        mock_time = MagicMock(wraps=time)
+        mock_time.perf_counter.return_value = 1005.25
+
+        with patch("cja_auto_sdr.generator.time", mock_time):
+            payload = _build_run_summary_payload(
+                run_state=run_state,
+                exit_code=0,
+                summary_start="2026-04-01T12:00:00+00:00",
+                summary_start_perf=1000.0,
+            )
+
+        assert payload["duration_seconds"] == 5.25
+        assert payload["started_at"] == "2026-04-01T12:00:00+00:00"
+        assert isinstance(payload["ended_at"], str)
+        assert "T" in payload["ended_at"]  # ISO 8601
+
+    def test_started_at_ended_at_are_wall_clock(self) -> None:
+        """started_at and ended_at remain wall-clock UTC timestamps, not elapsed clocks."""
+        import time as real_time
+        from datetime import UTC, datetime
+        from unittest.mock import MagicMock, patch
+
+        from cja_auto_sdr.generator import _build_run_summary_payload
+
+        run_state: dict = {
+            "mode": "single",
+            "processed_results": [],
+            "data_view_inputs": [],
+            "resolved_data_views": [],
+        }
+
+        fixed_now = datetime(2026, 4, 1, 15, 30, 0, tzinfo=UTC)
+        mock_time = MagicMock(wraps=real_time)
+        mock_time.perf_counter.return_value = 2000.0
+
+        with (
+            patch("cja_auto_sdr.generator.time", mock_time),
+            patch("cja_auto_sdr.generator.datetime") as mock_dt,
+        ):
+            mock_dt.now.return_value = fixed_now
+            mock_dt.side_effect = datetime
+            payload = _build_run_summary_payload(
+                run_state=run_state,
+                exit_code=0,
+                summary_start="2026-04-01T15:29:55+00:00",
+                summary_start_perf=1995.0,
+            )
+
+        assert payload["started_at"] == "2026-04-01T15:29:55+00:00"
+        assert payload["ended_at"] == fixed_now.isoformat()
+        assert payload["duration_seconds"] == 5.0
