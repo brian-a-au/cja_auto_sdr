@@ -35,6 +35,10 @@ def _sample_metadata() -> dict:
     return {"version": "1.0", "generated_at": "2025-01-01"}
 
 
+def _patch_sdr_writer(name: str, exc: Exception):
+    return patch(f"cja_auto_sdr.output.sdr.{name}", side_effect=exc)
+
+
 # ---------------------------------------------------------------------------
 # 1. write_csv_output error branches (lines 2378-2388)
 # ---------------------------------------------------------------------------
@@ -64,34 +68,16 @@ class TestWriteCsvOutputErrors:
 
 class TestWriteJsonOutputErrors:
     def test_permission_error(self, tmp_path: Path) -> None:
-        import builtins
-
-        original_open = builtins.open
-
-        def _fail_open(*args, **kwargs):
-            path_str = str(args[0]) if args else ""
-            if str(tmp_path) in path_str and ("w" in kwargs.get("mode", args[1] if len(args) > 1 else "")):
-                raise PermissionError("denied")
-            return original_open(*args, **kwargs)
-
-        with patch("builtins.open", side_effect=_fail_open):
+        with _patch_sdr_writer("write_json_atomic_compatible", PermissionError("denied")) as mock_write:
             with pytest.raises(PermissionError):
                 write_json_output(_sample_data(), _sample_metadata(), "test", str(tmp_path), logger)
+        mock_write.assert_called_once()
 
     def test_os_error(self, tmp_path: Path) -> None:
-        import builtins
-
-        original_open = builtins.open
-
-        def _fail_open(*args, **kwargs):
-            path_str = str(args[0]) if args else ""
-            if str(tmp_path) in path_str and ("w" in kwargs.get("mode", args[1] if len(args) > 1 else "")):
-                raise OSError("disk full")
-            return original_open(*args, **kwargs)
-
-        with patch("builtins.open", side_effect=_fail_open):
+        with _patch_sdr_writer("write_json_atomic_compatible", OSError("disk full")) as mock_write:
             with pytest.raises(OSError, match="disk full"):
                 write_json_output(_sample_data(), _sample_metadata(), "test", str(tmp_path), logger)
+        mock_write.assert_called_once()
 
     def test_serialization_error(self, tmp_path: Path) -> None:
         import json
@@ -195,34 +181,16 @@ class TestWriteJsonOutputInventoryObjects:
 
 class TestWriteHtmlOutputErrors:
     def test_permission_error(self, tmp_path: Path) -> None:
-        import builtins
-
-        original_open = builtins.open
-
-        def _fail_open(*args, **kwargs):
-            path_str = str(args[0]) if args else ""
-            if str(tmp_path) in path_str and ("w" in kwargs.get("mode", args[1] if len(args) > 1 else "")):
-                raise PermissionError("denied")
-            return original_open(*args, **kwargs)
-
-        with patch("builtins.open", side_effect=_fail_open):
+        with _patch_sdr_writer("write_text_atomic_compatible", PermissionError("denied")) as mock_write:
             with pytest.raises(PermissionError):
                 write_html_output(_sample_data(), _sample_metadata(), "test", str(tmp_path), logger)
+        mock_write.assert_called_once()
 
     def test_os_error(self, tmp_path: Path) -> None:
-        import builtins
-
-        original_open = builtins.open
-
-        def _fail_open(*args, **kwargs):
-            path_str = str(args[0]) if args else ""
-            if str(tmp_path) in path_str and ("w" in kwargs.get("mode", args[1] if len(args) > 1 else "")):
-                raise OSError("disk full")
-            return original_open(*args, **kwargs)
-
-        with patch("builtins.open", side_effect=_fail_open):
+        with _patch_sdr_writer("write_text_atomic_compatible", OSError("disk full")) as mock_write:
             with pytest.raises(OSError, match="disk full"):
                 write_html_output(_sample_data(), _sample_metadata(), "test", str(tmp_path), logger)
+        mock_write.assert_called_once()
 
     def test_generic_exception(self, tmp_path: Path) -> None:
         with patch.object(pd.DataFrame, "to_html", side_effect=RuntimeError("boom")):
@@ -268,34 +236,16 @@ class TestWriteHtmlOutputSeverityEdges:
 
 class TestWriteMarkdownOutputErrors:
     def test_permission_error(self, tmp_path: Path) -> None:
-        import builtins
-
-        original_open = builtins.open
-
-        def _fail_open(*args, **kwargs):
-            path_str = str(args[0]) if args else ""
-            if str(tmp_path) in path_str and ("w" in kwargs.get("mode", args[1] if len(args) > 1 else "")):
-                raise PermissionError("denied")
-            return original_open(*args, **kwargs)
-
-        with patch("builtins.open", side_effect=_fail_open):
+        with _patch_sdr_writer("write_text_atomic_compatible", PermissionError("denied")) as mock_write:
             with pytest.raises(PermissionError):
                 write_markdown_output(_sample_data(), _sample_metadata(), "test", str(tmp_path), logger)
+        mock_write.assert_called_once()
 
     def test_os_error(self, tmp_path: Path) -> None:
-        import builtins
-
-        original_open = builtins.open
-
-        def _fail_open(*args, **kwargs):
-            path_str = str(args[0]) if args else ""
-            if str(tmp_path) in path_str and ("w" in kwargs.get("mode", args[1] if len(args) > 1 else "")):
-                raise OSError("disk full")
-            return original_open(*args, **kwargs)
-
-        with patch("builtins.open", side_effect=_fail_open):
+        with _patch_sdr_writer("write_text_atomic_compatible", OSError("disk full")) as mock_write:
             with pytest.raises(OSError, match="disk full"):
                 write_markdown_output(_sample_data(), _sample_metadata(), "test", str(tmp_path), logger)
+        mock_write.assert_called_once()
 
     def test_generic_exception(self, tmp_path: Path) -> None:
         with patch.object(pd.DataFrame, "apply", side_effect=RuntimeError("boom")):

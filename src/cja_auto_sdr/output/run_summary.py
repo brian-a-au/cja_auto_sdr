@@ -48,7 +48,6 @@ def write_run_summary_output(summary: dict[str, Any], output: str, output_dir: s
     output_path = Path(output)
     if not output_path.is_absolute():
         output_path = Path(output_dir) / output_path
-    output_path.parent.mkdir(parents=True, exist_ok=True)
     write_json_atomic_compatible(output_path, summary, indent=2, ensure_ascii=False, trailing_newline=True)
     return str(output_path)
 

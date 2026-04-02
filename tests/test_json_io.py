@@ -111,6 +111,26 @@ class TestWriteJsonAtomicCompatible:
         raw = out.read_text(encoding="utf-8")
         assert not raw.endswith("\n")
 
+    def test_supports_default_and_sort_keys(self, tmp_path):
+        out = tmp_path / "sorted.json"
+        write_json_atomic_compatible(
+            out,
+            {
+                "z_key": _StringOnlyValue(),
+                "a_key": 1,
+            },
+            sort_keys=True,
+            default=str,
+        )
+
+        raw = out.read_text(encoding="utf-8")
+        assert raw.endswith("\n")
+        assert raw.index('"a_key"') < raw.index('"z_key"')
+        assert json.loads(raw) == {
+            "a_key": 1,
+            "z_key": "serialized-via-default",
+        }
+
     def test_follows_existing_symlink(self, tmp_path):
         real_file = tmp_path / "real.json"
         real_file.write_text("{}", encoding="utf-8")
