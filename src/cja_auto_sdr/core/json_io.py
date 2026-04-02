@@ -4,6 +4,7 @@ import contextlib
 import errno
 import json
 import os
+import stat
 import uuid
 from collections.abc import Callable
 from pathlib import Path
@@ -86,6 +87,129 @@ def write_json_atomic(
 
         os.replace(tmp_path, target_path)
         _fsync_directory(target_path.parent)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            tmp_path.unlink()
+        raise
+
+    return target_path
+
+
+# ---------------------------------------------------------------------------
+# Compatibility-preserving atomic helpers (v3.5.7)
+# ---------------------------------------------------------------------------
+# These follow symlinks and preserve existing file modes on overwrite,
+# matching the semantics of a plain ``open(path, "w")`` call while still
+# providing temp-file-and-rename durability.
+# ---------------------------------------------------------------------------
+
+
+def _resolve_dest(target_path: Path) -> tuple[Path, Path]:
+    """Resolve a possibly-symlinked destination and its parent directory.
+
+    Returns ``(resolved_path, temp_dir)`` where *temp_dir* is the parent of
+    the resolved target so the temp file lives on the same filesystem.
+    """
+    resolved = target_path.resolve()
+    return resolved, resolved.parent
+
+
+def _apply_existing_mode(tmp_path: Path, resolved: Path, file_mode: int | None) -> None:
+    """Copy the resolved destination's permission bits onto *tmp_path*.
+
+    If *file_mode* is explicitly provided it takes precedence.  When the
+    destination does not yet exist the temp file keeps the mode it was
+    created with (umask-driven), matching ``open(..., "w")`` semantics.
+    """
+    if file_mode is not None:
+        os.chmod(tmp_path, file_mode)
+        return
+    try:
+        existing_mode = stat.S_IMODE(resolved.stat().st_mode)
+        os.chmod(tmp_path, existing_mode)
+    except FileNotFoundError:
+        pass  # new file — keep umask-driven mode
+
+
+def write_json_atomic_compatible(
+    path: str | Path,
+    payload: Any,
+    *,
+    indent: int | None = 2,
+    ensure_ascii: bool = False,
+    sort_keys: bool = False,
+    default: Callable[[Any], Any] | None = None,
+    file_mode: int | None = None,
+    trailing_newline: bool = True,
+) -> Path:
+    """Atomically write JSON while preserving symlink-following and file-mode semantics.
+
+    Unlike :func:`write_json_atomic` this helper:
+
+    * follows existing symlinks (writes through to the resolved target)
+    * preserves the existing destination file's mode on overwrite
+    * honours the process umask for new files (unless *file_mode* is given)
+    """
+    target_path = Path(path)
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+
+    resolved, temp_dir = _resolve_dest(target_path)
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    tmp_path = temp_dir / f".{resolved.name}.{uuid.uuid4().hex}.tmp"
+
+    try:
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(
+                payload,
+                f,
+                indent=indent,
+                ensure_ascii=ensure_ascii,
+                sort_keys=sort_keys,
+                default=default,
+            )
+            if trailing_newline:
+                f.write("\n")
+            f.flush()
+            os.fsync(f.fileno())
+
+        _apply_existing_mode(tmp_path, resolved, file_mode)
+        os.replace(tmp_path, resolved)
+        _fsync_directory(temp_dir)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            tmp_path.unlink()
+        raise
+
+    return target_path
+
+
+def write_text_atomic_compatible(
+    path: str | Path,
+    content: str,
+    *,
+    encoding: str = "utf-8",
+    file_mode: int | None = None,
+) -> Path:
+    """Atomically write text while preserving symlink-following and file-mode semantics.
+
+    This is the text-file counterpart of :func:`write_json_atomic_compatible`.
+    """
+    target_path = Path(path)
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+
+    resolved, temp_dir = _resolve_dest(target_path)
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    tmp_path = temp_dir / f".{resolved.name}.{uuid.uuid4().hex}.tmp"
+
+    try:
+        with open(tmp_path, "w", encoding=encoding) as f:
+            f.write(content)
+            f.flush()
+            os.fsync(f.fileno())
+
+        _apply_existing_mode(tmp_path, resolved, file_mode)
+        os.replace(tmp_path, resolved)
+        _fsync_directory(temp_dir)
     except BaseException:
         with contextlib.suppress(OSError):
             tmp_path.unlink()

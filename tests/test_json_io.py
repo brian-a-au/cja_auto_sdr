@@ -10,7 +10,11 @@ from unittest.mock import patch
 import pytest
 
 import cja_auto_sdr.core.json_io as json_io
-from cja_auto_sdr.core.json_io import write_json_atomic
+from cja_auto_sdr.core.json_io import (
+    write_json_atomic,
+    write_json_atomic_compatible,
+    write_text_atomic_compatible,
+)
 
 
 class _StringOnlyValue:
@@ -82,3 +86,129 @@ def test_write_json_atomic_closes_fd_when_fdopen_fails(tmp_path) -> None:
         json_io.write_json_atomic(output_path, {"key": "value"})
 
     mock_close.assert_called_with(123)
+
+
+# ---------------------------------------------------------------------------
+# Compatibility-preserving atomic helpers (v3.5.7)
+# ---------------------------------------------------------------------------
+
+
+class TestWriteJsonAtomicCompatible:
+    """Tests for write_json_atomic_compatible."""
+
+    def test_trailing_newline_by_default(self, tmp_path):
+        out = tmp_path / "out.json"
+        write_json_atomic_compatible(out, {"key": "value"})
+        raw = out.read_text(encoding="utf-8")
+        assert raw.endswith("\n")
+        assert json.loads(raw) == {"key": "value"}
+
+    def test_no_trailing_newline_when_disabled(self, tmp_path):
+        out = tmp_path / "out.json"
+        write_json_atomic_compatible(out, {"a": 1}, trailing_newline=False)
+        raw = out.read_text(encoding="utf-8")
+        assert not raw.endswith("\n")
+
+    def test_follows_existing_symlink(self, tmp_path):
+        real_file = tmp_path / "real.json"
+        real_file.write_text("{}", encoding="utf-8")
+        link = tmp_path / "link.json"
+        link.symlink_to(real_file)
+
+        write_json_atomic_compatible(link, {"via": "symlink"})
+
+        assert link.is_symlink()
+        assert json.loads(real_file.read_text(encoding="utf-8")) == {"via": "symlink"}
+
+    def test_preserves_existing_file_mode_on_overwrite(self, tmp_path):
+        out = tmp_path / "out.json"
+        out.write_text("{}", encoding="utf-8")
+        os.chmod(out, 0o644)
+
+        write_json_atomic_compatible(out, {"updated": True})
+
+        assert stat.S_IMODE(out.stat().st_mode) == 0o644
+
+    def test_explicit_file_mode_overrides_existing(self, tmp_path):
+        out = tmp_path / "out.json"
+        out.write_text("{}", encoding="utf-8")
+        os.chmod(out, 0o644)
+
+        write_json_atomic_compatible(out, {"secret": True}, file_mode=0o600)
+
+        assert stat.S_IMODE(out.stat().st_mode) == 0o600
+
+    def test_new_file_honours_umask(self, tmp_path):
+        out = tmp_path / "new.json"
+        write_json_atomic_compatible(out, {"new": True})
+        assert out.exists()
+        # File should exist with umask-driven permissions (not hardcoded)
+        mode = stat.S_IMODE(out.stat().st_mode)
+        assert mode & 0o600 == 0o600  # owner rw at minimum
+
+    def test_temp_cleanup_on_failure(self, tmp_path):
+        out = tmp_path / "fail.json"
+        with (
+            patch("cja_auto_sdr.core.json_io.json.dump", side_effect=TypeError("boom")),
+            pytest.raises(TypeError, match="boom"),
+        ):
+            write_json_atomic_compatible(out, {"bad": object()})
+
+        # No temp files should remain
+        remaining = list(tmp_path.glob(".*tmp"))
+        assert remaining == []
+
+    def test_ensure_ascii_false_by_default(self, tmp_path):
+        out = tmp_path / "unicode.json"
+        write_json_atomic_compatible(out, {"name": "\u00e9l\u00e8ve"})
+        raw = out.read_text(encoding="utf-8")
+        assert "\u00e9l\u00e8ve" in raw  # not escaped
+
+
+class TestWriteTextAtomicCompatible:
+    """Tests for write_text_atomic_compatible."""
+
+    def test_writes_text_content(self, tmp_path):
+        out = tmp_path / "out.html"
+        write_text_atomic_compatible(out, "<html>hello</html>")
+        assert out.read_text(encoding="utf-8") == "<html>hello</html>"
+
+    def test_follows_existing_symlink(self, tmp_path):
+        real_file = tmp_path / "real.md"
+        real_file.write_text("old", encoding="utf-8")
+        link = tmp_path / "link.md"
+        link.symlink_to(real_file)
+
+        write_text_atomic_compatible(link, "new content")
+
+        assert link.is_symlink()
+        assert real_file.read_text(encoding="utf-8") == "new content"
+
+    def test_preserves_existing_file_mode_on_overwrite(self, tmp_path):
+        out = tmp_path / "out.md"
+        out.write_text("old", encoding="utf-8")
+        os.chmod(out, 0o644)
+
+        write_text_atomic_compatible(out, "new")
+
+        assert stat.S_IMODE(out.stat().st_mode) == 0o644
+
+    def test_explicit_file_mode_overrides_existing(self, tmp_path):
+        out = tmp_path / "out.md"
+        out.write_text("old", encoding="utf-8")
+        os.chmod(out, 0o644)
+
+        write_text_atomic_compatible(out, "secret", file_mode=0o600)
+
+        assert stat.S_IMODE(out.stat().st_mode) == 0o600
+
+    def test_temp_cleanup_on_failure(self, tmp_path):
+        out = tmp_path / "fail.txt"
+        with (
+            patch("builtins.open", side_effect=OSError("disk full")),
+            pytest.raises(OSError, match="disk full"),
+        ):
+            write_text_atomic_compatible(out, "content")
+
+        remaining = list(tmp_path.glob(".*tmp"))
+        assert remaining == []

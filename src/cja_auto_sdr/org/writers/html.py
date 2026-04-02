@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from cja_auto_sdr.core.constants import effective_governance_overlap_threshold
+from cja_auto_sdr.core.json_io import write_text_atomic_compatible
 from cja_auto_sdr.org.models import (
     OrgReportResult,
     OrgReportTrending,
@@ -67,8 +68,6 @@ def write_org_report_html(
     else:
         timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
         file_path = Path(output_dir) / f"org_report_{result.org_id}_{timestamp}.html"
-
-    file_path.parent.mkdir(parents=True, exist_ok=True)
 
     dist = result.distribution
     has_names = any(info.name for info in result.component_index.values())
@@ -376,8 +375,7 @@ def write_org_report_html(
 </body>
 </html>"""
 
-    with open(file_path, "w", encoding="utf-8") as f:
-        f.write(html_out)
+    write_text_atomic_compatible(file_path, html_out)
 
-    logger.info(f"HTML report written to {file_path}")
+    logger.info("HTML report written to %s", file_path)
     return str(file_path)

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from datetime import UTC, datetime
 from pathlib import Path
@@ -10,6 +9,7 @@ from typing import Any
 
 from cja_auto_sdr.core.advisory_builders import build_org_report_advisories
 from cja_auto_sdr.core.constants import effective_governance_overlap_threshold
+from cja_auto_sdr.core.json_io import write_json_atomic_compatible
 from cja_auto_sdr.org.models import (
     OrgReportResult,
     OrgReportTrending,
@@ -248,9 +248,7 @@ def write_org_report_json(
     )
 
     # Write JSON
-    file_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(file_path, "w", encoding="utf-8") as f:
-        json.dump(json_data, f, indent=2, ensure_ascii=False)
+    write_json_atomic_compatible(file_path, json_data, indent=2, ensure_ascii=False, trailing_newline=False)
 
-    logger.info(f"JSON report written to {file_path}")
+    logger.info("JSON report written to %s", file_path)
     return str(file_path)

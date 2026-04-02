@@ -69,7 +69,8 @@ class TestWriteJsonOutputErrors:
         original_open = builtins.open
 
         def _fail_open(*args, **kwargs):
-            if str(tmp_path) in str(args[0]) and args[0].endswith(".json"):
+            path_str = str(args[0]) if args else ""
+            if str(tmp_path) in path_str and ("w" in kwargs.get("mode", args[1] if len(args) > 1 else "")):
                 raise PermissionError("denied")
             return original_open(*args, **kwargs)
 
@@ -83,7 +84,8 @@ class TestWriteJsonOutputErrors:
         original_open = builtins.open
 
         def _fail_open(*args, **kwargs):
-            if str(tmp_path) in str(args[0]) and str(args[0]).endswith(".json"):
+            path_str = str(args[0]) if args else ""
+            if str(tmp_path) in path_str and ("w" in kwargs.get("mode", args[1] if len(args) > 1 else "")):
                 raise OSError("disk full")
             return original_open(*args, **kwargs)
 
@@ -198,7 +200,8 @@ class TestWriteHtmlOutputErrors:
         original_open = builtins.open
 
         def _fail_open(*args, **kwargs):
-            if str(tmp_path) in str(args[0]) and str(args[0]).endswith(".html"):
+            path_str = str(args[0]) if args else ""
+            if str(tmp_path) in path_str and ("w" in kwargs.get("mode", args[1] if len(args) > 1 else "")):
                 raise PermissionError("denied")
             return original_open(*args, **kwargs)
 
@@ -212,7 +215,8 @@ class TestWriteHtmlOutputErrors:
         original_open = builtins.open
 
         def _fail_open(*args, **kwargs):
-            if str(tmp_path) in str(args[0]) and str(args[0]).endswith(".html"):
+            path_str = str(args[0]) if args else ""
+            if str(tmp_path) in path_str and ("w" in kwargs.get("mode", args[1] if len(args) > 1 else "")):
                 raise OSError("disk full")
             return original_open(*args, **kwargs)
 
@@ -269,7 +273,8 @@ class TestWriteMarkdownOutputErrors:
         original_open = builtins.open
 
         def _fail_open(*args, **kwargs):
-            if str(tmp_path) in str(args[0]) and str(args[0]).endswith(".md"):
+            path_str = str(args[0]) if args else ""
+            if str(tmp_path) in path_str and ("w" in kwargs.get("mode", args[1] if len(args) > 1 else "")):
                 raise PermissionError("denied")
             return original_open(*args, **kwargs)
 
@@ -283,7 +288,8 @@ class TestWriteMarkdownOutputErrors:
         original_open = builtins.open
 
         def _fail_open(*args, **kwargs):
-            if str(tmp_path) in str(args[0]) and str(args[0]).endswith(".md"):
+            path_str = str(args[0]) if args else ""
+            if str(tmp_path) in path_str and ("w" in kwargs.get("mode", args[1] if len(args) > 1 else "")):
                 raise OSError("disk full")
             return original_open(*args, **kwargs)
 

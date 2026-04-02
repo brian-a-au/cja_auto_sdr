@@ -11,6 +11,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from cja_auto_sdr.core.json_io import write_text_atomic_compatible
+
 if TYPE_CHECKING:
     from cja_auto_sdr.diff.models import DiffResult
 
@@ -365,8 +367,7 @@ def handle_diff_command(
                 output_to_stdout=output_to_stdout,
             )
             if diff_output and output_content:
-                with open(diff_output, "w", encoding="utf-8") as f:
-                    f.write(output_content)
+                write_text_atomic_compatible(diff_output, output_content)
                 if not quiet:
                     print(f"Diff output written to: {diff_output}")
             if not quiet and output_format != "console" and not output_to_stdout:
@@ -689,8 +690,7 @@ def handle_diff_snapshot_command(
                 output_to_stdout=output_to_stdout,
             )
             if diff_output and output_content:
-                with open(diff_output, "w", encoding="utf-8") as f:
-                    f.write(output_content)
+                write_text_atomic_compatible(diff_output, output_content)
                 if not quiet:
                     print(f"Diff output written to: {diff_output}")
             if not quiet and output_format != "console" and not output_to_stdout:
@@ -867,8 +867,7 @@ def handle_compare_snapshots_command(
                 output_to_stdout=output_to_stdout,
             )
             if diff_output and output_content:
-                with open(diff_output, "w", encoding="utf-8") as f:
-                    f.write(output_content)
+                write_text_atomic_compatible(diff_output, output_content)
                 if not quiet:
                     print(f"Diff output written to: {diff_output}")
             if not quiet and output_format != "console" and not output_to_stdout:
