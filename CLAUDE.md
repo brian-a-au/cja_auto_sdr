@@ -18,7 +18,7 @@ CJA SDR Generator — a CLI tool for generating Solution Design Reference (SDR) 
 - Build system: **hatchling** (dynamic version from `src/cja_auto_sdr/core/version.py`)
 - Entry points: `cja_auto_sdr` and `cja-auto-sdr` (both via `__main__:main`)
 - Current version: v3.5.11
-- Tests: **7,754** across 129 files at **95% coverage gate**
+- Tests: **7,764** across 129 files at **95% coverage gate**
 - Dependencies: cjapy, numpy, pandas, xlsxwriter, tqdm
 - Optional deps: scipy (clustering), python-dotenv (env), argcomplete (completion)
 
