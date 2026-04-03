@@ -7,6 +7,16 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.10] — 2026-04-03
+
+### Added
+- Enabled GitHub branch protection on `main` — merges now require all CI checks to pass:
+  - **Tests:** `test-unit` (95% coverage gate), `test-integration`, `run-summary-contract`, `smoke-test` (cross-platform), `build` (wheel validation)
+  - **Lint:** `ruff` (41 rule sets), `actionlint` (workflow validation), `shellcheck`, `lockfile` (uv.lock sync)
+  - **Version:** `version-sync` (8-file consistency)
+- Branch must be up to date with `main` before merge (`strict: true`)
+- Protection enforced for admins — no bypass
+
 ## [3.5.9] — 2026-04-03
 
 ### Fixed
