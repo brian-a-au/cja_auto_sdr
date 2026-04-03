@@ -244,6 +244,7 @@ cja_auto_sdr "Production Analytics"
 | Include calculated metrics | `cja_auto_sdr dv_12345 --include-calculated` |
 | Include all inventories | `cja_auto_sdr dv_12345 --include-all-inventory` |
 | Inventory-only output | `cja_auto_sdr dv_12345 --include-segments --inventory-only` |
+| Quick inventory stats | `cja_auto_sdr dv_12345 --include-all-inventory --inventory-summary` |
 | Fail on quality issues >= HIGH | `cja_auto_sdr dv_12345 --fail-on-quality HIGH` |
 | Standalone quality report | `cja_auto_sdr dv_12345 --quality-report json --output -` |
 | **Output Formats** | |
