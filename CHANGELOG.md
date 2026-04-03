@@ -10,7 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [3.5.9] — 2026-04-03
 
 ### Fixed
-- Fixed `--inventory-summary --include-derived` silently failing with `ValueError: The truth value of a DataFrame is ambiguous` — replaced bare truthiness checks (`if derived_inventory:`) with explicit identity checks (`if derived_inventory is not None:`) in `display_inventory_summary()` for all three inventory types (derived, calculated, segments).
+- Fixed `--inventory-summary --include-derived` silently failing with `ValueError: The truth value of a DataFrame is ambiguous` — two root causes:
+  1. `_build_derived_inventory_summary()` called `cja.getMetrics()`/`cja.getDimensions()` without `inclType=True, full=True`, returning lightweight DataFrames missing `sourceFieldType="derived"` and `fieldDefinition` columns needed for derived field detection. Added the missing API flags to match the SDR pipeline's fetch path.
+  2. Same function used bare truthiness checks (`if metrics_data:`) on the returned DataFrames, which raises `ValueError` in pandas. Replaced with `isinstance()` guards.
+  3. `display_inventory_summary()` used bare truthiness checks (`if derived_inventory:`) on inventory objects. Replaced with explicit `is not None` identity checks for all three inventory types.
 
 ## [3.5.8] — 2026-04-03
 

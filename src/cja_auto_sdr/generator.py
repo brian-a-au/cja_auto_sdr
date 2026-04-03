@@ -2706,12 +2706,12 @@ def process_inventory_summary(
         def _build_derived_inventory_summary() -> Any:
             from cja_auto_sdr.inventory.derived_fields import DerivedFieldInventoryBuilder
 
-            # Need metrics and dimensions for derived fields
-            metrics_data = cja.getMetrics(data_view_id)
-            dimensions_data = cja.getDimensions(data_view_id)
+            # Need full metrics/dimensions (inclType + full) for derived field detection
+            metrics_data = cja.getMetrics(data_view_id, inclType=True, full=True)
+            dimensions_data = cja.getDimensions(data_view_id, inclType=True, full=True)
 
-            metrics_df = pd.DataFrame(metrics_data) if metrics_data else pd.DataFrame()
-            dimensions_df = pd.DataFrame(dimensions_data) if dimensions_data else pd.DataFrame()
+            metrics_df = metrics_data if isinstance(metrics_data, pd.DataFrame) else pd.DataFrame(metrics_data or [])
+            dimensions_df = dimensions_data if isinstance(dimensions_data, pd.DataFrame) else pd.DataFrame(dimensions_data or [])
 
             builder = DerivedFieldInventoryBuilder(logger=logger)
             derived = builder.build(metrics_df, dimensions_df, data_view_id, dv_name)
