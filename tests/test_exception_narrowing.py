@@ -198,9 +198,9 @@ class TestProcessInventorySummaryExceptionNarrowing:
     """Verify process_inventory_summary fallback catches third-party Exception failures."""
 
     def _run_with_side_effect(self, exc):
-        """Mock CJA init + dataviews.get_single raising *exc*."""
+        """Mock CJA init + getDataView raising *exc*."""
         mock_cja = MagicMock()
-        mock_cja.dataviews.get_single.side_effect = exc
+        mock_cja.getDataView.side_effect = exc
 
         with (
             patch("cja_auto_sdr.generator.initialize_cja", return_value=mock_cja),

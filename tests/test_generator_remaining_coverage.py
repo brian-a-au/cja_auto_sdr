@@ -514,7 +514,7 @@ class TestProcessInventorySummaryImportErrors:
         mock_setup_log.return_value = mock_logger
         mock_log_ctx.return_value = mock_logger
         mock_cja = MagicMock()
-        mock_cja.dataviews.get_single.return_value = {"name": "Test DV"}
+        mock_cja.getDataView.return_value = {"name": "Test DV"}
         mock_init_cja.return_value = mock_cja
         mock_display.return_value = {"data_view_id": "dv_test"}
 
@@ -543,7 +543,7 @@ class TestProcessInventorySummaryImportErrors:
         mock_setup_log.return_value = mock_logger
         mock_log_ctx.return_value = mock_logger
         mock_cja = MagicMock()
-        mock_cja.dataviews.get_single.return_value = {"name": "Test DV"}
+        mock_cja.getDataView.return_value = {"name": "Test DV"}
         mock_init_cja.return_value = mock_cja
         mock_display.return_value = {"data_view_id": "dv_test"}
 
