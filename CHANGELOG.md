@@ -7,6 +7,19 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.11] — 2026-04-03
+
+### Fixed
+- Fixed bare truthiness checks on inventory fields in `diff/git.py` — `if snapshot.calculated_metrics_inventory:` treated empty list `[]` (valid, zero components) as falsy, silently skipping git snapshot inventory files and metadata counts. Replaced all 5 sites with explicit `is not None` checks to match the model's own `has_*` property semantics. Same class of bug as v3.5.9.
+
+### Changed
+- Added `scripts/create_sample_outputs.py` and `scripts/stress_test.py` to CI lint scope — fixed 444 accumulated ruff violations and simplified `lint.yml` to lint the entire `scripts/` directory.
+- Advanced ruff `target-version` from `py313` to `py314` — resolved 3 forward-annotation sites (`SDRConfig`, `DataViewSnapshot`) that were the only blockers. Runtime floor was already `>=3.14`.
+- Added `CLAUDE.md` to `test-counts.yml` path triggers so mid-cycle PRs that modify its test count are validated.
+
+### Documentation
+- Added `--inventory-summary` to README common use cases table — the flag was subject of v3.5.8/v3.5.9 bug fixes but missing from the first-stop documentation.
+
 ## [3.5.10] — 2026-04-03
 
 ### Added
