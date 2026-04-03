@@ -1252,13 +1252,13 @@ def _run_optional_inventory_step[T](
 
 def _refetch_git_snapshot_for_commit(
     *,
-    snapshot: "DataViewSnapshot",
+    snapshot: DataViewSnapshot,
     data_view_id: str,
     config_file: str,
     profile: str | None,
     include_calculated_metrics: bool,
     include_segments_inventory: bool,
-) -> "DataViewSnapshot":
+) -> DataViewSnapshot:
     """Best-effort snapshot re-fetch used by optional --git-commit flow."""
     needs_fetch = not snapshot.metrics and not snapshot.dimensions
     needs_inventory = include_calculated_metrics or include_segments_inventory
