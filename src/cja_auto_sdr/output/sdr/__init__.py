@@ -14,7 +14,6 @@ Also contains the ExcelFormatCache helper class.
 from __future__ import annotations
 
 import html
-import json
 import logging
 import os
 import re
@@ -26,6 +25,7 @@ import pandas as pd
 from cja_auto_sdr.api.quality import DataQualityChecker
 from cja_auto_sdr.core.colors import _format_error_msg
 from cja_auto_sdr.core.exceptions import OutputError
+from cja_auto_sdr.core.json_io import write_json_atomic_compatible, write_text_atomic_compatible
 from cja_auto_sdr.core.version import __version__
 
 __all__ = [
@@ -92,7 +92,7 @@ def apply_excel_formatting(
         format_cache: Optional ExcelFormatCache for format reuse across sheets
     """
     try:
-        logger.info(f"Formatting sheet: {sheet_name}")
+        logger.info("Formatting sheet: %s", sheet_name)
 
         # Calculate row offset for Data Quality sheet (summary section at top)
         summary_rows = 0
@@ -383,7 +383,7 @@ def apply_excel_formatting(
         # Freeze header row (summary + data header visible when scrolling)
         worksheet.freeze_panes(summary_rows + 1, 0)
 
-        logger.info(f"Successfully formatted sheet: {sheet_name}")
+        logger.info("Successfully formatted sheet: %s", sheet_name)
 
     except (OutputError, OSError, KeyError, TypeError, ValueError) as e:
         logger.error(_format_error_msg(f"formatting sheet {sheet_name}", error=e))
@@ -424,15 +424,15 @@ def write_excel_output(
                 else:
                     apply_excel_formatting(writer, df, sheet_name, logger, format_cache)
 
-        logger.info(f"Excel file created: {excel_file}")
+        logger.info("Excel file created: %s", excel_file)
         return excel_file
 
     except PermissionError as e:
-        logger.error(f"Permission denied creating Excel file: {e}")
+        logger.error("Permission denied creating Excel file: %s", e)
         logger.error("Check write permissions for the output directory")
         raise
     except OSError as e:
-        logger.error(f"OS error creating Excel file: {e}")
+        logger.error("OS error creating Excel file: %s", e)
         logger.error("Check disk space and path validity")
         raise
     except (KeyError, TypeError, ValueError) as e:
@@ -469,17 +469,17 @@ def write_csv_output(
         for sheet_name, df in data_dict.items():
             csv_file = os.path.join(csv_dir, f"{sheet_name.replace(' ', '_').lower()}.csv")
             df.to_csv(csv_file, index=False, encoding="utf-8")
-            logger.info(f"  \u2713 Created CSV: {os.path.basename(csv_file)}")
+            logger.info("  \u2713 Created CSV: %s", os.path.basename(csv_file))
 
-        logger.info(f"CSV files created in: {csv_dir}")
+        logger.info("CSV files created in: %s", csv_dir)
         return csv_dir
 
     except PermissionError as e:
-        logger.error(f"Permission denied creating CSV files: {e}")
+        logger.error("Permission denied creating CSV files: %s", e)
         logger.error("Check write permissions for the output directory")
         raise
     except OSError as e:
-        logger.error(f"OS error creating CSV files: {e}")
+        logger.error("OS error creating CSV files: %s", e)
         logger.error("Check disk space and path validity")
         raise
     except (KeyError, TypeError, ValueError) as e:
@@ -563,22 +563,21 @@ def write_json_output(
 
         # Write JSON file
         json_file = os.path.join(output_dir, f"{base_filename}.json")
-        with open(json_file, "w", encoding="utf-8") as f:
-            json.dump(json_data, f, indent=2, ensure_ascii=False)
+        write_json_atomic_compatible(json_file, json_data, indent=2, ensure_ascii=False, trailing_newline=False)
 
-        logger.info(f"\u2713 JSON file created: {json_file}")
+        logger.info("\u2713 JSON file created: %s", json_file)
         return json_file
 
     except PermissionError as e:
-        logger.error(f"Permission denied creating JSON file: {e}")
+        logger.error("Permission denied creating JSON file: %s", e)
         logger.error("Check write permissions for the output directory")
         raise
     except OSError as e:
-        logger.error(f"OS error creating JSON file: {e}")
+        logger.error("OS error creating JSON file: %s", e)
         logger.error("Check disk space and path validity")
         raise
     except (TypeError, ValueError) as e:
-        logger.error(f"JSON serialization error: {e}")
+        logger.error("JSON serialization error: %s", e)
         logger.error("Data contains non-serializable values")
         raise
     except (KeyError, AttributeError) as e:
@@ -833,18 +832,17 @@ def write_html_output(
 
         # Write HTML file
         html_file = os.path.join(output_dir, f"{base_filename}.html")
-        with open(html_file, "w", encoding="utf-8") as f:
-            f.write("\n".join(html_parts))
+        write_text_atomic_compatible(html_file, "\n".join(html_parts))
 
-        logger.info(f"\u2713 HTML file created: {html_file}")
+        logger.info("\u2713 HTML file created: %s", html_file)
         return html_file
 
     except PermissionError as e:
-        logger.error(f"Permission denied creating HTML file: {e}")
+        logger.error("Permission denied creating HTML file: %s", e)
         logger.error("Check write permissions for the output directory")
         raise
     except OSError as e:
-        logger.error(f"OS error creating HTML file: {e}")
+        logger.error("OS error creating HTML file: %s", e)
         logger.error("Check disk space and path validity")
         raise
     except (KeyError, TypeError, ValueError) as e:
@@ -991,18 +989,17 @@ def write_markdown_output(
 
         # Write to file
         markdown_file = os.path.join(output_dir, f"{base_filename}.md")
-        with open(markdown_file, "w", encoding="utf-8") as f:
-            f.write("\n".join(md_parts))
+        write_text_atomic_compatible(markdown_file, "\n".join(md_parts))
 
-        logger.info(f"\u2713 Markdown file created: {markdown_file}")
+        logger.info("\u2713 Markdown file created: %s", markdown_file)
         return markdown_file
 
     except PermissionError as e:
-        logger.error(f"Permission denied creating Markdown file: {e}")
+        logger.error("Permission denied creating Markdown file: %s", e)
         logger.error("Check write permissions for the output directory")
         raise
     except OSError as e:
-        logger.error(f"OS error creating Markdown file: {e}")
+        logger.error("OS error creating Markdown file: %s", e)
         logger.error("Check disk space and path validity")
         raise
     except (KeyError, TypeError, ValueError) as e:

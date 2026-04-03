@@ -92,3 +92,257 @@ def write_json_atomic(
         raise
 
     return target_path
+
+
+# ---------------------------------------------------------------------------
+# Compatibility-preserving atomic helpers (v3.5.7)
+# ---------------------------------------------------------------------------
+# These preserve ``open(path, "w")`` overwrite semantics for existing files by
+# writing through the existing inode directly, including symlink-following.
+# For create-new paths they still use temp-file-and-rename so new artifacts get
+# durable atomic creation without silently changing overwrite-visible behavior.
+# ---------------------------------------------------------------------------
+
+
+def _resolve_dest(target_path: Path) -> tuple[Path, Path]:
+    """Resolve a possibly-symlinked destination and its parent directory.
+
+    Returns ``(resolved_path, temp_dir)`` where *temp_dir* is the parent of
+    the resolved target so the temp file lives on the same filesystem.
+    """
+    if target_path.is_symlink():
+        resolved = target_path.resolve()
+        return resolved, resolved.parent
+    return target_path, target_path.parent
+
+
+def _directory_supports_atomic_replace(directory: Path) -> bool:
+    """Return True when *directory* can accept temp-file creation and replace."""
+    return directory.exists() and os.access(directory, os.W_OK | os.X_OK)
+
+
+def _compatible_tmp_path(directory: Path) -> Path:
+    """Return a short temp-file path that fits even when target names are near NAME_MAX."""
+    return directory / f".{uuid.uuid4().hex}.tmp"
+
+
+def _cleanup_tmp_path(tmp_path: Path) -> None:
+    """Best-effort temp-file cleanup for compatibility helper fallbacks/errors."""
+    with contextlib.suppress(OSError):
+        tmp_path.unlink()
+
+
+def _target_exists_for_compatible_write(target_path: Path, resolved: Path) -> bool:
+    """Return True when the effective destination already exists."""
+    if target_path.is_symlink():
+        return resolved.exists()
+    return target_path.exists()
+
+
+def _write_direct_text_compatible(
+    path: Path,
+    content: str,
+    *,
+    encoding: str,
+    file_mode: int | None = None,
+) -> None:
+    """Write directly to preserve inode-backed overwrite semantics."""
+    with open(path, "w", encoding=encoding) as f:
+        f.write(content)
+        f.flush()
+        os.fsync(f.fileno())
+
+    if file_mode is not None:
+        os.chmod(path, file_mode)
+
+
+def _write_direct_json_compatible(
+    path: Path,
+    payload: Any,
+    *,
+    indent: int | None,
+    ensure_ascii: bool,
+    sort_keys: bool,
+    default: Callable[[Any], Any] | None,
+    file_mode: int | None,
+    trailing_newline: bool,
+) -> None:
+    """Write JSON directly to preserve inode-backed overwrite semantics."""
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(
+            payload,
+            f,
+            indent=indent,
+            ensure_ascii=ensure_ascii,
+            sort_keys=sort_keys,
+            default=default,
+        )
+        if trailing_newline:
+            f.write("\n")
+        f.flush()
+        os.fsync(f.fileno())
+
+    if file_mode is not None:
+        os.chmod(path, file_mode)
+
+
+def _stage_json_write(
+    tmp_path: Path,
+    payload: Any,
+    *,
+    indent: int | None,
+    ensure_ascii: bool,
+    sort_keys: bool,
+    default: Callable[[Any], Any] | None,
+    trailing_newline: bool,
+) -> None:
+    """Write JSON content to a staged temp file and fsync it."""
+    with open(tmp_path, "w", encoding="utf-8") as f:
+        json.dump(
+            payload,
+            f,
+            indent=indent,
+            ensure_ascii=ensure_ascii,
+            sort_keys=sort_keys,
+            default=default,
+        )
+        if trailing_newline:
+            f.write("\n")
+        f.flush()
+        os.fsync(f.fileno())
+
+
+def _stage_text_write(tmp_path: Path, content: str, *, encoding: str) -> None:
+    """Write text content to a staged temp file and fsync it."""
+    with open(tmp_path, "w", encoding=encoding) as f:
+        f.write(content)
+        f.flush()
+        os.fsync(f.fileno())
+
+
+def _write_new_atomic_compatible(
+    *,
+    target_path: Path,
+    resolved: Path,
+    temp_dir: Path,
+    file_mode: int | None,
+    direct_write: Callable[[], None],
+    stage_write: Callable[[Path], None],
+) -> Path:
+    """Atomically create a new compatible destination when the parent allows it."""
+    if not _directory_supports_atomic_replace(temp_dir):
+        direct_write()
+        return target_path
+
+    tmp_path = _compatible_tmp_path(temp_dir)
+
+    try:
+        stage_write(tmp_path)
+        if file_mode is not None:
+            os.chmod(tmp_path, file_mode)
+        os.replace(tmp_path, resolved)
+        _fsync_directory(temp_dir)
+    except BaseException:
+        _cleanup_tmp_path(tmp_path)
+        raise
+
+    return target_path
+
+
+def write_json_atomic_compatible(
+    path: str | Path,
+    payload: Any,
+    *,
+    indent: int | None = 2,
+    ensure_ascii: bool = True,
+    sort_keys: bool = False,
+    default: Callable[[Any], Any] | None = None,
+    file_mode: int | None = None,
+    trailing_newline: bool = True,
+) -> Path:
+    """Write JSON compatibly, preserving overwrite-visible path semantics.
+
+    Unlike :func:`write_json_atomic` this helper:
+
+    * follows existing symlinks (writes through to the resolved target)
+    * preserves the existing destination inode on overwrite
+    * honours the process umask for new files (unless *file_mode* is given)
+    * keeps stdlib ``json.dump(..., ensure_ascii=True)`` escaping by default
+    * uses temp-file-and-replace only for create-new paths where that does not
+      change existing overwrite semantics
+    """
+    target_path = Path(path)
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+
+    resolved, temp_dir = _resolve_dest(target_path)
+
+    def direct_write() -> None:
+        _write_direct_json_compatible(
+            path=target_path,
+            payload=payload,
+            indent=indent,
+            ensure_ascii=ensure_ascii,
+            sort_keys=sort_keys,
+            default=default,
+            file_mode=file_mode,
+            trailing_newline=trailing_newline,
+        )
+
+    if _target_exists_for_compatible_write(target_path, resolved):
+        direct_write()
+        return target_path
+
+    return _write_new_atomic_compatible(
+        target_path=target_path,
+        resolved=resolved,
+        temp_dir=temp_dir,
+        file_mode=file_mode,
+        direct_write=direct_write,
+        stage_write=lambda tmp_path: _stage_json_write(
+            tmp_path,
+            payload,
+            indent=indent,
+            ensure_ascii=ensure_ascii,
+            sort_keys=sort_keys,
+            default=default,
+            trailing_newline=trailing_newline,
+        ),
+    )
+
+
+def write_text_atomic_compatible(
+    path: str | Path,
+    content: str,
+    *,
+    encoding: str = "utf-8",
+    file_mode: int | None = None,
+) -> Path:
+    """Write text compatibly, preserving overwrite-visible path semantics.
+
+    This is the text-file counterpart of :func:`write_json_atomic_compatible`.
+    """
+    target_path = Path(path)
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+
+    resolved, temp_dir = _resolve_dest(target_path)
+
+    def direct_write() -> None:
+        _write_direct_text_compatible(
+            path=target_path,
+            content=content,
+            encoding=encoding,
+            file_mode=file_mode,
+        )
+
+    if _target_exists_for_compatible_write(target_path, resolved):
+        direct_write()
+        return target_path
+
+    return _write_new_atomic_compatible(
+        target_path=target_path,
+        resolved=resolved,
+        temp_dir=temp_dir,
+        file_mode=file_mode,
+        direct_write=direct_write,
+        stage_write=lambda tmp_path: _stage_text_write(tmp_path, content, encoding=encoding),
+    )

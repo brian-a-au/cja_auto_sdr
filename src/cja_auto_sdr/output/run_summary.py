@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any
 
 from cja_auto_sdr.api.quality_policy import count_quality_issues_by_severity
 from cja_auto_sdr.core.constants import QUALITY_SEVERITY_ORDER
+from cja_auto_sdr.core.json_io import write_json_atomic_compatible
 
 if TYPE_CHECKING:
     from cja_auto_sdr.diff.models import DiffResult
@@ -47,10 +48,7 @@ def write_run_summary_output(summary: dict[str, Any], output: str, output_dir: s
     output_path = Path(output)
     if not output_path.is_absolute():
         output_path = Path(output_dir) / output_path
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(summary, f, indent=2, ensure_ascii=False)
-        f.write("\n")
+    write_json_atomic_compatible(output_path, summary, indent=2, ensure_ascii=False, trailing_newline=True)
     return str(output_path)
 
 
@@ -66,7 +64,7 @@ def append_github_step_summary(markdown: str, logger: logging.Logger | None = No
         return True
     except OSError as e:
         if logger is not None:
-            logger.warning(f"Failed to write GitHub step summary: {e}")
+            logger.warning("Failed to write GitHub step summary: %s", e)
         return False
 
 

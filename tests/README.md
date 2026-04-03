@@ -141,7 +141,7 @@ tests/
 └── README.md                        # This file
 ```
 
-**Total: 7,725 comprehensive tests**
+**Total: 7,754 comprehensive tests**
 
 ### Test Count Breakdown
 
@@ -150,16 +150,16 @@ tests/
 
 | Category | Tests | Files | Notes |
 |----------|-------|-------|-------|
-| `unit` | 7,619 | 123 | Default primary category for files without explicit integration/e2e/smoke scope |
+| `unit` | 7,648 | 123 | Default primary category for files without explicit integration/e2e/smoke scope |
 | `integration` | 73 | 3 | Cross-module integration suites |
 | `e2e` | 23 | 2 | End-to-end suites with a mocked external boundary |
 | `smoke` | 10 | 1 | Lightweight command-mode coverage |
 | `slow` | 7 | 1 | Overlay marker; these tests are also counted in a primary category |
-| **Primary Total** | **7,725** | **129** | **unit + integration + e2e + smoke** |
+| **Primary Total** | **7,754** | **129** | **unit + integration + e2e + smoke** |
 
 | CI Slice | Tests | Files | Selector |
 |----------|-------|-------|----------|
-| `test-unit` | 7,612 | 122 | `-m "unit and not slow"` |
+| `test-unit` | 7,641 | 122 | `-m "unit and not slow"` |
 | `test-integration` | 103 | 6 | `-m "integration or e2e or slow"` |
 | `smoke-test` | 10 | 1 | `-m smoke` |
 
@@ -170,7 +170,7 @@ tests/
 | Test File | Tests | Coverage Area |
 |-----------|-------|---------------|
 | `test_diff_comparison.py` | 169 | Data view diff comparison feature with inventory support |
-| `test_ux_features.py` | 123 | UX features: --open, --stats, --output, --list-dataviews formats, inventory validation, inventory summary, include-all-inventory |
+| `test_ux_features.py` | 124 | UX features: --open, --stats, --output, --list-dataviews formats, inventory validation, inventory summary, include-all-inventory |
 | `test_org_report.py` | 211 | Org-wide component analysis: config, distribution, similarity, output formats, large org scaling, output path aliases |
 | `test_org_report_integration.py` | 17 | Org-wide analysis integration tests: end-to-end flows, caching, filtering, governance |
 | `test_cli.py` | 412 | Command-line interface and argument parsing |
@@ -282,7 +282,7 @@ tests/
 | `test_github_actions_audit.py` | 7 | GitHub Actions audit workflow helper and manifest staging tests |
 | `test_example_automation_scripts.py` | 4 | Automation shell script validation tests |
 | `test_exit_codes.py` | 11 | Exit code helpers and signal detection tests |
-| `test_json_io.py` | 5 | JSON I/O atomic write and read tests |
+| `test_json_io.py` | 33 | JSON I/O atomic write and read tests |
 | `test_lock_info_normalization.py` | 54 | Lock-info normalization classmethod direct unit tests |
 | `test_resilience_edge_cases.py` | 74 | Resilience edge-case tests |
 | `test_cache_edge_cases.py` | 20 | Cache edge-case tests |
@@ -298,7 +298,7 @@ tests/
 | `test_agent_workflows.py` | 69 | Agent workflow shell script validation tests |
 | `test_manifest_agent_contract.py` | 16 | Manifest vs runtime capability drift tests |
 | `test_tool_manifests.py` | 40 | Tool manifest schema and content tests |
-| **Total** | **7,725** | **Collected via pytest --collect-only** |
+| **Total** | **7,754** | **Collected via pytest --collect-only** |
 
 ## Running Tests
 
@@ -756,7 +756,7 @@ the `tests/README.md` inventory tree or count table.
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (7,725 tests total)
+- [x] Comprehensive test coverage (7,754 tests total)
 - [x] Org-wide analysis tests (test_org_report.py) - 211 tests (including large org scaling, output path aliases, memory warnings, smart cache invalidation)
 - [x] Org-wide analysis integration tests (test_org_report_integration.py) - 17 tests (end-to-end flows, caching, filtering, governance thresholds)
 - [x] Profile management tests (test_profiles.py) - 78 tests
@@ -769,7 +769,7 @@ the `tests/README.md` inventory tree or count table.
 - [x] Inventory utilities tests (test_inventory_utils.py) - 56 tests
 - [x] Git integration tests (test_git_integration.py) - 41 tests
 - [x] Inventory diff support in snapshot comparisons (test_diff_comparison.py) - 169 tests
-- [x] Inventory summary and include-all-inventory tests (test_ux_features.py) - 123 tests
+- [x] Inventory summary and include-all-inventory tests (test_ux_features.py) - 124 tests
 - [x] Parallel validation tests (test_parallel_validation.py)
 - [x] Validation caching tests (test_validation_cache.py)
 - [x] Early exit optimization tests (test_early_exit.py)

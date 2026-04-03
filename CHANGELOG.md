@@ -7,6 +7,16 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.7] — 2026-04-03
+
+### Changed
+- Added compatibility-preserving atomic write helpers (`write_json_atomic_compatible`, `write_text_atomic_compatible`) in `core/json_io.py` — new files get temp-file-and-rename durability while existing files preserve inode-backed overwrite semantics (symlink-following, hard-link visibility, xattr/ACL retention, file-mode preservation).
+- Migrated 14 write sites across 10 writer modules (SDR, diff, org-report, inventory-summary, run-summary) to the new compatible atomic helpers.
+- Converted 26 eager f-string logger calls to lazy `%s`-style interpolation across 8 writer modules.
+
+### Fixed
+- Output files are no longer silently truncated on write failure — existing files get fsync-and-flush durability; new files get atomic temp-and-rename.
+
 ## [3.5.6] — 2026-04-01
 
 ### Changed

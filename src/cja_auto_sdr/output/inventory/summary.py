@@ -7,14 +7,13 @@ files.  Extracted from generator.py; the orchestration function
 
 from __future__ import annotations
 
-import json
-import os
 import re
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from cja_auto_sdr.core.colors import ConsoleColors
+from cja_auto_sdr.core.json_io import write_json_atomic_compatible
 
 
 def display_inventory_summary(
@@ -203,11 +202,16 @@ def display_inventory_summary(
 
     # JSON output
     if output_format in ("json", "all"):
-        os.makedirs(output_dir, exist_ok=True)
         safe_name = re.sub(r"[^\w\-]", "_", data_view_name)[:50]
         json_path = Path(output_dir) / f"{safe_name}_inventory_summary.json"
-        with open(json_path, "w", encoding="utf-8") as f:
-            json.dump(summary, f, indent=2, default=str)
+        write_json_atomic_compatible(
+            json_path,
+            summary,
+            indent=2,
+            ensure_ascii=True,
+            default=str,
+            trailing_newline=False,
+        )
         if not quiet:
             print(f"Summary saved to: {json_path}")
 

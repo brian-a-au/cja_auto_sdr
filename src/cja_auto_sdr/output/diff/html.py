@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from cja_auto_sdr.core.colors import _format_error_msg
+from cja_auto_sdr.core.json_io import write_text_atomic_compatible
 from cja_auto_sdr.diff.models import (
     ChangeType,
     ComponentDiff,
@@ -363,10 +364,9 @@ def write_diff_html_output(
 """)
 
         html_file = os.path.join(output_dir, f"{base_filename}.html")
-        with open(html_file, "w", encoding="utf-8") as f:
-            f.write("\n".join(html_parts))
+        write_text_atomic_compatible(html_file, "\n".join(html_parts))
 
-        logger.info(f"Diff HTML file created: {html_file}")
+        logger.info("Diff HTML file created: %s", html_file)
         return html_file
 
     except (OSError, KeyError, TypeError, ValueError) as e:
