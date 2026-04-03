@@ -152,6 +152,29 @@ jobs:
       - name: Smoke test - parser and contract tests
         run: uv run pytest tests/ -q --tb=short -m smoke
 
+  ci-gate:
+    if: always()
+    needs: [test-unit, test-integration, run-summary-contract, smoke-test, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify all required jobs passed
+        run: |
+          results=( \
+            "${{ needs.test-unit.result }}" \
+            "${{ needs.test-integration.result }}" \
+            "${{ needs.run-summary-contract.result }}" \
+            "${{ needs.smoke-test.result }}" \
+            "${{ needs.build.result }}" \
+          )
+          for r in "${results[@]}"; do
+            if [[ "$r" != "success" ]]; then
+              echo "One or more required jobs failed or were cancelled: $r"
+              exit 1
+            fi
+          done
+          echo "All required jobs passed."
+
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 10
