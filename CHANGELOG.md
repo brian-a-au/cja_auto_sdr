@@ -7,6 +7,11 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.9] — 2026-04-03
+
+### Fixed
+- Fixed `--inventory-summary --include-derived` silently failing with `ValueError: The truth value of a DataFrame is ambiguous` — replaced bare truthiness checks (`if derived_inventory:`) with explicit identity checks (`if derived_inventory is not None:`) in `display_inventory_summary()` for all three inventory types (derived, calculated, segments).
+
 ## [3.5.8] — 2026-04-03
 
 ### Fixed

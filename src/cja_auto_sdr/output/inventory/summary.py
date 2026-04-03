@@ -54,7 +54,7 @@ def display_inventory_summary(
     high_complexity_items: list[dict[str, Any]] = []
 
     # Process derived fields inventory
-    if derived_inventory:
+    if derived_inventory is not None:
         derived_summary = derived_inventory.get_summary()
         summary["inventories"]["derived_fields"] = derived_summary
 
@@ -71,7 +71,7 @@ def display_inventory_summary(
         )
 
     # Process calculated metrics inventory
-    if calculated_inventory:
+    if calculated_inventory is not None:
         calc_summary = calculated_inventory.get_summary()
         summary["inventories"]["calculated_metrics"] = calc_summary
 
@@ -90,7 +90,7 @@ def display_inventory_summary(
         )
 
     # Process segments inventory
-    if segments_inventory:
+    if segments_inventory is not None:
         seg_summary = segments_inventory.get_summary()
         summary["inventories"]["segments"] = seg_summary
 
