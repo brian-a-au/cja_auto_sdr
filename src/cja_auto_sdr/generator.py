@@ -2711,7 +2711,9 @@ def process_inventory_summary(
             dimensions_data = cja.getDimensions(data_view_id, inclType=True, full=True)
 
             metrics_df = metrics_data if isinstance(metrics_data, pd.DataFrame) else pd.DataFrame(metrics_data or [])
-            dimensions_df = dimensions_data if isinstance(dimensions_data, pd.DataFrame) else pd.DataFrame(dimensions_data or [])
+            dimensions_df = (
+                dimensions_data if isinstance(dimensions_data, pd.DataFrame) else pd.DataFrame(dimensions_data or [])
+            )
 
             builder = DerivedFieldInventoryBuilder(logger=logger)
             derived = builder.build(metrics_df, dimensions_df, data_view_id, dv_name)
