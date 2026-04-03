@@ -27,9 +27,9 @@ jobs:
       - name: Sync dependencies
         run: uv sync --dev
       - name: Ruff check
-        run: uv run ruff check src/ tests/ scripts/check_version_sync.py scripts/update_test_counts.py scripts/orchestrator.py scripts/github_actions_audit.py examples/
+        run: uv run ruff check src/ tests/ scripts/ examples/
       - name: Ruff format check
-        run: uv run ruff format --check src/ tests/ scripts/check_version_sync.py scripts/update_test_counts.py scripts/orchestrator.py scripts/github_actions_audit.py examples/
+        run: uv run ruff format --check src/ tests/ scripts/ examples/
 
   actionlint:
     runs-on: ubuntu-latest

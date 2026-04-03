@@ -5,11 +5,12 @@ Create sample output files to demonstrate all formats
 This creates mock outputs without requiring CJA credentials
 """
 
-import pandas as pd
 import json
-from datetime import datetime
-from pathlib import Path
 import sys
+from datetime import UTC, datetime
+from pathlib import Path
+
+import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
@@ -17,89 +18,96 @@ from cja_auto_sdr.core.version import __version__
 
 # Create sample data
 sample_metadata = {
-    'Generation Timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S %Z'),
-    'Data View ID': 'dv_sample_12345',
-    'Data View Name': 'Sample Production Analytics',
-    'Total Metrics': 25,
-    'Total Dimensions': 15,
-    'Tool Version': __version__
+    "Generation Timestamp": datetime.now(tz=UTC).strftime("%Y-%m-%d %H:%M:%S %Z"),
+    "Data View ID": "dv_sample_12345",
+    "Data View Name": "Sample Production Analytics",
+    "Total Metrics": 25,
+    "Total Dimensions": 15,
+    "Tool Version": __version__,
 }
 
-sample_quality_issues = pd.DataFrame([
-    {
-        'Severity': 'HIGH',
-        'Category': 'Duplicates',
-        'Type': 'Metrics',
-        'Item Name': 'Page Views',
-        'Issue': 'Duplicate name found 2 times',
-        'Details': 'This metrics name appears 2 times in the data view'
-    },
-    {
-        'Severity': 'MEDIUM',
-        'Category': 'Null Values',
-        'Type': 'Dimensions',
-        'Item Name': 'Product Category',
-        'Issue': 'Null values in "description" field',
-        'Details': 'Missing description for better documentation'
-    },
-    {
-        'Severity': 'LOW',
-        'Category': 'Missing Fields',
-        'Type': 'Metrics',
-        'Item Name': 'Conversion Rate',
-        'Issue': 'Missing description',
-        'Details': 'Description field is empty'
-    }
-])
+sample_quality_issues = pd.DataFrame(
+    [
+        {
+            "Severity": "HIGH",
+            "Category": "Duplicates",
+            "Type": "Metrics",
+            "Item Name": "Page Views",
+            "Issue": "Duplicate name found 2 times",
+            "Details": "This metrics name appears 2 times in the data view",
+        },
+        {
+            "Severity": "MEDIUM",
+            "Category": "Null Values",
+            "Type": "Dimensions",
+            "Item Name": "Product Category",
+            "Issue": 'Null values in "description" field',
+            "Details": "Missing description for better documentation",
+        },
+        {
+            "Severity": "LOW",
+            "Category": "Missing Fields",
+            "Type": "Metrics",
+            "Item Name": "Conversion Rate",
+            "Issue": "Missing description",
+            "Details": "Description field is empty",
+        },
+    ]
+)
 
-sample_metrics = pd.DataFrame([
-    {
-        'id': 'metrics/pageviews',
-        'name': 'Page Views',
-        'type': 'int',
-        'title': 'Page Views',
-        'description': 'Total number of page views',
-        'dataType': 'integer',
-        'precision': 0
-    },
-    {
-        'id': 'metrics/visits',
-        'name': 'Visits',
-        'type': 'int',
-        'title': 'Visits',
-        'description': 'Total number of visits',
-        'dataType': 'integer',
-        'precision': 0
-    },
-    {
-        'id': 'metrics/revenue',
-        'name': 'Revenue',
-        'type': 'currency',
-        'title': 'Revenue',
-        'description': 'Total revenue in USD',
-        'dataType': 'decimal',
-        'precision': 2
-    }
-])
+sample_metrics = pd.DataFrame(
+    [
+        {
+            "id": "metrics/pageviews",
+            "name": "Page Views",
+            "type": "int",
+            "title": "Page Views",
+            "description": "Total number of page views",
+            "dataType": "integer",
+            "precision": 0,
+        },
+        {
+            "id": "metrics/visits",
+            "name": "Visits",
+            "type": "int",
+            "title": "Visits",
+            "description": "Total number of visits",
+            "dataType": "integer",
+            "precision": 0,
+        },
+        {
+            "id": "metrics/revenue",
+            "name": "Revenue",
+            "type": "currency",
+            "title": "Revenue",
+            "description": "Total revenue in USD",
+            "dataType": "decimal",
+            "precision": 2,
+        },
+    ]
+)
 
-sample_dimensions = pd.DataFrame([
-    {
-        'id': 'variables/evar1',
-        'name': 'Campaign',
-        'type': 'string',
-        'title': 'Marketing Campaign',
-        'description': 'Marketing campaign tracking code',
-        'dataType': 'string'
-    },
-    {
-        'id': 'variables/evar2',
-        'name': 'Product Category',
-        'type': 'string',
-        'title': 'Product Category',
-        'description': 'Product category classification',
-        'dataType': 'string'
-    }
-])
+sample_dimensions = pd.DataFrame(
+    [
+        {
+            "id": "variables/evar1",
+            "name": "Campaign",
+            "type": "string",
+            "title": "Marketing Campaign",
+            "description": "Marketing campaign tracking code",
+            "dataType": "string",
+        },
+        {
+            "id": "variables/evar2",
+            "name": "Product Category",
+            "type": "string",
+            "title": "Product Category",
+            "description": "Product category classification",
+            "dataType": "string",
+        },
+    ]
+)
+
 
 def create_csv_outputs():
     """Create CSV outputs"""
@@ -108,26 +116,19 @@ def create_csv_outputs():
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Create metadata CSV
-    pd.DataFrame([sample_metadata]).to_csv(
-        output_dir / "metadata.csv", index=False
-    )
+    pd.DataFrame([sample_metadata]).to_csv(output_dir / "metadata.csv", index=False)
 
     # Create quality issues CSV
-    sample_quality_issues.to_csv(
-        output_dir / "data_quality.csv", index=False
-    )
+    sample_quality_issues.to_csv(output_dir / "data_quality.csv", index=False)
 
     # Create metrics CSV
-    sample_metrics.to_csv(
-        output_dir / "metrics.csv", index=False
-    )
+    sample_metrics.to_csv(output_dir / "metrics.csv", index=False)
 
     # Create dimensions CSV
-    sample_dimensions.to_csv(
-        output_dir / "dimensions.csv", index=False
-    )
+    sample_dimensions.to_csv(output_dir / "dimensions.csv", index=False)
 
     print(f"   ✓ Created 4 CSV files in {output_dir}")
+
 
 def create_json_output():
     """Create JSON output"""
@@ -136,17 +137,18 @@ def create_json_output():
     output_dir.mkdir(parents=True, exist_ok=True)
 
     output_data = {
-        'metadata': sample_metadata,
-        'data_quality': sample_quality_issues.to_dict('records'),
-        'metrics': sample_metrics.to_dict('records'),
-        'dimensions': sample_dimensions.to_dict('records')
+        "metadata": sample_metadata,
+        "data_quality": sample_quality_issues.to_dict("records"),
+        "metrics": sample_metrics.to_dict("records"),
+        "dimensions": sample_dimensions.to_dict("records"),
     }
 
     output_file = output_dir / "sample_sdr.json"
-    with open(output_file, 'w', encoding='utf-8') as f:
+    with open(output_file, "w", encoding="utf-8") as f:
         json.dump(output_data, f, indent=2, ensure_ascii=False)
 
     print(f"   ✓ Created {output_file}")
+
 
 def create_html_output():
     """Create HTML output"""
@@ -260,12 +262,12 @@ def create_html_output():
     <div class="metadata">
         <h2>Metadata</h2>
         <table>
-            <tr><td><strong>Data View ID:</strong></td><td>{sample_metadata['Data View ID']}</td></tr>
-            <tr><td><strong>Data View Name:</strong></td><td>{sample_metadata['Data View Name']}</td></tr>
-            <tr><td><strong>Generated:</strong></td><td>{sample_metadata['Generation Timestamp']}</td></tr>
-            <tr><td><strong>Total Metrics:</strong></td><td>{sample_metadata['Total Metrics']}</td></tr>
-            <tr><td><strong>Total Dimensions:</strong></td><td>{sample_metadata['Total Dimensions']}</td></tr>
-            <tr><td><strong>Tool Version:</strong></td><td>{sample_metadata['Tool Version']}</td></tr>
+            <tr><td><strong>Data View ID:</strong></td><td>{sample_metadata["Data View ID"]}</td></tr>
+            <tr><td><strong>Data View Name:</strong></td><td>{sample_metadata["Data View Name"]}</td></tr>
+            <tr><td><strong>Generated:</strong></td><td>{sample_metadata["Generation Timestamp"]}</td></tr>
+            <tr><td><strong>Total Metrics:</strong></td><td>{sample_metadata["Total Metrics"]}</td></tr>
+            <tr><td><strong>Total Dimensions:</strong></td><td>{sample_metadata["Total Dimensions"]}</td></tr>
+            <tr><td><strong>Tool Version:</strong></td><td>{sample_metadata["Tool Version"]}</td></tr>
         </table>
     </div>
 
@@ -287,12 +289,12 @@ def create_html_output():
 
     for _, row in sample_quality_issues.iterrows():
         html_content += f"""                <tr>
-                    <td><span class="severity-{row['Severity']}">{row['Severity']}</span></td>
-                    <td>{row['Category']}</td>
-                    <td>{row['Type']}</td>
-                    <td>{row['Item Name']}</td>
-                    <td>{row['Issue']}</td>
-                    <td>{row['Details']}</td>
+                    <td><span class="severity-{row["Severity"]}">{row["Severity"]}</span></td>
+                    <td>{row["Category"]}</td>
+                    <td>{row["Type"]}</td>
+                    <td>{row["Item Name"]}</td>
+                    <td>{row["Issue"]}</td>
+                    <td>{row["Details"]}</td>
                 </tr>
 """
 
@@ -317,11 +319,11 @@ def create_html_output():
 
     for _, row in sample_metrics.iterrows():
         html_content += f"""                <tr>
-                    <td>{row['id']}</td>
-                    <td>{row['name']}</td>
-                    <td>{row['type']}</td>
-                    <td>{row['title']}</td>
-                    <td>{row['description']}</td>
+                    <td>{row["id"]}</td>
+                    <td>{row["name"]}</td>
+                    <td>{row["type"]}</td>
+                    <td>{row["title"]}</td>
+                    <td>{row["description"]}</td>
                 </tr>
 """
 
@@ -346,11 +348,11 @@ def create_html_output():
 
     for _, row in sample_dimensions.iterrows():
         html_content += f"""                <tr>
-                    <td>{row['id']}</td>
-                    <td>{row['name']}</td>
-                    <td>{row['type']}</td>
-                    <td>{row['title']}</td>
-                    <td>{row['description']}</td>
+                    <td>{row["id"]}</td>
+                    <td>{row["name"]}</td>
+                    <td>{row["type"]}</td>
+                    <td>{row["title"]}</td>
+                    <td>{row["description"]}</td>
                 </tr>
 """
 
@@ -367,10 +369,11 @@ def create_html_output():
 """
 
     output_file = output_dir / "sample_sdr.html"
-    with open(output_file, 'w', encoding='utf-8') as f:
+    with open(output_file, "w", encoding="utf-8") as f:
         f.write(html_content)
 
     print(f"   ✓ Created {output_file}")
+
 
 def create_markdown_output():
     """Create Markdown output"""
@@ -436,21 +439,22 @@ def create_markdown_output():
 
 ---
 
-*Generated by CJA Auto SDR Generator v{__version__}*
+*Generated by CJA Auto SDR Generator v{version}*
 """.format(
-        timestamp=sample_metadata['Generation Timestamp'],
-        dv_id=sample_metadata['Data View ID'],
-        dv_name=sample_metadata['Data View Name'],
-        metrics_count=sample_metadata['Total Metrics'],
-        dims_count=sample_metadata['Total Dimensions'],
-        version=sample_metadata['Tool Version']
+        timestamp=sample_metadata["Generation Timestamp"],
+        dv_id=sample_metadata["Data View ID"],
+        dv_name=sample_metadata["Data View Name"],
+        metrics_count=sample_metadata["Total Metrics"],
+        dims_count=sample_metadata["Total Dimensions"],
+        version=sample_metadata["Tool Version"],
     )
 
     output_file = output_dir / "sample_sdr.md"
-    with open(output_file, 'w', encoding='utf-8') as f:
+    with open(output_file, "w", encoding="utf-8") as f:
         f.write(md_content)
 
     print(f"   ✓ Created {output_file}")
+
 
 def create_excel_output():
     """Create Excel output using xlsxwriter"""
@@ -464,31 +468,24 @@ def create_excel_output():
     workbook = xlsxwriter.Workbook(output_file)
 
     # Define formats
-    header_format = workbook.add_format({
-        'bold': True,
-        'bg_color': '#4a5568',
-        'font_color': 'white',
-        'border': 1
-    })
+    header_format = workbook.add_format({"bold": True, "bg_color": "#4a5568", "font_color": "white", "border": 1})
 
     severity_formats = {
-        'HIGH': workbook.add_format({'bg_color': '#fed7d7', 'font_color': '#c53030'}),
-        'MEDIUM': workbook.add_format({'bg_color': '#feebc8', 'font_color': '#c05621'}),
-        'LOW': workbook.add_format({'bg_color': '#bee3f8', 'font_color': '#2c5282'})
+        "HIGH": workbook.add_format({"bg_color": "#fed7d7", "font_color": "#c53030"}),
+        "MEDIUM": workbook.add_format({"bg_color": "#feebc8", "font_color": "#c05621"}),
+        "LOW": workbook.add_format({"bg_color": "#bee3f8", "font_color": "#2c5282"}),
     }
 
     # Metadata sheet
-    ws_meta = workbook.add_worksheet('Metadata')
-    row = 0
-    for key, value in sample_metadata.items():
+    ws_meta = workbook.add_worksheet("Metadata")
+    for row, (key, value) in enumerate(sample_metadata.items()):
         ws_meta.write(row, 0, key, header_format)
         ws_meta.write(row, 1, str(value))
-        row += 1
     ws_meta.set_column(0, 0, 25)
     ws_meta.set_column(1, 1, 40)
 
     # Data Quality sheet
-    ws_quality = workbook.add_worksheet('Data Quality')
+    ws_quality = workbook.add_worksheet("Data Quality")
     for col, header in enumerate(sample_quality_issues.columns):
         ws_quality.write(0, col, header, header_format)
 
@@ -499,10 +496,10 @@ def create_excel_output():
             else:
                 ws_quality.write(row_idx, col_idx, value)
 
-    ws_quality.autofilter(0, 0, len(sample_quality_issues), len(sample_quality_issues.columns)-1)
+    ws_quality.autofilter(0, 0, len(sample_quality_issues), len(sample_quality_issues.columns) - 1)
 
     # Metrics sheet
-    ws_metrics = workbook.add_worksheet('Metrics')
+    ws_metrics = workbook.add_worksheet("Metrics")
     for col, header in enumerate(sample_metrics.columns):
         ws_metrics.write(0, col, header, header_format)
 
@@ -510,10 +507,10 @@ def create_excel_output():
         for col_idx, value in enumerate(row_data):
             ws_metrics.write(row_idx, col_idx, value)
 
-    ws_metrics.autofilter(0, 0, len(sample_metrics), len(sample_metrics.columns)-1)
+    ws_metrics.autofilter(0, 0, len(sample_metrics), len(sample_metrics.columns) - 1)
 
     # Dimensions sheet
-    ws_dims = workbook.add_worksheet('Dimensions')
+    ws_dims = workbook.add_worksheet("Dimensions")
     for col, header in enumerate(sample_dimensions.columns):
         ws_dims.write(0, col, header, header_format)
 
@@ -521,10 +518,11 @@ def create_excel_output():
         for col_idx, value in enumerate(row_data):
             ws_dims.write(row_idx, col_idx, value)
 
-    ws_dims.autofilter(0, 0, len(sample_dimensions), len(sample_dimensions.columns)-1)
+    ws_dims.autofilter(0, 0, len(sample_dimensions), len(sample_dimensions.columns) - 1)
 
     workbook.close()
     print(f"   ✓ Created {output_file}")
+
 
 def main():
     print("=" * 70)
@@ -550,5 +548,6 @@ def main():
     print("\nOpen the HTML file in a browser or Markdown in GitHub to see the formatted report!")
     print("\n✓ All output formats generated successfully")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()
