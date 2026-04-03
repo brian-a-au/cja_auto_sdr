@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Added `scripts/create_sample_outputs.py` and `scripts/stress_test.py` to CI lint scope — fixed 444 accumulated ruff violations and simplified `lint.yml` to lint the entire `scripts/` directory.
-- Advanced ruff `target-version` from `py313` to `py314` — resolved 3 forward-annotation sites (`SDRConfig`, `DataViewSnapshot`) that were the only blockers. Runtime floor was already `>=3.14`.
+- Advanced ruff `target-version` from `py313` to `py314` — resolved 3 forward-annotation sites (`SDRConfig`, `DataViewSnapshot`) that were the only blockers. Runtime floor was already `>=3.14`. Ruff format now applies PEP 758 `except` syntax (`except TypeError, ValueError:` without parentheses) across ~34 sites — this is valid Python 3.14+ syntax and semantically identical to the parenthesized form.
 - Added `CLAUDE.md` to `test-counts.yml` path triggers so mid-cycle PRs that modify its test count are validated.
 - Added `ci-gate` rollup job to `tests.yml` — decouples branch protection from CI matrix job names so renaming or adding matrix entries no longer breaks the protection rule.
 

@@ -185,6 +185,11 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Verify all required jobs passed
+        # Design note: the check below treats any non-"success" result
+        # (including "skipped") as a failure. This is intentional — all five
+        # required jobs are unconditional. If a job is ever made conditional
+        # (with an `if:` guard), its "skipped" result will fail this gate;
+        # update the check accordingly if that happens.
         run: |
           declare -A results=(
             [test-unit]="${{ needs.test-unit.result }}"
