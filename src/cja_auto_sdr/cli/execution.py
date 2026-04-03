@@ -159,7 +159,7 @@ def _confirm_large_batch(args: argparse.Namespace, *, data_views: list[str]) -> 
             print("Cancelled.")
             sys.exit(0)
         print()
-    except (EOFError, KeyboardInterrupt):
+    except EOFError, KeyboardInterrupt:
         print("\nCancelled.")
         sys.exit(0)
 

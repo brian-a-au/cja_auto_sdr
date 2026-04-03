@@ -26,7 +26,7 @@ def _parse_env_numeric(value: str | None, cast: Callable[[str], Any]) -> Any | N
         return None
     try:
         parsed = cast(value)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
     if isinstance(parsed, float) and not math.isfinite(parsed):
         return None

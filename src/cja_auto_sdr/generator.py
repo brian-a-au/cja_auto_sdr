@@ -2538,7 +2538,7 @@ def validate_data_view(cja: cjapy.CJA, data_view_id: str, logger: logging.Logger
 
         return True
 
-    except (KeyboardInterrupt, SystemExit):
+    except KeyboardInterrupt, SystemExit:
         raise
     except RECOVERABLE_CONFIG_API_EXCEPTIONS as e:  # cjapy API/bootstrap calls
         logger.error("=" * BANNER_WIDTH)
@@ -3936,7 +3936,7 @@ def run_dry_run(data_views: list[str], config_file: str, logger: logging.Logger,
         else:
             print("  ⚠ API connection returned None - may be unstable")
             available_dvs = []
-    except (KeyboardInterrupt, SystemExit):
+    except KeyboardInterrupt, SystemExit:
         print()
         print(ConsoleColors.warning("Dry-run cancelled."))
         raise
@@ -3987,7 +3987,7 @@ def run_dry_run(data_views: list[str], config_file: str, logger: logging.Logger,
                 raw_dv_info,
                 data_view_id=dv_id,
             )
-        except (KeyboardInterrupt, SystemExit):
+        except KeyboardInterrupt, SystemExit:
             print()
             print(ConsoleColors.warning("Validation cancelled."))
             raise
@@ -5632,7 +5632,7 @@ def run_org_report(
         _status_print(ConsoleColors.error(f"ERROR: Configuration file '{config_file}' not found"))
         return False, False
 
-    except (KeyboardInterrupt, SystemExit):
+    except KeyboardInterrupt, SystemExit:
         if not quiet:
             _status_print()
             _status_print(ConsoleColors.warning("Operation cancelled."))
