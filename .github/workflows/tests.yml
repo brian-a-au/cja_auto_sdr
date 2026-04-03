@@ -160,19 +160,27 @@ jobs:
     steps:
       - name: Verify all required jobs passed
         run: |
-          results=( \
-            "${{ needs.test-unit.result }}" \
-            "${{ needs.test-integration.result }}" \
-            "${{ needs.run-summary-contract.result }}" \
-            "${{ needs.smoke-test.result }}" \
-            "${{ needs.build.result }}" \
+          declare -A results=(
+            [test-unit]="${{ needs.test-unit.result }}"
+            [test-integration]="${{ needs.test-integration.result }}"
+            [run-summary-contract]="${{ needs.run-summary-contract.result }}"
+            [smoke-test]="${{ needs.smoke-test.result }}"
+            [build]="${{ needs.build.result }}"
           )
-          for r in "${results[@]}"; do
+          failed=0
+          for job in "${!results[@]}"; do
+            r="${results[$job]}"
             if [[ "$r" != "success" ]]; then
-              echo "One or more required jobs failed or were cancelled: $r"
-              exit 1
+              echo "FAIL: $job = $r"
+              failed=1
+            else
+              echo "OK:   $job = $r"
             fi
           done
+          if [[ "$failed" -eq 1 ]]; then
+            echo "One or more required jobs did not succeed."
+            exit 1
+          fi
           echo "All required jobs passed."
 
   build:
