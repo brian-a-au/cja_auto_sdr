@@ -7,6 +7,11 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.8] — 2026-04-03
+
+### Fixed
+- Fixed `--inventory-summary` failing with `AttributeError: 'CJA' object has no attribute 'dataviews'` — replaced 3 non-existent namespace-style cjapy calls (`cja.dataviews.get_single`, `cja.dataviews.get_metrics`, `cja.dataviews.get_dimensions`) with the correct flat methods (`cja.getDataView`, `cja.getMetrics`, `cja.getDimensions`) in `process_inventory_summary()`.
+
 ## [3.5.7] — 2026-04-03
 
 ### Changed

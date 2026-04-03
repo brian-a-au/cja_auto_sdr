@@ -2674,7 +2674,7 @@ def process_inventory_summary(
 
     # Get data view info
     try:
-        lookup_data = cja.dataviews.get_single(data_view_id)
+        lookup_data = cja.getDataView(data_view_id)
         dv_name = lookup_data.get("name", data_view_id) if isinstance(lookup_data, dict) else data_view_id
     except RECOVERABLE_CONFIG_API_EXCEPTIONS as e:
         print(ConsoleColors.error(f"ERROR: Failed to fetch data view: {e}"), file=sys.stderr)
@@ -2707,8 +2707,8 @@ def process_inventory_summary(
             from cja_auto_sdr.inventory.derived_fields import DerivedFieldInventoryBuilder
 
             # Need metrics and dimensions for derived fields
-            metrics_data = cja.dataviews.get_metrics(data_view_id)
-            dimensions_data = cja.dataviews.get_dimensions(data_view_id)
+            metrics_data = cja.getMetrics(data_view_id)
+            dimensions_data = cja.getDimensions(data_view_id)
 
             metrics_df = pd.DataFrame(metrics_data) if metrics_data else pd.DataFrame()
             dimensions_df = pd.DataFrame(dimensions_data) if dimensions_data else pd.DataFrame()

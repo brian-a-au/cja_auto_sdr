@@ -110,12 +110,12 @@ class TestProcessInventorySummary:
     @patch("cja_auto_sdr.generator.with_log_context")
     @patch("cja_auto_sdr.generator.setup_logging")
     def test_data_view_fetch_failure_returns_error(self, mock_setup, mock_ctx, mock_init, mock_display):
-        """When cja.dataviews.get_single raises, function should return error dict."""
+        """When cja.getDataView raises, function should return error dict."""
         mock_setup.return_value = logging.getLogger("test")
         mock_ctx.return_value = logging.getLogger("test")
 
         mock_cja = MagicMock()
-        mock_cja.dataviews.get_single.side_effect = APIError("API Error 404")
+        mock_cja.getDataView.side_effect = APIError("API Error 404")
         mock_init.return_value = mock_cja
 
         result = process_inventory_summary("dv_bad_id", config_file="config.json")
@@ -133,7 +133,7 @@ class TestProcessInventorySummary:
         mock_ctx.return_value = logging.getLogger("test")
 
         mock_cja = MagicMock()
-        mock_cja.dataviews.get_single.side_effect = ConnectionError("network timeout")
+        mock_cja.getDataView.side_effect = ConnectionError("network timeout")
         mock_init.return_value = mock_cja
 
         result = process_inventory_summary("dv_bad_id", config_file="config.json")
@@ -151,7 +151,7 @@ class TestProcessInventorySummary:
         mock_ctx.return_value = logging.getLogger("test")
 
         mock_cja = MagicMock()
-        mock_cja.dataviews.get_single.side_effect = RuntimeError("unexpected client crash")
+        mock_cja.getDataView.side_effect = RuntimeError("unexpected client crash")
         mock_init.return_value = mock_cja
 
         result = process_inventory_summary("dv_bad_id", config_file="config.json")
@@ -176,7 +176,7 @@ class TestProcessInventorySummary:
         mock_ctx.return_value = logging.getLogger("test")
 
         mock_cja = MagicMock()
-        mock_cja.dataviews.get_single.side_effect = RuntimeError("HTTP 403 Forbidden")
+        mock_cja.getDataView.side_effect = RuntimeError("HTTP 403 Forbidden")
         mock_init.return_value = mock_cja
 
         result = process_inventory_summary("dv_bad_id", config_file="config.json")
@@ -204,7 +204,7 @@ class TestProcessInventorySummary:
         mock_ctx.return_value = logging.getLogger("test")
 
         mock_cja = MagicMock()
-        mock_cja.dataviews.get_single.side_effect = Exception("HTTP 403 Forbidden")
+        mock_cja.getDataView.side_effect = Exception("HTTP 403 Forbidden")
         mock_init.return_value = mock_cja
 
         result = process_inventory_summary("dv_bad_id", config_file="config.json")
@@ -225,7 +225,7 @@ class TestProcessInventorySummary:
         mock_ctx.return_value = logging.getLogger("test")
 
         mock_cja = MagicMock()
-        mock_cja.dataviews.get_single.return_value = {"name": "My DV"}
+        mock_cja.getDataView.return_value = {"name": "My DV"}
         mock_init.return_value = mock_cja
         mock_display.return_value = {"total": 0}
 
@@ -244,7 +244,7 @@ class TestProcessInventorySummary:
         mock_ctx.return_value = logging.getLogger("test")
 
         mock_cja = MagicMock()
-        mock_cja.dataviews.get_single.return_value = {"name": "Quiet DV"}
+        mock_cja.getDataView.return_value = {"name": "Quiet DV"}
         mock_init.return_value = mock_cja
         mock_display.return_value = {"status": "ok"}
 
@@ -262,9 +262,9 @@ class TestProcessInventorySummary:
         mock_ctx.return_value = logging.getLogger("test")
 
         mock_cja = MagicMock()
-        mock_cja.dataviews.get_single.return_value = {"name": "DV1"}
-        mock_cja.dataviews.get_metrics.return_value = [{"id": "m1"}]
-        mock_cja.dataviews.get_dimensions.return_value = [{"id": "d1"}]
+        mock_cja.getDataView.return_value = {"name": "DV1"}
+        mock_cja.getMetrics.return_value = [{"id": "m1"}]
+        mock_cja.getDimensions.return_value = [{"id": "d1"}]
         mock_init.return_value = mock_cja
         mock_display.return_value = {"derived": 5}
 
@@ -292,8 +292,8 @@ class TestProcessInventorySummary:
         mock_ctx.return_value = logger
 
         mock_cja = MagicMock()
-        mock_cja.dataviews.get_single.return_value = {"name": "DV1"}
-        mock_cja.dataviews.get_metrics.side_effect = APIError("metrics API error")
+        mock_cja.getDataView.return_value = {"name": "DV1"}
+        mock_cja.getMetrics.side_effect = APIError("metrics API error")
         mock_init.return_value = mock_cja
         mock_display.return_value = {"ok": True}
 
@@ -312,7 +312,7 @@ class TestProcessInventorySummary:
         mock_ctx.return_value = logging.getLogger("test")
 
         mock_cja = MagicMock()
-        mock_cja.dataviews.get_single.return_value = {"name": "DV1"}
+        mock_cja.getDataView.return_value = {"name": "DV1"}
         mock_init.return_value = mock_cja
         mock_display.return_value = {"ok": True}
 
@@ -335,7 +335,7 @@ class TestProcessInventorySummary:
         mock_ctx.return_value = logging.getLogger("test")
 
         mock_cja = MagicMock()
-        mock_cja.dataviews.get_single.return_value = {"name": "DV1"}
+        mock_cja.getDataView.return_value = {"name": "DV1"}
         mock_init.return_value = mock_cja
         mock_display.return_value = {"ok": True}
 
@@ -365,7 +365,7 @@ class TestProcessInventorySummary:
         mock_ctx.return_value = logging.getLogger("test")
 
         mock_cja = MagicMock()
-        mock_cja.dataviews.get_single.return_value = {"name": "DV1"}
+        mock_cja.getDataView.return_value = {"name": "DV1"}
         mock_init.return_value = mock_cja
         mock_display.return_value = {"ok": True}
 
@@ -388,7 +388,7 @@ class TestProcessInventorySummary:
         mock_ctx.return_value = logging.getLogger("test")
 
         mock_cja = MagicMock()
-        mock_cja.dataviews.get_single.return_value = {"name": "DV1"}
+        mock_cja.getDataView.return_value = {"name": "DV1"}
         mock_init.return_value = mock_cja
         mock_display.return_value = {"ok": True}
 
@@ -447,9 +447,9 @@ class TestProcessInventorySummary:
         mock_ctx.return_value = logging.getLogger("test")
 
         mock_cja = MagicMock()
-        mock_cja.dataviews.get_single.return_value = {"name": "DV1"}
-        mock_cja.dataviews.get_metrics.return_value = [{"id": "m1"}]
-        mock_cja.dataviews.get_dimensions.return_value = [{"id": "d1"}]
+        mock_cja.getDataView.return_value = {"name": "DV1"}
+        mock_cja.getMetrics.return_value = [{"id": "m1"}]
+        mock_cja.getDimensions.return_value = [{"id": "d1"}]
         mock_init.return_value = mock_cja
         mock_display.return_value = {"ok": True}
 
@@ -476,7 +476,7 @@ class TestProcessInventorySummary:
         mock_ctx.return_value = logging.getLogger("test")
 
         mock_cja = MagicMock()
-        mock_cja.dataviews.get_single.return_value = "not_a_dict"
+        mock_cja.getDataView.return_value = "not_a_dict"
         mock_init.return_value = mock_cja
         mock_display.return_value = {}
 

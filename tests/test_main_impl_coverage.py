@@ -2216,7 +2216,7 @@ class TestProcessInventorySummaryExceptionHandlers:
 
         mock_cja = MagicMock()
         mock_init_cja.return_value = mock_cja
-        mock_cja.dataviews.get_single.return_value = {"name": "Test DV"}
+        mock_cja.getDataView.return_value = {"name": "Test DV"}
 
         mock_display.return_value = {"status": "ok"}
 
@@ -2265,7 +2265,7 @@ class TestProcessInventorySummaryExceptionHandlers:
 
         mock_cja = MagicMock()
         mock_init_cja.return_value = mock_cja
-        mock_cja.dataviews.get_single.return_value = {"name": "Test DV"}
+        mock_cja.getDataView.return_value = {"name": "Test DV"}
 
         mock_display.return_value = {"status": "ok"}
 
