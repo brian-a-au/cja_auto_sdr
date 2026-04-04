@@ -110,3 +110,103 @@ class TestSegmentsTraverseNonDict:
         builder = _seg_builder()
         result = builder._parse_definition([{"func": "eq"}])
         assert result["predicate_count"] == 0
+
+
+from cja_auto_sdr.inventory.derived_fields import DerivedFieldInventoryBuilder
+
+
+def _df_builder():
+    return DerivedFieldInventoryBuilder()
+
+
+def _build_one_df(definition):
+    """Build a single derived field from a definition and return the inventory."""
+    builder = _df_builder()
+    field_def = json.dumps(definition) if isinstance(definition, list) else definition
+    df = pd.DataFrame(
+        [
+            {
+                "id": "dimensions/test_field",
+                "name": "Test Field",
+                "sourceFieldType": "derived",
+                "fieldDefinition": field_def,
+                "dataSetType": "event",
+            }
+        ]
+    )
+    inventory = builder.build(pd.DataFrame(), df, "dv_test", "Test")
+    return inventory
+
+
+# ==================== Task 3: pd.isna TypeError/ValueError guard ====================
+
+
+class TestParseDefinitionIsnaGuard:
+    """Exercise line 376: except TypeError, ValueError around pd.isna().
+
+    pd.isna() can raise TypeError on objects that define __len__ in ways
+    that conflict with pandas internals. We mock pd.isna to force the
+    exception and verify the fallback path treats the value as non-null.
+    """
+
+    def test_isna_typeerror_falls_back_to_none_check(self):
+        """When pd.isna raises TypeError, field_def is treated as non-null."""
+        definition = [{"func": "raw-field", "id": "test.field", "label": "f"}]
+        field_def_str = json.dumps(definition)
+
+        builder = _df_builder()
+        row = pd.Series(
+            {
+                "id": "dimensions/test",
+                "name": "Test",
+                "sourceFieldType": "derived",
+                "fieldDefinition": field_def_str,
+                "dataSetType": "event",
+            }
+        )
+
+        with patch("cja_auto_sdr.inventory.derived_fields.pd.isna", side_effect=TypeError("mock")):
+            result = builder._process_row(row, "event", stats=None)
+
+        assert result is not None
+        assert result.component_name == "Test"
+
+    def test_isna_valueerror_falls_back_to_none_check(self):
+        """When pd.isna raises ValueError, field_def is treated as non-null."""
+        definition = [{"func": "raw-field", "id": "test.field", "label": "f"}]
+        field_def_str = json.dumps(definition)
+
+        builder = _df_builder()
+        row = pd.Series(
+            {
+                "id": "dimensions/test",
+                "name": "Test",
+                "sourceFieldType": "derived",
+                "fieldDefinition": field_def_str,
+                "dataSetType": "event",
+            }
+        )
+
+        with patch("cja_auto_sdr.inventory.derived_fields.pd.isna", side_effect=ValueError("mock")):
+            result = builder._process_row(row, "event", stats=None)
+
+        assert result is not None
+
+    def test_isna_exception_with_none_field_def_returns_none(self):
+        """When pd.isna raises and field_def IS None, fallback detects it."""
+        builder = _df_builder()
+        row = pd.Series(
+            {
+                "id": "dimensions/test",
+                "name": "Test",
+                "sourceFieldType": "derived",
+                "fieldDefinition": None,
+                "dataSetType": "event",
+            }
+        )
+
+        with patch("cja_auto_sdr.inventory.derived_fields.pd.isna", side_effect=TypeError("mock")):
+            result = builder._process_row(row, "event", stats=None)
+
+        # field_def is None → is_na fallback sets True → returns None
+        assert result is None

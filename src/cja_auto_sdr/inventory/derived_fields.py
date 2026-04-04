@@ -373,7 +373,7 @@ class DerivedFieldInventoryBuilder:
                 is_na = bool(is_na.all()) if len(is_na) > 0 else True
             else:
                 is_na = bool(is_na)
-        except TypeError, ValueError:  # pragma: no cover — pd.isna rarely raises
+        except TypeError, ValueError:
             is_na = field_def_str is None
 
         if is_na or field_def_str in ("NaN", "", "null", None):
