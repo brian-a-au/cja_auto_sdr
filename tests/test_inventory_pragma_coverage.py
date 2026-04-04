@@ -210,3 +210,55 @@ class TestParseDefinitionIsnaGuard:
 
         # field_def is None → is_na fallback sets True → returns None
         assert result is None
+
+
+# ==================== Task 4: _coerce_int_index overflow guard ====================
+
+
+class TestCoerceIntIndexOverflowGuard:
+    """Exercise line 617: except TypeError, ValueError, OverflowError on int().
+
+    The isfinite() check at line 613 catches inf/nan, but a float subclass
+    that passes isfinite yet fails int() exercises the guard directly.
+    """
+
+    def test_normal_float_converts(self):
+        """Baseline: normal float converts correctly."""
+        builder = _df_builder()
+        assert builder._coerce_int_index(3.0) == 3
+
+    def test_inf_returns_default(self):
+        """math.inf caught by isfinite check, returns default."""
+        import math
+
+        builder = _df_builder()
+        assert builder._coerce_int_index(math.inf) == 0
+        assert builder._coerce_int_index(math.inf, default=99) == 99
+
+    def test_nan_returns_default(self):
+        """NaN caught by isfinite check, returns default."""
+        import math
+
+        builder = _df_builder()
+        assert builder._coerce_int_index(math.nan) == 0
+
+    def test_neg_inf_returns_default(self):
+        """Negative infinity returns default."""
+        import math
+
+        builder = _df_builder()
+        assert builder._coerce_int_index(-math.inf, default=-1) == -1
+
+    def test_int_conversion_exception_returns_default(self):
+        """Force the guard path via a float subclass that fails int()."""
+        builder = _df_builder()
+
+        class BadFloat(float):
+            """A float subclass that passes isfinite but fails int()."""
+
+            def __int__(self):
+                raise OverflowError("cannot convert")
+
+        val = BadFloat(1.0)
+        result = builder._coerce_int_index(val, default=42)
+        assert result == 42

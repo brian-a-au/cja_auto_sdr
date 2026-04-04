@@ -614,7 +614,7 @@ class DerivedFieldInventoryBuilder:
                 return default
             try:
                 return int(value)
-            except TypeError, ValueError, OverflowError:  # pragma: no cover — finite floats always convert
+            except TypeError, ValueError, OverflowError:
                 return default
 
         if isinstance(value, str):
