@@ -24,6 +24,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   fallback branch
 - Total tests: 7,783 (was 7,765)
 
+### Documentation
+
+- Refreshed CLAUDE.md package layout tree — added 4 missing source files
+  (`api/validation.py`, `core/advisories.py`, `core/advisory_builders.py`,
+  `output/excel.py`)
+
 ## [3.5.11] — 2026-04-03
 
 ### Fixed
