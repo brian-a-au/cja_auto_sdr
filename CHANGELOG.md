@@ -7,6 +7,29 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.12] — 2026-04-04
+
+### Changed
+
+- Removed 5 `pragma: no cover` annotations from inventory subsystem by adding
+  edge-case tests that exercise defensive guard code paths directly
+- Confirmed `derived_fields.py:982` pragma is correct (genuinely unreachable) —
+  retained as-is
+
+### Tests
+
+- Added 18 tests covering: calculated_metrics `traverse()` non-dict guard,
+  segments `traverse()` non-dict guard, derived_fields `pd.isna` exception
+  fallback, `_coerce_int_index` overflow guard, and classify `lookup_references`
+  fallback branch
+- Total tests: 7,783 (was 7,765)
+
+### Documentation
+
+- Refreshed CLAUDE.md package layout tree — added 4 missing source files
+  (`api/validation.py`, `core/advisories.py`, `core/advisory_builders.py`,
+  `output/excel.py`)
+
 ## [3.5.11] — 2026-04-03
 
 ### Fixed

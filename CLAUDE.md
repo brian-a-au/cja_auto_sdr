@@ -17,8 +17,8 @@ CJA SDR Generator — a CLI tool for generating Solution Design Reference (SDR) 
 - Package manager: **uv**
 - Build system: **hatchling** (dynamic version from `src/cja_auto_sdr/core/version.py`)
 - Entry points: `cja_auto_sdr` and `cja-auto-sdr` (both via `__main__:main`)
-- Current version: v3.5.11
-- Tests: **7,764** across 129 files at **95% coverage gate**
+- Current version: v3.5.12
+- Tests: **7,783** across 130 files at **95% coverage gate**
 - Dependencies: cjapy, numpy, pandas, xlsxwriter, tqdm
 - Optional deps: scipy (clustering), python-dotenv (env), argcomplete (completion)
 
@@ -31,7 +31,7 @@ CJA SDR Generator — a CLI tool for generating Solution Design Reference (SDR) 
 ```
 src/cja_auto_sdr/
 ├── __init__.py              # Lazy forwarding (__version__, main → generator)
-├── __main__.py              # Fast-path entry point (~550 lines)
+├── __main__.py              # Fast-path entry point (~553 lines)
 ├── generator.py             # Main orchestrator (~7K lines, monolithic workhorse)
 │
 ├── api/                     # API client, resilience & caching
@@ -41,7 +41,8 @@ src/cja_auto_sdr/
 │   ├── fetch.py             # Parallel fetching with worker optimization
 │   ├── quality.py           # Core data quality validation engine
 │   ├── quality_policy.py    # Quality policy metadata
-│   └── tuning.py            # API worker auto-tuning
+│   ├── tuning.py            # API worker auto-tuning
+│   └── validation.py        # API response validation helpers
 │
 ├── cli/                     # Argument parsing & command dispatch
 │   ├── agent_output.py      # Centralized agent-mode output contract resolver
@@ -67,6 +68,8 @@ src/cja_auto_sdr/
 │   ├── credentials.py       # API credential resolution
 │   ├── exit_codes.py        # Exit code definitions + explainer
 │   ├── exceptions.py        # Custom exception hierarchy
+│   ├── advisories.py        # Advisory system for actionable warnings
+│   ├── advisory_builders.py # Advisory builder helpers
 │   ├── discovery_exceptions.py  # Discovery-specific exceptions
 │   ├── discovery_payloads.py    # Discovery payload classification
 │   ├── discovery_normalization.py # Normalization helpers
@@ -119,6 +122,7 @@ src/cja_auto_sdr/
 │   ├── protocols.py         # Writer protocol definitions
 │   ├── registry.py          # Format registry
 │   ├── run_summary.py       # Run summary output helpers
+│   ├── excel.py             # Shared Excel formatting utilities
 │   ├── writers/             # Format writers (csv, excel, json, html, markdown)
 │   ├── sdr/                 # SDR document generators
 │   ├── diff/                # Diff renderers (console, grouped, csv, json, html, excel, markdown, pr_comment)

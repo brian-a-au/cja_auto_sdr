@@ -373,7 +373,7 @@ class DerivedFieldInventoryBuilder:
                 is_na = bool(is_na.all()) if len(is_na) > 0 else True
             else:
                 is_na = bool(is_na)
-        except TypeError, ValueError:  # pragma: no cover — pd.isna rarely raises
+        except TypeError, ValueError:
             is_na = field_def_str is None
 
         if is_na or field_def_str in ("NaN", "", "null", None):
@@ -614,7 +614,7 @@ class DerivedFieldInventoryBuilder:
                 return default
             try:
                 return int(value)
-            except TypeError, ValueError, OverflowError:  # pragma: no cover — finite floats always convert
+            except TypeError, ValueError, OverflowError:
                 return default
 
         if isinstance(value, str):
@@ -785,7 +785,7 @@ class DerivedFieldInventoryBuilder:
                 else:
                     rules_str = ", ".join(rule_names[:3]) + f", +{len(rule_names) - 3} more"
                 parts.append(f"Lookup classification: {rules_str}")
-            elif parsed["lookup_references"]:  # pragma: no cover — _describe_lookup_logic covers this
+            elif parsed["lookup_references"]:
                 parts.append(f"Lookup from {parsed['lookup_references'][0]}")
             else:
                 parts.append("Lookup/classify operation")

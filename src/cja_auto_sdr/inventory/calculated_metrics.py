@@ -627,7 +627,7 @@ class CalculatedMetricsInventoryBuilder:
         def traverse(node: Any, current_depth: int) -> None:
             nonlocal total_operators, max_nesting, total_conditionals
 
-            if not isinstance(node, dict):  # pragma: no cover — all callers guard with isinstance
+            if not isinstance(node, dict):
                 return
 
             max_nesting = max(max_nesting, current_depth)

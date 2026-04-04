@@ -591,7 +591,7 @@ class SegmentsInventoryBuilder:
         def traverse(node: Any, current_depth: int) -> None:
             nonlocal total_predicates, total_logic_operators, max_nesting, total_containers, regex_count, container_type
 
-            if not isinstance(node, dict):  # pragma: no cover — all callers guard with isinstance
+            if not isinstance(node, dict):
                 return
 
             max_nesting = max(max_nesting, current_depth)
