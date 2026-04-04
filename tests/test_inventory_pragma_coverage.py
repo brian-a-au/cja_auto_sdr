@@ -65,3 +65,48 @@ class TestCalcMetricsTraverseNonDict:
         result = builder._parse_formula([{"func": "add"}])
         assert result["functions_internal"] == []
         assert result["operator_count"] == 0
+
+
+from cja_auto_sdr.inventory.segments import SegmentsInventoryBuilder
+
+
+def _seg_builder():
+    return SegmentsInventoryBuilder()
+
+
+# ==================== Task 2: segments traverse() non-dict guard ====================
+
+
+class TestSegmentsTraverseNonDict:
+    """Exercise line 594: `if not isinstance(node, dict)` inside traverse().
+
+    _parse_definition() calls traverse(definition, depth) at line 701 without
+    a guard. Passing a non-dict as definition hits line 594 directly.
+    """
+
+    def test_string_definition_returns_zero_counts(self):
+        """String definition hits the guard; all counters stay at zero."""
+        builder = _seg_builder()
+        result = builder._parse_definition("not_a_dict")
+        assert result["predicate_count"] == 0
+        assert result["nesting_depth"] == 0
+        assert result["logic_operator_count"] == 0
+        assert result["container_count"] == 0
+
+    def test_none_definition_returns_zero_counts(self):
+        """None definition hits the guard."""
+        builder = _seg_builder()
+        result = builder._parse_definition(None)
+        assert result["predicate_count"] == 0
+
+    def test_int_definition_returns_zero_counts(self):
+        """Integer definition hits the guard."""
+        builder = _seg_builder()
+        result = builder._parse_definition(42)
+        assert result["predicate_count"] == 0
+
+    def test_list_definition_returns_zero_counts(self):
+        """List definition hits the guard (list is not a dict)."""
+        builder = _seg_builder()
+        result = builder._parse_definition([{"func": "eq"}])
+        assert result["predicate_count"] == 0
