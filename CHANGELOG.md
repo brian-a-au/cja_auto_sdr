@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Fixed bare truthiness checks on inventory fields in `diff/git.py` — `if snapshot.calculated_metrics_inventory:` treated empty list `[]` (valid, zero components) as falsy, silently skipping git snapshot inventory files and metadata counts. Replaced all 5 sites with explicit `is not None` checks to match the model's own `has_*` property semantics. Same class of bug as v3.5.9.
-- Extended truthiness hardening to `diff/models.py` (`get_inventory_summary()`, `has_inventory_diffs`) and `diff/comparator.py` (6 inventory field references) — eliminates all remaining bare truthiness on inventory list fields across the diff subsystem. The `has_inventory_diffs` property previously used `any([...])` which returned `False` for empty lists, causing diff renderers to silently skip the inventory section when comparison was requested but yielded zero diffs.
+- Extended truthiness hardening to `diff/models.py` (`get_inventory_summary()`, `has_inventory_diffs`) and `diff/comparator.py` (8 inventory field references) — eliminates all remaining bare truthiness on inventory list fields across the diff subsystem. The `has_inventory_diffs` property previously used `any([...])` which returned `False` for empty lists, causing diff renderers to silently skip the inventory section when comparison was requested but yielded zero diffs.
 
 ### Changed
 - Added `scripts/create_sample_outputs.py` and `scripts/stress_test.py` to CI lint scope — fixed 444 accumulated ruff violations and simplified `lint.yml` to lint the entire `scripts/` directory.
