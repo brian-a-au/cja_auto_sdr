@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Advanced ruff `target-version` from `py313` to `py314` — resolved 3 forward-annotation sites (`SDRConfig`, `DataViewSnapshot`) that were the only blockers. Runtime floor was already `>=3.14`. Ruff format now applies PEP 758 `except` syntax (`except TypeError, ValueError:` without parentheses) across ~50 sites — this is valid Python 3.14+ syntax and semantically identical to the parenthesized form.
 - Added `CLAUDE.md` to `test-counts.yml` path triggers so mid-cycle PRs that modify its test count are validated.
 - Added `ci-gate` rollup job to `tests.yml` — decouples branch protection from CI matrix job names so renaming or adding matrix entries no longer breaks the protection rule.
+- Added `scripts/smoke_test_production.py` to `.gitignore` — local-only production smoke test script that exercises all CLI paths against the live API.
 
 ### Documentation
 - Added `--inventory-summary` to README common use cases table — the flag was subject of v3.5.8/v3.5.9 bug fixes but missing from the first-stop documentation.
