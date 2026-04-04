@@ -4,6 +4,9 @@ Tests that exercise pragma-guarded defensive code paths in inventory modules.
 v3.5.12: Coverage hardening — removes pragma: no cover from 5 lines across
 calculated_metrics.py, segments.py, and derived_fields.py by crafting payloads
 that bypass upstream isinstance filters.
+
+Note: ``except TypeError, ValueError:`` in the source uses PEP 758 bare-comma
+syntax (Python 3.14+), not the legacy Python 2 form — no parentheses required.
 """
 
 from __future__ import annotations
@@ -287,7 +290,7 @@ class TestClassifyLookupReferencesFallback:
         assert summary.total_derived_fields == 1
         field = summary.fields[0]
         # Line 789 produces: "Lookup from {parsed['lookup_references'][0]}"
-        assert "lookup" in field.logic_summary.lower() or "0" in field.logic_summary
+        assert "Lookup from" in field.logic_summary
 
     def test_classify_with_false_key_field_hits_fallback(self):
         """classify with key-field=False: same divergence pattern."""
@@ -302,4 +305,4 @@ class TestClassifyLookupReferencesFallback:
         assert summary.total_derived_fields == 1
         field = summary.fields[0]
         # "False" is truthy as a string, so lookup_references gets ["False"]
-        assert "lookup" in field.logic_summary.lower() or "false" in field.logic_summary.lower()
+        assert "Lookup from" in field.logic_summary
