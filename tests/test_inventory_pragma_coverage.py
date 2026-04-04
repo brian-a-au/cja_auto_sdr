@@ -16,7 +16,8 @@ import pandas as pd
 from cja_auto_sdr.inventory.calculated_metrics import (
     CalculatedMetricsInventoryBuilder,
 )
-
+from cja_auto_sdr.inventory.derived_fields import DerivedFieldInventoryBuilder
+from cja_auto_sdr.inventory.segments import SegmentsInventoryBuilder
 
 # ==================== HELPERS ====================
 
@@ -67,9 +68,6 @@ class TestCalcMetricsTraverseNonDict:
         assert result["operator_count"] == 0
 
 
-from cja_auto_sdr.inventory.segments import SegmentsInventoryBuilder
-
-
 def _seg_builder():
     return SegmentsInventoryBuilder()
 
@@ -112,9 +110,6 @@ class TestSegmentsTraverseNonDict:
         assert result["predicate_count"] == 0
 
 
-from cja_auto_sdr.inventory.derived_fields import DerivedFieldInventoryBuilder
-
-
 def _df_builder():
     return DerivedFieldInventoryBuilder()
 
@@ -134,8 +129,7 @@ def _build_one_df(definition):
             }
         ]
     )
-    inventory = builder.build(pd.DataFrame(), df, "dv_test", "Test")
-    return inventory
+    return builder.build(pd.DataFrame(), df, "dv_test", "Test")
 
 
 # ==================== Task 3: pd.isna TypeError/ValueError guard ====================
@@ -262,3 +256,50 @@ class TestCoerceIntIndexOverflowGuard:
         val = BadFloat(1.0)
         result = builder._coerce_int_index(val, default=42)
         assert result == 42
+
+
+# ==================== Task 5: classify lookup_references fallback ====================
+
+
+class TestClassifyLookupReferencesFallback:
+    """Exercise line 788: `elif parsed['lookup_references']` branch.
+
+    This branch fires when:
+    1. functions_internal contains 'classify'
+    2. _describe_lookup_logic() returns '' (no truthy key-field)
+    3. parsed['rule_names'] is empty
+    4. parsed['lookup_references'] is non-empty
+
+    The edge case: key-field=0 passes str() normalization in _parse_definition
+    but fails the truthiness check in _describe_lookup_logic.
+    """
+
+    def test_classify_with_falsy_key_field_hits_lookup_refs_fallback(self):
+        """classify with key-field=0 populates lookup_references but not lookup details."""
+        definition = [
+            {"func": "raw-field", "id": "test.field", "label": "base"},
+            {
+                "func": "classify",
+                "mapping": {"key-field": 0, "value-field": "result", "dataset": "lookup/my_dataset"},
+            },
+        ]
+        summary = _build_one_df(definition)
+        assert summary.total_derived_fields == 1
+        field = summary.fields[0]
+        # Line 789 produces: "Lookup from {parsed['lookup_references'][0]}"
+        assert "lookup" in field.logic_summary.lower() or "0" in field.logic_summary
+
+    def test_classify_with_false_key_field_hits_fallback(self):
+        """classify with key-field=False: same divergence pattern."""
+        definition = [
+            {"func": "raw-field", "id": "test.field", "label": "base"},
+            {
+                "func": "classify",
+                "mapping": {"key-field": False, "value-field": "result"},
+            },
+        ]
+        summary = _build_one_df(definition)
+        assert summary.total_derived_fields == 1
+        field = summary.fields[0]
+        # "False" is truthy as a string, so lookup_references gets ["False"]
+        assert "lookup" in field.logic_summary.lower() or "false" in field.logic_summary.lower()

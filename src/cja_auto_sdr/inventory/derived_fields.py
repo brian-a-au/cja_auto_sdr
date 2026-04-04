@@ -785,7 +785,7 @@ class DerivedFieldInventoryBuilder:
                 else:
                     rules_str = ", ".join(rule_names[:3]) + f", +{len(rule_names) - 3} more"
                 parts.append(f"Lookup classification: {rules_str}")
-            elif parsed["lookup_references"]:  # pragma: no cover — _describe_lookup_logic covers this
+            elif parsed["lookup_references"]:
                 parts.append(f"Lookup from {parsed['lookup_references'][0]}")
             else:
                 parts.append("Lookup/classify operation")
