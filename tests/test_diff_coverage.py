@@ -827,7 +827,20 @@ class TestDiffResultHasInventoryDiffs:
         )
         assert result.has_inventory_diffs is True
 
-    def test_has_inventory_diffs_false(self):
+    def test_has_inventory_diffs_empty_lists_still_true(self):
+        """Empty lists mean inventory was requested but had zero diffs — still True."""
+        result = DiffResult(
+            summary=DiffSummary(),
+            metadata_diff=MagicMock(),
+            metric_diffs=[],
+            dimension_diffs=[],
+            calc_metrics_diffs=[],
+            segments_diffs=[],
+        )
+        assert result.has_inventory_diffs is True
+
+    def test_has_inventory_diffs_false_when_none(self):
+        """None means inventory was not requested — False."""
         result = DiffResult(
             summary=DiffSummary(),
             metadata_diff=MagicMock(),

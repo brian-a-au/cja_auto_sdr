@@ -299,7 +299,7 @@ class DiffResult:
     @property
     def has_inventory_diffs(self) -> bool:
         """Check if any inventory diffs are included."""
-        return any([self.calc_metrics_diffs, self.segments_diffs])
+        return self.calc_metrics_diffs is not None or self.segments_diffs is not None
 
 
 @dataclass

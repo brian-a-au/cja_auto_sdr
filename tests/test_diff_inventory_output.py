@@ -1585,9 +1585,9 @@ class TestInventoryEdgeCases:
         )
         output = write_diff_console_output(result, use_color=False)
 
-        # has_inventory_diffs should be False since both lists are empty
-        # (empty list is falsy in Python, so has_inventory_diffs returns False)
-        assert "INVENTORY CHANGES" not in output
+        # has_inventory_diffs is True (empty list = requested, zero diffs)
+        # so inventory section is shown with "No changes" / "0 changes"
+        assert "INVENTORY CHANGES" in output
 
     def test_inventory_with_none_changed_fields(self):
         """InventoryItemDiff with changed_fields=None for MODIFIED type."""
