@@ -244,6 +244,7 @@ cja_auto_sdr "Production Analytics"
 | Include calculated metrics | `cja_auto_sdr dv_12345 --include-calculated` |
 | Include all inventories | `cja_auto_sdr dv_12345 --include-all-inventory` |
 | Inventory-only output | `cja_auto_sdr dv_12345 --include-segments --inventory-only` |
+| Quick inventory stats | `cja_auto_sdr dv_12345 --include-all-inventory --inventory-summary` |
 | Fail on quality issues >= HIGH | `cja_auto_sdr dv_12345 --fail-on-quality HIGH` |
 | Standalone quality report | `cja_auto_sdr dv_12345 --quality-report json --output -` |
 | **Output Formats** | |
@@ -442,7 +443,7 @@ cja_auto_sdr/
 │   └── ...                    # Additional guides
 ├── examples/                  # Automation and GitHub Actions examples
 ├── scripts/                   # Utility scripts
-├── tests/                     # Test suite (7,754+ tests)
+├── tests/                     # Test suite (7,765+ tests)
 │   ├── category_rules.py      # File-based test-category rules
 │   ├── conftest.py            # Pytest fixtures and auto-marking
 │   ├── README.md              # Test inventory and execution guide

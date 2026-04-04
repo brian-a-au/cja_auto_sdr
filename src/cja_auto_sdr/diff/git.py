@@ -105,7 +105,7 @@ def save_git_friendly_snapshot(
     saved_files["dimensions"] = dimensions_file
     logger.debug(f"Saved {len(dimensions_sorted)} dimensions to {dimensions_file}")
 
-    if snapshot.calculated_metrics_inventory:
+    if snapshot.calculated_metrics_inventory is not None:
         calc_metrics_sorted = sorted(
             snapshot.calculated_metrics_inventory,
             key=lambda x: x.get("id", x.get("metric_id", "")),
@@ -116,7 +116,7 @@ def save_git_friendly_snapshot(
         saved_files["calculated_metrics"] = calc_metrics_file
         logger.debug(f"Saved {len(calc_metrics_sorted)} calculated metrics to {calc_metrics_file}")
 
-    if snapshot.segments_inventory:
+    if snapshot.segments_inventory is not None:
         segments_sorted = sorted(snapshot.segments_inventory, key=lambda x: x.get("id", x.get("segment_id", "")))
         segments_file = dv_dir / "segments.json"
         with open(segments_file, "w", encoding="utf-8") as f:
@@ -139,11 +139,11 @@ def save_git_friendly_snapshot(
         },
     }
 
-    if snapshot.calculated_metrics_inventory or snapshot.segments_inventory:
+    if snapshot.calculated_metrics_inventory is not None or snapshot.segments_inventory is not None:
         metadata["inventory"] = {}
-        if snapshot.calculated_metrics_inventory:
+        if snapshot.calculated_metrics_inventory is not None:
             metadata["inventory"]["calculated_metrics_count"] = len(snapshot.calculated_metrics_inventory)
-        if snapshot.segments_inventory:
+        if snapshot.segments_inventory is not None:
             metadata["inventory"]["segments_count"] = len(snapshot.segments_inventory)
 
     if quality_issues:

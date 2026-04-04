@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'README.md'
+      - 'CLAUDE.md'
       - 'tests/**'
       - 'tests/README.md'
       - 'scripts/update_test_counts.py'

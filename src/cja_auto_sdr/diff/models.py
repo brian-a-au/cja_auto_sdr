@@ -299,7 +299,7 @@ class DiffResult:
     @property
     def has_inventory_diffs(self) -> bool:
         """Check if any inventory diffs are included."""
-        return any([self.calc_metrics_diffs, self.segments_diffs])
+        return self.calc_metrics_diffs is not None or self.segments_diffs is not None
 
 
 @dataclass
@@ -352,11 +352,11 @@ class DataViewSnapshot:
         return {
             "calculated_metrics": {
                 "present": self.has_calculated_metrics_inventory,
-                "count": len(self.calculated_metrics_inventory) if self.calculated_metrics_inventory else 0,
+                "count": len(self.calculated_metrics_inventory) if self.calculated_metrics_inventory is not None else 0,
             },
             "segments": {
                 "present": self.has_segments_inventory,
-                "count": len(self.segments_inventory) if self.segments_inventory else 0,
+                "count": len(self.segments_inventory) if self.segments_inventory is not None else 0,
             },
         }
 

@@ -210,7 +210,7 @@ def _run_list_command(
             print("  cja_auto_sdr --sample-config")
         return False
 
-    except (KeyboardInterrupt, SystemExit):
+    except KeyboardInterrupt, SystemExit:
         if not is_machine_readable:
             print()
             print(_generator.ConsoleColors.warning("Operation cancelled."))

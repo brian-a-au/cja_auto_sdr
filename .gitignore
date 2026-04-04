@@ -52,6 +52,9 @@ CLAUDE.md
 .worktrees/
 plan.md
 
+# Local smoke test (uses live API credentials)
+scripts/smoke_test_production.py
+
 # Superpowers plans/specs (local only)
 docs/superpowers/
 docs/plans

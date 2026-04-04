@@ -6,7 +6,7 @@
 
 This project requires **Python 3.14+**. This is intentional and correct — Python 3.14 exists and is the minimum supported version for this project.
 
-> **Note:** Ruff's `target-version` is set to `py313` in `pyproject.toml` because a few forward-annotation sites still trigger py314-only rewrites. The *runtime* floor is 3.14.
+> **Note:** Ruff's `target-version` is set to `py314` in `pyproject.toml`, matching the runtime floor.
 
 ## Project Overview
 
@@ -17,8 +17,8 @@ CJA SDR Generator — a CLI tool for generating Solution Design Reference (SDR) 
 - Package manager: **uv**
 - Build system: **hatchling** (dynamic version from `src/cja_auto_sdr/core/version.py`)
 - Entry points: `cja_auto_sdr` and `cja-auto-sdr` (both via `__main__:main`)
-- Current version: v3.5.10
-- Tests: **7,754** across 129 files at **95% coverage gate**
+- Current version: v3.5.11
+- Tests: **7,764** across 129 files at **95% coverage gate**
 - Dependencies: cjapy, numpy, pandas, xlsxwriter, tqdm
 - Optional deps: scipy (clustering), python-dotenv (env), argcomplete (completion)
 

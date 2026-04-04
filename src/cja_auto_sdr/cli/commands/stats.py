@@ -471,7 +471,7 @@ def show_stats(
             human_to_stderr=False,
         )
         return False
-    except (KeyboardInterrupt, SystemExit):
+    except KeyboardInterrupt, SystemExit:
         if not is_machine_readable:
             print()
             print(generator.ConsoleColors.warning("Operation cancelled."))

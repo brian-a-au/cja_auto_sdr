@@ -704,7 +704,7 @@ class TestDiffGitSignatures:
         # Only run this test if git is actually available
         try:
             subprocess.run(["git", "--version"], capture_output=True, timeout=5, check=True)
-        except (FileNotFoundError, subprocess.SubprocessError):
+        except FileNotFoundError, subprocess.SubprocessError:
             pytest.skip("git not available in test environment")
 
         ok, msg = git_init_snapshot_repo(new_dir)

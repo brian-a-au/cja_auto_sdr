@@ -158,8 +158,8 @@ class DataViewComparator:
 
         if self.include_calc_metrics:
             calc_metrics_diffs = self._compare_inventory_items(
-                source.calculated_metrics_inventory or [],
-                target.calculated_metrics_inventory or [],
+                source.calculated_metrics_inventory if source.calculated_metrics_inventory is not None else [],
+                target.calculated_metrics_inventory if target.calculated_metrics_inventory is not None else [],
                 "calculated_metric",
                 id_field="metric_id",
                 name_field="metric_name",
@@ -168,8 +168,8 @@ class DataViewComparator:
 
         if self.include_segments:
             segments_diffs = self._compare_inventory_items(
-                source.segments_inventory or [],
-                target.segments_inventory or [],
+                source.segments_inventory if source.segments_inventory is not None else [],
+                target.segments_inventory if target.segments_inventory is not None else [],
                 "segment",
                 id_field="segment_id",
                 name_field="segment_name",
@@ -395,7 +395,7 @@ class DataViewComparator:
         try:
             if pd.isna(value):
                 return ""
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             pass
         if isinstance(value, str):
             return value.strip()
@@ -466,16 +466,24 @@ class DataViewComparator:
         )
 
         if calc_metrics_diffs is not None:
-            summary.source_calc_metrics_count = len(source.calculated_metrics_inventory or [])
-            summary.target_calc_metrics_count = len(target.calculated_metrics_inventory or [])
+            summary.source_calc_metrics_count = (
+                len(source.calculated_metrics_inventory) if source.calculated_metrics_inventory is not None else 0
+            )
+            summary.target_calc_metrics_count = (
+                len(target.calculated_metrics_inventory) if target.calculated_metrics_inventory is not None else 0
+            )
             summary.calc_metrics_added = sum(1 for d in calc_metrics_diffs if d.change_type == ChangeType.ADDED)
             summary.calc_metrics_removed = sum(1 for d in calc_metrics_diffs if d.change_type == ChangeType.REMOVED)
             summary.calc_metrics_modified = sum(1 for d in calc_metrics_diffs if d.change_type == ChangeType.MODIFIED)
             summary.calc_metrics_unchanged = sum(1 for d in calc_metrics_diffs if d.change_type == ChangeType.UNCHANGED)
 
         if segments_diffs is not None:
-            summary.source_segments_count = len(source.segments_inventory or [])
-            summary.target_segments_count = len(target.segments_inventory or [])
+            summary.source_segments_count = (
+                len(source.segments_inventory) if source.segments_inventory is not None else 0
+            )
+            summary.target_segments_count = (
+                len(target.segments_inventory) if target.segments_inventory is not None else 0
+            )
             summary.segments_added = sum(1 for d in segments_diffs if d.change_type == ChangeType.ADDED)
             summary.segments_removed = sum(1 for d in segments_diffs if d.change_type == ChangeType.REMOVED)
             summary.segments_modified = sum(1 for d in segments_diffs if d.change_type == ChangeType.MODIFIED)

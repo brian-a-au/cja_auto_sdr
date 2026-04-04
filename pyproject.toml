@@ -76,10 +76,7 @@ dev = [
 ]
 
 [tool.ruff]
-# Keep Ruff one minor behind the runtime floor for now: Python 3.14 remains
-# required at runtime, but a few forward-annotation sites still trigger
-# py314-only UP037 rewrites that are outside this patch release's scope.
-target-version = "py313"
+target-version = "py314"
 line-length = 120
 src = ["src", "tests"]
 
@@ -173,6 +170,8 @@ ignore = [
 "src/cja_auto_sdr/pipeline/*.py" = ["F822"]  # lazy forwarding modules
 "tests/**" = ["B", "SIM", "RUF012", "PERF", "DTZ", "S105", "S108", "S110", "S314", "PT017", "PT018", "PT019", "ARG", "T201", "ERA001", "PD011", "FLY002"]
 "scripts/orchestrator.py" = ["T201"]  # intentional CLI output in standalone script
+"scripts/create_sample_outputs.py" = ["T201"]  # intentional CLI output in standalone script
+"scripts/stress_test.py" = ["T201"]  # intentional CLI output in standalone script
 "examples/**" = ["INP001", "T201"]  # INP001: not a package; T201: example scripts use print
 
 [tool.ruff.lint.isort]

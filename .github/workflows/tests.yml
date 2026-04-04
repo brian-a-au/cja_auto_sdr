@@ -177,3 +177,39 @@ jobs:
           fi
           uv pip install "${wheels[0]}" --python /tmp/test-install/bin/python
           /tmp/test-install/bin/python -c "from cja_auto_sdr.core.version import __version__; print(f'v{__version__}')"
+
+  ci-gate:
+    if: always()
+    needs: [test-unit, test-integration, run-summary-contract, smoke-test, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify all required jobs passed
+        # Design note: the check below treats any non-"success" result
+        # (including "skipped") as a failure. This is intentional — all five
+        # required jobs are unconditional. If a job is ever made conditional
+        # (with an `if:` guard), its "skipped" result will fail this gate;
+        # update the check accordingly if that happens.
+        run: |
+          declare -A results=(
+            [test-unit]="${{ needs.test-unit.result }}"
+            [test-integration]="${{ needs.test-integration.result }}"
+            [run-summary-contract]="${{ needs.run-summary-contract.result }}"
+            [smoke-test]="${{ needs.smoke-test.result }}"
+            [build]="${{ needs.build.result }}"
+          )
+          failed=0
+          for job in "${!results[@]}"; do
+            r="${results[$job]}"
+            if [[ "$r" != "success" ]]; then
+              echo "FAIL: $job = $r"
+              failed=1
+            else
+              echo "OK:   $job = $r"
+            fi
+          done
+          if [[ "$failed" -eq 1 ]]; then
+            echo "One or more required jobs did not succeed."
+            exit 1
+          fi
+          echo "All required jobs passed."

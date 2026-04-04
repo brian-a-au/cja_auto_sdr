@@ -79,7 +79,7 @@ def _format_diff_value(val: Any, truncate: bool = True, max_len: int = 30) -> st
     try:
         if pd.isna(val):
             return "(empty)"
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         pass
     result = str(val)
     if truncate and len(result) > max_len:

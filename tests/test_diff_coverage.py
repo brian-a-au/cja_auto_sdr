@@ -6,6 +6,7 @@ line coverage across the diff subpackage.
 
 from __future__ import annotations
 
+import json
 import subprocess
 from unittest.mock import MagicMock, patch
 
@@ -16,6 +17,7 @@ from cja_auto_sdr.diff.git import (
     git_commit_snapshot,
     git_get_user_info,
     git_init_snapshot_repo,
+    save_git_friendly_snapshot,
 )
 from cja_auto_sdr.diff.models import (
     ChangeType,
@@ -825,7 +827,20 @@ class TestDiffResultHasInventoryDiffs:
         )
         assert result.has_inventory_diffs is True
 
-    def test_has_inventory_diffs_false(self):
+    def test_has_inventory_diffs_empty_lists_still_true(self):
+        """Empty lists mean inventory was requested but had zero diffs — still True."""
+        result = DiffResult(
+            summary=DiffSummary(),
+            metadata_diff=MagicMock(),
+            metric_diffs=[],
+            dimension_diffs=[],
+            calc_metrics_diffs=[],
+            segments_diffs=[],
+        )
+        assert result.has_inventory_diffs is True
+
+    def test_has_inventory_diffs_false_when_none(self):
+        """None means inventory was not requested — False."""
         result = DiffResult(
             summary=DiffSummary(),
             metadata_diff=MagicMock(),
@@ -904,3 +919,151 @@ class TestGitMiscBranches:
                     found = True
                     break
             assert found, "No user.email config call found"
+
+
+# ==================== Truthiness regression tests (v3.5.11) ====================
+
+
+class TestInventorySummaryEmptyVsNone:
+    """Regression: get_inventory_summary() must distinguish [] from None.
+
+    Before the fix, both returned count=0 with no way to tell whether
+    inventory was requested-but-empty vs not-requested-at-all.
+    """
+
+    def test_empty_list_reports_present_true(self):
+        snap = _make_snapshot(calculated_metrics_inventory=[], segments_inventory=[])
+        summary = snap.get_inventory_summary()
+        assert summary["calculated_metrics"]["present"] is True
+        assert summary["calculated_metrics"]["count"] == 0
+        assert summary["segments"]["present"] is True
+        assert summary["segments"]["count"] == 0
+
+    def test_none_reports_present_false(self):
+        snap = _make_snapshot()  # inventory fields default to None
+        summary = snap.get_inventory_summary()
+        assert summary["calculated_metrics"]["present"] is False
+        assert summary["calculated_metrics"]["count"] == 0
+        assert summary["segments"]["present"] is False
+        assert summary["segments"]["count"] == 0
+
+    def test_mixed_one_empty_one_none(self):
+        snap = _make_snapshot(calculated_metrics_inventory=[], segments_inventory=None)
+        summary = snap.get_inventory_summary()
+        assert summary["calculated_metrics"]["present"] is True
+        assert summary["segments"]["present"] is False
+
+
+class TestGitSnapshotEmptyInventory:
+    """Regression: save_git_friendly_snapshot() must write files for [].
+
+    Before the fix, empty inventory lists were falsy so no
+    calculated-metrics.json / segments.json files were created, and
+    metadata omitted the inventory counts section.
+    """
+
+    def test_empty_inventory_creates_files(self, tmp_path):
+        snap = _make_snapshot(calculated_metrics_inventory=[], segments_inventory=[])
+        saved = save_git_friendly_snapshot(snap, tmp_path)
+
+        assert "calculated_metrics" in saved
+        assert "segments" in saved
+        assert saved["calculated_metrics"].exists()
+        assert saved["segments"].exists()
+
+        with open(saved["calculated_metrics"]) as f:
+            assert json.load(f) == []
+        with open(saved["segments"]) as f:
+            assert json.load(f) == []
+
+    def test_empty_inventory_metadata_has_counts(self, tmp_path):
+        snap = _make_snapshot(calculated_metrics_inventory=[], segments_inventory=[])
+        saved = save_git_friendly_snapshot(snap, tmp_path)
+
+        with open(saved["metadata"]) as f:
+            metadata = json.load(f)
+
+        assert "inventory" in metadata
+        assert metadata["inventory"]["calculated_metrics_count"] == 0
+        assert metadata["inventory"]["segments_count"] == 0
+
+    def test_none_inventory_omits_files_and_metadata(self, tmp_path):
+        snap = _make_snapshot()  # no inventory
+        saved = save_git_friendly_snapshot(snap, tmp_path)
+
+        assert "calculated_metrics" not in saved
+        assert "segments" not in saved
+
+        with open(saved["metadata"]) as f:
+            metadata = json.load(f)
+        assert "inventory" not in metadata
+
+
+class TestComparatorEmptyInventory:
+    """Regression: comparator must handle [] inventory without skipping.
+
+    Before the fix, `or []` coalesced both None and [] identically,
+    which happened to work but masked the semantic difference.  The
+    explicit `is not None` checks ensure the comparator only runs
+    inventory comparison when the caller opted in.
+    """
+
+    def test_empty_inventory_produces_zero_diffs(self):
+        source = _make_snapshot(calculated_metrics_inventory=[], segments_inventory=[])
+        target = _make_snapshot(calculated_metrics_inventory=[], segments_inventory=[])
+        comp = DataViewComparator(
+            dimensions_only=False,
+            include_calc_metrics=True,
+            include_segments=True,
+        )
+        result = comp.compare(source, target)
+
+        assert result.calc_metrics_diffs is not None
+        assert len(result.calc_metrics_diffs) == 0
+        assert result.segments_diffs is not None
+        assert len(result.segments_diffs) == 0
+
+    def test_empty_inventory_summary_counts_are_zero(self):
+        source = _make_snapshot(calculated_metrics_inventory=[], segments_inventory=[])
+        target = _make_snapshot(calculated_metrics_inventory=[], segments_inventory=[])
+        comp = DataViewComparator(
+            dimensions_only=False,
+            include_calc_metrics=True,
+            include_segments=True,
+        )
+        result = comp.compare(source, target)
+
+        assert result.summary.source_calc_metrics_count == 0
+        assert result.summary.target_calc_metrics_count == 0
+        assert result.summary.source_segments_count == 0
+        assert result.summary.target_segments_count == 0
+
+    def test_none_inventory_with_flags_off_skips_comparison(self):
+        source = _make_snapshot()  # no inventory
+        target = _make_snapshot()
+        comp = DataViewComparator(
+            dimensions_only=False,
+            include_calc_metrics=False,
+            include_segments=False,
+        )
+        result = comp.compare(source, target)
+
+        # Flags off — diffs should be None (comparison not requested)
+        assert result.calc_metrics_diffs is None
+        assert result.segments_diffs is None
+
+    def test_none_inventory_with_flags_on_coalesces_to_empty(self):
+        source = _make_snapshot()  # inventory is None
+        target = _make_snapshot()
+        comp = DataViewComparator(
+            dimensions_only=False,
+            include_calc_metrics=True,
+            include_segments=True,
+        )
+        result = comp.compare(source, target)
+
+        # Flags on but inventory is None — coalesces to [] for comparison
+        assert result.calc_metrics_diffs is not None
+        assert len(result.calc_metrics_diffs) == 0
+        assert result.segments_diffs is not None
+        assert len(result.segments_diffs) == 0
