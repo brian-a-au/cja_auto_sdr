@@ -15,7 +15,7 @@ classifiers = [
     "Topic :: Software Development :: Documentation",
 ]
 dependencies = [
-    "cjapy>=0.3.0",
+    "cjapy>=0.3.1",
     "numpy>=2.2.0,!=2.4.0",
     "pandas>=2.3.3,<3",
     "xlsxwriter>=3.2.9",
@@ -68,7 +68,7 @@ include = [
 
 [dependency-groups]
 dev = [
-    "pytest>=8.3.4",
+    "pytest>=9.0.3",
     "pytest-cov>=4.1.0",
     "pytest-xdist>=3.6.0",
     "ruff>=0.9.0",
