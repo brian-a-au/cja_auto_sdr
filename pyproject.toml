@@ -15,7 +15,7 @@ classifiers = [
     "Topic :: Software Development :: Documentation",
 ]
 dependencies = [
-    "cjapy>=0.2.4.post3",
+    "cjapy>=0.3.0",
     "numpy>=2.2.0,!=2.4.0",
     "pandas>=2.3.3,<3",
     "xlsxwriter>=3.2.9",

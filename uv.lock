@@ -134,7 +134,7 @@ dev = [
 requires-dist = [
     { name = "argcomplete", marker = "extra == 'completion'", specifier = ">=3.0.0" },
     { name = "argcomplete", marker = "extra == 'full'", specifier = ">=3.0.0" },
-    { name = "cjapy", specifier = ">=0.2.4.post3" },
+    { name = "cjapy", specifier = ">=0.3.0" },
     { name = "numpy", specifier = ">=2.2.0,!=2.4.0" },
     { name = "pandas", specifier = ">=2.3.3,<3" },
     { name = "python-dotenv", marker = "extra == 'env'", specifier = ">=1.0.0" },
@@ -157,7 +157,7 @@ dev = [
 
 [[package]]
 name = "cjapy"
-version = "0.2.4.post3"
+version = "0.3.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pandas" },
@@ -167,9 +167,9 @@ dependencies = [
     { name = "pytest" },
     { name = "requests" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/13/76/11faa67535c2a771c8ebe5ad571079313ad814a7a1bf6c192cf79875ecd8/cjapy-0.2.4.post3.tar.gz", hash = "sha256:6804f0f2703724da2ace2cd86619577b8c65e020023a497d156df4639631f6ae", size = 70372, upload-time = "2026-01-29T19:08:29.776Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/72/79/e89a2d23a71b97b63257542e4b0813fc9e6baf41965f8a594ee2ed696976/cjapy-0.3.0.tar.gz", hash = "sha256:6716ea047cfbafb0d8ecbbd4b32ed112ddfc65cb81a33962efbff9d8f8ccb792", size = 71430, upload-time = "2026-04-08T07:32:24.769Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a6/e5/b2d98b2548ae58f9d3aa372a7b5e5c4bba8aea1c486db4367632450e5252/cjapy-0.2.4.post3-py3-none-any.whl", hash = "sha256:d621906fcfcfbe6dcbadf3413af441afa1d5613a7b9858ca2cacd6a5e35994f0", size = 50772, upload-time = "2026-01-29T19:08:28.109Z" },
+    { url = "https://files.pythonhosted.org/packages/86/e5/ad3bb71eab898447aa3a4dc69e79c7718c362d6e11f4b2ef5087fc659b23/cjapy-0.3.0-py3-none-any.whl", hash = "sha256:3b6f17a55161c2c844ae38c17adc1d2b84a280bb690d076ae78493e3644d2fac", size = 50067, upload-time = "2026-04-08T07:32:23.294Z" },
 ]
 
 [[package]]

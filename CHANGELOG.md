@@ -7,6 +7,19 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.13] — 2026-04-23
+
+### Changed
+
+- Bumped `cjapy` dependency floor from `>=0.2.4.post3` to `>=0.3.0`. The 0.3.0
+  release removes JWT auth support (already deprecated in our codebase since
+  v3.0.8 — only OAuth Server-to-Server is used), renames `RequestCreator.setDimension`
+  to `setDimensions` (not consumed by this project), and adds an optional
+  `return_object` parameter to `configure()` and `importConfigFile()` (additive,
+  backwards compatible with our callers in `api/client.py`). The refactored
+  connector also improves error handling for rate-limit and connection issues.
+- Regenerated `uv.lock` to pin `cjapy 0.3.0`.
+
 ## [3.5.12] — 2026-04-04
 
 ### Changed
