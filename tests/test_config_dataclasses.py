@@ -470,7 +470,10 @@ class TestConstantValues:
         assert LOG_FILE_BACKUP_COUNT == 5
 
     def test_retryable_status_codes(self):
-        assert RETRYABLE_STATUS_CODES == {408, 429, 500, 502, 503, 504}
+        # v3.5.14: narrowed to {408}. cjapy's urllib3.Retry adapter already handles
+        # 429/500/502/503/504 upstream; project retries on those would stack.
+        # See docs/RESILIENCE_LAYERING.md.
+        assert RETRYABLE_STATUS_CODES == {408}
 
     def test_default_retry_config_matches_dataclass(self):
         assert DEFAULT_RETRY_CONFIG == RetryConfig().to_dict()

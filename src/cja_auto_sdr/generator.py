@@ -3929,12 +3929,28 @@ def run_dry_run(data_views: list[str], config_file: str, logger: logging.Logger,
             logger=logger,
             operation_name="getDataViews (dry-run)",
         )
-        if available_dvs is not None:
+        if isinstance(available_dvs, (list, tuple, pd.DataFrame)):
             dv_count = len(available_dvs) if hasattr(available_dvs, "__len__") else 0
             print("  ✓ API connection successful")
             print(f"  ✓ Found {dv_count} accessible data view(s)")
-        else:
+        elif available_dvs is None:
             print("  ⚠ API connection returned None - may be unstable")
+            available_dvs = []
+        else:
+            # cjapy 0.3.1 returns parsed JSON; an error-shaped dict reached us
+            # because the status was non-retryable or retries were exhausted.
+            status = None
+            message = None
+            if isinstance(available_dvs, dict):
+                status = available_dvs.get("statusCode") or available_dvs.get("status_code")
+                message = available_dvs.get("message") or available_dvs.get("error")
+            detail_parts = []
+            if status is not None:
+                detail_parts.append(f"statusCode={status}")
+            if message is not None:
+                detail_parts.append(f"message={message!r}")
+            detail = ", ".join(detail_parts) or f"type={type(available_dvs).__name__}"
+            print(f"  ⚠ API connection returned unexpected payload ({detail})")
             available_dvs = []
     except KeyboardInterrupt, SystemExit:
         print()

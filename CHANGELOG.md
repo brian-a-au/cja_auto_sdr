@@ -7,6 +7,45 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.14] — 2026-04-23
+
+### Fixed
+
+- **cjapy 0.3.1 response-shape blind spot at the retry boundary.** The project
+  retry wrapper `make_api_call_with_retry()` previously recognized retryable
+  statuses only via snake_case `status_code`, but cjapy 0.3.1 returns parsed
+  JSON payloads exposing camelCase `statusCode` (sometimes nested under `error`
+  or `response`). Adapter-exhausted cjapy responses therefore bypassed the
+  retry wrapper and circuit breaker. A new `_extract_http_status_code_from_result()`
+  helper normalizes all supported shapes (top-level and nested,
+  camelCase/snake_case, mappings and response-like attributes).
+- **`ParallelAPIFetcher` misclassifying component error payloads as success.**
+  `_fetch_metrics()` and `_fetch_dimensions()` now normalize payloads through
+  `assess_component_payload()` before recording a fetch status. An error-shaped
+  dict like `{"statusCode": 500, "message": "backend timeout"}` is now recorded
+  as `failed` with a useful error message instead of being returned as
+  "metrics" with `item_count=2`.
+- **`initialize_cja()` reporting connection success on error-shaped
+  `getDataViews()` payloads.** The connection probe now only logs success for
+  list/tuple/DataFrame payloads; error-shaped dicts warn with the parsed
+  `statusCode`/`message`. The dry-run `getDataViews()` path got the same
+  tightening.
+
+### Changed
+
+- **Narrowed `RETRYABLE_STATUS_CODES` to `{408}`.** cjapy 0.3.1 already handles
+  429/500/502/503/504 via its urllib3.Retry adapter (`status_forcelist`,
+  `backoff_factor=1`, `raise_on_status=False`). Keeping those statuses in the
+  project set stacked retries on top of the upstream adapter, multiplying wait
+  time and consuming CircuitBreaker budget faster than intended. 408 is not in
+  cjapy's `status_forcelist`, so it remains project-owned.
+
+### Documentation
+
+- Added `docs/RESILIENCE_LAYERING.md` documenting the upstream cjapy retry
+  adapter, the project retry/circuit-breaker layer, and the non-overlap
+  contract between them.
+
 ## [3.5.13] — 2026-04-23
 
 ### Changed

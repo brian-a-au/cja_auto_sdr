@@ -95,8 +95,17 @@ DEFAULT_RETRY_CONFIG: dict[str, Any] = DEFAULT_RETRY.to_dict()
 # Final delay = base_delay * uniform(*RETRY_JITTER_RANGE)
 RETRY_JITTER_RANGE: tuple[float, float] = (0.5, 1.5)
 
-# HTTP status codes that should trigger a retry
-RETRYABLE_STATUS_CODES: set[int] = {408, 429, 500, 502, 503, 504}
+# HTTP status codes that should trigger a retry at the project layer.
+#
+# cjapy 0.3.1's AdobeRequest._build_session installs a urllib3.Retry adapter that
+# handles 429/500/502/503/504 with exponential backoff (status_forcelist). By the
+# time responses for those statuses reach us, cjapy has already retried. Keeping
+# them in this set would stack project retries on top of the adapter's retries
+# and confuse both budgets and debugging. See docs/RESILIENCE_LAYERING.md.
+#
+# 408 is NOT in cjapy's status_forcelist, so it remains the project layer's
+# responsibility.
+RETRYABLE_STATUS_CODES: set[int] = {408}
 
 # ==================== QUALITY / SEVERITY ====================
 

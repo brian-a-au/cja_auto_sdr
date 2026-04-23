@@ -16,8 +16,60 @@ from typing import Any, TypeVar
 
 from cja_auto_sdr.core.config import CircuitBreakerConfig, CircuitState
 from cja_auto_sdr.core.constants import DEFAULT_RETRY_CONFIG, RETRY_JITTER_RANGE, RETRYABLE_STATUS_CODES
+from cja_auto_sdr.core.discovery_exceptions import coerce_http_status_code
 from cja_auto_sdr.core.exceptions import CircuitBreakerOpen, RetryableHTTPError
 from cja_auto_sdr.core.logging import emit_diagnostic
+
+# Keys examined on dict-shaped cjapy payloads when recovering the HTTP status code.
+# cjapy 0.3.1 returns parsed JSON and does not inject a snake_case status_code; the
+# real payloads expose statusCode (camelCase), optionally nested under error/response.
+_STATUS_KEY_CANDIDATES: tuple[str, ...] = (
+    "status_code",
+    "statusCode",
+    "status",
+    "http_status",
+    "httpStatus",
+    "code",
+)
+_NESTED_STATUS_KEYS: tuple[str, ...] = ("error", "response")
+
+
+def _extract_http_status_code_from_result(result: Any) -> int | None:
+    """Best-effort extraction of an HTTP status code from an API result.
+
+    Supports:
+    - Response-like objects exposing ``status_code`` or ``statusCode`` attributes
+    - Mappings with top-level status keys
+    - Mappings with status keys nested under ``error`` or ``response``
+
+    Returns None when no plausible HTTP status code is present.
+    """
+    if result is None:
+        return None
+
+    for attr in ("status_code", "statusCode"):
+        if hasattr(result, attr):
+            code = coerce_http_status_code(getattr(result, attr, None))
+            if code is not None:
+                return code
+
+    if isinstance(result, dict):
+        for key in _STATUS_KEY_CANDIDATES:
+            if key in result:
+                code = coerce_http_status_code(result.get(key))
+                if code is not None:
+                    return code
+
+        for nested_key in _NESTED_STATUS_KEYS:
+            nested = result.get(nested_key)
+            if isinstance(nested, dict):
+                for key in _STATUS_KEY_CANDIDATES:
+                    if key in nested:
+                        code = coerce_http_status_code(nested.get(key))
+                        if code is not None:
+                            return code
+
+    return None
 
 
 def _parse_env_numeric(value: str | None, cast: Callable[[str], Any]) -> Any | None:
@@ -886,14 +938,10 @@ def make_api_call_with_retry[T](
         try:
             result = api_func(*args, **kwargs)
 
-            # Check for HTTP status code in response (if exposed by the library)
-            status_code = None
-            if hasattr(result, "status_code"):
-                status_code = result.status_code
-            elif isinstance(result, dict) and "status_code" in result:
-                status_code = result["status_code"]
-            elif isinstance(result, dict) and "error" in result and isinstance(result["error"], dict):
-                status_code = result["error"].get("status_code")
+            # Check for HTTP status code in response. cjapy 0.3.1 returns parsed
+            # JSON dicts exposing camelCase statusCode (optionally nested under
+            # error/response), so we normalize across all supported shapes.
+            status_code = _extract_http_status_code_from_result(result)
 
             if status_code is not None and status_code in RETRYABLE_STATUS_CODES:
                 raise RetryableHTTPError(status_code, f"Retryable status from {operation_name}")

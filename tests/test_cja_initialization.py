@@ -870,3 +870,72 @@ class TestInitializeCjaEnvFallback:
 
         assert result is None
         mock_logger.critical.assert_called()
+
+
+class TestInitializeCjaConnectionProbeContract:
+    """CONTRACT (v3.5.14): getDataViews() error-shaped dict must not be reported as success.
+
+    cjapy 0.3.1 returns parsed JSON (not Response objects). An error-shaped payload
+    like ``{"statusCode": 500, ...}`` must warn, not log connection success. A real
+    listing is a list/tuple of rows or a pandas DataFrame.
+    """
+
+    @patch("cja_auto_sdr.api.client.CredentialResolver")
+    @patch("cja_auto_sdr.api.client.cjapy")
+    @patch("cja_auto_sdr.api.client.make_api_call_with_retry")
+    def test_error_shaped_getDataViews_payload_does_not_log_connection_success(
+        self,
+        mock_api_call,
+        mock_cjapy,
+        mock_resolver_class,
+        mock_logger,
+        mock_config_file,
+    ):
+        mock_resolver = Mock()
+        mock_resolver.resolve.return_value = (
+            {"org_id": "test@AdobeOrg", "client_id": "x", "secret": "y", "scopes": "openid"},
+            f"config:{Path(mock_config_file).name}",
+        )
+        mock_resolver_class.return_value = mock_resolver
+        mock_cjapy.CJA.return_value = Mock()
+        mock_api_call.return_value = {"statusCode": 500, "message": "backend timeout"}
+
+        result = initialize_cja(mock_config_file, mock_logger)
+
+        # The function still returns a CJA instance (the probe is non-fatal)
+        assert result is not None
+
+        info_calls = [str(call) for call in mock_logger.info.call_args_list]
+        warning_calls = [str(call) for call in mock_logger.warning.call_args_list]
+
+        # Must not claim connection success
+        assert not any("API connection successful" in c for c in info_calls)
+        # Must surface the error-shaped payload as a warning with the statusCode/message
+        assert any("unexpected payload" in c for c in warning_calls)
+        assert any("statusCode=500" in c for c in warning_calls)
+
+    @patch("cja_auto_sdr.api.client.CredentialResolver")
+    @patch("cja_auto_sdr.api.client.cjapy")
+    @patch("cja_auto_sdr.api.client.make_api_call_with_retry")
+    def test_list_payload_still_logs_connection_success(
+        self,
+        mock_api_call,
+        mock_cjapy,
+        mock_resolver_class,
+        mock_logger,
+        mock_config_file,
+    ):
+        mock_resolver = Mock()
+        mock_resolver.resolve.return_value = (
+            {"org_id": "test@AdobeOrg", "client_id": "x", "secret": "y", "scopes": "openid"},
+            f"config:{Path(mock_config_file).name}",
+        )
+        mock_resolver_class.return_value = mock_resolver
+        mock_cjapy.CJA.return_value = Mock()
+        mock_api_call.return_value = [{"id": "dv_1"}, {"id": "dv_2"}]
+
+        result = initialize_cja(mock_config_file, mock_logger)
+
+        assert result is not None
+        info_calls = [str(call) for call in mock_logger.info.call_args_list]
+        assert any("API connection successful" in c for c in info_calls)

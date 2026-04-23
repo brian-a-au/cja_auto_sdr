@@ -203,6 +203,38 @@ def configure_cjapy(
         return False, f"Profile error: {e}", None
 
 
+def _looks_like_dataview_listing(payload: object) -> bool:
+    """Return True when a getDataViews() payload is plausibly a data-view list.
+
+    cjapy 0.3.1 returns parsed JSON, so a dict like ``{"statusCode": 500, ...}``
+    would previously be treated as a successful connection. A real listing is
+    either a list/tuple of rows or a pandas DataFrame.
+    """
+    if payload is None:
+        return False
+
+    # Avoid importing pandas eagerly; check by duck-typing instead.
+    if type(payload).__name__ == "DataFrame":
+        return True
+
+    return isinstance(payload, (list, tuple))
+
+
+def _describe_unexpected_probe_payload(payload: object) -> str:
+    """Summarize an error-shaped probe payload for logging."""
+    if isinstance(payload, dict):
+        status = payload.get("statusCode") or payload.get("status_code")
+        message = payload.get("message") or payload.get("error")
+        parts: list[str] = []
+        if status is not None:
+            parts.append(f"statusCode={status}")
+        if message is not None:
+            parts.append(f"message={message!r}")
+        if parts:
+            return ", ".join(parts)
+    return f"type={type(payload).__name__}"
+
+
 def initialize_cja(
     config_file: str | Path = "config.json",
     logger: logging.Logger | None = None,
@@ -289,13 +321,17 @@ def initialize_cja(
                 logger=logger,
                 operation_name="getDataViews (connection test)",
             )
-            if test_call is not None:
-                logger.info(
-                    "\u2713 API connection successful! Found %s data view(s)",
-                    len(test_call) if hasattr(test_call, "__len__") else "multiple",
-                )
-            else:
+            if _looks_like_dataview_listing(test_call):
+                count = len(test_call) if hasattr(test_call, "__len__") else "multiple"
+                logger.info("\u2713 API connection successful! Found %s data view(s)", count)
+            elif test_call is None:
                 logger.warning("API connection test returned None - connection may be unstable")
+            else:
+                # Error-shaped payload (e.g. {"statusCode": 500, "message": ...}) reached
+                # the probe because the status was non-retryable or retries were exhausted.
+                detail = _describe_unexpected_probe_payload(test_call)
+                logger.warning("API connection test returned unexpected payload: %s", detail)
+                logger.warning("Proceeding anyway - errors may occur during data fetching")
         except RECOVERABLE_CONNECTION_TEST_EXCEPTIONS as test_error:
             logger.warning("Could not verify connection with test call: %s", test_error)
             logger.warning("Proceeding anyway - errors may occur during data fetching")
