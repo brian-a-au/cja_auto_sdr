@@ -94,8 +94,10 @@ already retried and gave up. The retry wrapper handles it as follows:
   429 trips the breaker and blocks further traffic until recovery
 
 Non-upstream-failure HTTP error codes (e.g. 401/403/404/400/422) are caller
-errors, not infrastructure distress; they do not consume breaker failure
-budget.
+errors, not infrastructure distress; the breaker records them as successes
+(the endpoint answered, so infrastructure is healthy) and the caller-side
+classifier in `ParallelAPIFetcher._normalize_component_payload()` renders
+the payload-level failure detail.
 
 ### Circuit breaker contract
 
@@ -120,7 +122,7 @@ set).
 | 502    | cjapy adapter   | upstream retries; project passes through; breaker records failure         |
 | 503    | cjapy adapter   | upstream retries; project passes through; breaker records failure         |
 | 504    | cjapy adapter   | upstream retries; project passes through; breaker records failure         |
-| 4xx (other) | caller       | returned as-is; classified by caller; breaker neutral (records success)   |
+| 4xx (other) | caller       | returned as-is; classified by caller; breaker records success (no failure)|
 
 ## Why this split exists
 
