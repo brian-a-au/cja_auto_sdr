@@ -77,24 +77,50 @@ appropriately — e.g. `ParallelAPIFetcher` now classifies them via
 `initialize_cja()` only reports connection success when `getDataViews()`
 returns a list/tuple/DataFrame.
 
+### Upstream-failure signaling set (v3.5.14+)
+
+```python
+UPSTREAM_ADAPTER_STATUS_CODES: frozenset[int] = frozenset({429, 500, 502, 503, 504})
+```
+
+This mirrors cjapy's `status_forcelist`. A payload that reaches the project
+layer carrying one of these codes is an *adapter-exhausted* failure: cjapy
+already retried and gave up. The retry wrapper handles it as follows:
+
+- does **not** retry again (that would stack on top of the adapter)
+- does **not** emit the `✓ … succeeded on attempt …` log even if prior attempts
+  raised — the final return is not a success
+- **does** call `circuit_breaker.record_failure(...)` so repeated upstream 5xx/
+  429 trips the breaker and blocks further traffic until recovery
+
+Non-upstream-failure HTTP error codes (e.g. 401/403/404/400/422) are caller
+errors, not infrastructure distress; they do not consume breaker failure
+budget.
+
 ### Circuit breaker contract
 
-`CircuitBreaker.record_failure()` is called **once per exhausted operation**,
-not once per retry attempt. After `make_api_call_with_retry()` has used its
-full budget and is about to raise, it records one breaker failure and raises.
-Non-retryable exceptions also record one breaker failure and raise immediately.
+`CircuitBreaker.record_failure()` is called **once per logical failure**:
+
+- once per retry loop that exhausts its budget and raises (408 loop, network
+  error loop, non-retryable exception)
+- once per adapter-exhausted pass-through whose status is in
+  `UPSTREAM_ADAPTER_STATUS_CODES`
+
+It is **not** called once per retry attempt, and it is **not** called for
+non-upstream-failure returns (2xx/3xx, or 4xx outside the upstream-failure
+set).
 
 ### Non-overlap contract summary
 
-| Status | Owner           | Behavior                                      |
-| ------ | --------------- | --------------------------------------------- |
-| 408    | project layer   | `make_api_call_with_retry` retries with jitter |
-| 429    | cjapy adapter   | upstream retries; project passes through      |
-| 500    | cjapy adapter   | upstream retries; project passes through      |
-| 502    | cjapy adapter   | upstream retries; project passes through      |
-| 503    | cjapy adapter   | upstream retries; project passes through      |
-| 504    | cjapy adapter   | upstream retries; project passes through      |
-| 4xx (other) | caller       | returned as-is; classified by caller          |
+| Status | Owner           | Behavior                                                                  |
+| ------ | --------------- | ------------------------------------------------------------------------- |
+| 408    | project layer   | `make_api_call_with_retry` retries with jitter; exhaustion → breaker failure |
+| 429    | cjapy adapter   | upstream retries; project passes through; breaker records failure         |
+| 500    | cjapy adapter   | upstream retries; project passes through; breaker records failure         |
+| 502    | cjapy adapter   | upstream retries; project passes through; breaker records failure         |
+| 503    | cjapy adapter   | upstream retries; project passes through; breaker records failure         |
+| 504    | cjapy adapter   | upstream retries; project passes through; breaker records failure         |
+| 4xx (other) | caller       | returned as-is; classified by caller; breaker neutral (records success)   |
 
 ## Why this split exists
 
@@ -111,7 +137,7 @@ Before v3.5.14:
 - `initialize_cja()` treated any non-`None` `getDataViews()` payload as a
   successful connection test.
 
-v3.5.14 fixes all four points:
+v3.5.14 fixes all five points:
 
 1. Retry-wrapper status extraction recognizes `statusCode`, nested
    `error.statusCode`, and `response.statusCode`.
@@ -121,3 +147,9 @@ v3.5.14 fixes all four points:
    `assess_component_payload()` before success accounting.
 4. `initialize_cja()` and the dry-run `getDataViews()` probe only log
    success for list/tuple/DataFrame payloads; error-shaped dicts warn.
+5. Adapter-exhausted pass-through payloads (status in
+   `UPSTREAM_ADAPTER_STATUS_CODES`) record a circuit-breaker failure and
+   suppress the success-after-retry log. Before v3.5.14 they were silently
+   recorded as breaker successes, so repeated upstream 5xx/429 never tripped
+   the circuit even though caller-side classifiers already treated the
+   payloads as failures.

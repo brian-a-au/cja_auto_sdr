@@ -30,6 +30,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   list/tuple/DataFrame payloads; error-shaped dicts warn with the parsed
   `statusCode`/`message`. The dry-run `getDataViews()` path got the same
   tightening.
+- **Circuit breaker treating adapter-exhausted upstream failures as successes.**
+  After `RETRYABLE_STATUS_CODES` was narrowed to `{408}`, payloads carrying
+  429/500/502/503/504 pass through the retry wrapper unchanged — but the
+  wrapper was recording `circuit_breaker.record_success()` and emitting
+  `✓ … succeeded on attempt …` on those returns, so repeated upstream distress
+  never tripped the breaker and telemetry contradicted the caller-side failure
+  classification in `ParallelAPIFetcher` and the `initialize_cja()` probe. A new
+  `UPSTREAM_ADAPTER_STATUS_CODES` set (mirroring cjapy's `status_forcelist`)
+  now routes those returns to `record_failure()` and suppresses the
+  success-after-retry log. Non-upstream-failure 4xx (401/403/404/400/422) stay
+  breaker-neutral (record success, as before).
 
 ### Changed
 

@@ -11,10 +11,15 @@ Post-v3.5.14 contract:
   and ``response.statusCode`` the same way it normalized legacy ``status_code``
 - ``RETRYABLE_STATUS_CODES`` is narrowed to ``{408}`` so we don't stack retries on
   top of cjapy's adapter; 429/500/502/503/504 pass through to the caller
+- when an adapter-exhausted payload carries a status in
+  ``UPSTREAM_ADAPTER_STATUS_CODES`` (429/500/502/503/504), the wrapper records a
+  circuit-breaker failure and suppresses the success-after-retry log so
+  repeated upstream distress trips the breaker and telemetry is coherent
 """
 
 from __future__ import annotations
 
+import logging
 from unittest.mock import MagicMock
 
 import pytest
@@ -152,8 +157,13 @@ class TestCircuitBreakerFailureAccounting:
         assert api_func.call_count == 4  # initial + 3 default retries
         assert stats["total_failures"] == 1
 
-    def test_circuit_breaker_records_no_failure_when_status_passes_through(self, recorded_sleeps):
-        """503 is no longer project-retryable, so the breaker doesn't see a failure."""
+    def test_circuit_breaker_records_failure_when_adapter_exhausted_status_passes_through(self, recorded_sleeps):
+        """Adapter-exhausted 5xx/429 pass-throughs must count as breaker failures.
+
+        cjapy already retried these upstream. The payload reaching us is a real
+        upstream failure signal, so the breaker must see it even though we don't
+        retry again at the project layer.
+        """
         breaker = CircuitBreaker(config=CircuitBreakerConfig(failure_threshold=2))
         api_func = MagicMock(return_value={"statusCode": 503, "message": "backend timeout"})
 
@@ -161,8 +171,93 @@ class TestCircuitBreakerFailureAccounting:
 
         assert result == {"statusCode": 503, "message": "backend timeout"}
         stats = breaker.get_statistics()
-        # A returned (non-raising) payload is recorded as success for the circuit breaker.
+        assert stats["total_failures"] == 1
+        assert api_func.call_count == 1
+
+    def test_back_to_back_adapter_exhausted_503_trips_circuit_breaker(self, recorded_sleeps):
+        """Two consecutive 503 pass-throughs open a threshold-2 breaker."""
+        breaker = CircuitBreaker(config=CircuitBreakerConfig(failure_threshold=2))
+        api_func = MagicMock(return_value={"statusCode": 503, "message": "backend timeout"})
+
+        make_api_call_with_retry(api_func, operation_name="probe", circuit_breaker=breaker)
+        make_api_call_with_retry(api_func, operation_name="probe", circuit_breaker=breaker)
+
+        stats = breaker.get_statistics()
+        assert stats["total_failures"] == 2
+        assert stats["state"] == "open"
+        assert stats["trips"] == 1
+
+    def test_nested_error_statusCode_503_records_breaker_failure(self, recorded_sleeps):
+        """Nested upstream-failure status carries through the same contract."""
+        breaker = CircuitBreaker(config=CircuitBreakerConfig(failure_threshold=5))
+        api_func = MagicMock(return_value={"error": {"statusCode": 500, "message": "upstream"}})
+
+        make_api_call_with_retry(api_func, operation_name="probe", circuit_breaker=breaker)
+
+        assert breaker.get_statistics()["total_failures"] == 1
+
+    def test_non_upstream_4xx_payload_still_records_breaker_success(self, recorded_sleeps):
+        """401/403/404 are caller-side errors, not infrastructure distress.
+
+        They are not in UPSTREAM_ADAPTER_STATUS_CODES and must not consume
+        breaker failure budget; the endpoint answered, the breaker is healthy.
+        """
+        breaker = CircuitBreaker(config=CircuitBreakerConfig(failure_threshold=2))
+        api_func = MagicMock(return_value={"statusCode": 401, "message": "unauthorized"})
+
+        make_api_call_with_retry(api_func, operation_name="probe", circuit_breaker=breaker)
+
+        stats = breaker.get_statistics()
         assert stats["total_failures"] == 0
+        assert stats["state"] == "closed"
+
+    def test_success_after_retry_log_suppressed_on_adapter_exhausted_pass_through(
+        self,
+        recorded_sleeps,
+        monkeypatch,
+        caplog,
+    ):
+        """ConnectionError -> 503 pass-through must NOT log '✓ succeeded on attempt'.
+
+        Previously the retry wrapper logged success for any non-exception return,
+        even when the return was an error-shaped payload — contradictory telemetry
+        next to caller-side failure handling.
+        """
+        monkeypatch.setenv("MAX_RETRIES", "2")
+        api_func = MagicMock(
+            side_effect=[
+                ConnectionError("transient"),
+                {"statusCode": 503, "message": "backend timeout"},
+            ],
+        )
+
+        with caplog.at_level(logging.INFO, logger="cja_auto_sdr.api.resilience"):
+            result = make_api_call_with_retry(api_func, operation_name="probe")
+
+        assert result == {"statusCode": 503, "message": "backend timeout"}
+        assert api_func.call_count == 2
+        assert not any("succeeded on attempt" in record.getMessage() for record in caplog.records)
+
+    def test_success_after_retry_log_emitted_on_genuine_recovery(
+        self,
+        recorded_sleeps,
+        monkeypatch,
+        caplog,
+    ):
+        """ConnectionError -> 200 still logs the success-after-retry line."""
+        monkeypatch.setenv("MAX_RETRIES", "2")
+        api_func = MagicMock(
+            side_effect=[
+                ConnectionError("transient"),
+                {"statusCode": 200, "data": "ok"},
+            ],
+        )
+
+        with caplog.at_level(logging.INFO, logger="cja_auto_sdr.api.resilience"):
+            result = make_api_call_with_retry(api_func, operation_name="probe")
+
+        assert result == {"statusCode": 200, "data": "ok"}
+        assert any("succeeded on attempt" in record.getMessage() for record in caplog.records)
 
 
 class TestNonRetryableStatusesPassThrough:

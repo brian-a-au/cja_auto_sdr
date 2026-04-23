@@ -15,7 +15,12 @@ from collections.abc import Callable
 from typing import Any, TypeVar
 
 from cja_auto_sdr.core.config import CircuitBreakerConfig, CircuitState
-from cja_auto_sdr.core.constants import DEFAULT_RETRY_CONFIG, RETRY_JITTER_RANGE, RETRYABLE_STATUS_CODES
+from cja_auto_sdr.core.constants import (
+    DEFAULT_RETRY_CONFIG,
+    RETRY_JITTER_RANGE,
+    RETRYABLE_STATUS_CODES,
+    UPSTREAM_ADAPTER_STATUS_CODES,
+)
 from cja_auto_sdr.core.discovery_exceptions import coerce_http_status_code
 from cja_auto_sdr.core.exceptions import CircuitBreakerOpen, RetryableHTTPError
 from cja_auto_sdr.core.logging import emit_diagnostic
@@ -946,13 +951,25 @@ def make_api_call_with_retry[T](
             if status_code is not None and status_code in RETRYABLE_STATUS_CODES:
                 raise RetryableHTTPError(status_code, f"Retryable status from {operation_name}")
 
-            # Log success after retry
-            if attempt > 0:
+            # Adapter-exhausted upstream failure: cjapy's urllib3.Retry adapter
+            # already retried 429/500/502/503/504 before this payload reached us.
+            # We don't retry again (that stacks), but we must signal the failure
+            # so repeated 5xx/429 trips the breaker and telemetry stays coherent.
+            is_upstream_failure = status_code is not None and status_code in UPSTREAM_ADAPTER_STATUS_CODES
+
+            if attempt > 0 and not is_upstream_failure:
                 _logger.info("✓ %s succeeded on attempt %s/%s", operation_name, attempt + 1, max_retries + 1)
 
-            # Record success to circuit breaker
             if circuit_breaker is not None:
-                circuit_breaker.record_success()
+                if is_upstream_failure:
+                    circuit_breaker.record_failure(
+                        RetryableHTTPError(
+                            status_code,
+                            f"Adapter-exhausted upstream status {status_code} from {operation_name}",
+                        ),
+                    )
+                else:
+                    circuit_breaker.record_success()
 
             return result
         except RETRYABLE_EXCEPTIONS as e:

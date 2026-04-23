@@ -107,6 +107,17 @@ RETRY_JITTER_RANGE: tuple[float, float] = (0.5, 1.5)
 # responsibility.
 RETRYABLE_STATUS_CODES: set[int] = {408}
 
+# Statuses handled by cjapy 0.3.1's urllib3.Retry adapter `status_forcelist`.
+# When a payload carrying one of these codes reaches the project layer, the
+# adapter has already exhausted its own retries — the payload is a genuine
+# upstream failure signal. The project retry wrapper does NOT retry these
+# (that would stack on top of the adapter), but it must still record a
+# circuit-breaker failure and suppress the success-after-retry log so repeated
+# upstream distress trips the breaker and telemetry stays coherent. Callers
+# still receive the raw payload so payload-specific error detail (message,
+# nested error) can be rendered downstream.
+UPSTREAM_ADAPTER_STATUS_CODES: frozenset[int] = frozenset({429, 500, 502, 503, 504})
+
 # ==================== QUALITY / SEVERITY ====================
 
 # Canonical severity ordering — used by CLI, validation, and quality-gate logic
