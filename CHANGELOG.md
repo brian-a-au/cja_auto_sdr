@@ -7,6 +7,36 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.13] — 2026-04-23
+
+### Changed
+
+- Bumped `cjapy` dependency floor from `>=0.2.4.post3` to `>=0.3.1`. The 0.3.x
+  release removes JWT auth support (already deprecated in our codebase since
+  v3.0.8 — only OAuth Server-to-Server is used), renames `RequestCreator.setDimension`
+  to `setDimensions` (not consumed by this project), and adds an optional
+  `return_object` parameter to `configure()` and `importConfigFile()` (additive,
+  backwards compatible with our callers in `api/client.py`). The refactored
+  connector also improves error handling for rate-limit and connection issues.
+  The `>=0.3.1` floor skips the 0.3.0 release, which shipped a missing
+  `deprecation` runtime dependency that broke `import cjapy` on clean installs
+  ([pitchmuc/cjapy@b7a1678](https://github.com/pitchmuc/cjapy/commit/b7a16788c0e5cf89afde23adeaee4296fb0c0da2)).
+- Regenerated `uv.lock` to pin `cjapy 0.3.1` and add the new `deprecation`
+  runtime dep. The `pyjwt`, `cryptography`, `cffi`, and `pycparser` transitive
+  dependencies dropped out of the lockfile, as cjapy 0.3.x no longer pulls
+  `pyjwt[crypto]`.
+
+### Security
+
+- Bumped `pytest` dev-group floor from `>=8.3.4` to `>=9.0.3` to address
+  [CVE-2025-71176](https://nvd.nist.gov/vuln/detail/CVE-2025-71176)
+  (GHSA-6w46-j5rx-g56g — vulnerable `tmpdir` handling in pytest).
+- Refreshed `uv.lock` to pick up `cryptography 46.0.7` (transitive via
+  `cjapy[crypto] → pyjwt[crypto]`), addressing
+  [CVE-2026-39892](https://nvd.nist.gov/vuln/detail/CVE-2026-39892)
+  (GHSA-p423-j2cm-9vmq — buffer overflow with non-contiguous buffers).
+  `uv audit` is now clean.
+
 ## [3.5.12] — 2026-04-04
 
 ### Changed
