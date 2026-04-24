@@ -39,7 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Coverage
 
-- Unit-slice coverage lifted from **98.91% → 99.04%**. Modules reaching 100%
+- Unit-slice coverage lifted from **98.91% → 99.06%**. Modules reaching 100%
   this release: `core/perf.py`, `output/diff/__init__.py`,
   `output/diff/csv.py`, `output/diff/excel.py`, `output/diff/html.py`,
   `output/diff/json.py`, `output/diff/markdown.py`.

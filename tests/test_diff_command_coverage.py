@@ -19,8 +19,10 @@ Targets:
 
 from __future__ import annotations
 
+import json
 import logging
-from unittest.mock import patch
+import os
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -348,10 +350,11 @@ class TestWriteDiffJsonOutputErrors:
     def test_os_error_is_logged_and_reraised(self, tmp_path):
         """Mock builtins.open to raise OSError; except clause catches, logs, re-raises."""
         dr = _make_diff_result()
-        logger = _make_logger()
+        logger = MagicMock()
         with patch("builtins.open", side_effect=OSError("disk full")):
             with pytest.raises(OSError, match="disk full"):
                 write_diff_json_output(dr, "diff_report", str(tmp_path), logger)
+        logger.error.assert_called_once()
 
 
 # ==================== TestWriteDiffMarkdownOutputEdges ====================
@@ -488,10 +491,11 @@ class TestWriteDiffMarkdownOutputEdges:
     def test_exception_handler(self, tmp_path):
         """Except clause catches OSError, logs, re-raises."""
         dr = _make_diff_result()
-        logger = _make_logger()
+        logger = MagicMock()
         with patch("builtins.open", side_effect=OSError("write failed")):
             with pytest.raises(OSError, match="write failed"):
                 write_diff_markdown_output(dr, "diff_report", str(tmp_path), logger)
+        logger.error.assert_called_once()
 
 
 # ==================== TestWriteDiffHtmlOutputEdges ====================
@@ -607,10 +611,11 @@ class TestWriteDiffHtmlOutputEdges:
     def test_exception_handler(self, tmp_path):
         """Except clause catches OSError, logs, re-raises."""
         dr = _make_diff_result()
-        logger = _make_logger()
+        logger = MagicMock()
         with patch("builtins.open", side_effect=OSError("html fail")):
             with pytest.raises(OSError, match="html fail"):
                 write_diff_html_output(dr, "diff_report", str(tmp_path), logger)
+        logger.error.assert_called_once()
 
 
 # ==================== TestWriteDiffExcelOutputEdges ====================
@@ -677,10 +682,11 @@ class TestWriteDiffExcelOutputEdges:
     def test_exception_handler(self, tmp_path):
         """Except clause catches OSError, logs, re-raises."""
         dr = _make_diff_result()
-        logger = _make_logger()
+        logger = MagicMock()
         with patch("pandas.ExcelWriter", side_effect=OSError("excel fail")):
             with pytest.raises(OSError, match="excel fail"):
                 write_diff_excel_output(dr, "diff_report", str(tmp_path), logger)
+        logger.error.assert_called_once()
 
 
 # ==================== TestWriteDiffCsvOutputEdges ====================
@@ -696,8 +702,6 @@ class TestWriteDiffCsvOutputEdges:
             segments_diffs=None,
         )
         logger = _make_logger()
-        import os
-
         csv_dir = write_diff_csv_output(dr, "diff_report", str(tmp_path), logger)
         files = os.listdir(csv_dir)
         assert "calc_metrics_diff.csv" not in files
@@ -706,10 +710,11 @@ class TestWriteDiffCsvOutputEdges:
     def test_exception_handler(self, tmp_path):
         """Except clause catches OSError, logs, re-raises."""
         dr = _make_diff_result()
-        logger = _make_logger()
+        logger = MagicMock()
         with patch("os.makedirs", side_effect=OSError("csv fail")):
             with pytest.raises(OSError, match="csv fail"):
                 write_diff_csv_output(dr, "diff_report", str(tmp_path), logger)
+        logger.error.assert_called_once()
 
 
 # ==================== TestWriteDiffOutput ====================
@@ -771,16 +776,11 @@ class TestWriteDiffOutput:
         # Console grouped output was printed
         assert "GROUPED BY FIELD" in captured.out
         # File outputs were also generated
-        import os
-
         generated_files = os.listdir(tmp_path)
         assert any(f.endswith(".json") for f in generated_files)
 
     def test_stdout_json_fast_path_emits_json_and_skips_file(self, tmp_path, capsys):
         """output_to_stdout=True with output_format='json' prints JSON and creates no files."""
-        import json as _json
-        import os
-
         dr = _make_diff_result(
             metric_diffs=[
                 ComponentDiff(
@@ -803,7 +803,7 @@ class TestWriteDiffOutput:
         captured = capsys.readouterr()
         assert result is None
         # Valid JSON was printed to stdout
-        parsed = _json.loads(captured.out)
+        parsed = json.loads(captured.out)
         assert isinstance(parsed, dict)
         # No file was created in output_dir
         assert os.listdir(tmp_path) == []
