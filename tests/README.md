@@ -70,7 +70,7 @@ tests/
 ├── test_api_client.py               # API client exception path tests
 ├── test_config_validation.py        # Configuration validation tests
 ├── test_credentials.py              # Credential resolution tests
-├── test_perf.py                     # Performance utilities tests
+├── test_performance_tracker.py      # Performance tracker tests
 ├── test_snapshot.py                 # Diff snapshot tests
 ├── test_colors.py                   # Console color formatting tests
 ├── test_exceptions.py               # Custom exception class tests
@@ -147,7 +147,7 @@ tests/
 └── README.md                        # This file
 ```
 
-**Total: 7,883 comprehensive tests**
+**Total: 7,884 comprehensive tests**
 
 ### Test Count Breakdown
 
@@ -156,17 +156,17 @@ tests/
 
 | Category | Tests | Files | Notes |
 |----------|-------|-------|-------|
-| `unit` | 7,777 | 129 | Default primary category for files without explicit integration/e2e/smoke scope |
+| `unit` | 7,778 | 129 | Default primary category for files without explicit integration/e2e/smoke scope |
 | `integration` | 73 | 3 | Cross-module integration suites |
 | `e2e` | 23 | 2 | End-to-end suites with a mocked external boundary |
 | `smoke` | 10 | 1 | Lightweight command-mode coverage |
-| `slow` | 7 | 1 | Overlay marker; these tests are also counted in a primary category |
-| **Primary Total** | **7,883** | **135** | **unit + integration + e2e + smoke** |
+| `slow` | 0 | 0 | Overlay marker; these tests are also counted in a primary category |
+| **Primary Total** | **7,884** | **135** | **unit + integration + e2e + smoke** |
 
 | CI Slice | Tests | Files | Selector |
 |----------|-------|-------|----------|
-| `test-unit` | 7,770 | 128 | `-m "unit and not slow"` |
-| `test-integration` | 103 | 6 | `-m "integration or e2e or slow"` |
+| `test-unit` | 7,778 | 129 | `-m "unit and not slow"` |
+| `test-integration` | 96 | 5 | `-m "integration or e2e or slow"` |
 | `smoke-test` | 10 | 1 | `-m smoke` |
 
 > Coverage note: the `--cov-fail-under=95` gate currently runs only in the `test-unit` CI slice.
@@ -229,7 +229,7 @@ tests/
 | `test_api_client.py` | 35 | API client exception paths and error handling |
 | `test_config_validation.py` | 55 | Configuration validation logic |
 | `test_credentials.py` | 73 | Credential resolution and source selection |
-| `test_perf.py` | 7 | Performance utilities (cache eviction, statistics) |
+| `test_performance_tracker.py` | 7 | Performance tracker (cache eviction, statistics) |
 | `test_snapshot.py` | 78 | Diff snapshot creation and comparison |
 | `test_colors.py` | 122 | Console color formatting, themes, TTY detection |
 | `test_exceptions.py` | 68 | Custom exception classes construction and formatting |
@@ -252,7 +252,7 @@ tests/
 | `test_snapshot_commands.py` | 65 | Snapshot creation, comparison, name resolution |
 | `test_config_and_resolution.py` | 115 | Config status, validation, stats, name resolution |
 | `test_derived_fields_edge_cases.py` | 34 | Derived fields edge cases and coverage |
-| `test_diff_command_coverage.py` | 45 | Diff command edge cases and coverage |
+| `test_diff_command_coverage.py` | 46 | Diff command edge cases and coverage |
 | `test_generator_interactive_and_console.py` | 37 | Generator interactive and console tests |
 | `test_generator_remaining_coverage.py` | 82 | Generator remaining coverage edge cases |
 | `test_interactive_discovery_coverage.py` | 118 | Interactive discovery and helpers coverage |
@@ -310,7 +310,7 @@ tests/
 | `test_agent_workflows.py` | 69 | Agent workflow shell script validation tests |
 | `test_manifest_agent_contract.py` | 16 | Manifest vs runtime capability drift tests |
 | `test_tool_manifests.py` | 40 | Tool manifest schema and content tests |
-| **Total** | **7,883** | **Collected via pytest --collect-only** |
+| **Total** | **7,884** | **Collected via pytest --collect-only** |
 
 ## Running Tests
 
@@ -443,7 +443,7 @@ uv run pytest --cov=cja_auto_sdr --cov-report=html --cov-report=term
 - `integration`: File-level integration suites such as `test_git_integration.py`, `test_org_report_integration.py`, and `test_trending_integration.py`
 - `e2e`: End-to-end suites such as `test_e2e_integration.py` and `test_cli_color_policy_e2e.py`
 - `smoke`: Lightweight command-mode coverage in `test_cli_smoke_modes.py`
-- `slow`: Performance-oriented tests in `test_perf.py`
+- `slow`: Performance-oriented tests matching `*_perf.py` or `*_slow.py` filename patterns (e.g. a future `test_cache_perf.py`)
 
 ### CI Mapping
 
@@ -768,7 +768,7 @@ the `tests/README.md` inventory tree or count table.
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (7,883 tests total)
+- [x] Comprehensive test coverage (7,884 tests total)
 - [x] Org-wide analysis tests (test_org_report.py) - 211 tests (including large org scaling, output path aliases, memory warnings, smart cache invalidation)
 - [x] Org-wide analysis integration tests (test_org_report_integration.py) - 17 tests (end-to-end flows, caching, filtering, governance thresholds)
 - [x] Profile management tests (test_profiles.py) - 78 tests

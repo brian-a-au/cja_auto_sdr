@@ -7,6 +7,43 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.16] — 2026-04-24
+
+### Fixed
+
+- **Diff writer exception-handler tests now exercise the error path they
+  claim to cover.** `tests/test_diff_command_coverage.py` previously patched
+  the five diff writers (`csv`, `excel`, `json`, `html`, `markdown`) to raise
+  `RuntimeError`. The writers catch narrow `(OSError, KeyError, TypeError,
+  ValueError)` tuples, so `RuntimeError` bypassed the `except` body entirely —
+  `logger.error(...)` and the re-raise statement never executed. Switched
+  the patches to `OSError`, which is caught by all five clauses, so the log
+  + re-raise path is now verifiably covered.
+
+### Tests
+
+- Renamed `tests/test_perf.py` → `tests/test_performance_tracker.py` so the
+  file participates in the `-m "unit and not slow"` CI slice. The prior
+  filename matched the `perf` token heuristic in `tests/category_rules.py`
+  and was auto-classified as `slow`, excluding its 7 tests from the coverage
+  slice and leaving `core/perf.py` at 68% reported coverage despite being
+  fully tested.
+- Added `tests/test_diff_command_coverage.py::TestWriteDiffOutput
+  ::test_stdout_json_fast_path_emits_json_and_skips_file` covering the
+  `output_to_stdout=True, output_format="json"` fast-path in
+  `output/diff/__init__.py:write_diff_output`.
+- Marked two defensive `if diffs is None: return` branches in
+  `output/diff/csv.py` and `output/diff/excel.py` with `# pragma: no cover`
+  — the outer caller already guards against `None`, so the inner early-return
+  is unreachable under normal flow.
+
+### Coverage
+
+- Unit-slice coverage lifted from **98.91% → 99.04%**. Modules reaching 100%
+  this release: `core/perf.py`, `output/diff/__init__.py`,
+  `output/diff/csv.py`, `output/diff/excel.py`, `output/diff/html.py`,
+  `output/diff/json.py`, `output/diff/markdown.py`.
+
 ## [3.5.15] — 2026-04-24
 
 ### Fixed

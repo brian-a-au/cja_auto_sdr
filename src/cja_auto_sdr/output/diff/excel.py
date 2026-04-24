@@ -183,7 +183,7 @@ def write_diff_excel_output(
 
             # Helper function to write inventory diff sheet
             def write_inventory_diff_sheet(diffs: list[InventoryItemDiff] | None, sheet_name: str):
-                if diffs is None:
+                if diffs is None:  # pragma: no cover — outer caller already guards against None
                     return
 
                 if changes_only:

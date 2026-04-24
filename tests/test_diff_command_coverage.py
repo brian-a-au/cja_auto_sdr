@@ -345,12 +345,12 @@ class TestDetectBreakingChangesSchemaPath:
 class TestWriteDiffJsonOutputErrors:
     """Test write_diff_json_output generic exception handler (lines 3784-3786)."""
 
-    def test_runtime_error_propagates(self, tmp_path):
-        """Mock builtins.open to raise RuntimeError; verify it re-raises."""
+    def test_os_error_is_logged_and_reraised(self, tmp_path):
+        """Mock builtins.open to raise OSError; except clause catches, logs, re-raises."""
         dr = _make_diff_result()
         logger = _make_logger()
-        with patch("builtins.open", side_effect=RuntimeError("disk full")):
-            with pytest.raises(RuntimeError, match="disk full"):
+        with patch("builtins.open", side_effect=OSError("disk full")):
+            with pytest.raises(OSError, match="disk full"):
                 write_diff_json_output(dr, "diff_report", str(tmp_path), logger)
 
 
@@ -486,11 +486,11 @@ class TestWriteDiffMarkdownOutputEdges:
         assert "Segments Changes" in content
 
     def test_exception_handler(self, tmp_path):
-        """Lines 3961-3963: Generic exception re-raises."""
+        """Except clause catches OSError, logs, re-raises."""
         dr = _make_diff_result()
         logger = _make_logger()
-        with patch("builtins.open", side_effect=RuntimeError("write failed")):
-            with pytest.raises(RuntimeError, match="write failed"):
+        with patch("builtins.open", side_effect=OSError("write failed")):
+            with pytest.raises(OSError, match="write failed"):
                 write_diff_markdown_output(dr, "diff_report", str(tmp_path), logger)
 
 
@@ -605,11 +605,11 @@ class TestWriteDiffHtmlOutputEdges:
         assert "Inventory Changes" in content
 
     def test_exception_handler(self, tmp_path):
-        """Lines 4358-4360: Generic exception re-raises."""
+        """Except clause catches OSError, logs, re-raises."""
         dr = _make_diff_result()
         logger = _make_logger()
-        with patch("builtins.open", side_effect=RuntimeError("html fail")):
-            with pytest.raises(RuntimeError, match="html fail"):
+        with patch("builtins.open", side_effect=OSError("html fail")):
+            with pytest.raises(OSError, match="html fail"):
                 write_diff_html_output(dr, "diff_report", str(tmp_path), logger)
 
 
@@ -675,11 +675,11 @@ class TestWriteDiffExcelOutputEdges:
         assert "Segments Diff" not in wb.sheetnames
 
     def test_exception_handler(self, tmp_path):
-        """Lines 4569-4571: Generic exception re-raises."""
+        """Except clause catches OSError, logs, re-raises."""
         dr = _make_diff_result()
         logger = _make_logger()
-        with patch("pandas.ExcelWriter", side_effect=RuntimeError("excel fail")):
-            with pytest.raises(RuntimeError, match="excel fail"):
+        with patch("pandas.ExcelWriter", side_effect=OSError("excel fail")):
+            with pytest.raises(OSError, match="excel fail"):
                 write_diff_excel_output(dr, "diff_report", str(tmp_path), logger)
 
 
@@ -704,11 +704,11 @@ class TestWriteDiffCsvOutputEdges:
         assert "segments_diff.csv" not in files
 
     def test_exception_handler(self, tmp_path):
-        """Lines 4734-4736: Generic exception re-raises."""
+        """Except clause catches OSError, logs, re-raises."""
         dr = _make_diff_result()
         logger = _make_logger()
-        with patch("os.makedirs", side_effect=RuntimeError("csv fail")):
-            with pytest.raises(RuntimeError, match="csv fail"):
+        with patch("os.makedirs", side_effect=OSError("csv fail")):
+            with pytest.raises(OSError, match="csv fail"):
                 write_diff_csv_output(dr, "diff_report", str(tmp_path), logger)
 
 
@@ -775,6 +775,38 @@ class TestWriteDiffOutput:
 
         generated_files = os.listdir(tmp_path)
         assert any(f.endswith(".json") for f in generated_files)
+
+    def test_stdout_json_fast_path_emits_json_and_skips_file(self, tmp_path, capsys):
+        """output_to_stdout=True with output_format='json' prints JSON and creates no files."""
+        import json as _json
+        import os
+
+        dr = _make_diff_result(
+            metric_diffs=[
+                ComponentDiff(
+                    id="m1",
+                    name="Revenue",
+                    change_type=ChangeType.MODIFIED,
+                    changed_fields={"description": ("old", "new")},
+                ),
+            ],
+        )
+        logger = _make_logger()
+        result = write_diff_output(
+            dr,
+            output_format="json",
+            base_filename="diff_test",
+            output_dir=str(tmp_path),
+            logger=logger,
+            output_to_stdout=True,
+        )
+        captured = capsys.readouterr()
+        assert result is None
+        # Valid JSON was printed to stdout
+        parsed = _json.loads(captured.out)
+        assert isinstance(parsed, dict)
+        # No file was created in output_dir
+        assert os.listdir(tmp_path) == []
 
 
 # ==================== TestPRCommentBreakingChanges ====================

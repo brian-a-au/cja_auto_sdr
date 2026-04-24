@@ -157,7 +157,7 @@ def write_diff_csv_output(
 
         # Helper function to write inventory diff CSV
         def write_inventory_diff_csv(diffs: list[InventoryItemDiff] | None, filename: str):
-            if diffs is None:
+            if diffs is None:  # pragma: no cover — outer caller already guards against None
                 return
 
             if changes_only:
