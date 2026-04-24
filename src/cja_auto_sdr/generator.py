@@ -2717,6 +2717,7 @@ def process_inventory_summary(
         and lookup_assessment.kind is _PayloadKind.ERROR
         and lookup_assessment.reason in _TOLERATED_LEGACY_LOOKUP_REASONS
     )
+    # Preserves pre-v3.5.14 tolerance of non-dict getDataView returns from legacy cjapy paths.
     tolerated_legacy_non_mapping = raw_lookup is not None and not isinstance(raw_lookup, dict)
     if not lookup_assessment.is_valid and not tolerated_legacy_lookup and not tolerated_legacy_non_mapping:
         detail = ""

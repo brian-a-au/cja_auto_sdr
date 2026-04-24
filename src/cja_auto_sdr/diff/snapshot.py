@@ -162,6 +162,7 @@ class SnapshotManager:
             raise _annotate_snapshot_failure(exc, stage="metrics_fetch") from exc
 
         metrics_outcome = classify_component_payload(raw_metrics)
+        # Duck-typing shim for pre-classification cjapy DataFrame returns; unwrap without the classifier.
         legacy_metrics_like_frame = (
             metrics_outcome.status == "failed"
             and metrics_outcome.reason == "unsupported_payload_type"
