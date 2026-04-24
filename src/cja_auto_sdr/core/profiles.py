@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from cja_auto_sdr.api.client import _describe_unexpected_probe_payload, _normalize_dataview_listing_payload
+from cja_auto_sdr.api.client import _normalize_dataview_listing_payload_or_raise
 from cja_auto_sdr.api.quality_policy import _canonical_quality_policy_key
 from cja_auto_sdr.core.colors import ConsoleColors
 from cja_auto_sdr.core.constants import BANNER_WIDTH, CREDENTIAL_FIELDS, ENV_VAR_MAPPING
@@ -690,11 +690,14 @@ def test_profile(profile_name: str) -> bool:
         generator._config_from_env(credentials, logger)
         cja = generator.cjapy.CJA()
         dataviews = cja.getDataViews()
-        normalized_dataviews = _normalize_dataview_listing_payload(dataviews)
-
-        if normalized_dataviews is None:
-            detail = _describe_unexpected_probe_payload(dataviews)
-            return _print_profile_test_failure(RuntimeError(f"Unexpected getDataViews() payload: {detail}"))
+        normalized_dataviews = (
+            []
+            if dataviews is None
+            else _normalize_dataview_listing_payload_or_raise(
+                dataviews,
+                operation="getDataViews (profile test)",
+            )
+        )
 
         if dataviews is not None:
             count = len(normalized_dataviews)

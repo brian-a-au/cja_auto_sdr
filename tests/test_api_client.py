@@ -29,10 +29,12 @@ from cja_auto_sdr.api.client import (
     _config_from_env,
     _describe_unexpected_probe_payload,
     _normalize_dataview_listing_payload,
+    _normalize_dataview_listing_payload_or_raise,
     configure_cjapy,
     initialize_cja,
 )
 from cja_auto_sdr.core.exceptions import (
+    APIError,
     CredentialSourceError,
     ProfileConfigError,
     ProfileNotFoundError,
@@ -136,6 +138,13 @@ class TestDataviewListingPayloadHelpers:
 
     def test_normalize_dataview_listing_payload_rejects_error_dict(self):
         assert _normalize_dataview_listing_payload({"statusCode": 500, "message": "backend timeout"}) is None
+
+    def test_normalize_dataview_listing_payload_or_raise_surfaces_api_error(self):
+        with pytest.raises(APIError, match="Unexpected getDataViews\\(\\) payload"):
+            _normalize_dataview_listing_payload_or_raise(
+                {"statusCode": 503, "message": "backend timeout"},
+                operation="getDataViews (test)",
+            )
 
     def test_describe_unexpected_probe_payload_reads_nested_error_status(self):
         detail = _describe_unexpected_probe_payload({"error": {"statusCode": 500, "message": "backend timeout"}})

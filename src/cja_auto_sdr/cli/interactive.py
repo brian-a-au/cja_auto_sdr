@@ -6,8 +6,6 @@ from __future__ import annotations
 
 import sys
 
-import pandas as pd
-
 from cja_auto_sdr.core.colors import ConsoleColors
 from cja_auto_sdr.core.constants import BANNER_WIDTH
 
@@ -124,17 +122,22 @@ def interactive_select_dataviews(config_file: str = "config.json", profile: str 
 
         print("Fetching available data views...")
         available_dvs = cja.getDataViews()
+        normalized_dvs = (
+            []
+            if available_dvs is None
+            else generator._normalize_dataview_listing_payload_or_raise(
+                available_dvs,
+                operation="getDataViews (interactive selection)",
+            )
+        )
 
-        if available_dvs is None or (hasattr(available_dvs, "__len__") and len(available_dvs) == 0):
+        if len(normalized_dvs) == 0:
             print()
             print(ConsoleColors.warning("No data views found or no access to any data views."))
             return []
 
-        if isinstance(available_dvs, pd.DataFrame):
-            available_dvs = available_dvs.to_dict("records")
-
         display_data = []
-        for dv in available_dvs:
+        for dv in normalized_dvs:
             if isinstance(dv, dict):
                 dv_id = generator._normalize_optional_text(dv.get("id"), default="N/A")
                 dv_name = generator._normalize_optional_text(dv.get("name"), default="N/A")
@@ -323,17 +326,22 @@ def interactive_wizard(config_file: str = "config.json", profile: str | None = N
 
         print("Fetching available data views...")
         available_dvs = cja.getDataViews()
+        normalized_dvs = (
+            []
+            if available_dvs is None
+            else generator._normalize_dataview_listing_payload_or_raise(
+                available_dvs,
+                operation="getDataViews (interactive prompt)",
+            )
+        )
 
-        if available_dvs is None or (hasattr(available_dvs, "__len__") and len(available_dvs) == 0):
+        if len(normalized_dvs) == 0:
             print()
             print(ConsoleColors.warning("No data views found or no access to any data views."))
             return None
 
-        if isinstance(available_dvs, pd.DataFrame):
-            available_dvs = available_dvs.to_dict("records")
-
         display_data = []
-        for dv in available_dvs:
+        for dv in normalized_dvs:
             if isinstance(dv, dict):
                 dv_id = generator._normalize_optional_text(dv.get("id"), default="N/A")
                 dv_name = generator._normalize_optional_text(dv.get("name"), default="N/A")

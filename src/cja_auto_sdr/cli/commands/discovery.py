@@ -20,7 +20,7 @@ from typing import Any
 
 import pandas as pd
 
-from cja_auto_sdr.api.client import _describe_unexpected_probe_payload, _normalize_dataview_listing_payload
+from cja_auto_sdr.api.client import _normalize_dataview_listing_payload_or_raise
 from cja_auto_sdr.api.resilience import make_api_call_with_retry
 from cja_auto_sdr.core.colors import ConsoleColors
 from cja_auto_sdr.core.discovery_exceptions import (
@@ -917,14 +917,14 @@ def _fetch_dataviews(
         from cja_auto_sdr.generator import _format_as_csv, _format_as_table
 
         available_dvs = cja.getDataViews()
-        normalized_dvs = _normalize_dataview_listing_payload(available_dvs)
-
-        if normalized_dvs is None:
-            logging.getLogger(__name__).warning(
-                "Ignoring unexpected getDataViews() payload in list_dataviews: %s",
-                _describe_unexpected_probe_payload(available_dvs),
+        normalized_dvs = (
+            []
+            if available_dvs is None
+            else _normalize_dataview_listing_payload_or_raise(
+                available_dvs,
+                operation="getDataViews (list_dataviews)",
             )
-            normalized_dvs = []
+        )
 
         if len(normalized_dvs) == 0:
             if is_machine_readable:
@@ -1278,8 +1278,14 @@ def _fetch_connections(
             # Check whether data views reference connections we can't see
             # (the GET /connections API requires product-admin privileges).
             available_dvs = cja.getDataViews()
-            if isinstance(available_dvs, pd.DataFrame):
-                available_dvs = available_dvs.to_dict("records")
+            available_dvs = (
+                []
+                if available_dvs is None
+                else _normalize_dataview_listing_payload_or_raise(
+                    available_dvs,
+                    operation="getDataViews (list_connections fallback)",
+                )
+            )
 
             conn_ids_from_dvs: dict[str, int] = {}  # conn_id -> count of data views
             for dv in available_dvs or []:
@@ -1465,8 +1471,14 @@ def _fetch_datasets(
 
         # Step 2: Fetch all data views
         available_dvs = cja.getDataViews()
-        if isinstance(available_dvs, pd.DataFrame):
-            available_dvs = available_dvs.to_dict("records")
+        available_dvs = (
+            []
+            if available_dvs is None
+            else _normalize_dataview_listing_payload_or_raise(
+                available_dvs,
+                operation="getDataViews (list_datasets)",
+            )
+        )
 
         if not available_dvs:
             if is_machine_readable:

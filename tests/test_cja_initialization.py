@@ -794,6 +794,26 @@ class TestValidateConfigOnly:
     @patch("cja_auto_sdr.generator.load_credentials_from_env")
     @patch("cja_auto_sdr.generator.cjapy")
     @patch("builtins.print")
+    def test_fails_on_error_shaped_dataview_listing_payload(
+        self,
+        mock_print,
+        mock_cjapy,
+        mock_load_env,
+        mock_config_file,
+    ):
+        """validate-config must not report success for a dict-shaped API error payload."""
+        mock_load_env.return_value = None
+        mock_cja = Mock()
+        mock_cjapy.CJA.return_value = mock_cja
+        mock_cja.getDataViews.return_value = {"statusCode": 500, "message": "backend timeout"}
+
+        result = validate_config_only(mock_config_file)
+
+        assert result is False
+
+    @patch("cja_auto_sdr.generator.load_credentials_from_env")
+    @patch("cja_auto_sdr.generator.cjapy")
+    @patch("builtins.print")
     def test_shows_credential_status(self, mock_print, mock_cjapy, mock_load_env, mock_config_file):
         """Test that credential status is shown"""
         mock_load_env.return_value = None

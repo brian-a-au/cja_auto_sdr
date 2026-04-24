@@ -2388,7 +2388,7 @@ from cja_auto_sdr.api.client import (
     _bootstrap_dotenv,
     _config_from_env,
     _describe_unexpected_probe_payload,
-    _normalize_dataview_listing_payload,
+    _normalize_dataview_listing_payload_or_raise,
     configure_cjapy,
     initialize_cja,
 )
@@ -2482,11 +2482,19 @@ def validate_data_view(cja: cjapy.CJA, data_view_id: str, logger: logging.Logger
             available_count = None
             try:
                 available_dvs = cja.getDataViews()
-                available_count = len(available_dvs) if available_dvs else 0
+                normalized_dvs = (
+                    []
+                    if available_dvs is None
+                    else _normalize_dataview_listing_payload_or_raise(
+                        available_dvs,
+                        operation="getDataViews (lookup context)",
+                    )
+                )
+                available_count = len(normalized_dvs)
 
                 if available_count > 0:
                     logger.info(f"You have access to {available_count} data view(s):")
-                    for i, dv in enumerate(available_dvs[:10]):  # Show first 10
+                    for i, dv in enumerate(normalized_dvs[:10]):  # Show first 10
                         dv_id = dv.get("id", "unknown")
                         dv_name = dv.get("name", "unknown")
                         logger.info(f"  {i + 1}. {dv_name} (ID: {dv_id})")
@@ -4346,16 +4354,13 @@ def get_cached_data_views(cja, cache_key: str, logger: logging.Logger) -> list[d
     # Fetch from API
     logger.debug("Fetching data views from API (cache miss)")
     available_dvs = cja.getDataViews()
-    normalized_dvs = _normalize_dataview_listing_payload(available_dvs)
 
-    if normalized_dvs == []:
+    if available_dvs is None:
         return []
-    if normalized_dvs is None:
-        logger.warning(
-            "Ignoring unexpected getDataViews() payload while populating cache: %s",
-            _describe_unexpected_probe_payload(available_dvs),
-        )
-        return []
+    normalized_dvs = _normalize_dataview_listing_payload_or_raise(
+        available_dvs,
+        operation="getDataViews (cache fill)",
+    )
 
     # Cache the result
     _data_view_cache.set(cache_key, normalized_dvs)

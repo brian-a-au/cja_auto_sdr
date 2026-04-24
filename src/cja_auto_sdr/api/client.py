@@ -6,7 +6,7 @@ import tempfile
 import time
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
 
 import cjapy
 
@@ -22,6 +22,7 @@ from cja_auto_sdr.core.error_policies import (
     RECOVERABLE_DOTENV_BOOTSTRAP_EXCEPTIONS,
 )
 from cja_auto_sdr.core.exceptions import (
+    APIError,
     CredentialSourceError,
     ProfileConfigError,
     ProfileNotFoundError,
@@ -253,6 +254,33 @@ def _normalize_dataview_listing_payload(payload: object) -> list[Any] | None:
         return list(payload)
 
     return None
+
+
+def _raise_unexpected_dataview_listing_payload(
+    payload: object,
+    *,
+    operation: str = "getDataViews",
+) -> NoReturn:
+    """Raise a structured APIError for an invalid getDataViews() payload."""
+    detail = _describe_unexpected_probe_payload(payload)
+    raise APIError(
+        "Unexpected getDataViews() payload",
+        status_code=_extract_http_status_code_from_result(payload),
+        operation=operation,
+        details=detail,
+    )
+
+
+def _normalize_dataview_listing_payload_or_raise(
+    payload: object,
+    *,
+    operation: str = "getDataViews",
+) -> list[Any]:
+    """Normalize a getDataViews() payload or raise when the shape is invalid."""
+    normalized = _normalize_dataview_listing_payload(payload)
+    if normalized is None:
+        _raise_unexpected_dataview_listing_payload(payload, operation=operation)
+    return normalized
 
 
 def initialize_cja(
