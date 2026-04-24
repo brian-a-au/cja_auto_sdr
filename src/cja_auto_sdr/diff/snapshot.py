@@ -7,12 +7,20 @@ from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from cja_auto_sdr.core.colors import ConsoleColors
+from cja_auto_sdr.core.discovery_payloads import PayloadKind, assess_dataview_lookup_payload
 from cja_auto_sdr.core.error_policies import RECOVERABLE_OPTIONAL_ENRICHMENT_EXCEPTIONS
 from cja_auto_sdr.core.exceptions import attach_api_connection_hint_context
 from cja_auto_sdr.core.json_io import write_json_atomic
 from cja_auto_sdr.diff.models import DataViewSnapshot
 
 _SNAPSHOT_FAILURE_STAGE_ATTR = "_cja_snapshot_failure_stage"
+_TOLERATED_LEGACY_LOOKUP_REASONS = frozenset(
+    {
+        "missing_expected_id",
+        "missing_identity",
+        "insufficient_metadata",
+    }
+)
 
 
 def _annotate_snapshot_failure(exc: Exception, *, stage: str, api_hint_context: str | None = None) -> Exception:
@@ -112,20 +120,38 @@ class SnapshotManager:
         self.logger.info(f"Creating snapshot for data view: {data_view_id}")
 
         try:
-            dv_info = cja.getDataView(data_view_id)
+            raw_dv_info = cja.getDataView(data_view_id)
         except Exception as exc:
             raise _annotate_snapshot_failure(
                 exc,
                 stage="data_view_lookup",
                 api_hint_context="data_view_lookup",
             ) from exc
-        if not dv_info:
+
+        lookup_assessment = assess_dataview_lookup_payload(raw_dv_info, expected_data_view_id=data_view_id)
+        legacy_acceptable_dict = (
+            isinstance(raw_dv_info, dict)
+            and lookup_assessment.kind is PayloadKind.ERROR
+            and lookup_assessment.reason in _TOLERATED_LEGACY_LOOKUP_REASONS
+        )
+        if not lookup_assessment.is_valid and not legacy_acceptable_dict:
+            detail = ""
+            if isinstance(raw_dv_info, dict):
+                detail = str(
+                    raw_dv_info.get("message") or raw_dv_info.get("error") or raw_dv_info.get("statusCode") or ""
+                )
+            if lookup_assessment.kind is PayloadKind.EMPTY:
+                detail = f"Failed to fetch data view info for {data_view_id}"
             raise _annotate_snapshot_failure(
-                ValueError(f"Failed to fetch data view info for {data_view_id}"),
+                ValueError(
+                    f"Data view lookup returned {lookup_assessment.kind.value} payload "
+                    f"({lookup_assessment.reason}): {detail}".rstrip(": ")
+                ),
                 stage="data_view_lookup",
                 api_hint_context="data_view_lookup",
             )
 
+        dv_info = lookup_assessment.payload or {}
         dv_name = dv_info.get("name", "Unknown")
         dv_owner = dv_info.get("owner", {})
         owner_name = dv_owner.get("name", "") if isinstance(dv_owner, dict) else str(dv_owner)
@@ -133,22 +159,55 @@ class SnapshotManager:
 
         self.logger.info("Fetching metrics...")
         try:
-            metrics_df = cja.getMetrics(data_view_id, inclType=True, full=True)
+            raw_metrics = cja.getMetrics(data_view_id, inclType=True, full=True)
         except Exception as exc:
             raise _annotate_snapshot_failure(exc, stage="metrics_fetch") from exc
-        metrics_list = []
-        if metrics_df is not None and not metrics_df.empty:
-            metrics_list = metrics_df.to_dict("records")
+        from cja_auto_sdr.api.fetch import classify_component_payload
+
+        metrics_outcome = classify_component_payload(raw_metrics)
+        legacy_metrics_like_frame = (
+            metrics_outcome.status == "failed"
+            and metrics_outcome.reason == "unsupported_payload_type"
+            and hasattr(raw_metrics, "empty")
+            and hasattr(raw_metrics, "to_dict")
+        )
+        if metrics_outcome.status == "failed" and not legacy_metrics_like_frame:
+            raise _annotate_snapshot_failure(
+                ValueError(
+                    f"Metrics fetch returned error payload ({metrics_outcome.reason}): {metrics_outcome.error_message}"
+                ),
+                stage="metrics_fetch",
+            )
+        if legacy_metrics_like_frame:
+            metrics_list = raw_metrics.to_dict("records") if not raw_metrics.empty else []
+        else:
+            metrics_list = metrics_outcome.frame.to_dict("records") if not metrics_outcome.frame.empty else []
         self.logger.info(f"  Fetched {len(metrics_list)} metrics")
 
         self.logger.info("Fetching dimensions...")
         try:
-            dimensions_df = cja.getDimensions(data_view_id, inclType=True, full=True)
+            raw_dimensions = cja.getDimensions(data_view_id, inclType=True, full=True)
         except Exception as exc:
             raise _annotate_snapshot_failure(exc, stage="dimensions_fetch") from exc
-        dimensions_list = []
-        if dimensions_df is not None and not dimensions_df.empty:
-            dimensions_list = dimensions_df.to_dict("records")
+        dimensions_outcome = classify_component_payload(raw_dimensions)
+        legacy_dimensions_like_frame = (
+            dimensions_outcome.status == "failed"
+            and dimensions_outcome.reason == "unsupported_payload_type"
+            and hasattr(raw_dimensions, "empty")
+            and hasattr(raw_dimensions, "to_dict")
+        )
+        if dimensions_outcome.status == "failed" and not legacy_dimensions_like_frame:
+            raise _annotate_snapshot_failure(
+                ValueError(
+                    f"Dimensions fetch returned error payload "
+                    f"({dimensions_outcome.reason}): {dimensions_outcome.error_message}"
+                ),
+                stage="dimensions_fetch",
+            )
+        if legacy_dimensions_like_frame:
+            dimensions_list = raw_dimensions.to_dict("records") if not raw_dimensions.empty else []
+        else:
+            dimensions_list = dimensions_outcome.frame.to_dict("records") if not dimensions_outcome.frame.empty else []
         self.logger.info(f"  Fetched {len(dimensions_list)} dimensions")
 
         snapshot = DataViewSnapshot(

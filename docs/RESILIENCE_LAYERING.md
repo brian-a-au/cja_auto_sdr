@@ -172,3 +172,22 @@ v3.5.14 fixes all six points:
    decorator don't inherit the telemetry bug. The decorator has no
    circuit-breaker parameter, so only the log-suppression half of the rule
    applies there.
+
+## Operational callers (v3.5.15+)
+
+Beyond the main SDR fetch path, operational paths also consume cjapy payloads
+directly. They now share a classify-before-consume contract via
+`classify_component_payload` for `getMetrics` / `getDimensions` payloads and
+`assess_dataview_lookup_payload` for `getDataView` payloads.
+
+| Call site                                                | Classifier used                  | On ERROR/INVALID                                           |
+| -------------------------------------------------------- | -------------------------------- | ---------------------------------------------------------- |
+| `diff/snapshot.py:create_snapshot`                       | both helpers                     | raises annotated `_annotate_snapshot_failure`              |
+| `generator.py:process_inventory_summary` lookup          | `assess_dataview_lookup_payload` | returns `{"error": <detail>}` + stderr `_print_api_hint`   |
+| `generator.py:_build_derived_inventory_summary`          | `classify_component_payload`     | raises `RuntimeError` caught by optional-inventory policy  |
+| `org/analyzer.py:_fetch_data_view_components` metadata   | `assess_dataview_lookup_payload` | logs `WARNING`; summary still returns with empty metadata  |
+
+`ParallelAPIFetcher._normalize_component_payload` is now a thin wrapper over
+`classify_component_payload`, so the main SDR fetch path and these operational
+paths share one component-payload contract. Before v3.5.15 each path had its
+own partial guard or none at all.

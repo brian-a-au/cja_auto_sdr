@@ -17,9 +17,11 @@ tests/
 ├── test_circuit_breaker.py          # Circuit breaker pattern tests
 ├── test_cja_initialization.py       # CJA initialization and validation tests
 ├── test_cjapy_retry_interaction.py  # cjapy retry/status-payload normalization contract tests
+├── test_classify_component_payload.py  # Shared component payload classification tests
 ├── test_cli.py                      # Command-line interface tests
 ├── test_data_quality.py             # Data quality validation tests
 ├── test_derived_inventory.py        # Derived fields inventory tests
+├── test_diff_snapshot_cjapy_payloads.py # Diff snapshot cjapy payload classification tests
 ├── test_diff_comparison.py          # Data view diff comparison tests
 ├── test_discovery_formatters.py     # Discovery formatters and WorkerArgs tests
 ├── test_discovery_normalization.py  # Discovery normalization helpers tests
@@ -37,6 +39,7 @@ tests/
 ├── test_explain_exit_code.py        # Exit-code explainer, fast-path dispatch, and run-summary tests
 ├── test_git_integration.py          # Git integration and snapshot tests
 ├── test_inventory_pragma_coverage.py # Inventory pragma coverage hardening tests
+├── test_inventory_summary_cjapy_payloads.py # Inventory summary cjapy payload classification tests
 ├── test_inventory_utils.py          # Inventory utilities tests
 ├── test_logging_optimization.py     # Logging optimization tests
 ├── test_name_resolution.py          # Data view name resolution tests
@@ -124,6 +127,7 @@ tests/
 ├── test_discovery_exceptions.py     # Discovery exception classification contracts
 ├── test_lock_backend_edge_cases.py  # Lock backend metadata I/O, stale detection, legacy parsing
 ├── test_org_analyzer_coverage.py    # Org analyzer governance, naming audit, sampling, memory, drift, clustering
+├── test_org_analyzer_metadata_enrichment.py # Org analyzer metadata enrichment payload tests
 ├── test_orchestrator.py             # Automation orchestrator wrapper tests
 ├── test_pipeline_single.py          # Modular single-dataview pipeline wrapper tests
 ├── test_processing_execution_policy.py # Processing execution-policy derivation tests
@@ -143,7 +147,7 @@ tests/
 └── README.md                        # This file
 ```
 
-**Total: 7,861 comprehensive tests**
+**Total: 7,883 comprehensive tests**
 
 ### Test Count Breakdown
 
@@ -152,16 +156,16 @@ tests/
 
 | Category | Tests | Files | Notes |
 |----------|-------|-------|-------|
-| `unit` | 7,755 | 125 | Default primary category for files without explicit integration/e2e/smoke scope |
+| `unit` | 7,777 | 129 | Default primary category for files without explicit integration/e2e/smoke scope |
 | `integration` | 73 | 3 | Cross-module integration suites |
 | `e2e` | 23 | 2 | End-to-end suites with a mocked external boundary |
 | `smoke` | 10 | 1 | Lightweight command-mode coverage |
 | `slow` | 7 | 1 | Overlay marker; these tests are also counted in a primary category |
-| **Primary Total** | **7,861** | **131** | **unit + integration + e2e + smoke** |
+| **Primary Total** | **7,883** | **135** | **unit + integration + e2e + smoke** |
 
 | CI Slice | Tests | Files | Selector |
 |----------|-------|-------|----------|
-| `test-unit` | 7,748 | 124 | `-m "unit and not slow"` |
+| `test-unit` | 7,770 | 128 | `-m "unit and not slow"` |
 | `test-integration` | 103 | 6 | `-m "integration or e2e or slow"` |
 | `smoke-test` | 10 | 1 | `-m smoke` |
 
@@ -178,7 +182,9 @@ tests/
 | `test_cli.py` | 412 | Command-line interface and argument parsing |
 | `test_profiles.py` | 78 | Multi-organization profile support |
 | `test_derived_inventory.py` | 62 | Derived fields inventory feature |
+| `test_diff_snapshot_cjapy_payloads.py` | 5 | Diff snapshot cjapy payload classification |
 | `test_inventory_pragma_coverage.py` | 18 | Inventory pragma coverage hardening |
+| `test_inventory_summary_cjapy_payloads.py` | 4 | Inventory summary cjapy payload classification |
 | `test_inventory_utils.py` | 56 | Inventory utilities and helpers |
 | `test_segments_inventory.py` | 48 | Segments inventory feature |
 | `test_edge_cases.py` | 39 | Edge cases, configuration dataclasses, custom exceptions |
@@ -187,9 +193,10 @@ tests/
 | `test_output_formats.py` | 37 | CSV, JSON, HTML, Markdown output generation |
 | `test_cja_initialization.py` | 51 | CJA connection and configuration validation |
 | `test_cjapy_retry_interaction.py` | 58 | cjapy retry/status-payload normalization contract |
+| `test_classify_component_payload.py` | 10 | Shared component payload classification helper |
 | `test_utils.py` | 50 | Utility functions and helpers |
 | `test_excel_formatting.py` | 28 | Excel sheet formatting and styling |
-| `test_parallel_api_fetcher.py` | 40 | Parallel API data fetching |
+| `test_parallel_api_fetcher.py` | 41 | Parallel API data fetching |
 | `test_api_tuning.py` | 25 | API worker auto-tuning |
 | `test_error_messages.py` | 23 | Enhanced error messages and guidance |
 | `test_explain_exit_code.py` | 44 | --explain-exit-code shared explainer, parser, fast-path, and run-summary behavior |
@@ -233,6 +240,7 @@ tests/
 | `test_lock_backend_edge_cases.py` | 165 | Lock backend metadata I/O, stale detection, legacy parsing |
 | `test_derived_fields_coverage.py` | 161 | Derived field complexity scoring, logic summary, predicates |
 | `test_org_analyzer_coverage.py` | 162 | Org analyzer governance, naming audit, sampling, memory, drift, clustering |
+| `test_org_analyzer_metadata_enrichment.py` | 2 | Org analyzer metadata enrichment payload handling |
 | `test_api_coverage.py` | 98 | API cache, quality, fetch, resilience exception paths |
 | `test_diff_coverage.py` | 72 | Diff comparator, models, git integration edge cases |
 | `test_generator_coverage.py` | 143 | Generator utility functions — coercion, normalization, diff formatting |
@@ -302,7 +310,7 @@ tests/
 | `test_agent_workflows.py` | 69 | Agent workflow shell script validation tests |
 | `test_manifest_agent_contract.py` | 16 | Manifest vs runtime capability drift tests |
 | `test_tool_manifests.py` | 40 | Tool manifest schema and content tests |
-| **Total** | **7,861** | **Collected via pytest --collect-only** |
+| **Total** | **7,883** | **Collected via pytest --collect-only** |
 
 ## Running Tests
 
@@ -760,7 +768,7 @@ the `tests/README.md` inventory tree or count table.
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (7,861 tests total)
+- [x] Comprehensive test coverage (7,883 tests total)
 - [x] Org-wide analysis tests (test_org_report.py) - 211 tests (including large org scaling, output path aliases, memory warnings, smart cache invalidation)
 - [x] Org-wide analysis integration tests (test_org_report_integration.py) - 17 tests (end-to-end flows, caching, filtering, governance thresholds)
 - [x] Profile management tests (test_profiles.py) - 78 tests
