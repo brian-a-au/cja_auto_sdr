@@ -142,6 +142,50 @@ class TestParallelAPIFetcherInit:
         assert stats["scale_ups"] >= 1
         assert fetcher.max_workers == 2
 
+    @patch("cja_auto_sdr.api.fetch.make_api_call_with_retry")
+    @patch("cja_auto_sdr.api.fetch.tqdm")
+    def test_auto_tune_ignores_adapter_exhausted_error_payloads(
+        self,
+        mock_tqdm,
+        mock_api_call,
+        mock_cja,
+        mock_logger,
+        mock_perf_tracker,
+    ):
+        """Adapter-exhausted upstream payloads must not count as successful timing samples."""
+        mock_pbar = MagicMock()
+        mock_tqdm.return_value.__enter__ = Mock(return_value=mock_pbar)
+        mock_tqdm.return_value.__exit__ = Mock(return_value=False)
+        mock_api_call.return_value = {"statusCode": 503, "message": "upstream exhausted"}
+
+        tuning_config = APITuningConfig(
+            min_workers=1,
+            max_workers=4,
+            scale_up_threshold_ms=1_000_000.0,
+            sample_window=1,
+            cooldown_seconds=0.0,
+        )
+        fetcher = ParallelAPIFetcher(
+            mock_cja,
+            mock_logger,
+            mock_perf_tracker,
+            max_workers=1,
+            tuning_config=tuning_config,
+            quiet=True,
+        )
+
+        metrics, dimensions, dataview = fetcher.fetch_all_data("dv_test_12345")
+        stats = fetcher.get_tuner_statistics()
+
+        assert metrics.empty
+        assert dimensions.empty
+        assert dataview["lookup_failed"] is True
+        assert dataview["lookup_failure_reason"] == "error_shape"
+        assert stats is not None
+        assert stats["total_requests"] == 0
+        assert stats["scale_ups"] == 0
+        assert fetcher.max_workers == 1
+
 
 class TestParallelAPIFetcherFetchAllData:
     """Tests for fetch_all_data method"""

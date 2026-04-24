@@ -12,7 +12,7 @@ import cjapy
 import pandas as pd
 from tqdm import tqdm
 
-from cja_auto_sdr.api.resilience import CircuitBreaker, make_api_call_with_retry
+from cja_auto_sdr.api.resilience import CircuitBreaker, _is_upstream_failure_payload, make_api_call_with_retry
 from cja_auto_sdr.api.tuning import APIWorkerTuner
 from cja_auto_sdr.core.config import APITuningConfig
 from cja_auto_sdr.core.constants import TQDM_BAR_FORMAT
@@ -228,8 +228,8 @@ class ParallelAPIFetcher:
             circuit_breaker=self.circuit_breaker,
             **kwargs,
         )
-        # Record response time only on success to avoid retry delays inflating metrics
-        if self.tuner is not None:
+        # Record response time only on success to avoid retry delays/error payloads inflating metrics.
+        if self.tuner is not None and not _is_upstream_failure_payload(result):
             duration_ms = (time.perf_counter() - start_time) * 1000
             new_workers = self.tuner.record_response_time(duration_ms)
             if new_workers is not None:
