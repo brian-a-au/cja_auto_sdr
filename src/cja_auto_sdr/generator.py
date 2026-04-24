@@ -147,10 +147,10 @@ from cja_auto_sdr.core.discovery_normalization import (
     pick_first_present_text as _pick_first_present_text,
 )
 from cja_auto_sdr.core.discovery_payloads import (
-    PayloadKind as _PayloadKind,
+    TOLERATED_LEGACY_LOOKUP_REASONS as _TOLERATED_LEGACY_LOOKUP_REASONS,
 )
 from cja_auto_sdr.core.discovery_payloads import (
-    TOLERATED_LEGACY_LOOKUP_REASONS as _TOLERATED_LEGACY_LOOKUP_REASONS,
+    PayloadKind as _PayloadKind,
 )
 from cja_auto_sdr.core.discovery_payloads import (
     assess_component_payload as _assess_component_payload,

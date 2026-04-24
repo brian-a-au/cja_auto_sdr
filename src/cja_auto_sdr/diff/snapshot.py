@@ -9,8 +9,8 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from cja_auto_sdr.api.fetch import classify_component_payload
 from cja_auto_sdr.core.colors import ConsoleColors
 from cja_auto_sdr.core.discovery_payloads import (
-    PayloadKind,
     TOLERATED_LEGACY_LOOKUP_REASONS,
+    PayloadKind,
     assess_dataview_lookup_payload,
 )
 from cja_auto_sdr.core.error_policies import RECOVERABLE_OPTIONAL_ENRICHMENT_EXCEPTIONS

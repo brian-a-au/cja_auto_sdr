@@ -33,8 +33,8 @@ from cja_auto_sdr.core.constants import (
     effective_governance_overlap_threshold,
 )
 from cja_auto_sdr.core.discovery_payloads import (
-    PayloadKind,
     TOLERATED_LEGACY_LOOKUP_REASONS,
+    PayloadKind,
     assess_dataview_lookup_payload,
 )
 from cja_auto_sdr.core.exceptions import LockOwnershipLostError
