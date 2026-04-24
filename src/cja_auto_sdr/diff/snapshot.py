@@ -6,6 +6,7 @@ import os
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from cja_auto_sdr.api.fetch import classify_component_payload
 from cja_auto_sdr.core.colors import ConsoleColors
 from cja_auto_sdr.core.discovery_payloads import (
     PayloadKind,
@@ -159,7 +160,6 @@ class SnapshotManager:
             raw_metrics = cja.getMetrics(data_view_id, inclType=True, full=True)
         except Exception as exc:
             raise _annotate_snapshot_failure(exc, stage="metrics_fetch") from exc
-        from cja_auto_sdr.api.fetch import classify_component_payload
 
         metrics_outcome = classify_component_payload(raw_metrics)
         legacy_metrics_like_frame = (
