@@ -2687,10 +2687,9 @@ def process_inventory_summary(
         print(ConsoleColors.error("ERROR: Failed to initialize CJA connection"), file=sys.stderr)
         return {"error": "CJA initialization failed"}
 
-    # Get data view info
+    # Get data view info - classify the response shape before consuming.
     try:
-        lookup_data = cja.getDataView(data_view_id)
-        dv_name = lookup_data.get("name", data_view_id) if isinstance(lookup_data, dict) else data_view_id
+        raw_lookup = cja.getDataView(data_view_id)
     except RECOVERABLE_CONFIG_API_EXCEPTIONS as e:
         print(ConsoleColors.error(f"ERROR: Failed to fetch data view: {e}"), file=sys.stderr)
         _print_api_hint(e, context="data_view_lookup")
@@ -2708,6 +2707,29 @@ def process_inventory_summary(
         logger.debug("Unexpected error fetching data view", exc_info=True)
         return {"error": str(e)}
 
+    lookup_assessment = _assess_dataview_lookup_payload(raw_lookup, expected_data_view_id=data_view_id)
+    tolerated_legacy_lookup = (
+        isinstance(raw_lookup, dict)
+        and lookup_assessment.kind is _PayloadKind.ERROR
+        and lookup_assessment.reason in {"missing_expected_id", "missing_identity", "insufficient_metadata"}
+    )
+    tolerated_legacy_non_mapping = raw_lookup is not None and not isinstance(raw_lookup, dict)
+    if not lookup_assessment.is_valid and not tolerated_legacy_lookup and not tolerated_legacy_non_mapping:
+        detail = ""
+        if isinstance(raw_lookup, dict):
+            detail = str(raw_lookup.get("message") or raw_lookup.get("error") or raw_lookup.get("statusCode") or "")
+        error_message = (
+            f"Data view lookup returned {lookup_assessment.kind.value} payload "
+            f"({lookup_assessment.reason}): {detail}".rstrip(": ")
+        )
+        lookup_error = RuntimeError(error_message)
+        print(ConsoleColors.error(f"ERROR: {error_message}"), file=sys.stderr)
+        _print_api_hint(lookup_error, context="data_view_lookup")
+        return {"error": error_message}
+
+    lookup_data = lookup_assessment.payload or (raw_lookup if isinstance(raw_lookup, dict) else {})
+    dv_name = lookup_data.get("name", data_view_id)
+
     if not quiet:
         print(ConsoleColors.info(f"Fetching inventory data for: {dv_name}"))
 
@@ -2719,19 +2741,26 @@ def process_inventory_summary(
     if include_derived:
 
         def _build_derived_inventory_summary() -> Any:
+            from cja_auto_sdr.api.fetch import classify_component_payload
             from cja_auto_sdr.inventory.derived_fields import DerivedFieldInventoryBuilder
 
-            # Need full metrics/dimensions (inclType + full) for derived field detection
-            metrics_data = cja.getMetrics(data_view_id, inclType=True, full=True)
-            dimensions_data = cja.getDimensions(data_view_id, inclType=True, full=True)
+            raw_metrics = cja.getMetrics(data_view_id, inclType=True, full=True)
+            metrics_outcome = classify_component_payload(raw_metrics)
+            if metrics_outcome.status == "failed":
+                raise RuntimeError(
+                    f"metrics fetch returned error payload ({metrics_outcome.reason}): {metrics_outcome.error_message}"
+                )
 
-            metrics_df = metrics_data if isinstance(metrics_data, pd.DataFrame) else pd.DataFrame(metrics_data or [])
-            dimensions_df = (
-                dimensions_data if isinstance(dimensions_data, pd.DataFrame) else pd.DataFrame(dimensions_data or [])
-            )
+            raw_dimensions = cja.getDimensions(data_view_id, inclType=True, full=True)
+            dimensions_outcome = classify_component_payload(raw_dimensions)
+            if dimensions_outcome.status == "failed":
+                raise RuntimeError(
+                    f"dimensions fetch returned error payload "
+                    f"({dimensions_outcome.reason}): {dimensions_outcome.error_message}"
+                )
 
             builder = DerivedFieldInventoryBuilder(logger=logger)
-            derived = builder.build(metrics_df, dimensions_df, data_view_id, dv_name)
+            derived = builder.build(metrics_outcome.frame, dimensions_outcome.frame, data_view_id, dv_name)
             if not quiet:
                 print(ConsoleColors.dim(f"  Derived fields: {derived.total_derived_fields}"))
             return derived

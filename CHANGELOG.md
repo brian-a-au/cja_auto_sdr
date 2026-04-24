@@ -7,6 +7,37 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.15] — 2026-04-24
+
+### Fixed
+
+- **Operational callers now fail closed on cjapy 0.3.1 error payloads.**
+  `diff/snapshot.py:create_snapshot`, `process_inventory_summary`, and
+  org-report metadata enrichment now classify `getDataView` / `getMetrics` /
+  `getDimensions` payloads before consuming them. Before v3.5.15, an
+  error-shaped response could crash snapshot creation with `AttributeError` on
+  `.empty`, silently produce an "Unknown" data-view name, or drop org-report
+  metadata without a warning.
+- **Derived-fields inventory no longer masks upstream error payloads as pandas
+  construction errors.** The inventory-summary path classifies metrics and
+  dimensions responses before creating DataFrames, so scalar error dicts like
+  `{"statusCode": 503, "message": "..."}` degrade through the existing
+  optional-inventory policy with the original classified reason.
+- **Org-report metadata enrichment now logs warning-level attribution for
+  error-shaped `getDataView` returns.** The path remains best-effort and still
+  returns the surrounding data-view summary with empty metadata fields.
+
+### Refactored
+
+- Extracted `classify_component_payload` / `ComponentFetchOutcome` into
+  `cja_auto_sdr.api.fetch` module scope. `ParallelAPIFetcher` now delegates to
+  the shared helper while preserving its existing fetch-status contract.
+
+### Documentation
+
+- Extended `docs/RESILIENCE_LAYERING.md` with the operational caller
+  classify-before-consume contract beyond the main SDR fetch path.
+
 ## [3.5.14] — 2026-04-23
 
 ### Fixed

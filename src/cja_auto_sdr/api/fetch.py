@@ -28,6 +28,72 @@ API_FETCH_TASK_COUNT = 3  # metrics + dimensions + dataview
 
 
 @dataclass(frozen=True, slots=True)
+class ComponentFetchOutcome:
+    """Pure classification result for a cjapy component payload."""
+
+    frame: pd.DataFrame
+    status: str
+    reason: str
+    error_message: str
+    item_count: int | None
+
+
+def classify_component_payload(payload: Any) -> ComponentFetchOutcome:
+    """Classify a cjapy component payload into a fetch outcome."""
+    if isinstance(payload, pd.DataFrame):
+        if payload.empty:
+            return ComponentFetchOutcome(
+                frame=pd.DataFrame(),
+                status="empty",
+                reason="empty_response",
+                error_message="",
+                item_count=0,
+            )
+        return ComponentFetchOutcome(
+            frame=payload,
+            status="success",
+            reason="dataframe",
+            error_message="",
+            item_count=len(payload),
+        )
+
+    assessment = assess_component_payload(payload)
+    if assessment.kind is PayloadKind.DATA:
+        frame = pd.DataFrame(assessment.rows)
+        return ComponentFetchOutcome(
+            frame=frame,
+            status="success",
+            reason=assessment.reason,
+            error_message="",
+            item_count=len(frame),
+        )
+
+    if assessment.kind is PayloadKind.EMPTY:
+        return ComponentFetchOutcome(
+            frame=pd.DataFrame(),
+            status="empty",
+            reason=assessment.reason or "empty_response",
+            error_message="",
+            item_count=0,
+        )
+
+    error_detail = ""
+    if isinstance(payload, dict):
+        error_detail = str(payload.get("message") or payload.get("error") or "")
+        status_code = payload.get("statusCode") or payload.get("status_code")
+        if status_code is not None:
+            error_detail = f"{status_code}: {error_detail}" if error_detail else f"status {status_code}"
+
+    return ComponentFetchOutcome(
+        frame=pd.DataFrame(),
+        status="failed",
+        reason=assessment.reason or f"{assessment.kind.value}_payload",
+        error_message=error_detail or f"{assessment.kind.value} payload shape",
+        item_count=None,
+    )
+
+
+@dataclass(frozen=True, slots=True)
 class EndpointFetchStatus:
     """Outcome metadata for a single API endpoint fetch."""
 
@@ -245,48 +311,34 @@ class ParallelAPIFetcher:
     ) -> pd.DataFrame:
         """Classify a component payload and record the correct fetch status.
 
-        cjapy 0.3.1 can return parsed JSON error dicts (e.g. ``{"statusCode": 500, ...}``)
-        for component endpoints. Treating these as successful fetches is wrong because
-        downstream SDR rendering then consumes an error shape as "data". This helper
-        delegates classification to ``assess_component_payload`` and converts the result
-        into a DataFrame + fetch-status update.
+        Delegates classification to ``classify_component_payload`` so
+        operational callers share the same cjapy payload contract as the main
+        SDR fetch path.
         """
-        # Preserve the existing DataFrame fast path: non-empty DataFrames are successes.
-        if isinstance(payload, pd.DataFrame):
-            if payload.empty:
-                self.logger.warning("No %s returned from API", label)
-                self._record_fetch_status(endpoint, "empty", reason="empty_response", item_count=0)
-                return pd.DataFrame()
-            self.logger.info("Successfully fetched %s %s", len(payload), label)
-            self._record_fetch_status(endpoint, "success", item_count=len(payload))
-            return payload
+        outcome = classify_component_payload(payload)
+        if outcome.status == "success":
+            self.logger.info("Successfully fetched %s %s", outcome.item_count, label)
+            self._record_fetch_status(endpoint, "success", item_count=outcome.item_count)
+            return outcome.frame
 
-        assessment = assess_component_payload(payload)
-        if assessment.kind is PayloadKind.DATA:
-            frame = pd.DataFrame(assessment.rows)
-            self.logger.info("Successfully fetched %s %s", len(frame), label)
-            self._record_fetch_status(endpoint, "success", item_count=len(frame))
-            return frame
-
-        if assessment.kind is PayloadKind.EMPTY:
+        if outcome.status == "empty":
             self.logger.warning("No %s returned from API", label)
-            self._record_fetch_status(endpoint, "empty", reason=assessment.reason or "empty_response", item_count=0)
-            return pd.DataFrame()
+            self._record_fetch_status(endpoint, "empty", reason=outcome.reason, item_count=0)
+            return outcome.frame
 
-        # ERROR or INVALID — record failure with a useful detail and return empty.
-        error_detail = ""
-        if isinstance(payload, dict):
-            error_detail = str(payload.get("message") or payload.get("error") or "")
         self.logger.error(
-            "%s fetch returned %s payload (%s)", label.capitalize(), assessment.kind.value, assessment.reason
+            "%s fetch returned %s payload (%s)",
+            label.capitalize(),
+            outcome.status,
+            outcome.reason,
         )
         self._record_fetch_status(
             endpoint,
             "failed",
-            reason=assessment.reason or f"{assessment.kind.value}_payload",
-            error_message=error_detail or f"{assessment.kind.value} payload shape",
+            reason=outcome.reason,
+            error_message=outcome.error_message,
         )
-        return pd.DataFrame()
+        return outcome.frame
 
     def _fetch_metrics(self, data_view_id: str) -> pd.DataFrame:
         """Fetch metrics with error handling and retry"""

@@ -32,6 +32,7 @@ from cja_auto_sdr.core.constants import (
     GOVERNANCE_MAX_OVERLAP_THRESHOLD,
     effective_governance_overlap_threshold,
 )
+from cja_auto_sdr.core.discovery_payloads import assess_dataview_lookup_payload
 from cja_auto_sdr.core.exceptions import LockOwnershipLostError
 from cja_auto_sdr.inventory.utils import extract_owner
 from cja_auto_sdr.org.models import (
@@ -934,22 +935,33 @@ class OrgComponentAnalyzer:
 
             if self.config.include_metadata:
                 try:
-                    # Try to get detailed data view info
-                    dv_details = cja.getDataView(dv_id)
-                    if dv_details is not None and isinstance(dv_details, dict):
-                        # Extract owner using utility function
-                        owner, owner_id = extract_owner(dv_details.get("owner"))
+                    raw_dv_details = cja.getDataView(dv_id)
+                except Exception as e:  # Intentional: metadata enrichment is optional and best-effort only.
+                    self.logger.warning("Metadata fetch raised for %s: %s", dv_id, e)
+                    raw_dv_details = None
 
-                        # Extract dates
+                if raw_dv_details is not None:
+                    metadata_assessment = assess_dataview_lookup_payload(raw_dv_details, expected_data_view_id=dv_id)
+                    tolerated_legacy_metadata = (
+                        isinstance(raw_dv_details, dict)
+                        and metadata_assessment.kind.value == "error"
+                        and metadata_assessment.reason
+                        in {"missing_expected_id", "missing_identity", "insufficient_metadata"}
+                    )
+                    if metadata_assessment.is_valid or tolerated_legacy_metadata:
+                        dv_details = metadata_assessment.payload or raw_dv_details
+                        owner, owner_id = extract_owner(dv_details.get("owner"))
                         created = dv_details.get("created") or dv_details.get("createdDate")
                         modified = dv_details.get("modified") or dv_details.get("modifiedDate")
-
-                        # Extract description
                         description = dv_details.get("description", "")
                         has_description = bool(description and description.strip())
-                except Exception as e:  # Intentional: metadata enrichment is optional and best-effort only.
-                    # Metadata fetch may fail - continue without it
-                    self.logger.debug("Metadata fetch failed for %s: %s", dv_id, e)
+                    else:
+                        self.logger.warning(
+                            "Metadata fetch returned %s payload for %s (%s)",
+                            metadata_assessment.kind.value,
+                            dv_id,
+                            metadata_assessment.reason,
+                        )
 
             return DataViewSummary(
                 data_view_id=dv_id,

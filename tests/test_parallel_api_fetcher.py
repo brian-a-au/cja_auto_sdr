@@ -855,6 +855,43 @@ class TestParallelAPIFetcherLogging:
 class TestCjapyErrorPayloadContract:
     """Component fetches must classify cjapy-style error dicts as failures, not success."""
 
+    def test_normalize_component_payload_delegates_to_classify_helper(
+        self,
+        mock_cja,
+        mock_logger,
+        mock_perf_tracker,
+    ):
+        fetcher = ParallelAPIFetcher(mock_cja, mock_logger, mock_perf_tracker)
+
+        result = fetcher._normalize_component_payload(
+            pd.DataFrame([{"id": "a"}, {"id": "b"}]),
+            endpoint="metrics",
+            label="metrics",
+        )
+        assert len(result) == 2
+        assert fetcher.get_fetch_statuses()["metrics"].status == "success"
+        assert fetcher.get_fetch_statuses()["metrics"].item_count == 2
+
+        result = fetcher._normalize_component_payload(
+            pd.DataFrame(),
+            endpoint="metrics",
+            label="metrics",
+        )
+        assert result.empty
+        empty_status = fetcher.get_fetch_statuses()["metrics"]
+        assert empty_status.status == "empty"
+        assert empty_status.reason == "empty_response"
+
+        result = fetcher._normalize_component_payload(
+            {"statusCode": 500, "message": "backend timeout"},
+            endpoint="dimensions",
+            label="dimensions",
+        )
+        assert result.empty
+        status = fetcher.get_fetch_statuses()["dimensions"]
+        assert status.status == "failed"
+        assert "500" in status.error_message or "backend timeout" in status.error_message
+
     @patch("cja_auto_sdr.api.fetch.make_api_call_with_retry")
     def test_fetch_metrics_rejects_statusCode_error_payload(
         self,
