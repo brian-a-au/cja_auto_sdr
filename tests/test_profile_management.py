@@ -613,6 +613,32 @@ class TestTestProfile:
         assert "no data views found" in captured.out
         assert "Profile test: PASSED" in captured.out
 
+    def test_api_connection_with_error_payload_fails(self, tmp_path, capsys):
+        """Error-shaped getDataViews payloads must not be reported as profile-test success."""
+        profile_dir = tmp_path / "orgs" / "error-dv"
+        _write_config_json(profile_dir)
+
+        mock_cja_instance = MagicMock()
+        mock_cja_instance.getDataViews.return_value = {"statusCode": 500, "message": "backend timeout"}
+
+        with (
+            patch("cja_auto_sdr.generator.get_profile_path", return_value=profile_dir),
+            patch("cja_auto_sdr.generator.cjapy") as mock_cjapy,
+            patch("cja_auto_sdr.generator.ConfigValidator") as mock_validator,
+            patch("cja_auto_sdr.generator._config_from_env") as mock_config_from_env,
+        ):
+            mock_cjapy.CJA.return_value = mock_cja_instance
+            mock_validator.validate_all.return_value = []
+            result = run_test_profile("error-dv")
+
+        assert result is False
+        mock_config_from_env.assert_called_once()
+        captured = capsys.readouterr()
+        assert "API connection: FAILED" in captured.err
+        assert "Unexpected getDataViews() payload" in captured.err
+        assert "statusCode=500" in captured.err
+        assert "Profile test: FAILED" in captured.err
+
     def test_api_connection_failure(self, tmp_path, capsys):
         """API connection failure should return False with helpful message."""
         profile_dir = tmp_path / "orgs" / "api-fail"

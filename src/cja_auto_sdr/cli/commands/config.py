@@ -474,7 +474,11 @@ def validate_config_only(
 
         available_dvs = cja.getDataViews()
         if available_dvs is not None:
-            dv_count = len(available_dvs) if hasattr(available_dvs, "__len__") else 0
+            normalized_dvs = generator._normalize_dataview_listing_payload_or_raise(
+                available_dvs,
+                operation="getDataViews (validate-config)",
+            )
+            dv_count = len(normalized_dvs)
             print(generator.ConsoleColors.success("  \u2713 API connection successful"))
             print(generator.ConsoleColors.success(f"  \u2713 Found {dv_count} accessible data view(s)"))
         else:

@@ -6,10 +6,11 @@ import tempfile
 import time
 from collections.abc import Mapping, Sequence
 from pathlib import Path
+from typing import Any, NoReturn
 
 import cjapy
 
-from cja_auto_sdr.api.resilience import make_api_call_with_retry
+from cja_auto_sdr.api.resilience import _extract_http_status_code_from_result, make_api_call_with_retry
 from cja_auto_sdr.core.constants import BANNER_WIDTH
 from cja_auto_sdr.core.credentials import (
     CredentialResolver,
@@ -21,6 +22,7 @@ from cja_auto_sdr.core.error_policies import (
     RECOVERABLE_DOTENV_BOOTSTRAP_EXCEPTIONS,
 )
 from cja_auto_sdr.core.exceptions import (
+    APIError,
     CredentialSourceError,
     ProfileConfigError,
     ProfileNotFoundError,
@@ -203,6 +205,84 @@ def configure_cjapy(
         return False, f"Profile error: {e}", None
 
 
+def _looks_like_dataview_listing(payload: object) -> bool:
+    """Return True when a getDataViews() payload is plausibly a data-view list.
+
+    cjapy 0.3.1 returns parsed JSON, so a dict like ``{"statusCode": 500, ...}``
+    would previously be treated as a successful connection. A real listing is
+    either a list/tuple of rows or a pandas DataFrame.
+    """
+    if payload is None:
+        return False
+
+    # Avoid importing pandas eagerly; check by duck-typing instead.
+    if type(payload).__name__ == "DataFrame":
+        return True
+
+    return isinstance(payload, (list, tuple))
+
+
+def _describe_unexpected_probe_payload(payload: object) -> str:
+    """Summarize an error-shaped probe payload for logging."""
+    status = _extract_http_status_code_from_result(payload)
+    if isinstance(payload, dict):
+        message = payload.get("message") or payload.get("error")
+        if isinstance(message, dict):
+            message = message.get("message") or message.get("description") or message.get("error")
+        parts: list[str] = []
+        if status is not None:
+            parts.append(f"statusCode={status}")
+        if message is not None:
+            parts.append(f"message={message!r}")
+        if parts:
+            return ", ".join(parts)
+    return f"type={type(payload).__name__}"
+
+
+def _normalize_dataview_listing_payload(payload: object) -> list[Any] | None:
+    """Normalize a getDataViews() payload into rows, or return None when invalid."""
+    if payload is None:
+        return []
+
+    if type(payload).__name__ == "DataFrame" and hasattr(payload, "to_dict"):
+        return payload.to_dict("records")
+
+    if isinstance(payload, list):
+        return payload
+
+    if isinstance(payload, tuple):
+        return list(payload)
+
+    return None
+
+
+def _raise_unexpected_dataview_listing_payload(
+    payload: object,
+    *,
+    operation: str = "getDataViews",
+) -> NoReturn:
+    """Raise a structured APIError for an invalid getDataViews() payload."""
+    detail = _describe_unexpected_probe_payload(payload)
+    raise APIError(
+        "Unexpected getDataViews() payload",
+        status_code=_extract_http_status_code_from_result(payload),
+        operation=operation,
+        details=detail,
+    )
+
+
+def _normalize_dataview_listing_payload_or_raise(
+    payload: object,
+    *,
+    operation: str = "getDataViews",
+) -> list[Any]:
+    """Normalize a getDataViews() payload or raise when the shape is invalid."""
+    normalized = _normalize_dataview_listing_payload(payload)
+    if normalized is None:
+        _raise_unexpected_dataview_listing_payload(payload, operation=operation)
+    return normalized
+
+
 def initialize_cja(
     config_file: str | Path = "config.json",
     logger: logging.Logger | None = None,
@@ -289,13 +369,17 @@ def initialize_cja(
                 logger=logger,
                 operation_name="getDataViews (connection test)",
             )
-            if test_call is not None:
-                logger.info(
-                    "\u2713 API connection successful! Found %s data view(s)",
-                    len(test_call) if hasattr(test_call, "__len__") else "multiple",
-                )
-            else:
+            if _looks_like_dataview_listing(test_call):
+                count = len(test_call) if hasattr(test_call, "__len__") else "multiple"
+                logger.info("\u2713 API connection successful! Found %s data view(s)", count)
+            elif test_call is None:
                 logger.warning("API connection test returned None - connection may be unstable")
+            else:
+                # Error-shaped payload (e.g. {"statusCode": 500, "message": ...}) reached
+                # the probe because the status was non-retryable or retries were exhausted.
+                detail = _describe_unexpected_probe_payload(test_call)
+                logger.warning("API connection test returned unexpected payload: %s", detail)
+                logger.warning("Proceeding anyway - errors may occur during data fetching")
         except RECOVERABLE_CONNECTION_TEST_EXCEPTIONS as test_error:
             logger.warning("Could not verify connection with test call: %s", test_error)
             logger.warning("Proceeding anyway - errors may occur during data fetching")

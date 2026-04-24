@@ -142,6 +142,50 @@ class TestParallelAPIFetcherInit:
         assert stats["scale_ups"] >= 1
         assert fetcher.max_workers == 2
 
+    @patch("cja_auto_sdr.api.fetch.make_api_call_with_retry")
+    @patch("cja_auto_sdr.api.fetch.tqdm")
+    def test_auto_tune_ignores_adapter_exhausted_error_payloads(
+        self,
+        mock_tqdm,
+        mock_api_call,
+        mock_cja,
+        mock_logger,
+        mock_perf_tracker,
+    ):
+        """Adapter-exhausted upstream payloads must not count as successful timing samples."""
+        mock_pbar = MagicMock()
+        mock_tqdm.return_value.__enter__ = Mock(return_value=mock_pbar)
+        mock_tqdm.return_value.__exit__ = Mock(return_value=False)
+        mock_api_call.return_value = {"statusCode": 503, "message": "upstream exhausted"}
+
+        tuning_config = APITuningConfig(
+            min_workers=1,
+            max_workers=4,
+            scale_up_threshold_ms=1_000_000.0,
+            sample_window=1,
+            cooldown_seconds=0.0,
+        )
+        fetcher = ParallelAPIFetcher(
+            mock_cja,
+            mock_logger,
+            mock_perf_tracker,
+            max_workers=1,
+            tuning_config=tuning_config,
+            quiet=True,
+        )
+
+        metrics, dimensions, dataview = fetcher.fetch_all_data("dv_test_12345")
+        stats = fetcher.get_tuner_statistics()
+
+        assert metrics.empty
+        assert dimensions.empty
+        assert dataview["lookup_failed"] is True
+        assert dataview["lookup_failure_reason"] == "error_shape"
+        assert stats is not None
+        assert stats["total_requests"] == 0
+        assert stats["scale_ups"] == 0
+        assert fetcher.max_workers == 1
+
 
 class TestParallelAPIFetcherFetchAllData:
     """Tests for fetch_all_data method"""
@@ -806,3 +850,102 @@ class TestParallelAPIFetcherLogging:
         # Verify completion logged
         calls = [str(c) for c in mock_logger.info.call_args_list]
         assert any("complete" in c.lower() for c in calls)
+
+
+class TestCjapyErrorPayloadContract:
+    """Component fetches must classify cjapy-style error dicts as failures, not success."""
+
+    @patch("cja_auto_sdr.api.fetch.make_api_call_with_retry")
+    def test_fetch_metrics_rejects_statusCode_error_payload(
+        self,
+        mock_api_call,
+        mock_cja,
+        mock_logger,
+        mock_perf_tracker,
+    ):
+        mock_api_call.return_value = {"statusCode": 500, "message": "backend timeout"}
+
+        fetcher = ParallelAPIFetcher(mock_cja, mock_logger, mock_perf_tracker)
+        result = fetcher._fetch_metrics("dv_test_12345")
+
+        assert isinstance(result, pd.DataFrame)
+        assert result.empty
+        status = fetcher.get_fetch_statuses()["metrics"]
+        assert status.status == "failed"
+        assert status.item_count is None
+        detail = (status.error_message or "") + " " + (status.reason or "")
+        assert "backend timeout" in detail or "error" in detail.lower()
+
+    @patch("cja_auto_sdr.api.fetch.make_api_call_with_retry")
+    def test_fetch_dimensions_rejects_statusCode_error_payload(
+        self,
+        mock_api_call,
+        mock_cja,
+        mock_logger,
+        mock_perf_tracker,
+    ):
+        mock_api_call.return_value = {"statusCode": 502, "message": "bad gateway"}
+
+        fetcher = ParallelAPIFetcher(mock_cja, mock_logger, mock_perf_tracker)
+        result = fetcher._fetch_dimensions("dv_test_12345")
+
+        assert isinstance(result, pd.DataFrame)
+        assert result.empty
+        status = fetcher.get_fetch_statuses()["dimensions"]
+        assert status.status == "failed"
+        assert status.item_count is None
+
+    @patch("cja_auto_sdr.api.fetch.make_api_call_with_retry")
+    def test_fetch_metrics_accepts_list_of_rows(
+        self,
+        mock_api_call,
+        mock_cja,
+        mock_logger,
+        mock_perf_tracker,
+    ):
+        """cjapy may return a list of row dicts — we must normalize to DataFrame."""
+        mock_api_call.return_value = [
+            {"id": "m1", "name": "M1", "type": "standard", "description": "x"},
+            {"id": "m2", "name": "M2", "type": "calculated", "description": "y"},
+        ]
+
+        fetcher = ParallelAPIFetcher(mock_cja, mock_logger, mock_perf_tracker)
+        result = fetcher._fetch_metrics("dv_test_12345")
+
+        assert isinstance(result, pd.DataFrame)
+        assert len(result) == 2
+        status = fetcher.get_fetch_statuses()["metrics"]
+        assert status.status == "success"
+        assert status.item_count == 2
+
+    @patch("cja_auto_sdr.api.fetch.make_api_call_with_retry")
+    @patch("cja_auto_sdr.api.fetch.tqdm")
+    def test_fetch_all_data_reports_failed_metrics_for_error_payload(
+        self,
+        mock_tqdm,
+        mock_api_call,
+        mock_cja,
+        mock_logger,
+        mock_perf_tracker,
+    ):
+        mock_pbar = MagicMock()
+        mock_tqdm.return_value.__enter__ = Mock(return_value=mock_pbar)
+        mock_tqdm.return_value.__exit__ = Mock(return_value=False)
+
+        def _side_effect(api_func, *args, **kwargs):
+            operation = kwargs.get("operation_name", "")
+            if operation == "getMetrics":
+                return {"statusCode": 500, "message": "backend timeout"}
+            if operation == "getDimensions":
+                return pd.DataFrame([{"id": "x", "name": "x", "type": "string", "description": "x"}])
+            return {"id": "dv_test_12345", "name": "T", "description": "d"}
+
+        mock_api_call.side_effect = _side_effect
+
+        fetcher = ParallelAPIFetcher(mock_cja, mock_logger, mock_perf_tracker)
+        metrics, _dimensions, _dataview = fetcher.fetch_all_data("dv_test_12345")
+
+        # After normalization: error dict must not surface as metrics; status is failed.
+        assert isinstance(metrics, pd.DataFrame)
+        assert metrics.empty
+        assert fetcher.get_fetch_statuses()["metrics"].status == "failed"

@@ -22,6 +22,11 @@ from typing import TYPE_CHECKING, Any
 import pandas as pd
 from tqdm import tqdm
 
+from cja_auto_sdr.api.client import (
+    _describe_unexpected_probe_payload,
+    _normalize_dataview_listing_payload,
+    _normalize_dataview_listing_payload_or_raise,
+)
 from cja_auto_sdr.core.constants import (
     DEFAULT_ORG_REPORT_WORKERS,
     GOVERNANCE_MAX_OVERLAP_THRESHOLD,
@@ -348,7 +353,14 @@ class OrgComponentAnalyzer:
         # This provides better UX - users learn about empty results before long work begins
         try:
             quick_check = self.cja.getDataViews()
-            if quick_check is None or (hasattr(quick_check, "__len__") and len(quick_check) == 0):
+            normalized_quick_check = _normalize_dataview_listing_payload(quick_check)
+            if normalized_quick_check is None:
+                self.logger.warning(
+                    "Ignoring unexpected getDataViews() payload during org-report quick check: %s",
+                    _describe_unexpected_probe_payload(quick_check),
+                )
+                return None
+            if len(normalized_quick_check) == 0:
                 self.logger.warning("No data views found in organization; returning empty org report")
                 return OrgReportResult(
                     timestamp=datetime.now(UTC).isoformat(),
@@ -574,12 +586,15 @@ class OrgComponentAnalyzer:
             self.logger.error("Failed to list data views: %s", e)
             return [], False, 0
 
-        if all_data_views is None or len(all_data_views) == 0:
+        if all_data_views is None:
             return [], False, 0
 
-        # Convert to list of dicts if needed
-        if isinstance(all_data_views, pd.DataFrame):
-            all_data_views = all_data_views.to_dict("records")
+        all_data_views = _normalize_dataview_listing_payload_or_raise(
+            all_data_views,
+            operation="getDataViews (org-report)",
+        )
+        if len(all_data_views) == 0:
+            return [], False, 0
 
         filtered = all_data_views
 

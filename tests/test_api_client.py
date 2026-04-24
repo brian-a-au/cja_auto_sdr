@@ -27,10 +27,14 @@ import cja_auto_sdr.api.client as _client_module
 from cja_auto_sdr.api.client import (
     _bootstrap_dotenv,
     _config_from_env,
+    _describe_unexpected_probe_payload,
+    _normalize_dataview_listing_payload,
+    _normalize_dataview_listing_payload_or_raise,
     configure_cjapy,
     initialize_cja,
 )
 from cja_auto_sdr.core.exceptions import (
+    APIError,
     CredentialSourceError,
     ProfileConfigError,
     ProfileNotFoundError,
@@ -121,6 +125,31 @@ class TestBootstrapDotenv:
 
         calls = [str(c) for c in mock_logger.debug.call_args_list]
         assert any("python-dotenv not installed" in c for c in calls)
+
+
+class TestDataviewListingPayloadHelpers:
+    """Helpers should normalize real listings and describe error dicts coherently."""
+
+    def test_normalize_dataview_listing_payload_converts_tuple(self):
+        assert _normalize_dataview_listing_payload(({"id": "dv_1"}, {"id": "dv_2"})) == [
+            {"id": "dv_1"},
+            {"id": "dv_2"},
+        ]
+
+    def test_normalize_dataview_listing_payload_rejects_error_dict(self):
+        assert _normalize_dataview_listing_payload({"statusCode": 500, "message": "backend timeout"}) is None
+
+    def test_normalize_dataview_listing_payload_or_raise_surfaces_api_error(self):
+        with pytest.raises(APIError, match="Unexpected getDataViews\\(\\) payload"):
+            _normalize_dataview_listing_payload_or_raise(
+                {"statusCode": 503, "message": "backend timeout"},
+                operation="getDataViews (test)",
+            )
+
+    def test_describe_unexpected_probe_payload_reads_nested_error_status(self):
+        detail = _describe_unexpected_probe_payload({"error": {"statusCode": 500, "message": "backend timeout"}})
+        assert "statusCode=500" in detail
+        assert "backend timeout" in detail
 
     def test_dotenv_import_runtime_error_is_non_fatal(self, mock_logger):
         """Unexpected dotenv import errors should remain best-effort."""

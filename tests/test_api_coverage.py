@@ -897,21 +897,22 @@ class TestMakeApiCallWithRetry:
             make_api_call_with_retry(lambda: None, logger=_make_logger(), circuit_breaker=cb)
 
     def test_retryable_status_in_response_dict(self, monkeypatch):
-        """Cover dict response with status_code field."""
+        """Cover dict response with status_code field for a project-retryable status."""
         monkeypatch.setenv("MAX_RETRIES", "0")
+        # 408 is project-retryable (not in cjapy adapter status_forcelist).
         with pytest.raises(RetryableHTTPError):
             make_api_call_with_retry(
-                lambda: {"status_code": 503},
+                lambda: {"status_code": 408},
                 logger=_make_logger(),
                 operation_name="test_op",
             )
 
     def test_retryable_status_in_error_dict(self, monkeypatch):
-        """Cover dict response with nested error.status_code."""
+        """Cover dict response with nested error.status_code for a project-retryable status."""
         monkeypatch.setenv("MAX_RETRIES", "0")
         with pytest.raises(RetryableHTTPError):
             make_api_call_with_retry(
-                lambda: {"error": {"status_code": 429}},
+                lambda: {"error": {"status_code": 408}},
                 logger=_make_logger(),
                 operation_name="test_op",
             )
@@ -981,11 +982,12 @@ class TestMakeApiCallWithRetry:
             make_api_call_with_retry(always_os_err, logger=_make_logger(), operation_name="os_op")
 
     def test_status_code_on_result_object(self, monkeypatch):
-        """Cover the hasattr(result, 'status_code') branch."""
+        """Cover the hasattr(result, 'status_code') branch on a project-retryable status."""
         monkeypatch.setenv("MAX_RETRIES", "0")
 
         class FakeResponse:
-            status_code = 503
+            # 408 is project-retryable (not in cjapy adapter status_forcelist).
+            status_code = 408
 
         with pytest.raises(RetryableHTTPError):
             make_api_call_with_retry(

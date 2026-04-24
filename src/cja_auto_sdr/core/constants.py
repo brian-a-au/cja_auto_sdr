@@ -95,8 +95,28 @@ DEFAULT_RETRY_CONFIG: dict[str, Any] = DEFAULT_RETRY.to_dict()
 # Final delay = base_delay * uniform(*RETRY_JITTER_RANGE)
 RETRY_JITTER_RANGE: tuple[float, float] = (0.5, 1.5)
 
-# HTTP status codes that should trigger a retry
-RETRYABLE_STATUS_CODES: set[int] = {408, 429, 500, 502, 503, 504}
+# HTTP status codes that should trigger a retry at the project layer.
+#
+# cjapy 0.3.1's AdobeRequest._build_session installs a urllib3.Retry adapter that
+# handles 429/500/502/503/504 with exponential backoff (status_forcelist). By the
+# time responses for those statuses reach us, cjapy has already retried. Keeping
+# them in this set would stack project retries on top of the adapter's retries
+# and confuse both budgets and debugging. See docs/RESILIENCE_LAYERING.md.
+#
+# 408 is NOT in cjapy's status_forcelist, so it remains the project layer's
+# responsibility.
+RETRYABLE_STATUS_CODES: set[int] = {408}
+
+# Statuses handled by cjapy 0.3.1's urllib3.Retry adapter `status_forcelist`.
+# When a payload carrying one of these codes reaches the project layer, the
+# adapter has already exhausted its own retries — the payload is a genuine
+# upstream failure signal. The project retry wrapper does NOT retry these
+# (that would stack on top of the adapter), but it must still record a
+# circuit-breaker failure and suppress the success-after-retry log so repeated
+# upstream distress trips the breaker and telemetry stays coherent. Callers
+# still receive the raw payload so payload-specific error detail (message,
+# nested error) can be rendered downstream.
+UPSTREAM_ADAPTER_STATUS_CODES: frozenset[int] = frozenset({429, 500, 502, 503, 504})
 
 # ==================== QUALITY / SEVERITY ====================
 

@@ -7,6 +7,7 @@ Lines targeted: 168, 281, 430-431, 450, 497-498, 537, 623, 626, 632,
 
 from __future__ import annotations
 
+import json
 from io import StringIO
 from unittest.mock import MagicMock, patch
 
@@ -30,6 +31,7 @@ from cja_auto_sdr.cli.commands.list import (
     _fetch_datasets,
     _fetch_dataviews,
 )
+from cja_auto_sdr.core.exceptions import APIError
 
 # ---------------------------------------------------------------------------
 # _approved_display edge cases (lines 623, 626, 632)
@@ -229,8 +231,6 @@ class TestFetchDataviewsEmpty:
 
     def test_empty_json_format_returns_empty_json(self) -> None:
         """JSON format returns empty JSON response (not the CSV branch)."""
-        import json
-
         cja = MagicMock()
         cja.getDataViews.return_value = []
 
@@ -247,6 +247,15 @@ class TestFetchDataviewsEmpty:
         fetcher = _fetch_dataviews(output_format="table")
         result = fetcher(cja, is_machine_readable=False)
         assert "No data views" in result
+
+    def test_error_payload_raises_api_error(self) -> None:
+        """Error-shaped getDataViews payloads must fail discovery instead of masquerading as empty."""
+        cja = MagicMock()
+        cja.getDataViews.return_value = {"statusCode": 500, "message": "backend timeout"}
+
+        fetcher = _fetch_dataviews(output_format="json")
+        with pytest.raises(APIError, match="Unexpected getDataViews\\(\\) payload"):
+            fetcher(cja, is_machine_readable=True)
 
 
 # ---------------------------------------------------------------------------
@@ -277,8 +286,6 @@ class TestBuildComponentListFetcherEmpty:
 
     def test_empty_metrics_json_returns_empty_json(self) -> None:
         """Empty components + JSON + machine_readable preserve dataview metadata."""
-        import json
-
         from cja_auto_sdr.cli.commands.list import _fetch_metrics_list
 
         cja = self._make_cja(
@@ -379,6 +386,16 @@ class TestFetchConnectionsDataFramePath:
         fetcher = _fetch_connections(output_format="csv")
         result = fetcher(cja, is_machine_readable=True)
         assert result == "connection_id,connection_name,owner,dataset_id,dataset_name\n"
+
+    def test_empty_connections_invalid_dataview_payload_raises(self) -> None:
+        """Fallback to getDataViews should fail loudly on error-shaped listing payloads."""
+        cja = MagicMock()
+        cja.getConnections.return_value = []
+        cja.getDataViews.return_value = {"statusCode": 503, "message": "backend timeout"}
+
+        fetcher = _fetch_connections(output_format="table")
+        with pytest.raises(APIError, match="Unexpected getDataViews\\(\\) payload"):
+            fetcher(cja, is_machine_readable=False)
 
 
 # ---------------------------------------------------------------------------
@@ -502,6 +519,16 @@ class TestFetchDatasetsEdgeCases:
         fetcher = _fetch_datasets(output_format="table")
         result = fetcher(cja, is_machine_readable=False)
         assert "DV1" in result
+
+    def test_invalid_dataview_payload_raises(self) -> None:
+        """Dataset listing should not downgrade an API error payload into an empty result."""
+        cja = MagicMock()
+        cja.getConnections.return_value = []
+        cja.getDataViews.return_value = {"statusCode": 500, "message": "backend timeout"}
+
+        fetcher = _fetch_datasets(output_format="table")
+        with pytest.raises(APIError, match="Unexpected getDataViews\\(\\) payload"):
+            fetcher(cja, is_machine_readable=False)
 
 
 # ---------------------------------------------------------------------------

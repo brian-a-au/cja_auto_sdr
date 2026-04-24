@@ -7,6 +7,81 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.14] — 2026-04-23
+
+### Fixed
+
+- **cjapy 0.3.1 response-shape blind spot at the retry boundary.** The project
+  retry wrapper `make_api_call_with_retry()` previously recognized retryable
+  statuses only via snake_case `status_code`, but cjapy 0.3.1 returns parsed
+  JSON payloads exposing camelCase `statusCode` (sometimes nested under `error`
+  or `response`). Adapter-exhausted cjapy responses therefore bypassed the
+  retry wrapper and circuit breaker. A new `_extract_http_status_code_from_result()`
+  helper normalizes all supported shapes (top-level and nested,
+  camelCase/snake_case, mappings and response-like attributes).
+- **`ParallelAPIFetcher` misclassifying component error payloads as success.**
+  `_fetch_metrics()` and `_fetch_dimensions()` now normalize payloads through
+  `assess_component_payload()` before recording a fetch status. An error-shaped
+  dict like `{"statusCode": 500, "message": "backend timeout"}` is now recorded
+  as `failed` with a useful error message instead of being returned as
+  "metrics" with `item_count=2`.
+- **`initialize_cja()` reporting connection success on error-shaped
+  `getDataViews()` payloads.** The connection probe now only logs success for
+  list/tuple/DataFrame payloads; error-shaped dicts warn with the parsed
+  `statusCode`/`message`. The dry-run `getDataViews()` path got the same
+  tightening.
+- **Circuit breaker treating adapter-exhausted upstream failures as successes.**
+  After `RETRYABLE_STATUS_CODES` was narrowed to `{408}`, payloads carrying
+  429/500/502/503/504 pass through the retry wrapper unchanged — but the
+  wrapper was recording `circuit_breaker.record_success()` and emitting
+  `✓ … succeeded on attempt …` on those returns, so repeated upstream distress
+  never tripped the breaker and telemetry contradicted the caller-side failure
+  classification in `ParallelAPIFetcher` and the `initialize_cja()` probe. A new
+  `UPSTREAM_ADAPTER_STATUS_CODES` set (mirroring cjapy's `status_forcelist`)
+  now routes those returns to `record_failure()` and suppresses the
+  success-after-retry log. Non-upstream-failure 4xx (401/403/404/400/422) stay
+  breaker-positive (records success, as before).
+- **`retry_with_backoff` decorator emitting success log on error-shaped returns.**
+  The sibling decorator (publicly re-exported from `cja_auto_sdr.api`) had the
+  same shape of telemetry bug: any non-exception return logged
+  `✓ … succeeded on attempt …`, even when the return carried an adapter-exhausted
+  5xx/429 status. Extracted the shared `_is_upstream_failure_payload()` predicate
+  and applied it to both `make_api_call_with_retry` and `retry_with_backoff`.
+  The decorator has no circuit-breaker plumbing, so only the log-suppression
+  half of the rule applies there.
+
+### Changed
+
+- **Narrowed `RETRYABLE_STATUS_CODES` to `{408}`.** cjapy 0.3.1 already handles
+  429/500/502/503/504 via its urllib3.Retry adapter (`status_forcelist`,
+  `backoff_factor=1`, `raise_on_status=False`). Keeping those statuses in the
+  project set stacked retries on top of the upstream adapter, multiplying wait
+  time and consuming CircuitBreaker budget faster than intended. 408 is not in
+  cjapy's `status_forcelist`, so it remains project-owned.
+
+### Documentation
+
+- Added `docs/RESILIENCE_LAYERING.md` documenting the upstream cjapy retry
+  adapter, the project retry/circuit-breaker layer, and the non-overlap
+  contract between them.
+- Extended the "Before v3.5.14" section in `docs/RESILIENCE_LAYERING.md` to
+  cover all six behaviors the release fixes (previously the preamble promised
+  "fixes all six points" but the before-list enumerated only four), so the
+  rationale for the breaker-success regression and the decorator
+  log-suppression bug is self-contained in the doc. (Post-review polish.)
+- Synced `CLAUDE.md` test-count badge to match the collected count.
+  (Post-review polish.)
+
+### Tests
+
+- Added `TestResolveDataViewNames::test_error_shaped_getdataviews_payload_returns_connectivity_error`
+  locking in the `cli/commands/stats.py` name-resolution path when
+  `get_cached_data_views()` raises `APIError` on an adapter-exhausted
+  `getDataViews()` payload: the handler surfaces a `connectivity_error`
+  diagnostic with the parsed upstream `statusCode` rather than the misleading
+  "no data views found" configuration error the pre-v3.5.14 lenient path
+  would have produced. (Post-review polish.)
+
 ## [3.5.13] — 2026-04-23
 
 ### Changed

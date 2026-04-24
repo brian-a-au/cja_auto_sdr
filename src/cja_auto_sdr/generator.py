@@ -2384,7 +2384,14 @@ def test_profile(profile_name: str) -> bool:
 
 # ==================== CONFIG VALIDATION (moved to core/config_validation.py) ====================
 # ==================== CJA CLIENT (moved to api/client.py) ====================
-from cja_auto_sdr.api.client import _bootstrap_dotenv, _config_from_env, configure_cjapy, initialize_cja
+from cja_auto_sdr.api.client import (
+    _bootstrap_dotenv,
+    _config_from_env,
+    _describe_unexpected_probe_payload,
+    _normalize_dataview_listing_payload_or_raise,
+    configure_cjapy,
+    initialize_cja,
+)
 from cja_auto_sdr.core.config_validation import (
     ConfigValidator,
     validate_config_file,
@@ -2475,11 +2482,19 @@ def validate_data_view(cja: cjapy.CJA, data_view_id: str, logger: logging.Logger
             available_count = None
             try:
                 available_dvs = cja.getDataViews()
-                available_count = len(available_dvs) if available_dvs else 0
+                normalized_dvs = (
+                    []
+                    if available_dvs is None
+                    else _normalize_dataview_listing_payload_or_raise(
+                        available_dvs,
+                        operation="getDataViews (lookup context)",
+                    )
+                )
+                available_count = len(normalized_dvs)
 
                 if available_count > 0:
                     logger.info(f"You have access to {available_count} data view(s):")
-                    for i, dv in enumerate(available_dvs[:10]):  # Show first 10
+                    for i, dv in enumerate(normalized_dvs[:10]):  # Show first 10
                         dv_id = dv.get("id", "unknown")
                         dv_name = dv.get("name", "unknown")
                         logger.info(f"  {i + 1}. {dv_name} (ID: {dv_id})")
@@ -3929,12 +3944,16 @@ def run_dry_run(data_views: list[str], config_file: str, logger: logging.Logger,
             logger=logger,
             operation_name="getDataViews (dry-run)",
         )
-        if available_dvs is not None:
+        if isinstance(available_dvs, (list, tuple, pd.DataFrame)):
             dv_count = len(available_dvs) if hasattr(available_dvs, "__len__") else 0
             print("  ✓ API connection successful")
             print(f"  ✓ Found {dv_count} accessible data view(s)")
-        else:
+        elif available_dvs is None:
             print("  ⚠ API connection returned None - may be unstable")
+            available_dvs = []
+        else:
+            detail = _describe_unexpected_probe_payload(available_dvs)
+            print(f"  ⚠ API connection returned unexpected payload ({detail})")
             available_dvs = []
     except KeyboardInterrupt, SystemExit:
         print()
@@ -4338,16 +4357,16 @@ def get_cached_data_views(cja, cache_key: str, logger: logging.Logger) -> list[d
 
     if available_dvs is None:
         return []
-
-    # Convert to list if DataFrame
-    if isinstance(available_dvs, pd.DataFrame):
-        available_dvs = available_dvs.to_dict("records")
+    normalized_dvs = _normalize_dataview_listing_payload_or_raise(
+        available_dvs,
+        operation="getDataViews (cache fill)",
+    )
 
     # Cache the result
-    _data_view_cache.set(cache_key, available_dvs)
-    logger.debug(f"Cached {len(available_dvs)} data views")
+    _data_view_cache.set(cache_key, normalized_dvs)
+    logger.debug(f"Cached {len(normalized_dvs)} data views")
 
-    return available_dvs
+    return normalized_dvs
 
 
 def prompt_for_selection(options: list[tuple[str, str]], prompt_text: str) -> str | None:

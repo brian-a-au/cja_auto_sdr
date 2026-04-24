@@ -18,7 +18,7 @@ from unittest.mock import Mock, patch
 import pandas as pd
 import pytest
 
-from cja_auto_sdr.core.exceptions import MemoryLimitExceeded
+from cja_auto_sdr.core.exceptions import APIError, MemoryLimitExceeded
 from cja_auto_sdr.org.analyzer import OrgComponentAnalyzer
 from cja_auto_sdr.org.models import (
     ComponentDistribution,
@@ -1267,6 +1267,23 @@ class TestExceptionHandlers:
         analyzer = _make_analyzer(mock_cja, logger)
         result = analyzer._quick_check_empty_org()
         assert result is None
+
+    def test_quick_check_empty_org_ignores_error_payload(self, mock_cja, logger, caplog):
+        """Error-shaped getDataViews payloads must not be mistaken for an empty org."""
+        mock_cja.getDataViews.return_value = {"statusCode": 503, "message": "backend timeout"}
+        analyzer = _make_analyzer(mock_cja, logger)
+        with caplog.at_level(logging.WARNING):
+            result = analyzer._quick_check_empty_org()
+        assert result is None
+        assert "unexpected getDataViews() payload" in caplog.text
+        assert "statusCode=503" in caplog.text
+
+    def test_list_and_filter_data_views_raises_on_error_payload(self, mock_cja, logger):
+        """Main org-report listing path must fail on error-shaped getDataViews payloads."""
+        mock_cja.getDataViews.return_value = {"statusCode": 500, "message": "backend timeout"}
+        analyzer = _make_analyzer(mock_cja, logger)
+        with pytest.raises(APIError, match="Unexpected getDataViews\\(\\) payload"):
+            analyzer._list_and_filter_data_views()
 
 
 # ===================================================================

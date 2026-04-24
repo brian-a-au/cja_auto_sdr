@@ -1346,6 +1346,33 @@ class TestResolveDataViewNames:
         assert ids == []
         assert name_map == {}
 
+    @patch("cja_auto_sdr.generator.get_cached_data_views")
+    @patch("cja_auto_sdr.generator.cjapy")
+    @patch("cja_auto_sdr.generator.configure_cjapy")
+    def test_error_shaped_getdataviews_payload_returns_connectivity_error(
+        self, mock_config, mock_cjapy, mock_cache
+    ) -> None:
+        """Error-shaped getDataViews payloads (cjapy 0.3.1 adapter-exhausted)
+        now raise APIError from get_cached_data_views via
+        _normalize_dataview_listing_payload_or_raise; the stats name-resolution
+        handler must surface that as a connectivity_error diagnostic rather
+        than a misleading "no data views found" configuration_error."""
+        from cja_auto_sdr.generator import resolve_data_view_names
+
+        mock_config.return_value = (True, "file", None)
+        mock_cjapy.CJA.return_value = MagicMock()
+        mock_cache.side_effect = APIError(
+            "getDataViews (cache fill) returned error payload: {'statusCode': 503, 'message': 'backend timeout'}"
+        )
+
+        ids, name_map, diagnostics = resolve_data_view_names(["My DV"], include_diagnostics=True)
+
+        assert ids == []
+        assert name_map == {}
+        assert diagnostics.error_type == "connectivity_error"
+        assert "Failed to resolve data view names" in (diagnostics.error_message or "")
+        assert "503" in (diagnostics.error_message or "")
+
     def test_invalid_match_mode(self) -> None:
         from cja_auto_sdr.generator import resolve_data_view_names
 

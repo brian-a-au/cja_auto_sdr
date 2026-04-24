@@ -12,11 +12,15 @@ import cjapy
 import pandas as pd
 from tqdm import tqdm
 
-from cja_auto_sdr.api.resilience import CircuitBreaker, make_api_call_with_retry
+from cja_auto_sdr.api.resilience import CircuitBreaker, _is_upstream_failure_payload, make_api_call_with_retry
 from cja_auto_sdr.api.tuning import APIWorkerTuner
 from cja_auto_sdr.core.config import APITuningConfig
 from cja_auto_sdr.core.constants import TQDM_BAR_FORMAT
-from cja_auto_sdr.core.discovery_payloads import assess_dataview_lookup_payload
+from cja_auto_sdr.core.discovery_payloads import (
+    PayloadKind,
+    assess_component_payload,
+    assess_dataview_lookup_payload,
+)
 from cja_auto_sdr.core.exceptions import CircuitBreakerOpen
 from cja_auto_sdr.core.perf import PerformanceTracker
 
@@ -224,13 +228,65 @@ class ParallelAPIFetcher:
             circuit_breaker=self.circuit_breaker,
             **kwargs,
         )
-        # Record response time only on success to avoid retry delays inflating metrics
-        if self.tuner is not None:
+        # Record response time only on success to avoid retry delays/error payloads inflating metrics.
+        if self.tuner is not None and not _is_upstream_failure_payload(result):
             duration_ms = (time.perf_counter() - start_time) * 1000
             new_workers = self.tuner.record_response_time(duration_ms)
             if new_workers is not None:
                 self.max_workers = new_workers
         return result
+
+    def _normalize_component_payload(
+        self,
+        payload: Any,
+        *,
+        endpoint: str,
+        label: str,
+    ) -> pd.DataFrame:
+        """Classify a component payload and record the correct fetch status.
+
+        cjapy 0.3.1 can return parsed JSON error dicts (e.g. ``{"statusCode": 500, ...}``)
+        for component endpoints. Treating these as successful fetches is wrong because
+        downstream SDR rendering then consumes an error shape as "data". This helper
+        delegates classification to ``assess_component_payload`` and converts the result
+        into a DataFrame + fetch-status update.
+        """
+        # Preserve the existing DataFrame fast path: non-empty DataFrames are successes.
+        if isinstance(payload, pd.DataFrame):
+            if payload.empty:
+                self.logger.warning("No %s returned from API", label)
+                self._record_fetch_status(endpoint, "empty", reason="empty_response", item_count=0)
+                return pd.DataFrame()
+            self.logger.info("Successfully fetched %s %s", len(payload), label)
+            self._record_fetch_status(endpoint, "success", item_count=len(payload))
+            return payload
+
+        assessment = assess_component_payload(payload)
+        if assessment.kind is PayloadKind.DATA:
+            frame = pd.DataFrame(assessment.rows)
+            self.logger.info("Successfully fetched %s %s", len(frame), label)
+            self._record_fetch_status(endpoint, "success", item_count=len(frame))
+            return frame
+
+        if assessment.kind is PayloadKind.EMPTY:
+            self.logger.warning("No %s returned from API", label)
+            self._record_fetch_status(endpoint, "empty", reason=assessment.reason or "empty_response", item_count=0)
+            return pd.DataFrame()
+
+        # ERROR or INVALID — record failure with a useful detail and return empty.
+        error_detail = ""
+        if isinstance(payload, dict):
+            error_detail = str(payload.get("message") or payload.get("error") or "")
+        self.logger.error(
+            "%s fetch returned %s payload (%s)", label.capitalize(), assessment.kind.value, assessment.reason
+        )
+        self._record_fetch_status(
+            endpoint,
+            "failed",
+            reason=assessment.reason or f"{assessment.kind.value}_payload",
+            error_message=error_detail or f"{assessment.kind.value} payload shape",
+        )
+        return pd.DataFrame()
 
     def _fetch_metrics(self, data_view_id: str) -> pd.DataFrame:
         """Fetch metrics with error handling and retry"""
@@ -246,14 +302,11 @@ class ParallelAPIFetcher:
                 operation_name="getMetrics",
             )
 
-            if metrics is None or (isinstance(metrics, pd.DataFrame) and metrics.empty):
-                self.logger.warning("No metrics returned from API")
-                self._record_fetch_status("metrics", "empty", reason="empty_response", item_count=0)
-                return pd.DataFrame()
-
-            self.logger.info("Successfully fetched %s metrics", len(metrics))
-            self._record_fetch_status("metrics", "success", item_count=len(metrics))
-            return metrics
+            return self._normalize_component_payload(
+                metrics,
+                endpoint="metrics",
+                label="metrics",
+            )
 
         except CircuitBreakerOpen as e:
             self.logger.warning("Circuit breaker open for metrics fetch: %s", e.message)
@@ -292,14 +345,11 @@ class ParallelAPIFetcher:
                 operation_name="getDimensions",
             )
 
-            if dimensions is None or (isinstance(dimensions, pd.DataFrame) and dimensions.empty):
-                self.logger.warning("No dimensions returned from API")
-                self._record_fetch_status("dimensions", "empty", reason="empty_response", item_count=0)
-                return pd.DataFrame()
-
-            self.logger.info("Successfully fetched %s dimensions", len(dimensions))
-            self._record_fetch_status("dimensions", "success", item_count=len(dimensions))
-            return dimensions
+            return self._normalize_component_payload(
+                dimensions,
+                endpoint="dimensions",
+                label="dimensions",
+            )
 
         except CircuitBreakerOpen as e:
             self.logger.warning("Circuit breaker open for dimensions fetch: %s", e.message)

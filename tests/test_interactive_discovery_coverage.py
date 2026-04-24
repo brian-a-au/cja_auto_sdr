@@ -724,6 +724,20 @@ class TestInteractiveSelectDataviews:
 
     @patch("cja_auto_sdr.generator.cjapy")
     @patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "mock", None))
+    def test_error_shaped_dataview_listing_is_treated_as_failure(self, _cfg, mock_cjapy, capsys):
+        """A returned error payload should fail the interactive flow instead of looking empty."""
+        mock_cja = Mock()
+        mock_cja.getDataViews.return_value = {"statusCode": 503, "message": "backend timeout"}
+        mock_cjapy.CJA.return_value = mock_cja
+
+        result = interactive_select_dataviews("config.json")
+        assert result == []
+        out = capsys.readouterr().out
+        assert "Failed to connect to CJA API: Unexpected getDataViews() payload" in out
+        assert "HTTP 503" in out
+
+    @patch("cja_auto_sdr.generator.cjapy")
+    @patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "mock", None))
     def test_hint_stays_on_stdout_for_interactive_select(self, _cfg, mock_cjapy, capsys):
         """Hint-bearing interactive selection failures should not split streams."""
         mock_cja = Mock()
