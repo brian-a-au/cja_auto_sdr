@@ -948,7 +948,7 @@ class OrgComponentAnalyzer:
                     metadata_assessment = assess_dataview_lookup_payload(raw_dv_details, expected_data_view_id=dv_id)
                     tolerated_legacy_metadata = (
                         isinstance(raw_dv_details, dict)
-                        and metadata_assessment.kind.value == "error"
+                        and metadata_assessment.kind is PayloadKind.ERROR
                         and metadata_assessment.reason in TOLERATED_LEGACY_LOOKUP_REASONS
                     )
                     if metadata_assessment.is_valid or tolerated_legacy_metadata:
