@@ -7,6 +7,39 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.17] — 2026-04-24
+
+### Refactored
+
+- **`TOLERATED_LEGACY_LOOKUP_REASONS` hoisted to `core/discovery_payloads.py`.**
+  The three operational callers that tolerate legacy `getDataView` error-shape
+  payloads (`diff/snapshot.py:create_snapshot`, `generator.py:inventory_summary`,
+  `org/analyzer.py:_fetch_data_view_components`) now share one canonical
+  tolerance set instead of three duplicated inline literals.
+- **`PayloadKind` comparison in `org/analyzer.py` normalized to identity.**
+  `metadata_assessment.kind is PayloadKind.ERROR` now matches the spelling
+  already used at `diff/snapshot.py` and `generator.py`. Behavior-equivalent
+  — Enum members are singletons.
+- **Inline `classify_component_payload` imports promoted to module scope** in
+  `diff/snapshot.py` and `generator.py`, now that v3.5.15 has cemented the
+  classify-before-consume contract.
+
+### Fixed
+
+- **Test coverage for `OrgAnalyzer` metadata-enrichment exception branch.**
+  `tests/test_org_analyzer_metadata_enrichment.py` gains a characterization
+  test for the `except Exception` branch that handles `cja.getDataView`
+  raising instead of returning an error-shape dict. Locks in the
+  warning-level log emission so a silent downgrade to `debug` would now be
+  caught by CI.
+
+### Documentation
+
+- Inline comments on two deliberately legacy-tolerant branches
+  (`generator.py` non-mapping `getDataView` pass-through; `diff/snapshot.py`
+  DataFrame duck-typing shim in `create_snapshot`) document the pre-v3.5.14
+  compatibility intent so future readers do not mistake them for dead code.
+
 ## [3.5.16] — 2026-04-24
 
 ### Fixed

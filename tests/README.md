@@ -147,7 +147,7 @@ tests/
 └── README.md                        # This file
 ```
 
-**Total: 7,884 comprehensive tests**
+**Total: 7,885 comprehensive tests**
 
 ### Test Count Breakdown
 
@@ -156,16 +156,16 @@ tests/
 
 | Category | Tests | Files | Notes |
 |----------|-------|-------|-------|
-| `unit` | 7,778 | 129 | Default primary category for files without explicit integration/e2e/smoke scope |
+| `unit` | 7,779 | 129 | Default primary category for files without explicit integration/e2e/smoke scope |
 | `integration` | 73 | 3 | Cross-module integration suites |
 | `e2e` | 23 | 2 | End-to-end suites with a mocked external boundary |
 | `smoke` | 10 | 1 | Lightweight command-mode coverage |
 | `slow` | 0 | 0 | Overlay marker; these tests are also counted in a primary category |
-| **Primary Total** | **7,884** | **135** | **unit + integration + e2e + smoke** |
+| **Primary Total** | **7,885** | **135** | **unit + integration + e2e + smoke** |
 
 | CI Slice | Tests | Files | Selector |
 |----------|-------|-------|----------|
-| `test-unit` | 7,778 | 129 | `-m "unit and not slow"` |
+| `test-unit` | 7,779 | 129 | `-m "unit and not slow"` |
 | `test-integration` | 96 | 5 | `-m "integration or e2e or slow"` |
 | `smoke-test` | 10 | 1 | `-m smoke` |
 
@@ -240,7 +240,7 @@ tests/
 | `test_lock_backend_edge_cases.py` | 165 | Lock backend metadata I/O, stale detection, legacy parsing |
 | `test_derived_fields_coverage.py` | 161 | Derived field complexity scoring, logic summary, predicates |
 | `test_org_analyzer_coverage.py` | 162 | Org analyzer governance, naming audit, sampling, memory, drift, clustering |
-| `test_org_analyzer_metadata_enrichment.py` | 2 | Org analyzer metadata enrichment payload handling |
+| `test_org_analyzer_metadata_enrichment.py` | 3 | Org analyzer metadata enrichment payload handling |
 | `test_api_coverage.py` | 98 | API cache, quality, fetch, resilience exception paths |
 | `test_diff_coverage.py` | 72 | Diff comparator, models, git integration edge cases |
 | `test_generator_coverage.py` | 143 | Generator utility functions — coercion, normalization, diff formatting |
@@ -310,7 +310,7 @@ tests/
 | `test_agent_workflows.py` | 69 | Agent workflow shell script validation tests |
 | `test_manifest_agent_contract.py` | 16 | Manifest vs runtime capability drift tests |
 | `test_tool_manifests.py` | 40 | Tool manifest schema and content tests |
-| **Total** | **7,884** | **Collected via pytest --collect-only** |
+| **Total** | **7,885** | **Collected via pytest --collect-only** |
 
 ## Running Tests
 
@@ -768,7 +768,7 @@ the `tests/README.md` inventory tree or count table.
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (7,884 tests total)
+- [x] Comprehensive test coverage (7,885 tests total)
 - [x] Org-wide analysis tests (test_org_report.py) - 211 tests (including large org scaling, output path aliases, memory warnings, smart cache invalidation)
 - [x] Org-wide analysis integration tests (test_org_report_integration.py) - 17 tests (end-to-end flows, caching, filtering, governance thresholds)
 - [x] Profile management tests (test_profiles.py) - 78 tests
