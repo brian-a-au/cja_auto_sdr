@@ -117,15 +117,15 @@ set).
 
 ### Non-overlap contract summary
 
-| Status | Owner           | Behavior                                                                  |
-| ------ | --------------- | ------------------------------------------------------------------------- |
-| 408    | project layer   | `make_api_call_with_retry` retries with jitter; exhaustion → breaker failure |
-| 429    | cjapy adapter   | upstream retries; project passes through; breaker records failure         |
-| 500    | cjapy adapter   | upstream retries; project passes through; breaker records failure         |
-| 502    | cjapy adapter   | upstream retries; project passes through; breaker records failure         |
-| 503    | cjapy adapter   | upstream retries; project passes through; breaker records failure         |
-| 504    | cjapy adapter   | upstream retries; project passes through; breaker records failure         |
-| 4xx (other) | caller       | returned as-is; classified by caller; breaker records success (no failure)|
+| Status      | Owner         | Behavior                                                                     |
+| ----------- | ------------- | ---------------------------------------------------------------------------- |
+| 408         | project layer | `make_api_call_with_retry` retries with jitter; exhaustion → breaker failure |
+| 429         | cjapy adapter | upstream retries; project passes through; breaker records failure            |
+| 500         | cjapy adapter | upstream retries; project passes through; breaker records failure            |
+| 502         | cjapy adapter | upstream retries; project passes through; breaker records failure            |
+| 503         | cjapy adapter | upstream retries; project passes through; breaker records failure            |
+| 504         | cjapy adapter | upstream retries; project passes through; breaker records failure            |
+| 4xx (other) | caller        | returned as-is; classified by caller; breaker records success (no failure)   |
 
 ## Why this split exists
 
