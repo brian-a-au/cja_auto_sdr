@@ -20,6 +20,7 @@ from typing import Any
 
 import pandas as pd
 
+from cja_auto_sdr.api.client import _describe_unexpected_probe_payload, _normalize_dataview_listing_payload
 from cja_auto_sdr.api.resilience import make_api_call_with_retry
 from cja_auto_sdr.core.colors import ConsoleColors
 from cja_auto_sdr.core.discovery_exceptions import (
@@ -916,19 +917,24 @@ def _fetch_dataviews(
         from cja_auto_sdr.generator import _format_as_csv, _format_as_table
 
         available_dvs = cja.getDataViews()
+        normalized_dvs = _normalize_dataview_listing_payload(available_dvs)
 
-        if available_dvs is None or (hasattr(available_dvs, "__len__") and len(available_dvs) == 0):
+        if normalized_dvs is None:
+            logging.getLogger(__name__).warning(
+                "Ignoring unexpected getDataViews() payload in list_dataviews: %s",
+                _describe_unexpected_probe_payload(available_dvs),
+            )
+            normalized_dvs = []
+
+        if len(normalized_dvs) == 0:
             if is_machine_readable:
                 if output_format == "json":
                     return json.dumps({"dataViews": [], "count": 0}, indent=2)
                 return "id,name,owner\n"
             return "\nNo data views found or no access to any data views.\n"
 
-        if isinstance(available_dvs, pd.DataFrame):
-            available_dvs = available_dvs.to_dict("records")
-
         display_data = []
-        for dv in available_dvs:
+        for dv in normalized_dvs:
             if isinstance(dv, dict):
                 dv_id = _normalize_optional_text(dv.get("id"), default="N/A")
                 dv_name = _normalize_optional_text(dv.get("name"), default="N/A")

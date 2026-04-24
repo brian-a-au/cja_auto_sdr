@@ -7,6 +7,7 @@ Lines targeted: 168, 281, 430-431, 450, 497-498, 537, 623, 626, 632,
 
 from __future__ import annotations
 
+import json
 from io import StringIO
 from unittest.mock import MagicMock, patch
 
@@ -247,6 +248,21 @@ class TestFetchDataviewsEmpty:
         fetcher = _fetch_dataviews(output_format="table")
         result = fetcher(cja, is_machine_readable=False)
         assert "No data views" in result
+
+    def test_error_payload_is_treated_as_empty_with_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Error-shaped getDataViews payloads should not be iterated like real listings."""
+        cja = MagicMock()
+        cja.getDataViews.return_value = {"statusCode": 500, "message": "backend timeout"}
+
+        fetcher = _fetch_dataviews(output_format="json")
+        with caplog.at_level("WARNING"):
+            result = fetcher(cja, is_machine_readable=True)
+
+        parsed = json.loads(result)
+        assert parsed["count"] == 0
+        assert parsed["dataViews"] == []
+        assert "unexpected getDataViews() payload" in caplog.text
+        assert "statusCode=500" in caplog.text
 
 
 # ---------------------------------------------------------------------------

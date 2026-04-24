@@ -1268,6 +1268,16 @@ class TestExceptionHandlers:
         result = analyzer._quick_check_empty_org()
         assert result is None
 
+    def test_quick_check_empty_org_ignores_error_payload(self, mock_cja, logger, caplog):
+        """Error-shaped getDataViews payloads must not be mistaken for an empty org."""
+        mock_cja.getDataViews.return_value = {"statusCode": 503, "message": "backend timeout"}
+        analyzer = _make_analyzer(mock_cja, logger)
+        with caplog.at_level(logging.WARNING):
+            result = analyzer._quick_check_empty_org()
+        assert result is None
+        assert "unexpected getDataViews() payload" in caplog.text
+        assert "statusCode=503" in caplog.text
+
 
 # ===================================================================
 # 13. Cache paths

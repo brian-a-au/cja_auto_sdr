@@ -6,10 +6,11 @@ import tempfile
 import time
 from collections.abc import Mapping, Sequence
 from pathlib import Path
+from typing import Any
 
 import cjapy
 
-from cja_auto_sdr.api.resilience import make_api_call_with_retry
+from cja_auto_sdr.api.resilience import _extract_http_status_code_from_result, make_api_call_with_retry
 from cja_auto_sdr.core.constants import BANNER_WIDTH
 from cja_auto_sdr.core.credentials import (
     CredentialResolver,
@@ -222,9 +223,11 @@ def _looks_like_dataview_listing(payload: object) -> bool:
 
 def _describe_unexpected_probe_payload(payload: object) -> str:
     """Summarize an error-shaped probe payload for logging."""
+    status = _extract_http_status_code_from_result(payload)
     if isinstance(payload, dict):
-        status = payload.get("statusCode") or payload.get("status_code")
         message = payload.get("message") or payload.get("error")
+        if isinstance(message, dict):
+            message = message.get("message") or message.get("description") or message.get("error")
         parts: list[str] = []
         if status is not None:
             parts.append(f"statusCode={status}")
@@ -233,6 +236,23 @@ def _describe_unexpected_probe_payload(payload: object) -> str:
         if parts:
             return ", ".join(parts)
     return f"type={type(payload).__name__}"
+
+
+def _normalize_dataview_listing_payload(payload: object) -> list[Any] | None:
+    """Normalize a getDataViews() payload into rows, or return None when invalid."""
+    if payload is None:
+        return []
+
+    if type(payload).__name__ == "DataFrame" and hasattr(payload, "to_dict"):
+        return payload.to_dict("records")
+
+    if isinstance(payload, list):
+        return payload
+
+    if isinstance(payload, tuple):
+        return list(payload)
+
+    return None
 
 
 def initialize_cja(

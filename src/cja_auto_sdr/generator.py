@@ -2384,7 +2384,14 @@ def test_profile(profile_name: str) -> bool:
 
 # ==================== CONFIG VALIDATION (moved to core/config_validation.py) ====================
 # ==================== CJA CLIENT (moved to api/client.py) ====================
-from cja_auto_sdr.api.client import _bootstrap_dotenv, _config_from_env, configure_cjapy, initialize_cja
+from cja_auto_sdr.api.client import (
+    _bootstrap_dotenv,
+    _config_from_env,
+    _describe_unexpected_probe_payload,
+    _normalize_dataview_listing_payload,
+    configure_cjapy,
+    initialize_cja,
+)
 from cja_auto_sdr.core.config_validation import (
     ConfigValidator,
     validate_config_file,
@@ -3937,19 +3944,7 @@ def run_dry_run(data_views: list[str], config_file: str, logger: logging.Logger,
             print("  ⚠ API connection returned None - may be unstable")
             available_dvs = []
         else:
-            # cjapy 0.3.1 returns parsed JSON; an error-shaped dict reached us
-            # because the status was non-retryable or retries were exhausted.
-            status = None
-            message = None
-            if isinstance(available_dvs, dict):
-                status = available_dvs.get("statusCode") or available_dvs.get("status_code")
-                message = available_dvs.get("message") or available_dvs.get("error")
-            detail_parts = []
-            if status is not None:
-                detail_parts.append(f"statusCode={status}")
-            if message is not None:
-                detail_parts.append(f"message={message!r}")
-            detail = ", ".join(detail_parts) or f"type={type(available_dvs).__name__}"
+            detail = _describe_unexpected_probe_payload(available_dvs)
             print(f"  ⚠ API connection returned unexpected payload ({detail})")
             available_dvs = []
     except KeyboardInterrupt, SystemExit:
@@ -4351,19 +4346,22 @@ def get_cached_data_views(cja, cache_key: str, logger: logging.Logger) -> list[d
     # Fetch from API
     logger.debug("Fetching data views from API (cache miss)")
     available_dvs = cja.getDataViews()
+    normalized_dvs = _normalize_dataview_listing_payload(available_dvs)
 
-    if available_dvs is None:
+    if normalized_dvs == []:
+        return []
+    if normalized_dvs is None:
+        logger.warning(
+            "Ignoring unexpected getDataViews() payload while populating cache: %s",
+            _describe_unexpected_probe_payload(available_dvs),
+        )
         return []
 
-    # Convert to list if DataFrame
-    if isinstance(available_dvs, pd.DataFrame):
-        available_dvs = available_dvs.to_dict("records")
-
     # Cache the result
-    _data_view_cache.set(cache_key, available_dvs)
-    logger.debug(f"Cached {len(available_dvs)} data views")
+    _data_view_cache.set(cache_key, normalized_dvs)
+    logger.debug(f"Cached {len(normalized_dvs)} data views")
 
-    return available_dvs
+    return normalized_dvs
 
 
 def prompt_for_selection(options: list[tuple[str, str]], prompt_text: str) -> str | None:

@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Any
 import pandas as pd
 from tqdm import tqdm
 
+from cja_auto_sdr.api.client import _describe_unexpected_probe_payload, _normalize_dataview_listing_payload
 from cja_auto_sdr.core.constants import (
     DEFAULT_ORG_REPORT_WORKERS,
     GOVERNANCE_MAX_OVERLAP_THRESHOLD,
@@ -348,7 +349,14 @@ class OrgComponentAnalyzer:
         # This provides better UX - users learn about empty results before long work begins
         try:
             quick_check = self.cja.getDataViews()
-            if quick_check is None or (hasattr(quick_check, "__len__") and len(quick_check) == 0):
+            normalized_quick_check = _normalize_dataview_listing_payload(quick_check)
+            if normalized_quick_check is None:
+                self.logger.warning(
+                    "Ignoring unexpected getDataViews() payload during org-report quick check: %s",
+                    _describe_unexpected_probe_payload(quick_check),
+                )
+                return None
+            if len(normalized_quick_check) == 0:
                 self.logger.warning("No data views found in organization; returning empty org report")
                 return OrgReportResult(
                     timestamp=datetime.now(UTC).isoformat(),
