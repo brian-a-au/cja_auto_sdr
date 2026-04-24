@@ -32,7 +32,11 @@ from cja_auto_sdr.core.constants import (
     GOVERNANCE_MAX_OVERLAP_THRESHOLD,
     effective_governance_overlap_threshold,
 )
-from cja_auto_sdr.core.discovery_payloads import assess_dataview_lookup_payload
+from cja_auto_sdr.core.discovery_payloads import (
+    PayloadKind,
+    TOLERATED_LEGACY_LOOKUP_REASONS,
+    assess_dataview_lookup_payload,
+)
 from cja_auto_sdr.core.exceptions import LockOwnershipLostError
 from cja_auto_sdr.inventory.utils import extract_owner
 from cja_auto_sdr.org.models import (
@@ -945,8 +949,7 @@ class OrgComponentAnalyzer:
                     tolerated_legacy_metadata = (
                         isinstance(raw_dv_details, dict)
                         and metadata_assessment.kind.value == "error"
-                        and metadata_assessment.reason
-                        in {"missing_expected_id", "missing_identity", "insufficient_metadata"}
+                        and metadata_assessment.reason in TOLERATED_LEGACY_LOOKUP_REASONS
                     )
                     if metadata_assessment.is_valid or tolerated_legacy_metadata:
                         dv_details = metadata_assessment.payload or raw_dv_details

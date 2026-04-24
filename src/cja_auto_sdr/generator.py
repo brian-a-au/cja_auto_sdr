@@ -149,6 +149,9 @@ from cja_auto_sdr.core.discovery_payloads import (
     PayloadKind as _PayloadKind,
 )
 from cja_auto_sdr.core.discovery_payloads import (
+    TOLERATED_LEGACY_LOOKUP_REASONS as _TOLERATED_LEGACY_LOOKUP_REASONS,
+)
+from cja_auto_sdr.core.discovery_payloads import (
     assess_component_payload as _assess_component_payload,
 )
 from cja_auto_sdr.core.discovery_payloads import (
@@ -2711,7 +2714,7 @@ def process_inventory_summary(
     tolerated_legacy_lookup = (
         isinstance(raw_lookup, dict)
         and lookup_assessment.kind is _PayloadKind.ERROR
-        and lookup_assessment.reason in {"missing_expected_id", "missing_identity", "insufficient_metadata"}
+        and lookup_assessment.reason in _TOLERATED_LEGACY_LOOKUP_REASONS
     )
     tolerated_legacy_non_mapping = raw_lookup is not None and not isinstance(raw_lookup, dict)
     if not lookup_assessment.is_valid and not tolerated_legacy_lookup and not tolerated_legacy_non_mapping:
