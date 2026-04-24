@@ -64,6 +64,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `docs/RESILIENCE_LAYERING.md` documenting the upstream cjapy retry
   adapter, the project retry/circuit-breaker layer, and the non-overlap
   contract between them.
+- Extended the "Before v3.5.14" section in `docs/RESILIENCE_LAYERING.md` to
+  cover all six behaviors the release fixes (previously the preamble promised
+  "fixes all six points" but the before-list enumerated only four), so the
+  rationale for the breaker-success regression and the decorator
+  log-suppression bug is self-contained in the doc. (Post-review polish.)
+- Synced `CLAUDE.md` test-count badge to match the collected count.
+  (Post-review polish.)
+
+### Tests
+
+- Added `TestResolveDataViewNames::test_error_shaped_getdataviews_payload_returns_connectivity_error`
+  locking in the `cli/commands/stats.py` name-resolution path when
+  `get_cached_data_views()` raises `APIError` on an adapter-exhausted
+  `getDataViews()` payload: the handler surfaces a `connectivity_error`
+  diagnostic with the parsed upstream `statusCode` rather than the misleading
+  "no data views found" configuration error the pre-v3.5.14 lenient path
+  would have produced. (Post-review polish.)
 
 ## [3.5.13] — 2026-04-23
 

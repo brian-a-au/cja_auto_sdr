@@ -141,6 +141,14 @@ Before v3.5.14:
   `{"statusCode": 500, ...}` was logged as "success" with `item_count = 2`.
 - `initialize_cja()` treated any non-`None` `getDataViews()` payload as a
   successful connection test.
+- Adapter-exhausted pass-through payloads (`{"statusCode": 503, ...}` etc.)
+  were silently recorded as circuit-breaker **successes**, so repeated
+  upstream 5xx/429 never tripped the breaker even though caller-side
+  classifiers already treated the payloads as failures.
+- The `retry_with_backoff` decorator had no upstream-failure awareness, so
+  external callers of the decorator inherited the same telemetry bug: the
+  `✓ … succeeded on attempt …` log fired even when the final return was an
+  adapter-exhausted error payload.
 
 v3.5.14 fixes all six points:
 
