@@ -77,6 +77,18 @@ def _extract_http_status_code_from_result(result: Any) -> int | None:
     return None
 
 
+def _is_upstream_failure_payload(result: Any) -> bool:
+    """True when a returned payload carries a status in ``UPSTREAM_ADAPTER_STATUS_CODES``.
+
+    Used by both ``make_api_call_with_retry`` and ``retry_with_backoff`` to
+    suppress the ``✓ … succeeded on attempt …`` log (and, where a circuit
+    breaker is available, route the breaker signal) on adapter-exhausted
+    5xx/429 returns — the payloads cjapy already retried and gave up on.
+    """
+    status_code = _extract_http_status_code_from_result(result)
+    return status_code is not None and status_code in UPSTREAM_ADAPTER_STATUS_CODES
+
+
 def _parse_env_numeric(value: str | None, cast: Callable[[str], Any]) -> Any | None:
     """Parse an environment value, returning None when invalid."""
     if value is None:
@@ -824,8 +836,12 @@ def retry_with_backoff(
             for attempt in range(_max_retries + 1):  # +1 for initial attempt
                 try:
                     result = func(*args, **kwargs)
-                    # Log success after retry
-                    if attempt > 0:
+                    # Log success after retry, unless the return carries an
+                    # adapter-exhausted upstream-failure status (5xx/429) — in
+                    # that case the "return" is actually an upstream failure
+                    # payload and the caller will classify it; logging success
+                    # would contradict that classification.
+                    if attempt > 0 and not _is_upstream_failure_payload(result):
                         _logger.info("✓ %s succeeded on attempt %s/%s", func.__name__, attempt + 1, _max_retries + 1)
                     return result
                 except _retryable_exceptions as e:

@@ -85,13 +85,16 @@ UPSTREAM_ADAPTER_STATUS_CODES: frozenset[int] = frozenset({429, 500, 502, 503, 5
 
 This mirrors cjapy's `status_forcelist`. A payload that reaches the project
 layer carrying one of these codes is an *adapter-exhausted* failure: cjapy
-already retried and gave up. The retry wrapper handles it as follows:
+already retried and gave up. Both retry forms in this module
+(`make_api_call_with_retry` and the `retry_with_backoff` decorator) consult
+`_is_upstream_failure_payload(result)` on every non-exception return and:
 
-- does **not** retry again (that would stack on top of the adapter)
-- does **not** emit the `✓ … succeeded on attempt …` log even if prior attempts
+- do **not** retry again (that would stack on top of the adapter)
+- do **not** emit the `✓ … succeeded on attempt …` log even if prior attempts
   raised — the final return is not a success
-- **does** call `circuit_breaker.record_failure(...)` so repeated upstream 5xx/
-  429 trips the breaker and blocks further traffic until recovery
+- (wrapper only — the decorator has no breaker parameter) call
+  `circuit_breaker.record_failure(...)` so repeated upstream 5xx/429 trips the
+  breaker and blocks further traffic until recovery
 
 Non-upstream-failure HTTP error codes (e.g. 401/403/404/400/422) are caller
 errors, not infrastructure distress; the breaker records them as successes
@@ -139,7 +142,7 @@ Before v3.5.14:
 - `initialize_cja()` treated any non-`None` `getDataViews()` payload as a
   successful connection test.
 
-v3.5.14 fixes all five points:
+v3.5.14 fixes all six points:
 
 1. Retry-wrapper status extraction recognizes `statusCode`, nested
    `error.statusCode`, and `response.statusCode`.
@@ -155,3 +158,9 @@ v3.5.14 fixes all five points:
    recorded as breaker successes, so repeated upstream 5xx/429 never tripped
    the circuit even though caller-side classifiers already treated the
    payloads as failures.
+6. The `retry_with_backoff` decorator (publicly re-exported from
+   `cja_auto_sdr.api`) shares the same log-suppression rule via
+   `_is_upstream_failure_payload()`, so future external callers of the
+   decorator don't inherit the telemetry bug. The decorator has no
+   circuit-breaker parameter, so only the log-suppression half of the rule
+   applies there.

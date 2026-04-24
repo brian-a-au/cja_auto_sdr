@@ -40,7 +40,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `UPSTREAM_ADAPTER_STATUS_CODES` set (mirroring cjapy's `status_forcelist`)
   now routes those returns to `record_failure()` and suppresses the
   success-after-retry log. Non-upstream-failure 4xx (401/403/404/400/422) stay
-  breaker-neutral (record success, as before).
+  breaker-positive (records success, as before).
+- **`retry_with_backoff` decorator emitting success log on error-shaped returns.**
+  The sibling decorator (publicly re-exported from `cja_auto_sdr.api`) had the
+  same shape of telemetry bug: any non-exception return logged
+  `✓ … succeeded on attempt …`, even when the return carried an adapter-exhausted
+  5xx/429 status. Extracted the shared `_is_upstream_failure_payload()` predicate
+  and applied it to both `make_api_call_with_retry` and `retry_with_backoff`.
+  The decorator has no circuit-breaker plumbing, so only the log-suppression
+  half of the rule applies there.
 
 ### Changed
 

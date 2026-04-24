@@ -27,7 +27,9 @@ import pytest
 from cja_auto_sdr.api.resilience import (
     CircuitBreaker,
     _extract_http_status_code_from_result,
+    _is_upstream_failure_payload,
     make_api_call_with_retry,
+    retry_with_backoff,
 )
 from cja_auto_sdr.core.config import CircuitBreakerConfig
 from cja_auto_sdr.core.exceptions import RetryableHTTPError
@@ -316,3 +318,78 @@ class TestExtractHttpStatusCode:
 
     def test_extracts_http_status_key(self):
         assert _extract_http_status_code_from_result({"http_status": 503}) == 503
+
+
+class TestIsUpstreamFailurePayload:
+    """The shared predicate used by both make_api_call_with_retry and retry_with_backoff."""
+
+    @pytest.mark.parametrize("status", [429, 500, 502, 503, 504])
+    def test_true_for_adapter_statuses(self, status):
+        assert _is_upstream_failure_payload({"statusCode": status}) is True
+
+    def test_true_for_nested_error_statusCode(self):
+        assert _is_upstream_failure_payload({"error": {"statusCode": 500}}) is True
+
+    @pytest.mark.parametrize("status", [200, 204, 301, 400, 401, 403, 404, 408, 422])
+    def test_false_for_non_upstream_statuses(self, status):
+        assert _is_upstream_failure_payload({"statusCode": status}) is False
+
+    def test_false_for_no_status_payload(self):
+        assert _is_upstream_failure_payload({"data": "ok"}) is False
+
+    def test_false_for_none(self):
+        assert _is_upstream_failure_payload(None) is False
+
+
+class TestRetryWithBackoffDecorator:
+    """The decorator shares the log-suppression rule with make_api_call_with_retry.
+
+    It has no circuit-breaker plumbing, so the only signal to fix is the
+    ``✓ … succeeded on attempt …`` log — which must not fire when the final
+    return is an adapter-exhausted 5xx/429 payload (cjapy already retried).
+    """
+
+    def test_success_log_suppressed_on_adapter_exhausted_pass_through(self, recorded_sleeps, caplog):
+        calls = {"n": 0}
+
+        @retry_with_backoff(max_retries=2, base_delay=0.001, max_delay=0.01)
+        def flaky():
+            calls["n"] += 1
+            if calls["n"] < 2:
+                raise ConnectionError("transient")
+            return {"statusCode": 503, "message": "backend timeout"}
+
+        with caplog.at_level(logging.INFO, logger="cja_auto_sdr.api.resilience"):
+            result = flaky()
+
+        assert result == {"statusCode": 503, "message": "backend timeout"}
+        assert calls["n"] == 2
+        assert not any("succeeded on attempt" in record.getMessage() for record in caplog.records)
+
+    def test_success_log_emitted_on_genuine_recovery(self, recorded_sleeps, caplog):
+        calls = {"n": 0}
+
+        @retry_with_backoff(max_retries=2, base_delay=0.001, max_delay=0.01)
+        def flaky():
+            calls["n"] += 1
+            if calls["n"] < 2:
+                raise ConnectionError("transient")
+            return {"statusCode": 200, "data": "ok"}
+
+        with caplog.at_level(logging.INFO, logger="cja_auto_sdr.api.resilience"):
+            result = flaky()
+
+        assert result == {"statusCode": 200, "data": "ok"}
+        assert any("succeeded on attempt" in record.getMessage() for record in caplog.records)
+
+    def test_no_log_on_first_attempt_success_even_with_upstream_status(self, recorded_sleeps, caplog):
+        """attempt == 0 never emits the success-after-retry log regardless of payload."""
+
+        @retry_with_backoff(max_retries=2, base_delay=0.001, max_delay=0.01)
+        def immediate():
+            return {"statusCode": 503, "message": "backend timeout"}
+
+        with caplog.at_level(logging.INFO, logger="cja_auto_sdr.api.resilience"):
+            immediate()
+
+        assert not any("succeeded on attempt" in record.getMessage() for record in caplog.records)
