@@ -32,6 +32,7 @@ import cjapy
 import pandas as pd
 from tqdm import tqdm
 
+from cja_auto_sdr.api.fetch import classify_component_payload as _classify_component_payload
 from cja_auto_sdr.api.quality_policy import (
     QUALITY_POLICY_ALLOWED_KEYS,
     QUALITY_REPORT_PREFERRED_COLUMNS,
@@ -144,6 +145,9 @@ from cja_auto_sdr.core.discovery_normalization import (
 )
 from cja_auto_sdr.core.discovery_normalization import (
     pick_first_present_text as _pick_first_present_text,
+)
+from cja_auto_sdr.core.discovery_payloads import (
+    TOLERATED_LEGACY_LOOKUP_REASONS as _TOLERATED_LEGACY_LOOKUP_REASONS,
 )
 from cja_auto_sdr.core.discovery_payloads import (
     PayloadKind as _PayloadKind,
@@ -2711,8 +2715,9 @@ def process_inventory_summary(
     tolerated_legacy_lookup = (
         isinstance(raw_lookup, dict)
         and lookup_assessment.kind is _PayloadKind.ERROR
-        and lookup_assessment.reason in {"missing_expected_id", "missing_identity", "insufficient_metadata"}
+        and lookup_assessment.reason in _TOLERATED_LEGACY_LOOKUP_REASONS
     )
+    # Preserves pre-v3.5.14 tolerance of non-dict getDataView returns from legacy cjapy paths.
     tolerated_legacy_non_mapping = raw_lookup is not None and not isinstance(raw_lookup, dict)
     if not lookup_assessment.is_valid and not tolerated_legacy_lookup and not tolerated_legacy_non_mapping:
         detail = ""
@@ -2741,18 +2746,17 @@ def process_inventory_summary(
     if include_derived:
 
         def _build_derived_inventory_summary() -> Any:
-            from cja_auto_sdr.api.fetch import classify_component_payload
             from cja_auto_sdr.inventory.derived_fields import DerivedFieldInventoryBuilder
 
             raw_metrics = cja.getMetrics(data_view_id, inclType=True, full=True)
-            metrics_outcome = classify_component_payload(raw_metrics)
+            metrics_outcome = _classify_component_payload(raw_metrics)
             if metrics_outcome.status == "failed":
                 raise RuntimeError(
                     f"metrics fetch returned error payload ({metrics_outcome.reason}): {metrics_outcome.error_message}"
                 )
 
             raw_dimensions = cja.getDimensions(data_view_id, inclType=True, full=True)
-            dimensions_outcome = classify_component_payload(raw_dimensions)
+            dimensions_outcome = _classify_component_payload(raw_dimensions)
             if dimensions_outcome.status == "failed":
                 raise RuntimeError(
                     f"dimensions fetch returned error payload "

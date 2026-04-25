@@ -61,3 +61,29 @@ def test_metadata_enrichment_populates_fields_on_valid_payload(analyzer_with_met
     assert summary.owner == "Alice"
     assert summary.created == "2026-04-20T00:00:00Z"
     assert summary.has_description is True
+
+
+def test_metadata_enrichment_logs_warning_on_getdataview_exception(
+    analyzer_with_metadata_enabled,
+    caplog,
+):
+    analyzer, cja = analyzer_with_metadata_enabled
+    cja.getDataView.side_effect = RuntimeError("backend timeout")
+
+    dv = {"id": "dv_abc123", "name": "Test DV"}
+    with caplog.at_level(logging.WARNING, logger="cja_auto_sdr.org.analyzer"):
+        summary = analyzer._fetch_data_view_components(dv)
+
+    assert summary.data_view_id == "dv_abc123"
+    assert summary.owner is None
+    assert summary.owner_id is None
+    assert summary.created is None
+    assert summary.modified is None
+    assert summary.description is None
+    assert summary.has_description is False
+    assert any(
+        "metadata fetch raised" in record.message.lower()
+        and "dv_abc123" in record.message
+        and "backend timeout" in record.message
+        for record in caplog.records
+    ), f"expected raised-exception warning for dv_abc123, got: {[r.message for r in caplog.records]}"

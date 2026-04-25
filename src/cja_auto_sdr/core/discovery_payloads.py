@@ -48,6 +48,18 @@ DATAVIEW_METADATA_HINT_KEYS = frozenset(
         "modified_date",
     },
 )
+# Legacy getDataView payloads from pre-v3.5.14 cjapy paths can classify as ERROR
+# because they lack the expected identity fields, yet still carry usable metadata.
+# Three operational call sites (diff snapshot, SDR inventory summary, org-report
+# metadata enrichment) tolerate these specific reasons to preserve backward
+# compatibility. Keep this set in one place so the three sites stay in lockstep.
+TOLERATED_LEGACY_LOOKUP_REASONS: frozenset[str] = frozenset(
+    {
+        "missing_expected_id",
+        "missing_identity",
+        "insufficient_metadata",
+    },
+)
 _DIAGNOSTIC_KEY_PREFIXES = ("error", "lookup_", "status")
 _LOOKUP_MISSING_VALUE = object()
 _LOOKUP_CANONICAL_KEY_ALIASES = {

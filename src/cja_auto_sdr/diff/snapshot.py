@@ -6,21 +6,19 @@ import os
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from cja_auto_sdr.api.fetch import classify_component_payload
 from cja_auto_sdr.core.colors import ConsoleColors
-from cja_auto_sdr.core.discovery_payloads import PayloadKind, assess_dataview_lookup_payload
+from cja_auto_sdr.core.discovery_payloads import (
+    TOLERATED_LEGACY_LOOKUP_REASONS,
+    PayloadKind,
+    assess_dataview_lookup_payload,
+)
 from cja_auto_sdr.core.error_policies import RECOVERABLE_OPTIONAL_ENRICHMENT_EXCEPTIONS
 from cja_auto_sdr.core.exceptions import attach_api_connection_hint_context
 from cja_auto_sdr.core.json_io import write_json_atomic
 from cja_auto_sdr.diff.models import DataViewSnapshot
 
 _SNAPSHOT_FAILURE_STAGE_ATTR = "_cja_snapshot_failure_stage"
-_TOLERATED_LEGACY_LOOKUP_REASONS = frozenset(
-    {
-        "missing_expected_id",
-        "missing_identity",
-        "insufficient_metadata",
-    }
-)
 
 
 def _annotate_snapshot_failure(exc: Exception, *, stage: str, api_hint_context: str | None = None) -> Exception:
@@ -132,7 +130,7 @@ class SnapshotManager:
         legacy_acceptable_dict = (
             isinstance(raw_dv_info, dict)
             and lookup_assessment.kind is PayloadKind.ERROR
-            and lookup_assessment.reason in _TOLERATED_LEGACY_LOOKUP_REASONS
+            and lookup_assessment.reason in TOLERATED_LEGACY_LOOKUP_REASONS
         )
         if not lookup_assessment.is_valid and not legacy_acceptable_dict:
             detail = ""
@@ -162,9 +160,9 @@ class SnapshotManager:
             raw_metrics = cja.getMetrics(data_view_id, inclType=True, full=True)
         except Exception as exc:
             raise _annotate_snapshot_failure(exc, stage="metrics_fetch") from exc
-        from cja_auto_sdr.api.fetch import classify_component_payload
 
         metrics_outcome = classify_component_payload(raw_metrics)
+        # Duck-typing shim for pre-classification cjapy DataFrame returns; unwrap without the classifier.
         legacy_metrics_like_frame = (
             metrics_outcome.status == "failed"
             and metrics_outcome.reason == "unsupported_payload_type"
