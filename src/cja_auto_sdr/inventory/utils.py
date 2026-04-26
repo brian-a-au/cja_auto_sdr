@@ -318,7 +318,7 @@ class BatchProcessingStats:
     @property
     def has_issues(self) -> bool:
         """Check if any items were skipped or had errors."""
-        return self.skipped > 0 or len(self.errors) > 0
+        return self.skipped > 0 or bool(self.errors)
 
 
 # ==================== VALIDATION HELPERS ====================
