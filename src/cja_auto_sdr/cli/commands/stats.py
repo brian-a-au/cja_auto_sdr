@@ -150,6 +150,7 @@ def resolve_data_view_names(
             len(id_to_name_lookup),
         )
 
+        name_lookup_keys = list(name_to_id_lookup.keys())
         for identifier in identifiers:
             if generator.is_data_view_id(identifier):
                 if identifier in id_to_name_lookup:
@@ -169,7 +170,7 @@ def resolve_data_view_names(
                 matching_ids = name_to_id_lookup.get(identifier) or name_to_id_lookup_ci.get(identifier.lower())
                 if matching_ids is None:
                     similar = generator.find_similar_names(
-                        identifier, list(name_to_id_lookup.keys()), max_suggestions=1
+                        identifier, name_lookup_keys, max_suggestions=1
                     )
                     if similar:
                         best_name, best_distance = similar[0]
@@ -194,7 +195,7 @@ def resolve_data_view_names(
             unresolved_names.append(identifier)
 
             if suggest_similar:
-                similar = generator.find_similar_names(identifier, list(name_to_id_lookup.keys()))
+                similar = generator.find_similar_names(identifier, name_lookup_keys)
                 if similar:
                     case_match = [s for s in similar if s[1] == 0]
                     if case_match:
