@@ -25,21 +25,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   check is the falsy form. Sits in the same fuzzy-match path as v3.5.18's
   keys-list hoist.
 
-### Investigated and reverted
-
-- **Inline-import promotion of `cja_auto_sdr.inventory.*` builders in
-  `generator.py` was attempted and reverted.** Six inline imports of
-  `DerivedFieldInventoryBuilder`, `CalculatedMetricsInventoryBuilder`, and
-  `SegmentsInventoryBuilder` looked like a candidate for the same v3.5.17
-  pattern that promoted `classify_component_payload`. Promotion broke tests
-  in `test_cli_command_handlers.py`, `test_process_single_dataview.py`,
-  `test_main_impl_coverage.py`, `test_snapshot.py`, and
-  `test_generator_remaining_coverage.py` that use `patch.dict("sys.modules",
-  ...)` or `patch("cja_auto_sdr.inventory.X.Builder")` to inject failure
-  modes — both patterns rely on the inline import resolving at call time.
-  Documented here so future hygiene scans don't re-attempt the promotion
-  without first redesigning the test mocks.
-
 ## [3.5.18] — 2026-04-25
 
 ### Fixed
