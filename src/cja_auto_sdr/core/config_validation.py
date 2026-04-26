@@ -263,7 +263,7 @@ def validate_config_file(config_file: str | Path, logger: logging.Logger) -> boo
 
         # Validate JSON structure
         try:
-            with open(config_path) as f:
+            with open(config_path, encoding="utf-8") as f:
                 config_data = json.load(f)
         except json.JSONDecodeError as e:
             error_msg = ErrorMessageHelper.get_config_error_message(
