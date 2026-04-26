@@ -169,9 +169,7 @@ def resolve_data_view_names(
             elif match_mode == "fuzzy":
                 matching_ids = name_to_id_lookup.get(identifier) or name_to_id_lookup_ci.get(identifier.lower())
                 if matching_ids is None:
-                    similar = generator.find_similar_names(
-                        identifier, name_lookup_keys, max_suggestions=1
-                    )
+                    similar = generator.find_similar_names(identifier, name_lookup_keys, max_suggestions=1)
                     if similar:
                         best_name, best_distance = similar[0]
                         matching_ids = name_to_id_lookup.get(best_name)
