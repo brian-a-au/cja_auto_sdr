@@ -365,7 +365,7 @@ class OrgComponentAnalyzer:
                     _describe_unexpected_probe_payload(quick_check),
                 )
                 return None
-            if len(normalized_quick_check) == 0:
+            if not normalized_quick_check:
                 self.logger.warning("No data views found in organization; returning empty org report")
                 return OrgReportResult(
                     timestamp=datetime.now(UTC).isoformat(),
@@ -598,7 +598,7 @@ class OrgComponentAnalyzer:
             all_data_views,
             operation="getDataViews (org-report)",
         )
-        if len(all_data_views) == 0:
+        if not all_data_views:
             return [], False, 0
 
         filtered = all_data_views

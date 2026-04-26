@@ -157,7 +157,7 @@ class JsonFileCredentialLoader(CredentialLoader):
         if not self.file_path.exists():
             return None
 
-        with open(self.file_path) as f:
+        with open(self.file_path, encoding="utf-8") as f:
             config = json.load(f)
 
         if isinstance(config, dict):
@@ -180,7 +180,7 @@ class DotenvCredentialLoader(CredentialLoader):
             return None
 
         credentials = {}
-        with open(self.file_path) as f:
+        with open(self.file_path, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if not line or line.startswith("#"):

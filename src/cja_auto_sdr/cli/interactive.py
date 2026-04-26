@@ -131,7 +131,7 @@ def interactive_select_dataviews(config_file: str = "config.json", profile: str 
             )
         )
 
-        if len(normalized_dvs) == 0:
+        if not normalized_dvs:
             print()
             print(ConsoleColors.warning("No data views found or no access to any data views."))
             return []
@@ -335,7 +335,7 @@ def interactive_wizard(config_file: str = "config.json", profile: str | None = N
             )
         )
 
-        if len(normalized_dvs) == 0:
+        if not normalized_dvs:
             print()
             print(ConsoleColors.warning("No data views found or no access to any data views."))
             return None

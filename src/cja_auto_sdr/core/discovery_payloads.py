@@ -181,7 +181,7 @@ def _lookup_value_has_substance(
         return any(_lookup_value_has_substance(child, _seen_containers=seen) for child in value.values())
 
     if isinstance(value, (list, tuple, set)):
-        if len(value) == 0:
+        if not value:
             return False
         seen = _seen_containers if _seen_containers is not None else set()
         container_id = id(value)

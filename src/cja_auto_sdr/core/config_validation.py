@@ -205,7 +205,7 @@ def validate_credentials(
         logger.debug("Ignoring unknown fields from %s: %s", source, ", ".join(unknown_fields))
 
     is_valid = (
-        len(issues) == 0
+        not issues
         if strict
         else all("Missing required field" not in issue and "Empty value" not in issue for issue in issues)
     )
@@ -263,7 +263,7 @@ def validate_config_file(config_file: str | Path, logger: logging.Logger) -> boo
 
         # Validate JSON structure
         try:
-            with open(config_path) as f:
+            with open(config_path, encoding="utf-8") as f:
                 config_data = json.load(f)
         except json.JSONDecodeError as e:
             error_msg = ErrorMessageHelper.get_config_error_message(
