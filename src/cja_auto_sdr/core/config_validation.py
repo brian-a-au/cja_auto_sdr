@@ -205,7 +205,7 @@ def validate_credentials(
         logger.debug("Ignoring unknown fields from %s: %s", source, ", ".join(unknown_fields))
 
     is_valid = (
-        len(issues) == 0
+        not issues
         if strict
         else all("Missing required field" not in issue and "Empty value" not in issue for issue in issues)
     )

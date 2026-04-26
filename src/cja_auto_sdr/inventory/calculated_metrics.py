@@ -488,7 +488,7 @@ class CalculatedMetricsInventoryBuilder:
                 stats.record_skip("no formula in definition", metric_id)
             return None
 
-        if isinstance(raw_formula, (dict, list)) and len(raw_formula) == 0:
+        if isinstance(raw_formula, (dict, list)) and not raw_formula:
             self.logger.warning(f"Skipping metric '{metric_name}' ({metric_id}) - no formula in definition")
             if stats:
                 stats.record_skip("no formula in definition", metric_id)

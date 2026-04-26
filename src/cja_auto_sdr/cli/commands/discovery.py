@@ -926,7 +926,7 @@ def _fetch_dataviews(
             )
         )
 
-        if len(normalized_dvs) == 0:
+        if not normalized_dvs:
             if is_machine_readable:
                 if output_format == "json":
                     return json.dumps({"dataViews": [], "count": 0}, indent=2)
