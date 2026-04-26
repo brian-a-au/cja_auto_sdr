@@ -1723,7 +1723,7 @@ class OrgComponentAnalyzer:
                 },
             )
 
-        if len(audit["stale_patterns"]) > 0:
+        if audit["stale_patterns"]:
             audit["recommendations"].append(
                 {
                     "type": "stale_naming_patterns",
