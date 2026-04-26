@@ -4200,7 +4200,7 @@ def levenshtein_distance(s1: str, s2: str) -> int:
     if len(s1) < len(s2):
         return levenshtein_distance(s2, s1)
 
-    if len(s2) == 0:
+    if not s2:
         return len(s1)
 
     previous_row = range(len(s2) + 1)
