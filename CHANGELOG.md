@@ -7,6 +7,38 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.18] — 2026-04-25
+
+### Fixed
+
+- **Three text-mode `open()` calls in `core/` now specify `encoding="utf-8"`.**
+  `core/config_validation.py:266` (config JSON load),
+  `core/credentials.py:160` (`JsonFileCredentialLoader._load_impl`), and
+  `core/credentials.py:183` (`DotenvCredentialLoader._load_impl`) previously
+  relied on platform default encoding. On non-UTF-8 locales (e.g. Windows
+  cp1252) this risked mis-decoding credential files containing non-ASCII
+  characters. Aligns with every other text-mode `open()` in `src/`, which
+  already specified `encoding="utf-8"`.
+
+### Refactored
+
+- **`len(x) == 0` collapsed to falsy form** on eight sites where `x` is
+  statically known to be a plain `list` or `dict` (verified by `isinstance`
+  guards, helper-function return types, or local `[]` initializers):
+  `core/config_validation.py:208`, `core/discovery_payloads.py:184`,
+  `org/analyzer.py:368`, `org/analyzer.py:601`, `cli/interactive.py:134`,
+  `cli/interactive.py:338`, `cli/commands/discovery.py:929`,
+  `inventory/calculated_metrics.py:491`. Zero behavior change on the typed
+  inputs. Pandas `Series`/`Index` sites left as-is since `not series` raises
+  "The truth value of an Index is ambiguous".
+
+### Performance
+
+- **Hoisted `list(name_to_id_lookup.keys())` out of the fuzzy-match loop
+  in `cli/commands/stats.py:resolve_data_view_names`.** The miss-path
+  branches built the same key list twice per iteration. For N identifiers
+  against M data views, drops O(N·M) list copies to O(M).
+
 ## [3.5.17] — 2026-04-24
 
 ### Refactored
