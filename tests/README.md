@@ -147,7 +147,7 @@ tests/
 └── README.md                        # This file
 ```
 
-**Total: 7,885 comprehensive tests**
+**Total: 7,895 comprehensive tests**
 
 ### Test Count Breakdown
 
@@ -156,16 +156,16 @@ tests/
 
 | Category | Tests | Files | Notes |
 |----------|-------|-------|-------|
-| `unit` | 7,779 | 129 | Default primary category for files without explicit integration/e2e/smoke scope |
+| `unit` | 7,789 | 129 | Default primary category for files without explicit integration/e2e/smoke scope |
 | `integration` | 73 | 3 | Cross-module integration suites |
 | `e2e` | 23 | 2 | End-to-end suites with a mocked external boundary |
 | `smoke` | 10 | 1 | Lightweight command-mode coverage |
 | `slow` | 0 | 0 | Overlay marker; these tests are also counted in a primary category |
-| **Primary Total** | **7,885** | **135** | **unit + integration + e2e + smoke** |
+| **Primary Total** | **7,895** | **135** | **unit + integration + e2e + smoke** |
 
 | CI Slice | Tests | Files | Selector |
 |----------|-------|-------|----------|
-| `test-unit` | 7,779 | 129 | `-m "unit and not slow"` |
+| `test-unit` | 7,789 | 129 | `-m "unit and not slow"` |
 | `test-integration` | 96 | 5 | `-m "integration or e2e or slow"` |
 | `smoke-test` | 10 | 1 | `-m smoke` |
 
@@ -210,7 +210,7 @@ tests/
 | `test_shared_cache.py` | 28 | Shared validation cache |
 | `test_logging_optimization.py` | 17 | Logging performance optimizations |
 | `test_env_credentials.py` | 15 | Environment variable credentials |
-| `test_dry_run.py` | 15 | Dry-run mode functionality |
+| `test_dry_run.py` | 16 | Dry-run mode functionality |
 | `test_early_exit.py` | 11 | Early exit optimizations |
 | `test_data_quality.py` | 10 | Data quality validation logic |
 | `test_parallel_validation.py` | 9 | Parallel validation operations |
@@ -281,7 +281,7 @@ tests/
 | `test_org_trending_adversarial.py` | 51 | Adversarial and stress tests for trending |
 | `test_cli_diff_contracts.py` | 70 | CLI/diff public API contract tests |
 | `test_list_command_edge_cases.py` | 61 | List command edge cases and coverage |
-| `test_cli_commands_config_coverage.py` | 37 | Config command edge cases and coverage |
+| `test_cli_commands_config_coverage.py` | 46 | Config command edge cases and coverage |
 | `test_cli_execution.py` | 27 | CLI execution edge cases and coverage |
 | `test_diff_git_coverage.py` | 27 | Diff/git subprocess error path coverage |
 | `test_generator_trending_coverage.py` | 19 | Generator trending integration coverage |
@@ -310,7 +310,7 @@ tests/
 | `test_agent_workflows.py` | 69 | Agent workflow shell script validation tests |
 | `test_manifest_agent_contract.py` | 16 | Manifest vs runtime capability drift tests |
 | `test_tool_manifests.py` | 40 | Tool manifest schema and content tests |
-| **Total** | **7,885** | **Collected via pytest --collect-only** |
+| **Total** | **7,895** | **Collected via pytest --collect-only** |
 
 ## Running Tests
 
@@ -768,7 +768,7 @@ the `tests/README.md` inventory tree or count table.
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (7,885 tests total)
+- [x] Comprehensive test coverage (7,895 tests total)
 - [x] Org-wide analysis tests (test_org_report.py) - 211 tests (including large org scaling, output path aliases, memory warnings, smart cache invalidation)
 - [x] Org-wide analysis integration tests (test_org_report_integration.py) - 17 tests (end-to-end flows, caching, filtering, governance thresholds)
 - [x] Profile management tests (test_profiles.py) - 78 tests
