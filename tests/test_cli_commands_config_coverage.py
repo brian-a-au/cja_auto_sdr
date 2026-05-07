@@ -707,6 +707,64 @@ class TestApiConnectionHint:
 
 
 # ---------------------------------------------------------------------------
+# api_connection_error_summary — short summary for the error line
+# ---------------------------------------------------------------------------
+
+
+class TestApiConnectionErrorSummary:
+    """Tests for api_connection_error_summary in core.exceptions."""
+
+    def test_key_error_content_returns_malformed_summary(self):
+        from cja_auto_sdr.core.exceptions import api_connection_error_summary
+
+        assert api_connection_error_summary(KeyError("content")) == "empty or malformed API response"
+
+    def test_key_error_other_key_returns_none(self):
+        from cja_auto_sdr.core.exceptions import api_connection_error_summary
+
+        assert api_connection_error_summary(KeyError("globalCompanyId")) is None
+
+    def test_http_401_returns_auth_summary(self):
+        from cja_auto_sdr.core.exceptions import api_connection_error_summary
+
+        exc = Exception("Unauthorized")
+        exc.status_code = 401
+        assert api_connection_error_summary(exc) == "HTTP 401 — authentication failed"
+
+    def test_http_403_generic_returns_auth_summary(self):
+        from cja_auto_sdr.core.exceptions import api_connection_error_summary
+
+        exc = Exception("Forbidden")
+        exc.status_code = 403
+        assert api_connection_error_summary(exc) == "HTTP 403 — authorization failed or resource not accessible"
+
+    def test_http_403_data_view_lookup_returns_access_summary(self):
+        from cja_auto_sdr.core.exceptions import api_connection_error_summary
+
+        exc = Exception("Forbidden")
+        exc.status_code = 403
+        assert api_connection_error_summary(exc, context="data_view_lookup") == "HTTP 403 — data view not accessible"
+
+    def test_runtime_http_403_text_returns_auth_summary(self):
+        from cja_auto_sdr.core.exceptions import api_connection_error_summary
+
+        assert (
+            api_connection_error_summary(RuntimeError("HTTP 403 Forbidden"))
+            == "HTTP 403 — authorization failed or resource not accessible"
+        )
+
+    def test_generic_exception_returns_none(self):
+        from cja_auto_sdr.core.exceptions import api_connection_error_summary
+
+        assert api_connection_error_summary(ValueError("something else")) is None
+
+    def test_unrelated_numeric_runtime_text_returns_none(self):
+        from cja_auto_sdr.core.exceptions import api_connection_error_summary
+
+        assert api_connection_error_summary(RuntimeError("expected 403 columns in export")) is None
+
+
+# ---------------------------------------------------------------------------
 # validate_config_only — hint output in step [4/5]
 # ---------------------------------------------------------------------------
 
