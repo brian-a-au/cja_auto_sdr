@@ -66,6 +66,20 @@ class TestDryRunMode:
         assert result is False
 
     @patch("cja_auto_sdr.generator.cjapy")
+    def test_dry_run_key_error_content_shows_friendly_summary(self, mock_cjapy, valid_config_file, logger, capsys):
+        """KeyError('content') in dry-run API probe must show friendly summary, not \"'content'\"."""
+        mock_cja_instance = MagicMock()
+        mock_cjapy.CJA.return_value = mock_cja_instance
+        mock_cja_instance.getDataViews.side_effect = KeyError("content")
+
+        result = run_dry_run(data_views=["dv_12345"], config_file=valid_config_file, logger=logger)
+
+        assert result is False
+        captured = capsys.readouterr()
+        assert "API connection failed: empty or malformed API response" in captured.out
+        assert "'content'" not in captured.out
+
+    @patch("cja_auto_sdr.generator.cjapy")
     def test_dry_run_success_with_valid_data_views(self, mock_cjapy, valid_config_file, logger):
         """Test dry-run succeeds with valid configuration and data views"""
         # Mock CJA instance
