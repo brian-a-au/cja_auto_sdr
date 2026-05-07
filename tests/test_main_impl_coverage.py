@@ -1829,7 +1829,8 @@ class TestRunDryRunAPIValidation:
             result = run_dry_run(["dv_test"], "config.json", logger)
         assert result is False
         captured = capsys.readouterr()
-        assert "API connection failed: 'content'" in captured.out
+        assert "API connection failed: empty or malformed API response" in captured.out
+        assert "'content'" not in captured.out
         assert "AEP API" in captured.out
 
     def test_api_connection_runtime_auth_error_shows_hint(self, capsys):
@@ -1845,7 +1846,7 @@ class TestRunDryRunAPIValidation:
             result = run_dry_run(["dv_test"], "config.json", logger)
         assert result is False
         captured = capsys.readouterr()
-        assert "API connection failed: HTTP 403 Forbidden" in captured.out
+        assert "API connection failed: HTTP 403 — authorization failed or resource not accessible" in captured.out
         assert "authentication or authorization failed" in captured.out
 
     def test_api_connection_plain_exception_auth_error_shows_hint(self, capsys):
@@ -1861,7 +1862,7 @@ class TestRunDryRunAPIValidation:
             result = run_dry_run(["dv_test"], "config.json", logger)
         assert result is False
         captured = capsys.readouterr()
-        assert "API connection failed: HTTP 403 Forbidden" in captured.out
+        assert "API connection failed: HTTP 403 — authorization failed or resource not accessible" in captured.out
         assert "authentication or authorization failed" in captured.out
 
     def test_api_connection_unexpected_runtime_exception(self, capsys):
@@ -2021,7 +2022,7 @@ class TestRunDryRunAPIValidation:
             result = run_dry_run(["dv_forbidden"], "config.json", logger)
         assert result is False
         captured = capsys.readouterr()
-        assert "dv_forbidden: Error - HTTP 403 Forbidden" in captured.out
+        assert "dv_forbidden: Error - HTTP 403 — data view not accessible" in captured.out
         assert "accessing this data view" in captured.out
         assert "have access to it" in captured.out
 
@@ -2045,7 +2046,7 @@ class TestRunDryRunAPIValidation:
             result = run_dry_run(["dv_forbidden"], "config.json", logger)
         assert result is False
         captured = capsys.readouterr()
-        assert "dv_forbidden: Error - HTTP 403 Forbidden" in captured.out
+        assert "dv_forbidden: Error - HTTP 403 — data view not accessible" in captured.out
         assert "accessing this data view" in captured.out
         assert "have access to it" in captured.out
 
@@ -2073,7 +2074,7 @@ class TestRunDryRunAPIValidation:
             result = run_dry_run(["dv_components"], "config.json", logger)
         assert result is False
         captured = capsys.readouterr()
-        assert "dv_components: Error - HTTP 403 Forbidden" in captured.out
+        assert "dv_components: Error - HTTP 403 — authorization failed or resource not accessible" in captured.out
         assert "authentication or authorization failed" in captured.out
         assert "accessing this data view" not in captured.out
 
@@ -2101,7 +2102,7 @@ class TestRunDryRunAPIValidation:
             result = run_dry_run(["dv_components"], "config.json", logger)
         assert result is False
         captured = capsys.readouterr()
-        assert "dv_components: Error - HTTP 403 Forbidden" in captured.out
+        assert "dv_components: Error - HTTP 403 — authorization failed or resource not accessible" in captured.out
         assert "authentication or authorization failed" in captured.out
         assert "accessing this data view" not in captured.out
 
