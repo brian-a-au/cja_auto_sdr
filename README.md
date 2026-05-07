@@ -2,6 +2,17 @@
 
 <img width="1024" height="572" alt="image" src="https://github.com/user-attachments/assets/54a43474-3fc6-4379-909c-452c19cdeac2" />
 
+[![Tests](https://github.com/brian-a-au/cja_auto_sdr/actions/workflows/tests.yml/badge.svg)](https://github.com/brian-a-au/cja_auto_sdr/actions/workflows/tests.yml)
+[![Lint](https://github.com/brian-a-au/cja_auto_sdr/actions/workflows/lint.yml/badge.svg)](https://github.com/brian-a-au/cja_auto_sdr/actions/workflows/lint.yml)
+[![Version Sync](https://github.com/brian-a-au/cja_auto_sdr/actions/workflows/version-sync.yml/badge.svg)](https://github.com/brian-a-au/cja_auto_sdr/actions/workflows/version-sync.yml)
+[![Python 3.14+](https://img.shields.io/badge/python-3.14%2B-blue.svg)](https://www.python.org/downloads/)
+[![Coverage](https://img.shields.io/badge/coverage-99%25-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-7895-brightgreen.svg)](tests/)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Last Commit](https://img.shields.io/github/last-commit/brian-a-au/cja_auto_sdr)](https://github.com/brian-a-au/cja_auto_sdr/commits/main)
+
 A production-ready Python tool that automates the creation of Solution Design Reference (SDR) documents from your Adobe Customer Journey Analytics (CJA) implementation.
 
 ## What It Is
@@ -24,7 +35,7 @@ A **Solution Design Reference** is the essential documentation that bridges your
 ### Key Features
 
 | Category | Feature | Benefit |
-|----------|---------|---------|
+| -------- | ------- | ------- |
 | **Performance** | Parallel Batch Processing | Process multiple Data Views simultaneously (3-4x faster) |
 | | Validation Caching | 50-90% faster on repeated runs with intelligent result caching |
 | | Optimized Validation | Single-pass DataFrame scanning (30-50% faster) |
@@ -99,6 +110,7 @@ cd cja_auto_sdr
 ### 2. Install Dependencies
 
 **macOS/Linux:**
+
 ```bash
 # Install uv package manager (if not already installed)
 curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -108,6 +120,7 @@ uv sync
 ```
 
 **Windows (PowerShell):**
+
 ```powershell
 # Install uv package manager
 powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
@@ -117,6 +130,7 @@ uv sync
 ```
 
 If uv doesn't work, use native Python instead (recommended for Windows):
+
 ```text
 python -m venv .venv
 .venv\Scripts\activate
@@ -125,7 +139,10 @@ pip install -e .
 
 > **Windows Users:** If you encounter issues with `uv run` or NumPy import errors on Windows, we recommend using Python directly. See the [Windows-Specific Issues](docs/TROUBLESHOOTING.md#windows-specific-issues) section in the troubleshooting guide for detailed solutions.
 
+<!-- separator between blockquotes -->
+
 > **Running commands:** You have two equivalent options:
+>
 > - `uv run cja_auto_sdr ...` — works immediately on macOS/Linux, may have issues on Windows
 > - `cja_auto_sdr ...` — after activating the venv: `source .venv/bin/activate` (Unix) or `.venv\Scripts\activate` (Windows)
 >
@@ -137,7 +154,7 @@ Get your credentials from [Adobe Developer Console](https://developer.adobe.com/
 
 > ⚠ **Important:** Your Adobe Developer Console project must have **both** the CJA API **and** the AEP (Experience Platform) API added. The AEP API associates your service account with an Experience Platform product profile, which is required for CJA API authentication. See the [Quickstart Guide](docs/QUICKSTART_GUIDE.md#15-add-the-adobe-experience-platform-aep-api) for setup instructions.
 
-**Option A: Configuration File (Quickest)**
+#### Option A: Configuration File (Quickest)
 
 Create a `config.json` file with your Adobe credentials:
 
@@ -162,7 +179,7 @@ uv run cja_auto_sdr --sample-config
 }
 ```
 
-**Option B: Environment Variables (Recommended for CI/CD)**
+#### Option B: Environment Variables (Recommended for CI/CD)
 
 Use a `.env` file (copy from `.env.example`) or export directly:
 
@@ -178,6 +195,7 @@ SCOPES=your_scopes_from_developer_console
 ### 4. Verify Setup & Run
 
 **Interactive Mode (Recommended for First-Time Users):**
+
 ```bash
 # Launch interactive mode - walks through all options step by step
 uv run cja_auto_sdr --interactive
@@ -186,6 +204,7 @@ uv run cja_auto_sdr --interactive
 Interactive mode guides you through data view selection, output format, and inventory options.
 
 **macOS/Linux (Direct Commands):**
+
 ```bash
 # Verify configuration and list available data views
 uv run cja_auto_sdr --validate-config
@@ -199,6 +218,7 @@ uv run cja_auto_sdr "Production Analytics"
 ```
 
 **Windows (if uv run doesn't work):**
+
 ```text
 # Activate virtual environment first
 .venv\Scripts\activate
@@ -222,11 +242,12 @@ cja_auto_sdr "Production Analytics"
 ## Common Use Cases
 
 **Note:** Commands below omit the `uv run` prefix for brevity:
+
 - **macOS/Linux:** Add `uv run` before each command (e.g., `uv run cja_auto_sdr dv_12345`)
 - **Windows:** Activate the venv first (`.venv\Scripts\activate`), then run commands directly
 
 | Task | Command |
-|------|---------|
+| ---- | ------- |
 | **Getting Started** | |
 | Interactive mode (guided) | `cja_auto_sdr --interactive` |
 | List available data views | `cja_auto_sdr --list-dataviews` |
@@ -316,7 +337,7 @@ cja_auto_sdr "Production Analytics"
 ## Documentation
 
 | Guide | Description |
-|-------|-------------|
+| ----- | ----------- |
 | [Quick Reference](docs/QUICK_REFERENCE.md) | Single-page command cheat sheet |
 | [Extended Quick Start](docs/QUICKSTART_GUIDE.md) | Complete walkthrough from zero to first SDR |
 | [Installation Guide](docs/INSTALLATION.md) | Detailed setup instructions, authentication options |
@@ -350,7 +371,7 @@ cja_auto_sdr "Production Analytics"
 
 High-level overview of the current repository layout (representative, not exhaustive):
 
-```
+```text
 cja_auto_sdr/
 ├── .github/
 │   └── workflows/             # CI, lint, version-sync, and release checks
@@ -468,10 +489,6 @@ cja_auto_sdr/
 ├── .env.example               # Environment variable template
 └── *.xlsx                     # Generated SDR files
 ```
-
-## License
-
-See [LICENSE](LICENSE) for details.
 
 ## Additional Resources
 
