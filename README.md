@@ -135,7 +135,7 @@ pip install -e .
 
 Get your credentials from [Adobe Developer Console](https://developer.adobe.com/console/) (see [QUICKSTART_GUIDE](docs/QUICKSTART_GUIDE.md) for detailed steps).
 
-> **Important:** Your Adobe Developer Console project must have **both** the CJA API **and** the AEP (Experience Platform) API added. The AEP API associates your service account with an Experience Platform product profile, which is required for CJA API authentication. See the [Quickstart Guide](docs/QUICKSTART_GUIDE.md#15-add-the-adobe-experience-platform-aep-api) for setup instructions.
+> ⚠ **Important:** Your Adobe Developer Console project must have **both** the CJA API **and** the AEP (Experience Platform) API added. The AEP API associates your service account with an Experience Platform product profile, which is required for CJA API authentication. See the [Quickstart Guide](docs/QUICKSTART_GUIDE.md#15-add-the-adobe-experience-platform-aep-api) for setup instructions.
 
 **Option A: Configuration File (Quickest)**
 
