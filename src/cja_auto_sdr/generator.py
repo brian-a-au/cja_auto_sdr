@@ -175,6 +175,7 @@ from cja_auto_sdr.core.exceptions import (
     ProfileNotFoundError,
     RetryableHTTPError,
     ValidationError,
+    api_connection_error_summary,
     api_connection_hint,
 )
 from cja_auto_sdr.core.locks.manager import normalize_lock_stale_threshold_seconds
@@ -3912,7 +3913,8 @@ def run_dry_run(data_views: list[str], config_file: str, logger: logging.Logger,
 
     def _fail_dry_run_api_connection(error: Exception) -> bool:
         """Print a consistent step-[2/3] API probe failure and stop the dry-run."""
-        print(f"  ✗ API connection failed: {_dry_run_error_text(error)}")
+        summary = api_connection_error_summary(error) or _dry_run_error_text(error)
+        print(f"  ✗ API connection failed: {summary}")
         _print_api_hint(error, file=sys.stdout)
         print()
         print("=" * BANNER_WIDTH)
@@ -3922,7 +3924,8 @@ def run_dry_run(data_views: list[str], config_file: str, logger: logging.Logger,
 
     def _print_dry_run_data_view_error(error: Exception, *, context: str | None = None) -> None:
         """Print a consistent per-data-view validation error and optional remediation hint."""
-        print(f"  ✗ {dv_id}: Error - {_dry_run_error_text(error)}")
+        summary = api_connection_error_summary(error, context=context) or _dry_run_error_text(error)
+        print(f"  ✗ {dv_id}: Error - {summary}")
         _print_api_hint(error, file=sys.stdout, context=context)
 
     # Step 1: Validate credentials

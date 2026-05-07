@@ -368,3 +368,32 @@ def api_connection_hint(exc: Exception, *, context: str | None = None) -> str | 
             "      access it."
         )
     return None
+
+
+def api_connection_error_summary(exc: Exception, *, context: str | None = None) -> str | None:
+    """Return a short human-readable summary for the error-line display.
+
+    Complements :func:`api_connection_hint`: when a hint is available, this
+    returns a one-liner suitable for the ``✗ … : <summary>`` part of a failure
+    message so callers do not display the raw exception repr.
+
+    Returns ``None`` when no known summary applies — callers should fall back
+    to ``str(exc)`` in that case.
+    """
+    if isinstance(exc, KeyError):
+        if str(exc).strip("'\"") == "content":
+            return "empty or malformed API response"
+        return None
+
+    status = _api_connection_hint_status(exc)
+    normalized_context = _normalize_api_connection_hint_context(
+        context if context is not None else _exception_api_connection_hint_context(exc),
+    )
+
+    if status == 401:
+        return "HTTP 401 — authentication failed"
+    if status == 403 and normalized_context == _DATAVIEW_LOOKUP_HINT_CONTEXT:
+        return "HTTP 403 — data view not accessible"
+    if status == 403:
+        return "HTTP 403 — authorization failed or resource not accessible"
+    return None

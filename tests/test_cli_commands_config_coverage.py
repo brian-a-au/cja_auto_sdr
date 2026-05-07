@@ -707,6 +707,64 @@ class TestApiConnectionHint:
 
 
 # ---------------------------------------------------------------------------
+# api_connection_error_summary — short summary for the error line
+# ---------------------------------------------------------------------------
+
+
+class TestApiConnectionErrorSummary:
+    """Tests for api_connection_error_summary in core.exceptions."""
+
+    def test_key_error_content_returns_malformed_summary(self):
+        from cja_auto_sdr.core.exceptions import api_connection_error_summary
+
+        assert api_connection_error_summary(KeyError("content")) == "empty or malformed API response"
+
+    def test_key_error_other_key_returns_none(self):
+        from cja_auto_sdr.core.exceptions import api_connection_error_summary
+
+        assert api_connection_error_summary(KeyError("globalCompanyId")) is None
+
+    def test_http_401_returns_auth_summary(self):
+        from cja_auto_sdr.core.exceptions import api_connection_error_summary
+
+        exc = Exception("Unauthorized")
+        exc.status_code = 401
+        assert api_connection_error_summary(exc) == "HTTP 401 — authentication failed"
+
+    def test_http_403_generic_returns_auth_summary(self):
+        from cja_auto_sdr.core.exceptions import api_connection_error_summary
+
+        exc = Exception("Forbidden")
+        exc.status_code = 403
+        assert api_connection_error_summary(exc) == "HTTP 403 — authorization failed or resource not accessible"
+
+    def test_http_403_data_view_lookup_returns_access_summary(self):
+        from cja_auto_sdr.core.exceptions import api_connection_error_summary
+
+        exc = Exception("Forbidden")
+        exc.status_code = 403
+        assert api_connection_error_summary(exc, context="data_view_lookup") == "HTTP 403 — data view not accessible"
+
+    def test_runtime_http_403_text_returns_auth_summary(self):
+        from cja_auto_sdr.core.exceptions import api_connection_error_summary
+
+        assert (
+            api_connection_error_summary(RuntimeError("HTTP 403 Forbidden"))
+            == "HTTP 403 — authorization failed or resource not accessible"
+        )
+
+    def test_generic_exception_returns_none(self):
+        from cja_auto_sdr.core.exceptions import api_connection_error_summary
+
+        assert api_connection_error_summary(ValueError("something else")) is None
+
+    def test_unrelated_numeric_runtime_text_returns_none(self):
+        from cja_auto_sdr.core.exceptions import api_connection_error_summary
+
+        assert api_connection_error_summary(RuntimeError("expected 403 columns in export")) is None
+
+
+# ---------------------------------------------------------------------------
 # validate_config_only — hint output in step [4/5]
 # ---------------------------------------------------------------------------
 
@@ -761,6 +819,33 @@ class TestValidateConfigHintOutput:
 
         assert result is False
         captured = capsys.readouterr()
-        assert "API connection failed: HTTP 403 Forbidden" in captured.out
+        assert "API connection failed: HTTP 403 — authorization failed or resource not accessible" in captured.out
         assert "authentication or authorization failed" in captured.out
         assert "unexpected" not in captured.out
+
+    def test_key_error_content_shows_friendly_summary_on_error_line(self, capsys):
+        """KeyError('content') error line must say 'empty or malformed' not \"'content'\"."""
+        from cja_auto_sdr.cli.commands.config import validate_config_only
+
+        gen = _make_generator_mock(
+            python_version_info=(3, 14, 0),
+            recoverable_exceptions=(KeyError,),
+        )
+        gen.load_credentials_from_env.return_value = {
+            "org_id": "org@AdobeOrg",
+            "client_id": "cid12345678",
+            "secret": "sec12345678",
+            "scopes": "openid",
+        }
+        gen.validate_env_credentials.return_value = True
+        gen.cjapy.CJA.return_value.getDataViews.side_effect = KeyError("content")
+
+        with patch("cja_auto_sdr.cli.commands.config._generator_module", return_value=gen):
+            with patch("cja_auto_sdr.cli.commands.config._check_output_dir_access"):
+                result = validate_config_only()
+
+        assert result is False
+        captured = capsys.readouterr()
+        assert "API connection failed: empty or malformed API response" in captured.out
+        assert "'content'" not in captured.out
+        assert "AEP API" in captured.out

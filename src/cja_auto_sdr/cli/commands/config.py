@@ -45,9 +45,12 @@ def _print_api_connection_failure(
     unexpected: bool = False,
 ) -> None:
     """Render validate-config API failures with consistent hint handling."""
+    from cja_auto_sdr.core.exceptions import api_connection_error_summary
+
     hint = _api_connection_hint(exc)
     label = "API connection failed (unexpected)" if unexpected and hint is None else "API connection failed"
-    print(generator.ConsoleColors.error(f"  \u2717 {label}: {exc!s}"))
+    summary = api_connection_error_summary(exc) or str(exc)
+    print(generator.ConsoleColors.error(f"  \u2717 {label}: {summary}"))
     if hint:
         print()
         for line in hint.splitlines():

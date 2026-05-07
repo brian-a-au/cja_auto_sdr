@@ -7,6 +7,21 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.20] — 2026-05-06
+
+### Fixed
+
+- **Friendlier error-line summaries for known API failures** — the `✗ API
+  connection failed:` line in `--validate-config`, `--dry-run`, and
+  `--profile-test` now displays a human-readable summary instead of the raw
+  exception repr for recognised error patterns:
+  - `KeyError('content')` → `"empty or malformed API response"` (with existing
+    AEP API / product-profile hint below)
+  - HTTP 401 → `"HTTP 401 — authentication failed"`
+  - HTTP 403 → `"HTTP 403 — authorization failed or resource not accessible"`
+    (or `"HTTP 403 — data view not accessible"` for per-data-view lookups)
+  - Unrecognised exceptions fall back to `str(exc)` unchanged.
+
 ## [3.5.19] — 2026-04-25
 
 ### Refactored
