@@ -819,6 +819,33 @@ class TestValidateConfigHintOutput:
 
         assert result is False
         captured = capsys.readouterr()
-        assert "API connection failed: HTTP 403 Forbidden" in captured.out
+        assert "API connection failed: HTTP 403 — authorization failed or resource not accessible" in captured.out
         assert "authentication or authorization failed" in captured.out
         assert "unexpected" not in captured.out
+
+    def test_key_error_content_shows_friendly_summary_on_error_line(self, capsys):
+        """KeyError('content') error line must say 'empty or malformed' not \"'content'\"."""
+        from cja_auto_sdr.cli.commands.config import validate_config_only
+
+        gen = _make_generator_mock(
+            python_version_info=(3, 14, 0),
+            recoverable_exceptions=(KeyError,),
+        )
+        gen.load_credentials_from_env.return_value = {
+            "org_id": "org@AdobeOrg",
+            "client_id": "cid12345678",
+            "secret": "sec12345678",
+            "scopes": "openid",
+        }
+        gen.validate_env_credentials.return_value = True
+        gen.cjapy.CJA.return_value.getDataViews.side_effect = KeyError("content")
+
+        with patch("cja_auto_sdr.cli.commands.config._generator_module", return_value=gen):
+            with patch("cja_auto_sdr.cli.commands.config._check_output_dir_access"):
+                result = validate_config_only()
+
+        assert result is False
+        captured = capsys.readouterr()
+        assert "API connection failed: empty or malformed API response" in captured.out
+        assert "'content'" not in captured.out
+        assert "AEP API" in captured.out
