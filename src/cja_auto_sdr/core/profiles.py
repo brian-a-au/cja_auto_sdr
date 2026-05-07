@@ -672,7 +672,8 @@ def test_profile(profile_name: str) -> bool:
     def _print_profile_test_failure(exc: Exception) -> bool:
         """Render a controlled profile-test failure with optional remediation hint."""
         print(ConsoleColors.error("   API connection: FAILED"), file=sys.stderr)
-        print(ConsoleColors.error(f"   Error: {api_connection_error_summary(exc) or str(exc)}"), file=sys.stderr)
+        summary = api_connection_error_summary(exc) or str(exc)
+        print(ConsoleColors.error(f"   Error: {summary}"), file=sys.stderr)
         print(file=sys.stderr)
         print(ConsoleColors.error("Profile test: FAILED"), file=sys.stderr)
         print(file=sys.stderr)
