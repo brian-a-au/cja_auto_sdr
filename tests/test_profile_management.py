@@ -677,7 +677,7 @@ class TestTestProfile:
         assert result is False
         captured = capsys.readouterr()
         assert "Profile test: FAILED" in captured.err
-        assert "HTTP 403 Forbidden" in captured.err
+        assert "HTTP 403 — authorization failed or resource not accessible" in captured.err
         assert "authentication or authorization failed" in captured.out
 
     def test_plain_constructor_failure_returns_controlled_failure(self, tmp_path, capsys):
