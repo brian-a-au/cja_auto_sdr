@@ -80,6 +80,43 @@ jobs:
             sed -n '/= slowest 25 durations =/,$p' /tmp/test-unit.log
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+      - name: Emit coverage + test count to step summary
+        # Surface the same metrics the `update-badges` workflow consumes,
+        # but on EVERY tests run (PRs and main alike), so reviewers see
+        # the current values in the PR's Checks tab without scraping logs.
+        # `success()` keeps the output honest — no metrics emitted on a
+        # failed run.
+        if: ${{ success() }}
+        shell: bash
+        run: |
+          # Coverage % from the `TOTAL` row of pytest-cov's term report
+          # (already in /tmp/test-unit.log from the previous step).
+          COV=$(grep -E '^TOTAL' /tmp/test-unit.log | awk '{print $NF}' | tr -d '%')
+          # Test count: pytest's `-q` + pytest-cov suppresses the "N passed
+          # in X.XXs" summary in non-tty output, so we count via a separate
+          # `--collect-only --no-cov` pass (no test execution; <1s wall time).
+          # The summary line `N tests collected in X.XXs` only appears with
+          # --collect-only.
+          TESTS=$(uv run pytest --collect-only --no-cov 2>&1 | grep -oE '[0-9]+ tests collected' | head -1 | awk '{print $1}')
+          if [ -z "$COV" ] || [ -z "$TESTS" ]; then
+            echo "::warning::Could not parse coverage (got '$COV') or test count (got '$TESTS') — emitting placeholder summary"
+            {
+              echo "## Test metrics"
+              echo ""
+              echo "_Could not parse metrics from pytest output. See run logs._"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          {
+            echo "## Test metrics"
+            echo ""
+            echo "| Metric | Value |"
+            echo "|---|---|"
+            echo "| Coverage | **${COV}%** |"
+            echo "| Tests collected | **${TESTS}** |"
+            echo ""
+            echo "_Source: \`update-badges\` workflow consumes the same parse from this run on \`main\` to refresh the README badges. PR drift from main is informational here, not gated._"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   test-integration:
     runs-on: ubuntu-latest
