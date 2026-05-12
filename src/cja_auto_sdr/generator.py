@@ -6980,6 +6980,13 @@ def _main_impl(run_state: dict[str, Any] | None = None):
             run_state=run_state,
         )
 
+    # Handle --watch mode (continuous monitoring loop)
+    if getattr(args, "watch_data_views", None) is not None:
+        from cja_auto_sdr.cli.commands.watch import run_watch
+
+        exit_code = run_watch(args)
+        sys.exit(exit_code)
+
     # Validate that at least one data view is provided
     if not data_view_inputs:
         print(ConsoleColors.error("ERROR: At least one data view ID or name is required"), file=sys.stderr)
