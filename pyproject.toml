@@ -172,6 +172,7 @@ ignore = [
 "scripts/orchestrator.py" = ["T201"]  # intentional CLI output in standalone script
 "scripts/create_sample_outputs.py" = ["T201"]  # intentional CLI output in standalone script
 "scripts/stress_test.py" = ["T201"]  # intentional CLI output in standalone script
+"scripts/smoke_test_production.py" = ["T201", "F401", "F541", "F841", "ARG001", "ERA001", "EXE001"]  # intentional CLI output, live-API smoke test script
 "examples/**" = ["INP001", "T201"]  # INP001: not a package; T201: example scripts use print
 
 [tool.ruff.lint.isort]

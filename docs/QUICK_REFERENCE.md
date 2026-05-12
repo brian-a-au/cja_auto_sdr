@@ -1,6 +1,6 @@
 # Quick Reference Card
 
-Single-page command cheat sheet for CJA SDR Generator v3.5.20.
+Single-page command cheat sheet for CJA SDR Generator v3.6.0.
 
 ## Four Main Modes
 
@@ -356,6 +356,9 @@ cja_auto_sdr --list-dataviews  # Uses client-a
 | `--include-all-inventory` | Enable all inventory options (smart mode: auto-excludes derived in snapshot/diff modes) | SDR + Snapshot Diff |
 | `--inventory-only` | Output only inventory sheets (requires `--include-*`) | SDR only |
 | `--inventory-summary` | Quick stats without full output (requires `--include-*`) | SDR only |
+| `--watch DV_ID [DV_ID ...]` | Enter watch loop emitting `cja-watch-event/v1` NDJSON on stdout | Watch only |
+| `--interval Nh\|Nd\|Nw` | Watch cycle interval (e.g. `1h`, `6h`, `1d`, `1w`); required with `--watch` | Watch only |
+| `--watch-threshold N` | Minimum changes to emit a `change` event; `0` = heartbeat; default `1` | Watch only |
 
 > **Note:** `--include-derived` is for SDR generation only. Derived fields are already included in the standard metrics/dimensions output, so changes are captured in the Metrics/Dimensions diff.
 >

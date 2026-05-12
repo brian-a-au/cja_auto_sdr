@@ -7,6 +7,29 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.0] — 2026-05-11
+
+### Added
+- `--watch <DV_ID>...` watch mode: foreground loop that fetches, snapshots, and diffs
+  one or more data views on a cycle, emitting `cja-watch-event/v1` NDJSON on stdout.
+- `--interval Nh|Nd|Nw` cycle interval (required with `--watch`).
+- `--watch-threshold N` minimum change count to emit (default 1; 0 = heartbeat).
+- Three structured-log events: `watch_loop_start`, `watch_cycle_complete`, `watch_loop_stop`.
+- `cja_auto_sdr.core.logging.redact_text` public helper.
+- `cja_auto_sdr.diff.snapshot.parse_duration_seconds` for `Nh|Nd|Nw` grammar.
+
+### Rejected with `--watch`
+- `--format`, `--output`, `--org-report`, `--diff`, `--quality-policy`,
+  `--fail-on-quality`, `--batch`, and all discovery flags
+  (`--list-dataviews`, `--list-connections`, `--list-datasets`).
+  All rejected with exit code `1` via `_exit_error()`, matching the convention
+  established by other semantic-relationship rejections.
+
+### Unchanged
+- All other CLI modes are byte-equivalent to v3.5.20.
+- No new runtime dependencies.
+- No exit-code changes (SIGINT/SIGTERM exit 0).
+
 ## [3.5.20] — 2026-05-06
 
 ### Fixed
