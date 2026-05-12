@@ -27,7 +27,7 @@ def test_parse_duration_seconds_invalid(period_str):
     assert parse_duration_seconds(period_str) is None
 
 
-@pytest.mark.parametrize("period_str", ["²h", "①h", "١h"])
+@pytest.mark.parametrize("period_str", ["²h", "①h", "١h"])  # noqa: RUF001 — deliberate ambiguous chars
 def test_parse_duration_seconds_rejects_non_ascii_digits(period_str):
     # str.isdigit() admits superscripts and circled digits but int() rejects them.
     # str.isdecimal() admits Arabic-Indic digits int() accepts but the parser should
