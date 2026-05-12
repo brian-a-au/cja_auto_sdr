@@ -1795,6 +1795,43 @@ def _validate_semantic_flag_relationships(
             _exit_error("--watch is incompatible with --list-connections")
         if getattr(args, "list_datasets", False):
             _exit_error("--watch is incompatible with --list-datasets")
+        # Snapshot/inventory/diff family — each has its own dispatcher that would
+        # otherwise run before watch dispatch and silently take precedence.
+        if getattr(args, "snapshot", None) is not None:
+            _exit_error("--watch is incompatible with --snapshot")
+        if getattr(args, "list_snapshots", False):
+            _exit_error("--watch is incompatible with --list-snapshots")
+        if getattr(args, "prune_snapshots", False):
+            _exit_error("--watch is incompatible with --prune-snapshots")
+        if getattr(args, "diff_snapshot", None) is not None:
+            _exit_error("--watch is incompatible with --diff-snapshot")
+        if getattr(args, "compare_with_prev", False):
+            _exit_error("--watch is incompatible with --compare-with-prev")
+        if getattr(args, "compare_snapshots", None) is not None:
+            _exit_error("--watch is incompatible with --compare-snapshots")
+        if getattr(args, "diff_labels", None) is not None:
+            _exit_error("--watch is incompatible with --diff-labels")
+        if getattr(args, "inventory_summary", False):
+            _exit_error("--watch is incompatible with --inventory-summary")
+        if getattr(args, "include_all_inventory", False):
+            _exit_error("--watch is incompatible with --include-all-inventory")
+        if getattr(args, "git_init", False):
+            _exit_error("--watch is incompatible with --git-init")
+        if getattr(args, "git_commit", False):
+            _exit_error("--watch is incompatible with --git-commit")
+        if getattr(args, "profile_list", False):
+            _exit_error("--watch is incompatible with --profile-list")
+        if getattr(args, "profile_import", None) is not None:
+            _exit_error("--watch is incompatible with --profile-import")
+        if getattr(args, "profile_add", None) is not None:
+            _exit_error("--watch is incompatible with --profile-add")
+        # Data view ID shape — watch loops only over data view IDs (`dv_*`), not names
+        # or other identifiers. Per-cycle name resolution would be wasteful, so reject
+        # non-ID inputs upfront with the same is_data_view_id() check the rest of the
+        # CLI uses.
+        for dv_id in args.watch_data_views:
+            if not is_data_view_id(dv_id):
+                _exit_error(f"--watch values must be data view IDs (e.g. dv_abc123), not names. Got: {dv_id!r}")
 
 
 def _sync_run_summary_cli_metadata(
@@ -6677,6 +6714,16 @@ def _main_impl(run_state: dict[str, Any] | None = None):
     if inferred_mode == RunMode.ORG_REPORT_SNAPSHOTS:
         _handle_org_report_snapshot_cli(args, output_to_stdout=output_to_stdout, run_state=run_state)
 
+    # Handle --watch mode (continuous monitoring loop). Dispatched before color theme
+    # setup and the other CLI subcommand handlers so that --watch takes precedence over
+    # profile/git/snapshot dispatchers; semantic prevalidation rules
+    # (in _validate_semantic_flag_relationships) catch nonsensical flag combinations
+    # before we reach this point.
+    if getattr(args, "watch_data_views", None) is not None:
+        from cja_auto_sdr.cli.commands.watch import run_watch
+
+        sys.exit(run_watch(args))
+
     # Set color theme for diff output (accessible accessibility)
     color_theme = getattr(args, "color_theme", "default")
     if color_theme and color_theme != "default":
@@ -6979,13 +7026,6 @@ def _main_impl(run_state: dict[str, Any] | None = None):
             keep_since_specified=keep_since_specified,
             run_state=run_state,
         )
-
-    # Handle --watch mode (continuous monitoring loop)
-    if getattr(args, "watch_data_views", None) is not None:
-        from cja_auto_sdr.cli.commands.watch import run_watch
-
-        exit_code = run_watch(args)
-        sys.exit(exit_code)
 
     # Validate that at least one data view is provided
     if not data_view_inputs:

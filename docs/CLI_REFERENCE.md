@@ -528,7 +528,6 @@ All events are emitted on stdout, one JSON object per line, with a trailing newl
     "dimensions": 124,
     "metrics": 86,
     "calculated_metrics": 42,
-    "derived_fields": 17,
     "segments": 203
   }
 }
@@ -581,7 +580,7 @@ Three new `INFO`-level diagnostic events are emitted via `emit_diagnostic()` (vi
 | Event name | When emitted | Key fields |
 |------------|--------------|------------|
 | `watch_loop_start` | Once at dispatch entry | `data_view_count`, `interval_seconds`, `watch_threshold` |
-| `watch_cycle_complete` | Once per emitted NDJSON event (not for `error` events) | `cycle`, `data_view_id`, `total_changes`, `emitted` |
+| `watch_cycle_complete` | Once per emitted NDJSON `baseline` or `change` event (skipped for `error` events) | `cycle`, `data_view_id`, `total_changes` |
 | `watch_loop_stop` | At loop termination | `reason` (`"sigint"`, `"sigterm"`, `"fatal"`), `cycles_completed` |
 
 #### Exit Code Contract
