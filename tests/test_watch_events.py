@@ -90,15 +90,29 @@ def test_event_field_order_is_schema_then_type_then_ts_first():
 def test_event_lines_end_with_newline(event_type):
     # Common envelope sanity: NDJSON requires trailing newline per line.
     kwargs = {
-        BaselineEvent: dict(ts="t", cycle=1, data_view_id="d", snapshot_id="s", component_counts={}),
-        ChangeEvent: dict(
-            ts="t", cycle=1, data_view_id="d",
-            previous_snapshot_id="a", current_snapshot_id="b",
-            total_changes=0, changes_by_category={},
-        ),
-        ErrorEvent: dict(
-            ts="t", cycle=1, data_view_id="d",
-            stage="fetch", error_class="E", error_message="m",
-        ),
+        BaselineEvent: {
+            "ts": "t",
+            "cycle": 1,
+            "data_view_id": "d",
+            "snapshot_id": "s",
+            "component_counts": {},
+        },
+        ChangeEvent: {
+            "ts": "t",
+            "cycle": 1,
+            "data_view_id": "d",
+            "previous_snapshot_id": "a",
+            "current_snapshot_id": "b",
+            "total_changes": 0,
+            "changes_by_category": {},
+        },
+        ErrorEvent: {
+            "ts": "t",
+            "cycle": 1,
+            "data_view_id": "d",
+            "stage": "fetch",
+            "error_class": "E",
+            "error_message": "m",
+        },
     }[event_type]
     assert serialize_event(event_type(**kwargs)).endswith("\n")
