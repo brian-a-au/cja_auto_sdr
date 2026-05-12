@@ -143,16 +143,57 @@ def test_run_watch_no_phantom_cycle_when_signal_arrives_during_sleep(MockRunner,
 
     assert exit_code == 0
     captured = capsys.readouterr()
-    # Exactly one event line — the baseline. No phantom change event.
-    event_lines = [line for line in captured.out.split("\n") if line.strip()]
-    assert len(event_lines) == 1, f"expected 1 event, got {len(event_lines)}: {event_lines}"
+    # Filter for NDJSON event lines only — setup_logging now writes startup banner
+    # to stdout in non-quiet mode, which would otherwise inflate the count.
+    event_lines = [line for line in captured.out.split("\n") if line.strip().startswith("{")]
+    assert len(event_lines) == 1, f"expected 1 NDJSON event, got {len(event_lines)}: {event_lines}"
     assert '"type":"baseline"' in event_lines[0]
-    assert '"type":"change"' not in captured.out
+    assert '"type":"change"' not in "\n".join(event_lines)
 
     # loop_stop should report cycles_completed=1, not 2.
     loop_stop_calls = [c for c in mock_emit.call_args_list if c.args and c.args[1] == "watch_loop_stop"]
     assert len(loop_stop_calls) == 1
     assert loop_stop_calls[0].kwargs["cycles_completed"] == 1
+
+
+@patch("cja_auto_sdr.cli.commands.watch.WatchCycleRunner")
+@patch("cja_auto_sdr.cli.commands.watch.setup_logging")
+def test_run_watch_initializes_logging_before_emitting_diagnostics(mock_setup_logging, MockRunner, capsys):
+    """Codex review found: _main_impl's sys.exit(run_watch(args)) skips the SDR
+    setup_logging() call, so without an explicit call inside run_watch the
+    structured-log events were dropped. Verify setup_logging is called before
+    the first diagnostic fires, with log_level/log_format threaded through."""
+    mock_setup_logging.return_value = MagicMock()
+    runner = MockRunner.return_value
+    runner.run_cycle.return_value = iter(
+        [
+            BaselineEvent(
+                ts="2026-05-11T00:00:00Z",
+                cycle=1,
+                data_view_id="dv_abc",
+                snapshot_id="s1",
+                component_counts={},
+            ),
+        ]
+    )
+    args = MagicMock()
+    args.watch_data_views = ["dv_abc"]
+    args.watch_interval = "1h"
+    args.watch_threshold = 1
+    args.log_level = "DEBUG"
+    args.log_format = "json"
+
+    _stop_requested.set()
+    try:
+        run_watch(args, cja=MagicMock())
+    finally:
+        _stop_requested.clear()
+
+    mock_setup_logging.assert_called_once()
+    kwargs = mock_setup_logging.call_args.kwargs
+    assert kwargs["log_level"] == "DEBUG"
+    assert kwargs["log_format"] == "json"
+    assert kwargs["batch_mode"] is True
 
 
 @patch("cja_auto_sdr.cli.commands.watch.WatchCycleRunner")

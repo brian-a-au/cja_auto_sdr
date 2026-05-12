@@ -1845,6 +1845,15 @@ def _validate_semantic_flag_relationships(
             _exit_error("--watch is incompatible with --list-calculated-metrics")
         if getattr(args, "trending_window", None) is not None:
             _exit_error("--watch is incompatible with --trending-window")
+        # Positional data view IDs are ignored once --watch is set — reject them
+        # explicitly rather than silently watching the wrong set. Example footgun:
+        # `cja_auto_sdr dv_old --watch dv_new --interval 1h` would otherwise watch
+        # only dv_new while dv_old looks like it was requested.
+        if getattr(args, "data_views", None):
+            _exit_error(
+                "--watch is incompatible with positional data view arguments. "
+                "Pass all data views as --watch arguments instead."
+            )
         # Data view ID shape — watch loops only over data view IDs (`dv_*`), not names
         # or other identifiers. Per-cycle name resolution would be wasteful, so reject
         # non-ID inputs upfront with the same is_data_view_id() check the rest of the

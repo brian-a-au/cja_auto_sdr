@@ -118,3 +118,13 @@ def test_watch_rejects_numeric_only_input():
     result = _run(["--watch", "12345", "--interval", "1h"])
     assert result.returncode == 1
     assert "data view IDs" in result.stderr
+
+
+def test_watch_rejects_positional_data_views():
+    """Codex review found: positional data views are silently dropped because
+    run_watch only consults args.watch_data_views. Reject them explicitly so a
+    user can't accidentally watch the wrong set, e.g.
+    `cja_auto_sdr dv_old --watch dv_new --interval 1h`."""
+    result = _run(["dv_old", "--watch", "dv_new", "--interval", "1h"])
+    assert result.returncode == 1
+    assert "positional data view" in result.stderr
