@@ -1441,6 +1441,39 @@ Requirements:
         help="Stale lease recovery threshold in seconds for the org-report concurrency lock (default: 3600)",
     )
 
+    # --- Watch Mode ----------------------------------------------------------
+    watch_group = parser.add_argument_group("Watch")
+    watch_group.add_argument(
+        "--watch",
+        nargs="+",
+        metavar="DV_ID",
+        dest="watch_data_views",
+        default=None,
+        help=(
+            "Enter the watch loop for one or more data views. "
+            "Requires --interval. Emits NDJSON events on stdout (cja-watch-event/v1)."
+        ),
+    )
+    watch_group.add_argument(
+        "--interval",
+        type=str,
+        metavar="PERIOD",
+        dest="watch_interval",
+        default=None,
+        help="Watch loop cycle interval (e.g. 1h, 6h, 1d, 1w). Required with --watch.",
+    )
+    watch_group.add_argument(
+        "--watch-threshold",
+        type=int,
+        default=1,
+        metavar="N",
+        dest="watch_threshold",
+        help=(
+            "Minimum total change count to emit a `change` event. "
+            "Pass 0 to emit every cycle including zero-change cycles (heartbeat). Default: 1."
+        ),
+    )
+
     # --- Agent Integration ---------------------------------------------------
     agent_group = parser.add_argument_group("Agent Integration")
     agent_group.add_argument(
