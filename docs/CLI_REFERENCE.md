@@ -496,7 +496,7 @@ Foreground loop that fetches, snapshots, and diffs one or more data views on a r
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `--watch DV_ID [DV_ID ...]` | Enter the watch loop for one or more data views. Requires `--interval`. Emits NDJSON events on stdout. | - |
+| `--watch DV_ID [DV_ID ...]` | Enter the watch loop for one or more data views. Values must be data view IDs (`dv_*` prefix); names and connections are rejected. Requires `--interval`. Emits NDJSON events on stdout. | - |
 | `--interval PERIOD` | Watch cycle interval. Accepts `Nh` (hours), `Nd` (days), or `Nw` (weeks). E.g. `1h`, `6h`, `1d`, `2w`. Required with `--watch`. | - |
 | `--watch-threshold N` | Minimum total change count to emit a `change` event. Pass `0` to emit every cycle including zero-change cycles (heartbeat mode). | 1 |
 
@@ -593,7 +593,20 @@ Three new `INFO`-level diagnostic events are emitted via `emit_diagnostic()` (vi
 
 #### Incompatible Flags
 
-`--watch` cannot be combined with: `--format`, `--output`, `--org-report`, `--diff`, `--quality-policy`, `--fail-on-quality`, `--batch`, `--list-dataviews`, `--list-connections`, `--list-datasets`. All are rejected with exit code `1`.
+`--watch` cannot be combined with any of the following. All are rejected with exit code `1`.
+
+| Family | Flags |
+|---|---|
+| Output / format | `--format`, `--output` |
+| Other run modes | `--org-report`, `--diff`, `--batch` |
+| Quality engine | `--quality-policy`, `--fail-on-quality` |
+| Discovery | `--list-dataviews`, `--list-connections`, `--list-datasets`, `--describe-dataview`, `--list-metrics`, `--list-dimensions`, `--list-segments`, `--list-calculated-metrics` |
+| Stats / inspection | `--stats`, `--inventory-summary`, `--include-all-inventory`, `--trending-window` |
+| Snapshot / diff family | `--snapshot`, `--list-snapshots`, `--prune-snapshots`, `--diff-snapshot`, `--compare-with-prev`, `--compare-snapshots`, `--diff-labels` |
+| Profile management | `--profile-list`, `--profile-add`, `--profile-import`, `--profile-test`, `--profile-show` |
+| Git integration | `--git-init`, `--git-commit`, `--git-push` |
+
+In addition, `--watch` requires a data view ID matching the `dv_*` prefix; names and numeric-only inputs are rejected with the same exit code `1` semantic rejection.
 
 ### Agent Integration
 

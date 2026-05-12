@@ -1825,6 +1825,26 @@ def _validate_semantic_flag_relationships(
             _exit_error("--watch is incompatible with --profile-import")
         if getattr(args, "profile_add", None) is not None:
             _exit_error("--watch is incompatible with --profile-add")
+        if getattr(args, "profile_test", None) is not None:
+            _exit_error("--watch is incompatible with --profile-test")
+        if getattr(args, "profile_show", None) is not None:
+            _exit_error("--watch is incompatible with --profile-show")
+        if getattr(args, "git_push", False):
+            _exit_error("--watch is incompatible with --git-push")
+        if getattr(args, "stats", False):
+            _exit_error("--watch is incompatible with --stats")
+        if getattr(args, "describe_dataview", None) is not None:
+            _exit_error("--watch is incompatible with --describe-dataview")
+        if getattr(args, "list_metrics", None) is not None:
+            _exit_error("--watch is incompatible with --list-metrics")
+        if getattr(args, "list_dimensions", None) is not None:
+            _exit_error("--watch is incompatible with --list-dimensions")
+        if getattr(args, "list_segments", None) is not None:
+            _exit_error("--watch is incompatible with --list-segments")
+        if getattr(args, "list_calculated_metrics", None) is not None:
+            _exit_error("--watch is incompatible with --list-calculated-metrics")
+        if getattr(args, "trending_window", None) is not None:
+            _exit_error("--watch is incompatible with --trending-window")
         # Data view ID shape — watch loops only over data view IDs (`dv_*`), not names
         # or other identifiers. Per-cycle name resolution would be wasteful, so reject
         # non-ID inputs upfront with the same is_data_view_id() check the rest of the
