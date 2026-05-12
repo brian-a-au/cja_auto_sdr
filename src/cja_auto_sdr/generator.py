@@ -494,6 +494,7 @@ class RunMode(Enum):
     DIFF_SNAPSHOT = "diff_snapshot"
     DRY_RUN = "dry_run"
     INVENTORY_SUMMARY = "inventory_summary"
+    WATCH = "watch"
     SDR = "sdr"
 
 
@@ -1429,6 +1430,7 @@ def _run_mode_checks(args: argparse.Namespace) -> tuple[tuple[RunMode, bool], ..
         ),
         (RunMode.DRY_RUN, getattr(args, "dry_run", False)),
         (RunMode.INVENTORY_SUMMARY, getattr(args, "inventory_summary", False)),
+        (RunMode.WATCH, getattr(args, "watch_data_views", None) is not None),
     )
 
 
@@ -1764,6 +1766,35 @@ def _validate_semantic_flag_relationships(
         _exit_error("Use either --list-snapshots or --prune-snapshots, not both")
     if getattr(args, "profile_overwrite", False) and not getattr(args, "profile_import", None):
         _exit_error("--profile-overwrite requires --profile-import")
+    # Watch mode rejections.
+    watch_active = getattr(args, "watch_data_views", None) is not None
+    if getattr(args, "watch_interval", None) is not None and not watch_active:
+        _exit_error("--interval requires --watch")
+    if getattr(args, "watch_threshold", 1) != 1 and not watch_active:
+        _exit_error("--watch-threshold requires --watch")
+    if watch_active and getattr(args, "watch_interval", None) is None:
+        _exit_error("--watch requires --interval")
+    if watch_active:
+        if getattr(args, "format", None) is not None:
+            _exit_error("--watch is incompatible with --format")
+        if getattr(args, "output", None) is not None:
+            _exit_error("--watch is incompatible with --output")
+        if getattr(args, "org_report", False):
+            _exit_error("--watch is incompatible with --org-report")
+        if getattr(args, "diff", False):
+            _exit_error("--watch is incompatible with --diff")
+        if getattr(args, "quality_policy", None) is not None:
+            _exit_error("--watch is incompatible with --quality-policy")
+        if getattr(args, "fail_on_quality", None) is not None:
+            _exit_error("--watch is incompatible with --fail-on-quality")
+        if getattr(args, "batch", False):
+            _exit_error("--watch is incompatible with --batch")
+        if getattr(args, "list_dataviews", False):
+            _exit_error("--watch is incompatible with --list-dataviews")
+        if getattr(args, "list_connections", False):
+            _exit_error("--watch is incompatible with --list-connections")
+        if getattr(args, "list_datasets", False):
+            _exit_error("--watch is incompatible with --list-datasets")
 
 
 def _sync_run_summary_cli_metadata(
