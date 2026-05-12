@@ -453,7 +453,7 @@ def parse_duration_seconds(period_str: str) -> int | None:
     if unit not in _DURATION_UNIT_SECONDS:
         return None
     head = period_str[:-1]
-    if not head.isdigit():  # also rejects "-1", "1.5", " 1", ""
+    if not head.isascii() or not head.isdigit():  # rejects "-1", "1.5", " 1", "", and Unicode digits
         return None
     n = int(head)
     if n <= 0:
