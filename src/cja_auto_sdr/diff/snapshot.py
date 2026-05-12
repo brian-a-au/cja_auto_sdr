@@ -436,3 +436,26 @@ def parse_retention_period(period_str: str) -> int | None:
         pass
 
     return None
+
+
+_DURATION_UNIT_SECONDS = {"h": 3600, "d": 86_400, "w": 604_800}
+
+
+def parse_duration_seconds(period_str: str) -> int | None:
+    """Parse an Nh/Nd/Nw duration string to whole seconds.
+
+    Returns None for any input that does not match exactly `<positive-int><h|d|w>`.
+    Whitespace, decimals, zero, and negative values are rejected.
+    """
+    if not period_str or len(period_str) < 2:
+        return None
+    unit = period_str[-1]
+    if unit not in _DURATION_UNIT_SECONDS:
+        return None
+    head = period_str[:-1]
+    if not head.isascii() or not head.isdigit():  # rejects "-1", "1.5", " 1", "", and Unicode digits
+        return None
+    n = int(head)
+    if n <= 0:
+        return None
+    return n * _DURATION_UNIT_SECONDS[unit]

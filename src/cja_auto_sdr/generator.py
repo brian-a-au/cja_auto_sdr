@@ -494,6 +494,7 @@ class RunMode(Enum):
     DIFF_SNAPSHOT = "diff_snapshot"
     DRY_RUN = "dry_run"
     INVENTORY_SUMMARY = "inventory_summary"
+    WATCH = "watch"
     SDR = "sdr"
 
 
@@ -1429,6 +1430,7 @@ def _run_mode_checks(args: argparse.Namespace) -> tuple[tuple[RunMode, bool], ..
         ),
         (RunMode.DRY_RUN, getattr(args, "dry_run", False)),
         (RunMode.INVENTORY_SUMMARY, getattr(args, "inventory_summary", False)),
+        (RunMode.WATCH, getattr(args, "watch_data_views", None) is not None),
     )
 
 
@@ -1764,6 +1766,101 @@ def _validate_semantic_flag_relationships(
         _exit_error("Use either --list-snapshots or --prune-snapshots, not both")
     if getattr(args, "profile_overwrite", False) and not getattr(args, "profile_import", None):
         _exit_error("--profile-overwrite requires --profile-import")
+    # Watch mode rejections.
+    watch_active = getattr(args, "watch_data_views", None) is not None
+    if getattr(args, "watch_interval", None) is not None and not watch_active:
+        _exit_error("--interval requires --watch")
+    if getattr(args, "watch_threshold", 1) != 1 and not watch_active:
+        _exit_error("--watch-threshold requires --watch")
+    if watch_active and getattr(args, "watch_interval", None) is None:
+        _exit_error("--watch requires --interval")
+    if watch_active:
+        if getattr(args, "format", None) is not None:
+            _exit_error("--watch is incompatible with --format")
+        if getattr(args, "output", None) is not None:
+            _exit_error("--watch is incompatible with --output")
+        if getattr(args, "org_report", False):
+            _exit_error("--watch is incompatible with --org-report")
+        if getattr(args, "diff", False):
+            _exit_error("--watch is incompatible with --diff")
+        if getattr(args, "quality_policy", None) is not None:
+            _exit_error("--watch is incompatible with --quality-policy")
+        if getattr(args, "fail_on_quality", None) is not None:
+            _exit_error("--watch is incompatible with --fail-on-quality")
+        if getattr(args, "batch", False):
+            _exit_error("--watch is incompatible with --batch")
+        if getattr(args, "list_dataviews", False):
+            _exit_error("--watch is incompatible with --list-dataviews")
+        if getattr(args, "list_connections", False):
+            _exit_error("--watch is incompatible with --list-connections")
+        if getattr(args, "list_datasets", False):
+            _exit_error("--watch is incompatible with --list-datasets")
+        # Snapshot/inventory/diff family — each has its own dispatcher that would
+        # otherwise run before watch dispatch and silently take precedence.
+        if getattr(args, "snapshot", None) is not None:
+            _exit_error("--watch is incompatible with --snapshot")
+        if getattr(args, "list_snapshots", False):
+            _exit_error("--watch is incompatible with --list-snapshots")
+        if getattr(args, "prune_snapshots", False):
+            _exit_error("--watch is incompatible with --prune-snapshots")
+        if getattr(args, "diff_snapshot", None) is not None:
+            _exit_error("--watch is incompatible with --diff-snapshot")
+        if getattr(args, "compare_with_prev", False):
+            _exit_error("--watch is incompatible with --compare-with-prev")
+        if getattr(args, "compare_snapshots", None) is not None:
+            _exit_error("--watch is incompatible with --compare-snapshots")
+        if getattr(args, "diff_labels", None) is not None:
+            _exit_error("--watch is incompatible with --diff-labels")
+        if getattr(args, "inventory_summary", False):
+            _exit_error("--watch is incompatible with --inventory-summary")
+        if getattr(args, "include_all_inventory", False):
+            _exit_error("--watch is incompatible with --include-all-inventory")
+        if getattr(args, "git_init", False):
+            _exit_error("--watch is incompatible with --git-init")
+        if getattr(args, "git_commit", False):
+            _exit_error("--watch is incompatible with --git-commit")
+        if getattr(args, "profile_list", False):
+            _exit_error("--watch is incompatible with --profile-list")
+        if getattr(args, "profile_import", None) is not None:
+            _exit_error("--watch is incompatible with --profile-import")
+        if getattr(args, "profile_add", None) is not None:
+            _exit_error("--watch is incompatible with --profile-add")
+        if getattr(args, "profile_test", None) is not None:
+            _exit_error("--watch is incompatible with --profile-test")
+        if getattr(args, "profile_show", None) is not None:
+            _exit_error("--watch is incompatible with --profile-show")
+        if getattr(args, "git_push", False):
+            _exit_error("--watch is incompatible with --git-push")
+        if getattr(args, "stats", False):
+            _exit_error("--watch is incompatible with --stats")
+        if getattr(args, "describe_dataview", None) is not None:
+            _exit_error("--watch is incompatible with --describe-dataview")
+        if getattr(args, "list_metrics", None) is not None:
+            _exit_error("--watch is incompatible with --list-metrics")
+        if getattr(args, "list_dimensions", None) is not None:
+            _exit_error("--watch is incompatible with --list-dimensions")
+        if getattr(args, "list_segments", None) is not None:
+            _exit_error("--watch is incompatible with --list-segments")
+        if getattr(args, "list_calculated_metrics", None) is not None:
+            _exit_error("--watch is incompatible with --list-calculated-metrics")
+        if getattr(args, "trending_window", None) is not None:
+            _exit_error("--watch is incompatible with --trending-window")
+        # Positional data view IDs are ignored once --watch is set — reject them
+        # explicitly rather than silently watching the wrong set. Example footgun:
+        # `cja_auto_sdr dv_old --watch dv_new --interval 1h` would otherwise watch
+        # only dv_new while dv_old looks like it was requested.
+        if getattr(args, "data_views", None):
+            _exit_error(
+                "--watch is incompatible with positional data view arguments. "
+                "Pass all data views as --watch arguments instead."
+            )
+        # Data view ID shape — watch loops only over data view IDs (`dv_*`), not names
+        # or other identifiers. Per-cycle name resolution would be wasteful, so reject
+        # non-ID inputs upfront with the same is_data_view_id() check the rest of the
+        # CLI uses.
+        for dv_id in args.watch_data_views:
+            if not is_data_view_id(dv_id):
+                _exit_error(f"--watch values must be data view IDs (e.g. dv_abc123), not names. Got: {dv_id!r}")
 
 
 def _sync_run_summary_cli_metadata(
@@ -6645,6 +6742,16 @@ def _main_impl(run_state: dict[str, Any] | None = None):
 
     if inferred_mode == RunMode.ORG_REPORT_SNAPSHOTS:
         _handle_org_report_snapshot_cli(args, output_to_stdout=output_to_stdout, run_state=run_state)
+
+    # Handle --watch mode (continuous monitoring loop). Dispatched before color theme
+    # setup and the other CLI subcommand handlers so that --watch takes precedence over
+    # profile/git/snapshot dispatchers; semantic prevalidation rules
+    # (in _validate_semantic_flag_relationships) catch nonsensical flag combinations
+    # before we reach this point.
+    if getattr(args, "watch_data_views", None) is not None:
+        from cja_auto_sdr.cli.commands.watch import run_watch
+
+        sys.exit(run_watch(args))
 
     # Set color theme for diff output (accessible accessibility)
     color_theme = getattr(args, "color_theme", "default")

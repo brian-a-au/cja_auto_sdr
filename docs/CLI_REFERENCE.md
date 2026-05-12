@@ -490,6 +490,124 @@ Cache is stored in `~/.cja_auto_sdr/cache/org_report_cache.json`.
 >
 > **Snapshot/Diff Tip:** `--include-all-inventory` automatically excludes `--include-derived` in `--snapshot`, `--diff-snapshot`, `--compare-snapshots`, and `--compare-with-prev` modes.
 
+### Watch Mode
+
+Foreground loop that fetches, snapshots, and diffs one or more data views on a repeating interval, emitting structured `cja-watch-event/v1` NDJSON events on stdout. Designed for CI pipelines and agent integrations that need continuous change detection without polling.
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--watch DV_ID [DV_ID ...]` | Enter the watch loop for one or more data views. Values must be data view IDs (`dv_*` prefix); names and connections are rejected. Requires `--interval`. Emits NDJSON events on stdout. | - |
+| `--interval PERIOD` | Watch cycle interval. Accepts `Nh` (hours), `Nd` (days), or `Nw` (weeks). E.g. `1h`, `6h`, `1d`, `2w`. Required with `--watch`. | - |
+| `--watch-threshold N` | Minimum total change count to emit a `change` event. Pass `0` to emit every cycle including zero-change cycles (heartbeat mode). | 1 |
+
+#### NDJSON Event Schema: `cja-watch-event/v1`
+
+All events are emitted on stdout, one JSON object per line, with a trailing newline.
+
+**Common envelope fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `schema` | string | Always `"cja-watch-event/v1"` |
+| `type` | string | `"baseline"`, `"change"`, or `"error"` |
+| `ts` | string | Z-suffixed ISO-8601 UTC timestamp |
+| `cycle` | integer | 1-indexed, monotonic per process; does not reset across data views |
+| `data_view_id` | string | Exact value passed via `--watch` |
+
+**`baseline` event** — emitted on the first cycle for each data view (no prior snapshot to diff):
+
+```json
+{
+  "schema": "cja-watch-event/v1",
+  "type": "baseline",
+  "ts": "2026-05-11T18:42:11Z",
+  "cycle": 1,
+  "data_view_id": "dv_abc123",
+  "snapshot_id": "<sha or path token>",
+  "component_counts": {
+    "dimensions": 124,
+    "metrics": 86,
+    "calculated_metrics": 42,
+    "segments": 203
+  }
+}
+```
+
+**`change` event** — emitted on cycle 2+ when `total_changes >= watch_threshold`:
+
+```json
+{
+  "schema": "cja-watch-event/v1",
+  "type": "change",
+  "ts": "2026-05-11T19:42:11Z",
+  "cycle": 5,
+  "data_view_id": "dv_abc123",
+  "previous_snapshot_id": "...",
+  "current_snapshot_id": "...",
+  "total_changes": 7,
+  "changes_by_category": {
+    "dimensions": {"added": 1, "removed": 0, "modified": 2},
+    "metrics": {"added": 0, "removed": 0, "modified": 0},
+    "calculated_metrics": {"added": 1, "removed": 0, "modified": 1},
+    "segments": {"added": 2, "removed": 0, "modified": 0}
+  }
+}
+```
+
+`total_changes` is the sum of all 12 counters (added + removed + modified across four categories). `changes_by_category` covers `dimensions`, `metrics`, `calculated_metrics`, and `segments`; derived fields are not tracked by the diff engine and are excluded.
+
+**`error` event** — per-data-view fetch/snapshot/diff failure; the loop continues to the next data view and the next cycle:
+
+```json
+{
+  "schema": "cja-watch-event/v1",
+  "type": "error",
+  "ts": "2026-05-11T20:42:11Z",
+  "cycle": 4,
+  "data_view_id": "dv_abc123",
+  "stage": "fetch | snapshot | diff",
+  "error_class": "ConnectionError",
+  "error_message": "<redacted via redact_text>"
+}
+```
+
+`error_message` is run through `redact_text()` before serialization so Bearer tokens and other sensitive patterns are scrubbed from stdout.
+
+#### Structured Log Events
+
+Three new `INFO`-level diagnostic events are emitted via `emit_diagnostic()` (visible with `--log-format json`):
+
+| Event name | When emitted | Key fields |
+|------------|--------------|------------|
+| `watch_loop_start` | Once at dispatch entry | `data_view_count`, `interval_seconds`, `watch_threshold` |
+| `watch_cycle_complete` | Once per emitted NDJSON `baseline` or `change` event (skipped for `error` events) | `cycle`, `data_view_id`, `total_changes` |
+| `watch_loop_stop` | At loop termination | `reason` (`"sigint"`, `"sigterm"`, `"fatal"`), `cycles_completed` |
+
+#### Exit Code Contract
+
+| Condition | Exit code |
+|-----------|-----------|
+| SIGINT or SIGTERM | `0` |
+| Semantic flag rejections (e.g. `--watch` without `--interval`) | `1` |
+| Argparse-native rejections (unknown flag, malformed value) | `2` |
+
+#### Incompatible Flags
+
+`--watch` cannot be combined with any of the following. All are rejected with exit code `1`.
+
+| Family | Flags |
+|---|---|
+| Output / format | `--format`, `--output` |
+| Other run modes | `--org-report`, `--diff`, `--batch` |
+| Quality engine | `--quality-policy`, `--fail-on-quality` |
+| Discovery | `--list-dataviews`, `--list-connections`, `--list-datasets`, `--describe-dataview`, `--list-metrics`, `--list-dimensions`, `--list-segments`, `--list-calculated-metrics` |
+| Stats / inspection | `--stats`, `--inventory-summary`, `--include-all-inventory`, `--trending-window` |
+| Snapshot / diff family | `--snapshot`, `--list-snapshots`, `--prune-snapshots`, `--diff-snapshot`, `--compare-with-prev`, `--compare-snapshots`, `--diff-labels` |
+| Profile management | `--profile-list`, `--profile-add`, `--profile-import`, `--profile-test`, `--profile-show` |
+| Git integration | `--git-init`, `--git-commit`, `--git-push` |
+
+In addition, `--watch` requires a data view ID matching the `dv_*` prefix; names and numeric-only inputs are rejected with the same exit code `1` semantic rejection.
+
 ### Agent Integration
 
 Preset flag for running CJA SDR Generator from AI agents, scripts, and automation pipelines.

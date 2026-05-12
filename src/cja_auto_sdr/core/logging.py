@@ -225,6 +225,19 @@ def _redact_message(message: str) -> str:
     return _GENERIC_BEARER_PATTERN.sub(_redact_bearer_match, redacted)
 
 
+def redact_text(message: str) -> str:
+    """Scrub Bearer tokens and sensitive key-value patterns from *message*.
+
+    Public alias over the internal `_redact_message` helper. Intended for callers
+    that need to serialize exception text into structured output (e.g., the watch
+    event NDJSON `error_message` field) without leaking credentials.
+
+    Input is a plain string; output is a plain string. Returns the input unchanged
+    if no sensitive patterns match.
+    """
+    return _redact_message(message)
+
+
 def _redact_value(value: object) -> object:
     if isinstance(value, dict):
         redacted_dict: dict[object, object] = {}

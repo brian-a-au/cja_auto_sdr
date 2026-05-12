@@ -190,7 +190,7 @@ This command:
 
 ```bash
 $ uv run cja_auto_sdr -V
-cja_auto_sdr 3.5.20
+cja_auto_sdr 3.6.0
 ```
 
 > **Important:** All commands in this guide assume you're in the `cja_auto_sdr` directory. If you see "command not found", make sure you're in the right directory and have run `uv sync`.
@@ -690,6 +690,24 @@ uv run cja_auto_sdr dv_12345 --snapshot ./baseline.json
 ```
 
 See [Data View Comparison](DIFF_COMPARISON.md) for more details.
+
+### Watch a Data View for Changes
+
+Continuously monitor one or more data views and emit structured NDJSON events when components change:
+```bash
+# Watch a single data view every hour
+uv run cja_auto_sdr --watch dv_12345 --interval 1h
+
+# Watch two data views every 6 hours; emit only when >= 3 changes
+uv run cja_auto_sdr --watch dv_12345 dv_67890 --interval 6h --watch-threshold 3
+
+# Heartbeat mode: emit every cycle regardless of change count
+uv run cja_auto_sdr --watch dv_12345 --interval 1d --watch-threshold 0
+```
+
+Each cycle emits a `cja-watch-event/v1` NDJSON line on stdout (`baseline` on first cycle, `change` when threshold is met, `error` on fetch failure). Press Ctrl-C to stop cleanly (exit 0).
+
+See [CLI Reference](CLI_REFERENCE.md#watch-mode) for the full schema and flag details.
 
 ### Analyze Org-Wide Component Usage
 

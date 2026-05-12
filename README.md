@@ -333,6 +333,10 @@ cja_auto_sdr "Production Analytics"
 | Quick stats mode | `cja_auto_sdr --org-report --org-stats` |
 | Cluster data views | `cja_auto_sdr --org-report --cluster --format excel` |
 | CI/CD governance check | `cja_auto_sdr --org-report --duplicate-threshold 5 --fail-on-threshold` |
+| **Watch Mode** | |
+| Watch for changes every hour | `cja_auto_sdr --watch dv_12345 --interval 1h` |
+| Watch multiple data views (6h cycle) | `cja_auto_sdr --watch dv_1 dv_2 --interval 6h` |
+| Heartbeat mode (emit every cycle) | `cja_auto_sdr --watch dv_12345 --interval 1d --watch-threshold 0` |
 
 ## Documentation
 
@@ -464,7 +468,7 @@ cja_auto_sdr/
 │   └── ...                    # Additional guides
 ├── examples/                  # Automation and GitHub Actions examples
 ├── scripts/                   # Utility scripts
-├── tests/                     # Test suite (7,895+ tests)
+├── tests/                     # Test suite (7,998+ tests)
 │   ├── category_rules.py      # File-based test-category rules
 │   ├── conftest.py            # Pytest fixtures and auto-marking
 │   ├── README.md              # Test inventory and execution guide
