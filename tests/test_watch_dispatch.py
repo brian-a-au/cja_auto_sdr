@@ -40,10 +40,18 @@ def test_main_does_not_call_run_watch_when_watch_arg_absent(mock_run_watch):
     """
     from cja_auto_sdr import generator
 
+    exit_code: int | None = None
     with patch.object(sys, "argv", ["cja_auto_sdr", "--config-status"]):
         try:
             generator.main()
-        except SystemExit:
-            pass
+        except SystemExit as exc:
+            exit_code = exc.code if isinstance(exc.code, int) else None
 
     assert not mock_run_watch.called
+    # 0 = clean exit (config resolved). 1 = clean "no config found" from
+    # show_config_status (the test environment is not guaranteed to have one).
+    # 2 = argparse rejection — acceptable only if the flag itself becomes
+    # invalid in a future refactor. Anything else means --config-status
+    # crashed en route, which silently passed under the old
+    # `except SystemExit: pass`.
+    assert exit_code in (0, 1, 2), f"unexpected exit code from --config-status: {exit_code}"

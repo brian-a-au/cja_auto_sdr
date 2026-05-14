@@ -23,6 +23,9 @@ from cja_auto_sdr.output.watch_event import ErrorEvent, serialize_event
 from cja_auto_sdr.pipeline.watch import WatchCycleRunner
 
 _logger = logging.getLogger(__name__)
+# Module-level mutable state below (`_stop_requested`, `_stop_reason_holder`,
+# `_previous_handlers`) is reset between tests by an autouse fixture in
+# `tests/conftest.py::reset_watch_module_state` — keep names in sync if renaming.
 _stop_requested = threading.Event()
 # Module-scope holder for the signal reason. Mutated by the signal handler closure
 # inside `_install_signal_handlers`; read by `run_watch` after the loop exits.

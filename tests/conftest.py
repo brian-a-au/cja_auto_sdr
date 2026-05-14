@@ -2,6 +2,7 @@
 
 import json
 import os
+import sys
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -28,6 +29,27 @@ def clear_fast_path_option_spec_cache():
     _fast_path_option_spec.cache_clear()
     yield
     _fast_path_option_spec.cache_clear()
+
+
+@pytest.fixture(autouse=True)
+def reset_watch_module_state():
+    """Reset module-level mutable state in cja_auto_sdr.cli.commands.watch.
+
+    In-process watch tests touch `_stop_requested`, `_stop_reason_holder`, and
+    `_previous_handlers` directly. Without this teardown a test that exits before
+    `run_watch`'s own `finally` runs (e.g. an assertion failure mid-call) would
+    leave the watch SIGINT/SIGTERM handler installed for the rest of the session.
+    Cheap no-op for the vast majority of tests that don't import the watch module.
+    """
+    yield
+
+    watch_mod = sys.modules.get("cja_auto_sdr.cli.commands.watch")
+    if watch_mod is None:
+        return
+    watch_mod._stop_requested.clear()
+    watch_mod._stop_reason_holder.clear()
+    if watch_mod._previous_handlers:
+        watch_mod._restore_signal_handlers()
 
 
 @pytest.hookimpl(tryfirst=True)
