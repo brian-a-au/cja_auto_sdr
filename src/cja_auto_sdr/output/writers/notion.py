@@ -189,3 +189,115 @@ def build_sdr_blocks(
         ],
     )
     return blocks
+
+
+# ---------------------------------------------------------------------------
+# Credential resolution
+# ---------------------------------------------------------------------------
+
+def resolve_notion_credentials() -> tuple[str, str]:
+    """Return (NOTION_TOKEN, NOTION_PARENT_PAGE_ID) from env / .env file."""
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()
+    except ImportError:
+        pass
+
+    token = os.environ.get("NOTION_TOKEN")
+    parent_page_id = os.environ.get("NOTION_PARENT_PAGE_ID")
+
+    if not token:
+        print(
+            "ERROR: NOTION_TOKEN is not set. "
+            "Set it as an environment variable or add it to a .env file.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    if not parent_page_id:
+        print(
+            "ERROR: NOTION_PARENT_PAGE_ID is not set. "
+            "Set it as an environment variable or add it to a .env file.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    return token, parent_page_id
+
+
+def _require_notion_client():
+    """Return notion_client.Client class or exit with install instructions."""
+    try:
+        from notion_client import Client
+        return Client
+    except ImportError:
+        print(
+            "ERROR: Notion output requires the notion extra.\n"
+            "Install it with: uv pip install 'cja-auto-sdr[notion]'",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+
+# ---------------------------------------------------------------------------
+# Notion API operations
+# ---------------------------------------------------------------------------
+
+def _clear_page_blocks(client: Any, page_id: str) -> None:
+    """Delete all child blocks from a Notion page (no bulk-clear API exists)."""
+    cursor = None
+    while True:
+        kwargs: dict[str, Any] = {"block_id": page_id}
+        if cursor:
+            kwargs["start_cursor"] = cursor
+        response = client.blocks.children.list(**kwargs)
+        for block in response.get("results", []):
+            client.blocks.delete(block_id=block["id"])
+        if not response.get("has_more"):
+            break
+        cursor = response.get("next_cursor")
+
+
+def _append_blocks(
+    client: Any, page_id: str, blocks: list[dict], batch_size: int = 100,
+) -> None:
+    """Append blocks to a Notion page in batches (API limit: 100 per call)."""
+    for i in range(0, len(blocks), batch_size):
+        client.blocks.children.append(
+            block_id=page_id, children=blocks[i:i + batch_size],
+        )
+
+
+def create_or_update_page(
+    client: Any,
+    parent_page_id: str,
+    page_title: str,
+    data_view_id: str,
+    blocks: list[dict],
+    registry_path: Path,
+    *,
+    force_new: bool = False,
+) -> str:
+    """Create a new Notion page or update the existing one for this data view.
+
+    Returns the Notion page ID. Registry entry is written only after a
+    successful block append.
+    """
+    existing_page_id = (
+        None if force_new else lookup_page_id(registry_path, data_view_id)
+    )
+
+    if existing_page_id:
+        _clear_page_blocks(client, existing_page_id)
+        _append_blocks(client, existing_page_id, blocks)
+        store_page_id(registry_path, data_view_id, existing_page_id)
+        return existing_page_id
+
+    page = client.pages.create(
+        parent={"page_id": parent_page_id},
+        properties={"title": [{"type": "text", "text": {"content": page_title}}]},
+    )
+    page_id = page["id"]
+    _append_blocks(client, page_id, blocks)
+    store_page_id(registry_path, data_view_id, page_id)
+    return page_id

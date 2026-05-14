@@ -167,3 +167,127 @@ def test_build_sdr_blocks_dq_section_omitted_when_empty():
         if b["type"] == "heading_2"
     ]
     assert not any("Data Quality" in h for h in headings)
+
+
+# ---- API layer tests (mocked Client) ----
+
+
+def test_resolve_notion_credentials_reads_env(monkeypatch):
+    monkeypatch.setenv("NOTION_TOKEN", "secret-token")
+    monkeypatch.setenv("NOTION_PARENT_PAGE_ID", "parent-page-id")
+    from cja_auto_sdr.output.writers.notion import resolve_notion_credentials
+    token, parent_id = resolve_notion_credentials()
+    assert token == "secret-token"
+    assert parent_id == "parent-page-id"
+
+
+def test_resolve_notion_credentials_missing_token_exits(monkeypatch):
+    monkeypatch.delenv("NOTION_TOKEN", raising=False)
+    monkeypatch.delenv("NOTION_PARENT_PAGE_ID", raising=False)
+    from cja_auto_sdr.output.writers.notion import resolve_notion_credentials
+    with pytest.raises(SystemExit) as exc_info:
+        resolve_notion_credentials()
+    assert exc_info.value.code == 1
+
+
+def test_resolve_notion_credentials_missing_parent_page_exits(monkeypatch):
+    monkeypatch.setenv("NOTION_TOKEN", "secret-token")
+    monkeypatch.delenv("NOTION_PARENT_PAGE_ID", raising=False)
+    from cja_auto_sdr.output.writers.notion import resolve_notion_credentials
+    with pytest.raises(SystemExit) as exc_info:
+        resolve_notion_credentials()
+    assert exc_info.value.code == 1
+
+
+def test_clear_page_blocks_deletes_all_children():
+    from cja_auto_sdr.output.writers.notion import _clear_page_blocks
+    client = MagicMock()
+    client.blocks.children.list.return_value = {
+        "results": [{"id": "block-1"}, {"id": "block-2"}],
+        "has_more": False,
+    }
+    _clear_page_blocks(client, "page-abc")
+    assert client.blocks.delete.call_count == 2
+    client.blocks.delete.assert_any_call(block_id="block-1")
+    client.blocks.delete.assert_any_call(block_id="block-2")
+
+
+def test_clear_page_blocks_handles_pagination():
+    from cja_auto_sdr.output.writers.notion import _clear_page_blocks
+    client = MagicMock()
+    client.blocks.children.list.side_effect = [
+        {"results": [{"id": "block-1"}], "has_more": True, "next_cursor": "cursor-x"},
+        {"results": [{"id": "block-2"}], "has_more": False},
+    ]
+    _clear_page_blocks(client, "page-abc")
+    assert client.blocks.delete.call_count == 2
+
+
+def test_append_blocks_batches_at_100():
+    from cja_auto_sdr.output.writers.notion import _append_blocks
+    client = MagicMock()
+    blocks = [
+        {"type": "paragraph", "paragraph": {"rich_text": []}} for _ in range(150)
+    ]
+    _append_blocks(client, "page-abc", blocks)
+    assert client.blocks.children.append.call_count == 2
+    first_call_blocks = client.blocks.children.append.call_args_list[0][1]["children"]
+    assert len(first_call_blocks) == 100
+
+
+def test_create_or_update_page_creates_new_when_not_in_registry(tmp_path):
+    from cja_auto_sdr.output.writers.notion import create_or_update_page
+    client = MagicMock()
+    client.pages.create.return_value = {"id": "new-page-id"}
+    registry_path = tmp_path / ".notion_pages.json"
+    page_id = create_or_update_page(
+        client,
+        "parent-id",
+        "Web Analytics — SDR",
+        "dv_123",
+        [{"type": "paragraph", "paragraph": {"rich_text": []}}],
+        registry_path,
+        force_new=False,
+    )
+    assert page_id == "new-page-id"
+    client.pages.create.assert_called_once()
+
+
+def test_create_or_update_page_updates_existing_when_in_registry(tmp_path):
+    import json
+    from cja_auto_sdr.output.writers.notion import create_or_update_page
+    registry_path = tmp_path / ".notion_pages.json"
+    registry_path.write_text(json.dumps({"dv_123": "existing-page-id"}))
+    client = MagicMock()
+    client.blocks.children.list.return_value = {"results": [], "has_more": False}
+    page_id = create_or_update_page(
+        client,
+        "parent-id",
+        "Web Analytics — SDR",
+        "dv_123",
+        [],
+        registry_path,
+        force_new=False,
+    )
+    assert page_id == "existing-page-id"
+    client.pages.create.assert_not_called()
+
+
+def test_create_or_update_page_force_new_ignores_registry(tmp_path):
+    import json
+    from cja_auto_sdr.output.writers.notion import create_or_update_page
+    registry_path = tmp_path / ".notion_pages.json"
+    registry_path.write_text(json.dumps({"dv_123": "old-page-id"}))
+    client = MagicMock()
+    client.pages.create.return_value = {"id": "fresh-page-id"}
+    page_id = create_or_update_page(
+        client,
+        "parent-id",
+        "Web Analytics — SDR",
+        "dv_123",
+        [],
+        registry_path,
+        force_new=True,
+    )
+    assert page_id == "fresh-page-id"
+    client.pages.create.assert_called_once()
