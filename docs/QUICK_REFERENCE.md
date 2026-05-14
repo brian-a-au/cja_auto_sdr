@@ -6,7 +6,7 @@ Single-page command cheat sheet for CJA SDR Generator v3.6.1.
 
 | Mode | Purpose | Output |
 |------|---------|--------|
-| **SDR Generation** | Document a data view's dimensions, metrics, and calculated metrics | Excel (default), CSV, JSON, HTML, Markdown |
+| **SDR Generation** | Document a data view's dimensions, metrics, and calculated metrics | Excel (default), CSV, JSON, HTML, Markdown, Notion |
 | **Diff Comparison** | Compare two data views or snapshots to identify changes | Console (default), Excel, CSV, JSON, HTML, Markdown |
 | **Org-Wide Analysis** | Analyze component usage across all data views in an organization | Console (default), Excel, CSV, JSON, HTML, Markdown |
 | **Discovery** | List data views, connections, and datasets in your CJA org | Console (default), CSV, JSON |
@@ -399,6 +399,9 @@ cja_auto_sdr --list-dataviews  # Uses client-a
 | `--warn-threshold PERCENT` | Exit with code 3 if change % exceeds threshold (for CI/CD) |
 | `--no-color` | Disable ANSI color codes in console output (global) |
 | `--format-pr-comment` | Output in GitHub/GitLab PR comment format |
+| `--format notion` | Publish SDR directly to Notion (requires `NOTION_TOKEN` + `NOTION_PARENT_PAGE_ID`) |
+| `--push-to-notion JSON_FILE` | Push existing JSON artifact to Notion (no CJA API call) |
+| `--notion-force-new` | Force a new Notion page instead of updating existing |
 
 > **Retention precedence:** Explicit values are preserved in both forms: `--keep-last 0` / `--keep-last=0` and `--keep-since 90d` / `--keep-since=90d`.
 
@@ -411,6 +414,7 @@ cja_auto_sdr --list-dataviews  # Uses client-a
 | `json` | ✅ | ✅ | ✅ | ✅ | JSON for integrations |
 | `html` | ✅ | ✅ | ✅ | ❌ | Browser-viewable |
 | `markdown` | ✅ | ✅ | ✅ | ❌ | Documentation-ready |
+| `notion` | ✅ | ❌ | ❌ | ❌ | Publish SDR to Notion page |
 | `console` | ❌ | ✅ (default) | ✅ (default) | ✅ (default) | Terminal output |
 | `all` | ✅ | ✅ | ✅ | ❌ | All formats |
 
