@@ -73,3 +73,32 @@ def test_push_to_notion_invalid_json_exits(tmp_path):
     with pytest.raises(SystemExit) as exc_info:
         _push_to_notion_from_json(str(bad_json), output_dir=str(tmp_path))
     assert exc_info.value.code == 1
+
+
+def test_push_to_notion_os_error_exits(tmp_path, monkeypatch):
+    """OSError from JSON read (permission denied, IO error) surfaces as exit 1."""
+    import cja_auto_sdr.generator as gen_mod
+
+    fake = tmp_path / "exists_but_unreadable.json"
+    fake.write_text("{}")
+
+    def boom(self, *args, **kwargs):
+        raise PermissionError("simulated permission denied")
+
+    monkeypatch.setattr(Path, "read_text", boom)
+    with pytest.raises(SystemExit) as exc_info:
+        gen_mod._push_to_notion_from_json(str(fake), output_dir=str(tmp_path))
+    assert exc_info.value.code == 1
+
+
+def test_push_to_notion_takes_precedence_over_watch():
+    """RunMode inference must resolve PUSH_TO_NOTION before WATCH so dispatch is consistent."""
+    import argparse
+
+    from cja_auto_sdr.generator import RunMode, _infer_run_mode_enum
+
+    args = argparse.Namespace(
+        push_to_notion="./sdr.json",
+        watch_data_views=["dv_123"],
+    )
+    assert _infer_run_mode_enum(args) == RunMode.PUSH_TO_NOTION

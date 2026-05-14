@@ -518,6 +518,8 @@ cja_auto_sdr --push-to-notion ./reports/dv_12345_sdr.json --notion-force-new
 ```
 
 > **Idempotency:** Page IDs are tracked in `.notion_pages.json` in the output directory so re-runs update the existing page rather than creating duplicates. Use `--notion-force-new` to override.
+>
+> **Stdout:** `--push-to-notion` prints the resulting `notion://pages/<id>` identifier to stdout on success. Avoid combining with `--run-summary-json -` / `--output -` if you need to consume stdout machine-readably, since the two outputs will be interleaved.
 
 ### Watch Mode
 

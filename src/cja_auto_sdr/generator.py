@@ -535,6 +535,8 @@ def _push_to_notion_from_json(
         payload = json.loads(json_path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         _exit_error(f"--push-to-notion: invalid JSON in {json_file}: {exc}")
+    except OSError as exc:
+        _exit_error(f"--push-to-notion: failed to read {json_file}: {exc}")
 
     metadata_dict = payload.get("metadata", {})
     data_dict: dict[str, pd.DataFrame] = {}
@@ -1482,8 +1484,8 @@ def _run_mode_checks(args: argparse.Namespace) -> tuple[tuple[RunMode, bool], ..
         ),
         (RunMode.DRY_RUN, getattr(args, "dry_run", False)),
         (RunMode.INVENTORY_SUMMARY, getattr(args, "inventory_summary", False)),
-        (RunMode.WATCH, getattr(args, "watch_data_views", None) is not None),
         (RunMode.PUSH_TO_NOTION, getattr(args, "push_to_notion", None) is not None),
+        (RunMode.WATCH, getattr(args, "watch_data_views", None) is not None),
     )
 
 

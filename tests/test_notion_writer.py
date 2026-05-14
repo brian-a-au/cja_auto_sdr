@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import builtins
 import logging
 from unittest.mock import MagicMock, patch
 
@@ -358,3 +359,27 @@ def test_notion_registered_in_writer_registry():
     from cja_auto_sdr.output.registry import WRITER_REGISTRY
 
     assert "notion" in WRITER_REGISTRY
+
+
+def test_require_notion_client_exits_when_sdk_missing(capsys, monkeypatch):
+    """Per spec: missing notion-client extra exits 1 with install instructions."""
+    import sys as _sys
+
+    from cja_auto_sdr.output.writers import notion as _notion_mod
+
+    real_import = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        if name == "notion_client":
+            raise ImportError("No module named 'notion_client'")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+    monkeypatch.setitem(_sys.modules, "notion_client", None)
+
+    with pytest.raises(SystemExit) as exc_info:
+        _notion_mod._require_notion_client()
+    assert exc_info.value.code == 1
+    err = capsys.readouterr().err
+    assert "notion extra" in err
+    assert "cja-auto-sdr[notion]" in err

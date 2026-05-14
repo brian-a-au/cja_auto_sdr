@@ -25,13 +25,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Tests
 - `tests/test_notion_registry.py` — 11 tests covering registry CRUD,
   atomic writes, and missing-file behavior.
-- `tests/test_notion_writer.py` — 28 tests covering the block builder
+- `tests/test_notion_writer.py` — 29 tests covering the block builder
   (pure functions), credential resolution, Notion API layer (clear/append/
-  create-or-update), and `write_notion_output` integration with mocked client.
+  create-or-update), `write_notion_output` integration with mocked client,
+  and the missing-`notion-client`-extra guardrail.
 - `tests/test_cli_notion.py` — 9 tests covering CLI flag wiring,
   `--push-to-notion` default, simultaneous flags, and standalone policy.
-- `tests/test_push_to_notion.py` — 3 tests covering the push handler:
-  JSON deserialization, file-not-found, and invalid-JSON exits.
+- `tests/test_push_to_notion.py` — 5 tests covering the push handler:
+  JSON deserialization, file-not-found, invalid-JSON exits, OSError on
+  read, and `RunMode.PUSH_TO_NOTION` precedence over `RunMode.WATCH`.
 
 ### Documentation
 - New Notion sections in `docs/OUTPUT_FORMATS.md`, `docs/CLI_REFERENCE.md`,

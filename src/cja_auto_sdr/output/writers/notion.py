@@ -40,8 +40,8 @@ _SECTION_ICONS = {
     "Segments": "🔖",
     "Calculated Metrics": "🧮",
     "Derived Fields": "🔬",
-    "Data Quality": "🛡️",
 }
+_DQ_HEADING_ICON = "🛡️"
 _DQ_SEVERITY_ICONS = {
     "ERROR": "🔴",
     "CRITICAL": "🔴",
@@ -170,7 +170,7 @@ def build_sdr_blocks(
 
     dq_df = data_dict.get("Data Quality")
     if dq_df is not None and not dq_df.empty:
-        blocks.append(_heading2_block("🛡️ Data Quality"))
+        blocks.append(_heading2_block(f"{_DQ_HEADING_ICON} Data Quality"))
         blocks.extend(_dq_callout_blocks(dq_df))
 
     for section_name in _SECTION_ORDER:
@@ -282,15 +282,16 @@ def create_or_update_page(
 ) -> str:
     """Create a new Notion page or update the existing one for this data view.
 
-    Returns the Notion page ID. Registry entry is written only after a
-    successful block append.
+    Returns the Notion page ID. On CREATE, the registry entry is written only
+    after a successful block append, so a mid-flight failure leaves the
+    registry unchanged and the next run creates a fresh page. On UPDATE the
+    page ID does not change, so the registry is not rewritten.
     """
     existing_page_id = None if force_new else lookup_page_id(registry_path, data_view_id)
 
     if existing_page_id:
         _clear_page_blocks(client, existing_page_id)
         _append_blocks(client, existing_page_id, blocks)
-        store_page_id(registry_path, data_view_id, existing_page_id)
         return existing_page_id
 
     page = client.pages.create(
@@ -319,9 +320,12 @@ def write_notion_output(
 ) -> str:
     """Publish SDR data to a Notion page.
 
-    Returns a notion://pages/<page_id> identifier (not a file path).
+    Returns a ``notion://pages/<page_id>`` identifier (not a file path).
+    ``base_filename`` is accepted for writer-protocol parity with file-emitting
+    writers and is used as a fallback when ``metadata_dict`` lacks
+    ``Data View ID`` or ``Data View Name``.
     """
-    logger.info("Publishing to Notion...")
+    logger.info("✓ Publishing to Notion...")
 
     client_cls = _require_notion_client()
     token, parent_page_id = resolve_notion_credentials()
@@ -344,5 +348,5 @@ def write_notion_output(
         force_new=force_new,
     )
 
-    logger.info("Notion page published: notion://pages/%s", page_id)
+    logger.info("✓ Notion page published: notion://pages/%s", page_id)
     return f"notion://pages/{page_id}"
