@@ -500,6 +500,10 @@ Foreground loop that fetches, snapshots, and diffs one or more data views on a r
 | `--interval PERIOD` | Watch cycle interval. Accepts `Nh` (hours), `Nd` (days), or `Nw` (weeks). E.g. `1h`, `6h`, `1d`, `2w`. Required with `--watch`. | - |
 | `--watch-threshold N` | Minimum total change count to emit a `change` event. Pass `0` to emit every cycle including zero-change cycles (heartbeat mode). | 1 |
 
+> **Note:** watch holds snapshots in memory only; restarting the loop emits
+> a fresh baseline for every data view. Use `cja_auto_sdr <dv_id> --snapshot file.json`
+> before starting if you need durable baselines.
+
 #### NDJSON Event Schema: `cja-watch-event/v1`
 
 All events are emitted on stdout, one JSON object per line, with a trailing newline.

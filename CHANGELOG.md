@@ -7,6 +7,35 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.1] — 2026-05-14
+
+### Fixed
+- Watch loop now restores previous SIGINT/SIGTERM handlers when `run_watch`
+  returns — important for in-process tests and any embedded invocation.
+- `watch_loop_stop` diagnostic's `cycles_completed` field now reports only
+  cycles whose body completed in full, not cycles that started but were
+  interrupted by a signal.
+- Defensive `--interval` validation in `run_watch` now uses `_exit_error`
+  (matches the rest of the CLI's error formatting) instead of raw stderr print.
+- Duplicate `--watch DV_ID DV_ID` is now deduped at parse time with a stderr
+  warning, instead of producing a confusing baseline-then-empty-change pattern
+  in cycle 1.
+
+### Added
+- One-shot stderr note on watch entry: `note: watch holds snapshots in memory;
+  baselines reset on restart.` Suppressed under `--quiet`.
+
+### Tests
+- New `tests/test_watch_dispatch.py` — end-to-end dispatch wiring tests.
+- New `tests/test_watch_logging.py` — explicit coverage for the three
+  structured-log events.
+
+### Unchanged
+- `cja-watch-event/v1` NDJSON schema (every event payload is byte-equivalent).
+- All other CLI modes (single SDR, batch, org-report, diff, discovery).
+- Exit codes (SIGINT/SIGTERM → 0; semantic rejections → 1; argparse → 2).
+- No new flags, no new runtime dependencies.
+
 ## [3.6.0] — 2026-05-12
 
 ### Added

@@ -29,15 +29,34 @@ _stop_requested = threading.Event()
 _stop_reason_holder: dict[str, str] = {}
 
 
+# Module-scope cache of previous signal handlers, populated by
+# _install_signal_handlers and consumed by _restore_signal_handlers.
+_previous_handlers: dict[int, Any] = {}
+
+
 def _install_signal_handlers() -> None:
-    """Install SIGINT/SIGTERM handlers that set _stop_requested + record the reason."""
+    """Install SIGINT/SIGTERM handlers and remember the previous values."""
+    # Defensive: clear stale state from a prior invocation whose restore
+    # didn't run (e.g. a test crashed between install and the finally block).
+    # Without this, the second install would capture the watch handler as
+    # "previous" and a subsequent restore would re-install it — silent test
+    # pollution that's hard to debug.
+    _previous_handlers.clear()
 
     def _handler(signum, _frame):
         _stop_reason_holder["reason"] = "sigint" if signum == signal.SIGINT else "sigterm"
         _stop_requested.set()
 
-    signal.signal(signal.SIGINT, _handler)
-    signal.signal(signal.SIGTERM, _handler)
+    _previous_handlers[signal.SIGINT] = signal.signal(signal.SIGINT, _handler)
+    _previous_handlers[signal.SIGTERM] = signal.signal(signal.SIGTERM, _handler)
+
+
+def _restore_signal_handlers() -> None:
+    """Restore the handlers that were in place before _install_signal_handlers."""
+    for signum, previous in _previous_handlers.items():
+        if previous is not None:
+            signal.signal(signum, previous)
+    _previous_handlers.clear()
 
 
 class _LoggingEmitter:
@@ -118,10 +137,12 @@ def _resolve_cja_client(args: Any) -> Any:
 
 def run_watch(args: Any, *, cja: Any | None = None) -> int:
     """Run the watch loop. Returns the process exit code (always 0 on clean exit)."""
+    # Imported lazily to avoid a circular import with generator → cli.commands.watch.
+    from cja_auto_sdr.generator import _exit_error
+
     interval_seconds = parse_duration_seconds(args.watch_interval)
     if interval_seconds is None:
-        print(f"ERROR: Invalid --interval value: {args.watch_interval}", file=sys.stderr)
-        return 1
+        _exit_error(f"Invalid --interval value: {args.watch_interval}")
 
     # Initialize logging so the three structured-log events (watch_loop_start,
     # watch_cycle_complete, watch_loop_stop) actually reach handlers. _main_impl's
@@ -166,8 +187,19 @@ def run_watch(args: Any, *, cja: Any | None = None) -> int:
         interval_seconds=interval_seconds,
         watch_threshold=args.watch_threshold,
     )
+    if not getattr(args, "quiet", False):
+        from cja_auto_sdr.core.colors import ConsoleColors
+
+        print(
+            ConsoleColors.info(
+                "note: watch holds snapshots in memory; baselines reset on restart. "
+                "For persistent snapshots, run `cja_auto_sdr <dv_id> --snapshot file.json` first."
+            ),
+            file=sys.stderr,
+        )
 
     cycle = 0
+    cycles_completed = 0
     stop_reason = "fatal"  # overwritten if signal handler runs
     try:
         while True:
@@ -183,6 +215,7 @@ def run_watch(args: Any, *, cja: Any | None = None) -> int:
                         data_view_id=event.data_view_id,
                         total_changes=getattr(event, "total_changes", 0),
                     )
+            cycles_completed = cycle
             if _stop_requested.is_set():
                 break
             _sleep_with_stop(interval_seconds)
@@ -192,7 +225,8 @@ def run_watch(args: Any, *, cja: Any | None = None) -> int:
                 break
         stop_reason = _stop_reason_holder.get("reason", "fatal")
     finally:
-        emitter.loop_stop(reason=stop_reason, cycles_completed=cycle)
+        emitter.loop_stop(reason=stop_reason, cycles_completed=cycles_completed)
         _stop_reason_holder.clear()
+        _restore_signal_handlers()
 
     return 0

@@ -1862,6 +1862,30 @@ def _validate_semantic_flag_relationships(
             if not is_data_view_id(dv_id):
                 _exit_error(f"--watch values must be data view IDs (e.g. dv_abc123), not names. Got: {dv_id!r}")
 
+        # Dedupe watch_data_views (Issue 4): repeated IDs would produce a
+        # confusing baseline-then-empty-change pattern in cycle 1. Warn and
+        # continue with the deduped list. This is the one place in
+        # _validate_semantic_flag_relationships that MUTATES args rather than
+        # only validating — intentional because the alternative (a separate
+        # normalization pass in _main_impl) adds more surface area than it saves.
+        from collections import Counter
+
+        counts = Counter(args.watch_data_views)
+        duplicates = sorted(dv for dv, n in counts.items() if n > 1)
+        if duplicates:
+            print(
+                ConsoleColors.warning(f"WARNING: --watch deduplicated repeat ID(s): {', '.join(duplicates)}"),
+                file=sys.stderr,
+            )
+            # Preserve original ordering while deduping.
+            seen: set[str] = set()
+            deduped: list[str] = []
+            for dv in args.watch_data_views:
+                if dv not in seen:
+                    seen.add(dv)
+                    deduped.append(dv)
+            args.watch_data_views = deduped
+
 
 def _sync_run_summary_cli_metadata(
     run_state: dict[str, Any] | None,

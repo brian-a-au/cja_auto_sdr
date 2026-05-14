@@ -3,7 +3,10 @@
 Signal tests are in test_watch_signals.py (subprocess-based, @pytest.mark.slow).
 """
 
+import signal as _signal
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from cja_auto_sdr.cli.commands.watch import (
     _LoggingEmitter,
@@ -225,3 +228,91 @@ def test_run_watch_emits_baseline_then_exits_on_stop(MockRunner, capsys):
     captured = capsys.readouterr()
     assert '"type":"baseline"' in captured.out
     assert '"data_view_id":"dv_abc"' in captured.out
+
+
+@patch("cja_auto_sdr.cli.commands.watch.parse_duration_seconds")
+def test_run_watch_invalid_interval_uses_exit_error(mock_parse, capsys):
+    """Issue 3: defensive --interval failure path now uses _exit_error
+    (ConsoleColors.error wrapper + sys.exit(1)) instead of raw print/return."""
+    mock_parse.return_value = None  # simulate invalid interval
+
+    args = MagicMock()
+    args.watch_data_views = ["dv_abc"]
+    args.watch_interval = "garbage"
+    args.watch_threshold = 1
+
+    with pytest.raises(SystemExit) as exc:
+        run_watch(args, cja=MagicMock())
+
+    assert exc.value.code == 1
+    captured = capsys.readouterr()
+    assert "ERROR:" in captured.err
+    assert "garbage" in captured.err
+
+
+@patch("cja_auto_sdr.cli.commands.watch.WatchCycleRunner")
+def test_run_watch_restores_signal_handlers_on_exit(MockRunner):
+    """Issue 1: run_watch must restore the previous SIGINT/SIGTERM handlers
+    so calling it from a test session doesn't leave the watch handler
+    installed across subsequent SIGINT delivery."""
+    sentinel_int = _signal.getsignal(_signal.SIGINT)
+    sentinel_term = _signal.getsignal(_signal.SIGTERM)
+
+    runner = MockRunner.return_value
+    runner.run_cycle.return_value = iter([])
+    args = MagicMock()
+    args.watch_data_views = ["dv_abc"]
+    args.watch_interval = "1h"
+    args.watch_threshold = 1
+
+    _stop_requested.set()
+    try:
+        run_watch(args, cja=MagicMock())
+    finally:
+        _stop_requested.clear()
+
+    assert _signal.getsignal(_signal.SIGINT) is sentinel_int
+    assert _signal.getsignal(_signal.SIGTERM) is sentinel_term
+
+
+@patch("cja_auto_sdr.cli.commands.watch.WatchCycleRunner")
+def test_run_watch_emits_in_memory_note_on_stderr(MockRunner, capsys):
+    """Issue 6: operators should be told once that watch holds snapshots in memory."""
+    runner = MockRunner.return_value
+    runner.run_cycle.return_value = iter([])
+    args = MagicMock()
+    args.watch_data_views = ["dv_abc"]
+    args.watch_interval = "1h"
+    args.watch_threshold = 1
+    args.quiet = False
+
+    _stop_requested.set()
+    try:
+        run_watch(args, cja=MagicMock())
+    finally:
+        _stop_requested.clear()
+
+    captured = capsys.readouterr()
+    assert "snapshots in memory" in captured.err
+    assert captured.err.count("snapshots in memory") == 1, "note should fire once, not per cycle"
+
+
+@patch("cja_auto_sdr.cli.commands.watch.WatchCycleRunner")
+def test_run_watch_suppresses_in_memory_note_in_quiet_mode(MockRunner, capsys):
+    """Quiet mode suppresses the in-memory note."""
+    runner = MockRunner.return_value
+    runner.run_cycle.return_value = iter([])
+    args = MagicMock()
+    args.watch_data_views = ["dv_abc"]
+    args.watch_interval = "1h"
+    args.watch_threshold = 1
+    args.quiet = True
+
+    _stop_requested.set()
+    try:
+        run_watch(args, cja=MagicMock())
+    finally:
+        _stop_requested.clear()
+
+    captured = capsys.readouterr()
+    assert "snapshots in memory" not in captured.err
