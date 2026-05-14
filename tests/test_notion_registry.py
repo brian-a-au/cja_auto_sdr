@@ -81,3 +81,34 @@ def test_store_page_id_preserves_other_entries(tmp_path):
     data = json.loads(reg_path.read_text())
     assert data["dv_existing"] == "page-existing"
     assert data["dv_new"] == "page-new"
+
+
+def test_store_page_id_creates_sidecar_lock_file(tmp_path):
+    """fcntl-locked write must leave a sidecar .lock file alongside the registry."""
+    reg_path = tmp_path / REGISTRY_FILENAME
+    store_page_id(reg_path, "dv_123", "page-abc")
+    assert (tmp_path / (REGISTRY_FILENAME + ".lock")).exists()
+
+
+def test_store_page_id_concurrent_workers_preserve_all_entries(tmp_path):
+    """Concurrent store_page_id calls from a process pool must not lose entries.
+
+    Without the exclusive flock around the read-modify-write, two workers can
+    load the same baseline registry and clobber each other's writes. This test
+    drives 20 concurrent writes through a real ProcessPoolExecutor and asserts
+    every entry survives.
+    """
+    from concurrent.futures import ProcessPoolExecutor
+
+    reg_path = tmp_path / REGISTRY_FILENAME
+    n = 20
+
+    with ProcessPoolExecutor(max_workers=8) as ex:
+        futures = [ex.submit(store_page_id, reg_path, f"dv_{i:03d}", f"page-{i:03d}") for i in range(n)]
+        for f in futures:
+            f.result()
+
+    data = json.loads(reg_path.read_text())
+    assert len(data) == n
+    for i in range(n):
+        assert data[f"dv_{i:03d}"] == f"page-{i:03d}"

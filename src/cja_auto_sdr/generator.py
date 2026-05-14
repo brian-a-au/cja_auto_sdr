@@ -977,7 +977,7 @@ def _resolve_requested_output_formats(output_format: str) -> frozenset[str]:
 
 
 STANDARD_COMPONENT_ENDPOINTS: frozenset[str] = frozenset({"metrics", "dimensions"})
-EMBEDDED_METADATA_FORMATS: frozenset[str] = frozenset({"json", "html", "markdown"})
+EMBEDDED_METADATA_FORMATS: frozenset[str] = frozenset({"json", "html", "markdown", "notion"})
 
 
 def _should_emit_standard_sdr_sections(*, inventory_only: bool) -> bool:

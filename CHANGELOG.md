@@ -17,14 +17,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `--notion-force-new` — force a new Notion page even if one already exists
   for the data view; the new page ID replaces the old entry in the registry.
 - Idempotent page registry (`.notion_pages.json`) so re-runs update existing
-  pages in place rather than accumulating duplicates.
+  pages in place rather than accumulating duplicates. Registry writes are
+  serialized across batch workers via an `fcntl.flock` sidecar lock so
+  parallel `--format notion` batch runs do not lose entries.
 - `notion` optional extra: `uv pip install 'cja-auto-sdr[notion]'`. The
   `notion-client` SDK is added unconditionally to the dev dependency group
   so tests run without the optional install flag.
+- `notion` joins `json`/`html`/`markdown` in `EMBEDDED_METADATA_FORMATS`, so
+  direct `--format notion` runs send real SDR metadata (data view name, ID,
+  generation timestamp) to the Notion page rather than falling back to the
+  base filename.
 
 ### Tests
-- `tests/test_notion_registry.py` — 11 tests covering registry CRUD,
-  atomic writes, and missing-file behavior.
+- `tests/test_notion_registry.py` — 13 tests covering registry CRUD,
+  atomic writes, missing-file behavior, the sidecar lock file, and a
+  real-`ProcessPoolExecutor` concurrent-write test that asserts all entries
+  survive parallel batch worker writes.
 - `tests/test_notion_writer.py` — 29 tests covering the block builder
   (pure functions), credential resolution, Notion API layer (clear/append/
   create-or-update), `write_notion_output` integration with mocked client,
