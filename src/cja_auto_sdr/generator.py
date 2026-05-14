@@ -3039,6 +3039,7 @@ def process_single_dataview(
     allow_partial: bool = False,
     production_mode: bool = False,
     batch_id: str | None = None,
+    notion_force_new: bool = False,
     processing_config: ProcessingConfig | None = None,
 ) -> ProcessingResult:
     """
@@ -3103,6 +3104,7 @@ def process_single_dataview(
             allow_partial=allow_partial,
             production_mode=production_mode,
             batch_id=batch_id,
+            notion_force_new=notion_force_new,
         )
 
     config_file = processing_config.config_file
@@ -3132,6 +3134,7 @@ def process_single_dataview(
     quality_report_only = processing_config.quality_report_only
     allow_partial = processing_config.allow_partial
     production_mode = processing_config.production_mode
+    notion_force_new = processing_config.notion_force_new
     batch_id = processing_config.batch_id
 
     start_time = time.perf_counter()
@@ -3879,13 +3882,14 @@ def process_single_dataview(
 
                 elif fmt == "notion":
                     from cja_auto_sdr.output.writers.notion import write_notion_output
+
                     notion_output = write_notion_output(
                         data_dict,
                         metadata_dict,
                         base_filename,
                         output_dir,
                         logger,
-                        force_new=getattr(args, "notion_force_new", False),
+                        force_new=notion_force_new,
                     )
                     output_files.append(notion_output)
 
@@ -6837,7 +6841,9 @@ def _main_impl(run_state: dict[str, Any] | None = None):
         force_new = getattr(args, "notion_force_new", False)
         output_dir = getattr(args, "output_dir", None)
         result = _push_to_notion_from_json(
-            json_file, output_dir=output_dir, force_new=force_new,
+            json_file,
+            output_dir=output_dir,
+            force_new=force_new,
         )
         print(result)
         sys.exit(0)

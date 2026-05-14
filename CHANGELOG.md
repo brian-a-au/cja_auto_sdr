@@ -7,6 +7,37 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.7.0] — 2026-05-14
+
+### Added
+- `--format notion` — publish SDR directly to a Notion page in a single command.
+- `--push-to-notion <file>` — push an existing JSON artifact to Notion without
+  re-calling the CJA API. Mutually exclusive with generation flags via the
+  `RunMode.PUSH_TO_NOTION` dispatch.
+- `--notion-force-new` — force a new Notion page even if one already exists
+  for the data view; the new page ID replaces the old entry in the registry.
+- Idempotent page registry (`.notion_pages.json`) so re-runs update existing
+  pages in place rather than accumulating duplicates.
+- `notion` optional extra: `uv pip install 'cja-auto-sdr[notion]'`. The
+  `notion-client` SDK is added unconditionally to the dev dependency group
+  so tests run without the optional install flag.
+
+### Tests
+- `tests/test_notion_registry.py` — 11 tests covering registry CRUD,
+  atomic writes, and missing-file behavior.
+- `tests/test_notion_writer.py` — 28 tests covering the block builder
+  (pure functions), credential resolution, Notion API layer (clear/append/
+  create-or-update), and `write_notion_output` integration with mocked client.
+- `tests/test_cli_notion.py` — 9 tests covering CLI flag wiring,
+  `--push-to-notion` default, simultaneous flags, and standalone policy.
+- `tests/test_push_to_notion.py` — 3 tests covering the push handler:
+  JSON deserialization, file-not-found, and invalid-JSON exits.
+
+### Documentation
+- New Notion sections in `docs/OUTPUT_FORMATS.md`, `docs/CLI_REFERENCE.md`,
+  `docs/QUICK_REFERENCE.md`, `docs/AGENT_AUTOMATION.md`.
+- `tools/cja_sdr_generate.json` — `notion` added to format enum.
+
 ## [3.6.1] — 2026-05-14
 
 ### Fixed

@@ -6,6 +6,7 @@ Credentials (env vars required, not stored in config.json):
 
 Install the optional dep: uv pip install 'cja-auto-sdr[notion]'
 """
+
 from __future__ import annotations
 
 import logging
@@ -54,6 +55,7 @@ _DQ_SEVERITY_ICONS = {
 # Block builder helpers (pure functions, no API calls)
 # ---------------------------------------------------------------------------
 
+
 def _rich_text(content: str) -> list[dict]:
     return [{"type": "text", "text": {"content": str(content)[:2000]}}]
 
@@ -95,9 +97,7 @@ def _table_row_block(cells: list[str]) -> dict:
         "object": "block",
         "type": "table_row",
         "table_row": {
-            "cells": [
-                [{"type": "text", "text": {"content": str(c)[:2000]}}] for c in cells
-            ],
+            "cells": [[{"type": "text", "text": {"content": str(c)[:2000]}}] for c in cells],
         },
     }
 
@@ -156,18 +156,15 @@ def _metadata_callout_block(metadata_dict: dict) -> dict:
         "Data View ID",
         "Generated Date & timestamp and timezone",
     ]
-    lines = []
-    for key in priority_keys:
-        if key in metadata_dict:
-            lines.append(f"{key}: {metadata_dict[key]}")
-    for key, val in metadata_dict.items():
-        if key not in set(priority_keys):
-            lines.append(f"{key}: {val}")
+    priority_set = set(priority_keys)
+    lines = [f"{key}: {metadata_dict[key]}" for key in priority_keys if key in metadata_dict]
+    lines.extend(f"{key}: {val}" for key, val in metadata_dict.items() if key not in priority_set)
     return _callout_block("\n".join(lines), emoji="📋")
 
 
 def build_sdr_blocks(
-    data_dict: dict[str, pd.DataFrame], metadata_dict: dict,
+    data_dict: dict[str, pd.DataFrame],
+    metadata_dict: dict,
 ) -> list[dict]:
     blocks: list[dict] = [_metadata_callout_block(metadata_dict), _divider_block()]
 
@@ -195,10 +192,12 @@ def build_sdr_blocks(
 # Credential resolution
 # ---------------------------------------------------------------------------
 
+
 def resolve_notion_credentials() -> tuple[str, str]:
     """Return (NOTION_TOKEN, NOTION_PARENT_PAGE_ID) from env / .env file."""
     try:
         from dotenv import load_dotenv
+
         load_dotenv()
     except ImportError:
         pass
@@ -208,16 +207,14 @@ def resolve_notion_credentials() -> tuple[str, str]:
 
     if not token:
         print(
-            "ERROR: NOTION_TOKEN is not set. "
-            "Set it as an environment variable or add it to a .env file.",
+            "ERROR: NOTION_TOKEN is not set. Set it as an environment variable or add it to a .env file.",
             file=sys.stderr,
         )
         sys.exit(1)
 
     if not parent_page_id:
         print(
-            "ERROR: NOTION_PARENT_PAGE_ID is not set. "
-            "Set it as an environment variable or add it to a .env file.",
+            "ERROR: NOTION_PARENT_PAGE_ID is not set. Set it as an environment variable or add it to a .env file.",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -229,11 +226,11 @@ def _require_notion_client():
     """Return notion_client.Client class or exit with install instructions."""
     try:
         from notion_client import Client
+
         return Client
     except ImportError:
         print(
-            "ERROR: Notion output requires the notion extra.\n"
-            "Install it with: uv pip install 'cja-auto-sdr[notion]'",
+            "ERROR: Notion output requires the notion extra.\nInstall it with: uv pip install 'cja-auto-sdr[notion]'",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -242,6 +239,7 @@ def _require_notion_client():
 # ---------------------------------------------------------------------------
 # Notion API operations
 # ---------------------------------------------------------------------------
+
 
 def _clear_page_blocks(client: Any, page_id: str) -> None:
     """Delete all child blocks from a Notion page (no bulk-clear API exists)."""
@@ -259,12 +257,16 @@ def _clear_page_blocks(client: Any, page_id: str) -> None:
 
 
 def _append_blocks(
-    client: Any, page_id: str, blocks: list[dict], batch_size: int = 100,
+    client: Any,
+    page_id: str,
+    blocks: list[dict],
+    batch_size: int = 100,
 ) -> None:
     """Append blocks to a Notion page in batches (API limit: 100 per call)."""
     for i in range(0, len(blocks), batch_size):
         client.blocks.children.append(
-            block_id=page_id, children=blocks[i:i + batch_size],
+            block_id=page_id,
+            children=blocks[i : i + batch_size],
         )
 
 
@@ -283,9 +285,7 @@ def create_or_update_page(
     Returns the Notion page ID. Registry entry is written only after a
     successful block append.
     """
-    existing_page_id = (
-        None if force_new else lookup_page_id(registry_path, data_view_id)
-    )
+    existing_page_id = None if force_new else lookup_page_id(registry_path, data_view_id)
 
     if existing_page_id:
         _clear_page_blocks(client, existing_page_id)
@@ -306,6 +306,7 @@ def create_or_update_page(
 # ---------------------------------------------------------------------------
 # Writer entry point (matches writer protocol)
 # ---------------------------------------------------------------------------
+
 
 def write_notion_output(
     data_dict: dict[str, pd.DataFrame],

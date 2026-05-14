@@ -1,4 +1,5 @@
 """Tests for Notion block builder and writer."""
+
 from __future__ import annotations
 
 import logging
@@ -84,22 +85,26 @@ def test_section_blocks_empty_df_returns_empty_list():
 
 
 def test_dq_callout_blocks_warn_severity():
-    dq_df = pd.DataFrame({
-        "Severity": ["WARN"],
-        "Component": ["metric_a"],
-        "Issue": ["Missing description"],
-    })
+    dq_df = pd.DataFrame(
+        {
+            "Severity": ["WARN"],
+            "Component": ["metric_a"],
+            "Issue": ["Missing description"],
+        }
+    )
     blocks = _dq_callout_blocks(dq_df)
     assert len(blocks) == 1
     assert blocks[0]["callout"]["icon"]["emoji"] == "⚠️"
 
 
 def test_dq_callout_blocks_error_severity():
-    dq_df = pd.DataFrame({
-        "Severity": ["ERROR"],
-        "Component": ["dim_b"],
-        "Issue": ["Null values"],
-    })
+    dq_df = pd.DataFrame(
+        {
+            "Severity": ["ERROR"],
+            "Component": ["dim_b"],
+            "Issue": ["Null values"],
+        }
+    )
     blocks = _dq_callout_blocks(dq_df)
     assert blocks[0]["callout"]["icon"]["emoji"] == "🔴"
 
@@ -145,11 +150,7 @@ def test_build_sdr_blocks_omits_empty_sections():
     }
     metadata = {"Data View Name": "Test", "Data View ID": "dv_001"}
     blocks = build_sdr_blocks(data_dict, metadata)
-    headings = [
-        b["heading_2"]["rich_text"][0]["text"]["content"]
-        for b in blocks
-        if b["type"] == "heading_2"
-    ]
+    headings = [b["heading_2"]["rich_text"][0]["text"]["content"] for b in blocks if b["type"] == "heading_2"]
     assert any("Metrics" in h for h in headings)
     assert not any("Dimensions" in h for h in headings)
 
@@ -161,11 +162,7 @@ def test_build_sdr_blocks_dq_section_omitted_when_empty():
     }
     metadata = {"Data View Name": "Test", "Data View ID": "dv_001"}
     blocks = build_sdr_blocks(data_dict, metadata)
-    headings = [
-        b["heading_2"]["rich_text"][0]["text"]["content"]
-        for b in blocks
-        if b["type"] == "heading_2"
-    ]
+    headings = [b["heading_2"]["rich_text"][0]["text"]["content"] for b in blocks if b["type"] == "heading_2"]
     assert not any("Data Quality" in h for h in headings)
 
 
@@ -176,6 +173,7 @@ def test_resolve_notion_credentials_reads_env(monkeypatch):
     monkeypatch.setenv("NOTION_TOKEN", "secret-token")
     monkeypatch.setenv("NOTION_PARENT_PAGE_ID", "parent-page-id")
     from cja_auto_sdr.output.writers.notion import resolve_notion_credentials
+
     token, parent_id = resolve_notion_credentials()
     assert token == "secret-token"
     assert parent_id == "parent-page-id"
@@ -185,6 +183,7 @@ def test_resolve_notion_credentials_missing_token_exits(monkeypatch):
     monkeypatch.delenv("NOTION_TOKEN", raising=False)
     monkeypatch.delenv("NOTION_PARENT_PAGE_ID", raising=False)
     from cja_auto_sdr.output.writers.notion import resolve_notion_credentials
+
     with pytest.raises(SystemExit) as exc_info:
         resolve_notion_credentials()
     assert exc_info.value.code == 1
@@ -194,6 +193,7 @@ def test_resolve_notion_credentials_missing_parent_page_exits(monkeypatch):
     monkeypatch.setenv("NOTION_TOKEN", "secret-token")
     monkeypatch.delenv("NOTION_PARENT_PAGE_ID", raising=False)
     from cja_auto_sdr.output.writers.notion import resolve_notion_credentials
+
     with pytest.raises(SystemExit) as exc_info:
         resolve_notion_credentials()
     assert exc_info.value.code == 1
@@ -201,6 +201,7 @@ def test_resolve_notion_credentials_missing_parent_page_exits(monkeypatch):
 
 def test_clear_page_blocks_deletes_all_children():
     from cja_auto_sdr.output.writers.notion import _clear_page_blocks
+
     client = MagicMock()
     client.blocks.children.list.return_value = {
         "results": [{"id": "block-1"}, {"id": "block-2"}],
@@ -214,6 +215,7 @@ def test_clear_page_blocks_deletes_all_children():
 
 def test_clear_page_blocks_handles_pagination():
     from cja_auto_sdr.output.writers.notion import _clear_page_blocks
+
     client = MagicMock()
     client.blocks.children.list.side_effect = [
         {"results": [{"id": "block-1"}], "has_more": True, "next_cursor": "cursor-x"},
@@ -225,10 +227,9 @@ def test_clear_page_blocks_handles_pagination():
 
 def test_append_blocks_batches_at_100():
     from cja_auto_sdr.output.writers.notion import _append_blocks
+
     client = MagicMock()
-    blocks = [
-        {"type": "paragraph", "paragraph": {"rich_text": []}} for _ in range(150)
-    ]
+    blocks = [{"type": "paragraph", "paragraph": {"rich_text": []}} for _ in range(150)]
     _append_blocks(client, "page-abc", blocks)
     assert client.blocks.children.append.call_count == 2
     first_call_blocks = client.blocks.children.append.call_args_list[0][1]["children"]
@@ -237,6 +238,7 @@ def test_append_blocks_batches_at_100():
 
 def test_create_or_update_page_creates_new_when_not_in_registry(tmp_path):
     from cja_auto_sdr.output.writers.notion import create_or_update_page
+
     client = MagicMock()
     client.pages.create.return_value = {"id": "new-page-id"}
     registry_path = tmp_path / ".notion_pages.json"
@@ -255,7 +257,9 @@ def test_create_or_update_page_creates_new_when_not_in_registry(tmp_path):
 
 def test_create_or_update_page_updates_existing_when_in_registry(tmp_path):
     import json
+
     from cja_auto_sdr.output.writers.notion import create_or_update_page
+
     registry_path = tmp_path / ".notion_pages.json"
     registry_path.write_text(json.dumps({"dv_123": "existing-page-id"}))
     client = MagicMock()
@@ -275,7 +279,9 @@ def test_create_or_update_page_updates_existing_when_in_registry(tmp_path):
 
 def test_create_or_update_page_force_new_ignores_registry(tmp_path):
     import json
+
     from cja_auto_sdr.output.writers.notion import create_or_update_page
+
     registry_path = tmp_path / ".notion_pages.json"
     registry_path.write_text(json.dumps({"dv_123": "old-page-id"}))
     client = MagicMock()
@@ -300,6 +306,7 @@ def test_write_notion_output_returns_notion_url(tmp_path, monkeypatch):
     monkeypatch.setenv("NOTION_TOKEN", "test-token")
     monkeypatch.setenv("NOTION_PARENT_PAGE_ID", "parent-id")
     from cja_auto_sdr.output.writers.notion import write_notion_output
+
     mock_client_instance = MagicMock()
     mock_client_instance.pages.create.return_value = {"id": "new-page-abc"}
     mock_client_instance.blocks.children.append.return_value = {}
@@ -321,10 +328,12 @@ def test_write_notion_output_returns_notion_url(tmp_path, monkeypatch):
 
 def test_write_notion_output_with_force_new(tmp_path, monkeypatch):
     import json
+
     monkeypatch.setenv("NOTION_TOKEN", "test-token")
     monkeypatch.setenv("NOTION_PARENT_PAGE_ID", "parent-id")
     (tmp_path / ".notion_pages.json").write_text(json.dumps({"dv_001": "old-page"}))
     from cja_auto_sdr.output.writers.notion import write_notion_output
+
     mock_client_instance = MagicMock()
     mock_client_instance.pages.create.return_value = {"id": "fresh-page"}
     mock_client_instance.blocks.children.append.return_value = {}
@@ -347,4 +356,5 @@ def test_write_notion_output_with_force_new(tmp_path, monkeypatch):
 
 def test_notion_registered_in_writer_registry():
     from cja_auto_sdr.output.registry import WRITER_REGISTRY
+
     assert "notion" in WRITER_REGISTRY

@@ -61,6 +61,7 @@ class BatchProcessor:
         quality_report_only: bool = False,
         allow_partial: bool = False,
         production_mode: bool = False,
+        notion_force_new: bool = False,
         batch_config: BatchConfig | None = None,
     ):
         generator = _generator_module()
@@ -96,6 +97,7 @@ class BatchProcessor:
                 quality_report_only=quality_report_only,
                 allow_partial=allow_partial,
                 production_mode=production_mode,
+                notion_force_new=notion_force_new,
             )
 
         self.config_file = batch_config.config_file
@@ -127,6 +129,7 @@ class BatchProcessor:
         self.quality_report_only = batch_config.quality_report_only
         self.allow_partial = batch_config.allow_partial
         self.production_mode = batch_config.production_mode
+        self.notion_force_new = batch_config.notion_force_new
         self.batch_id = str(uuid.uuid4())[:8]
         base_logger = generator.setup_logging(batch_mode=True, log_level=self.log_level, log_format=self.log_format)
         self.logger = generator.with_log_context(base_logger, run_mode="batch", batch_id=self.batch_id)
@@ -198,6 +201,7 @@ class BatchProcessor:
                 allow_partial=self.allow_partial,
                 production_mode=self.production_mode,
                 batch_id=self.batch_id,
+                notion_force_new=self.notion_force_new,
             )
             for dv_id in data_view_ids
         ]

@@ -167,6 +167,7 @@ ignore = [
 "src/cja_auto_sdr/inventory/*.py" = ["F822"] # lazy forwarding modules
 "src/cja_auto_sdr/output/**/*.py" = ["F822"] # lazy forwarding modules
 "src/cja_auto_sdr/output/inventory/summary.py" = ["T201"]  # intentional CLI console output (inventory summary display)
+"src/cja_auto_sdr/output/writers/notion.py" = ["T201", "RUF001", "RUF003"]  # T201: stderr error messages before logger is wired; RUF001/3: intentional Unicode emoji (ℹ ⚠ 🔴)
 "src/cja_auto_sdr/output/run_summary.py" = ["T201"]  # intentional CLI console output (run summary to stdout)
 "src/cja_auto_sdr/output/diff/console.py" = ["RUF001", "RUF003"]  # intentional Unicode box-drawing characters
 "src/cja_auto_sdr/output/diff/grouped.py" = ["RUF001"]  # intentional Unicode arrow (→) in output

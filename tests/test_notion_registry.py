@@ -1,4 +1,5 @@
 """Tests for Notion page ID registry."""
+
 from __future__ import annotations
 
 import json

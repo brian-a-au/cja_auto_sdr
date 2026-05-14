@@ -1,4 +1,5 @@
 """Tests for Notion-related CLI flag wiring."""
+
 from __future__ import annotations
 
 import sys
@@ -51,6 +52,7 @@ def test_push_to_notion_and_format_both_set_no_argparse_conflict():
 
 def test_push_to_notion_standalone_policy_registered():
     from cja_auto_sdr.cli.standalone_policy import standalone_prevalidation_policy
+
     policy = standalone_prevalidation_policy("push_to_notion")
     assert policy is not None
     assert "notion_force_new" in policy.ignored_semantic_dests

@@ -123,6 +123,7 @@ class WorkerArgs:
     allow_partial: bool = False
     production_mode: bool = False
     batch_id: str | None = None
+    notion_force_new: bool = False
 
 
 @dataclass(frozen=True)
@@ -157,6 +158,7 @@ class ProcessingConfig:
     allow_partial: bool = False
     production_mode: bool = False
     batch_id: str | None = None
+    notion_force_new: bool = False
 
 
 @dataclass(frozen=True)
@@ -192,3 +194,4 @@ class BatchConfig:
     quality_report_only: bool = False
     allow_partial: bool = False
     production_mode: bool = False
+    notion_force_new: bool = False

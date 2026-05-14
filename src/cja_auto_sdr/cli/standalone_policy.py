@@ -61,9 +61,7 @@ _SAMPLE_CONFIG_STANDALONE_POLICY = StandalonePrevalidationPolicy(
     ignored_semantic_dests=_WRAPPER_EXECUTION_TOLERATED_SEMANTIC_DESTS,
 )
 _PUSH_TO_NOTION_STANDALONE_POLICY = StandalonePrevalidationPolicy(
-    ignored_semantic_dests=(
-        frozenset({"notion_force_new"}) | _WRAPPER_EXECUTION_TOLERATED_SEMANTIC_DESTS
-    ),
+    ignored_semantic_dests=(frozenset({"notion_force_new"}) | _WRAPPER_EXECUTION_TOLERATED_SEMANTIC_DESTS),
     validate_org_report_mode_scoped_options=False,
 )
 

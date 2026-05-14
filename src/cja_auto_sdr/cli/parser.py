@@ -1450,7 +1450,7 @@ Requirements:
         metavar="JSON_FILE",
         dest="push_to_notion",
         help="Push an existing SDR JSON artifact to Notion without re-calling the CJA API. "
-             "Mutually exclusive with generation flags. Requires NOTION_TOKEN and NOTION_PARENT_PAGE_ID env vars.",
+        "Mutually exclusive with generation flags. Requires NOTION_TOKEN and NOTION_PARENT_PAGE_ID env vars.",
     )
     notion_group.add_argument(
         "--notion-force-new",
@@ -1458,7 +1458,7 @@ Requirements:
         default=False,
         dest="notion_force_new",
         help="Force creation of a new Notion page even if one already exists for this data view. "
-             "The new page ID replaces the old entry in .notion_pages.json.",
+        "The new page ID replaces the old entry in .notion_pages.json.",
     )
 
     # --- Watch Mode ----------------------------------------------------------

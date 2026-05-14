@@ -3,6 +3,7 @@
 Maps data view IDs to Notion page IDs so re-runs update existing pages.
 Registry file: .notion_pages.json in the output directory.
 """
+
 from __future__ import annotations
 
 import json
@@ -22,13 +23,17 @@ def load_registry(path: Path) -> dict[str, str]:
         return {}
     try:
         return json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
+    except json.JSONDecodeError, OSError:
         return {}
 
 
 def save_registry(path: Path, registry: dict[str, str]) -> None:
     write_json_atomic_compatible(
-        path, registry, indent=2, ensure_ascii=False, trailing_newline=False,
+        path,
+        registry,
+        indent=2,
+        ensure_ascii=False,
+        trailing_newline=False,
     )
 
 
