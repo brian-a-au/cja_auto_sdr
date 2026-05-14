@@ -118,10 +118,12 @@ def _resolve_cja_client(args: Any) -> Any:
 
 def run_watch(args: Any, *, cja: Any | None = None) -> int:
     """Run the watch loop. Returns the process exit code (always 0 on clean exit)."""
+    # Imported lazily to avoid a circular import with generator → cli.commands.watch.
+    from cja_auto_sdr.generator import _exit_error
+
     interval_seconds = parse_duration_seconds(args.watch_interval)
     if interval_seconds is None:
-        print(f"ERROR: Invalid --interval value: {args.watch_interval}", file=sys.stderr)
-        return 1
+        _exit_error(f"Invalid --interval value: {args.watch_interval}")
 
     # Initialize logging so the three structured-log events (watch_loop_start,
     # watch_cycle_complete, watch_loop_stop) actually reach handlers. _main_impl's

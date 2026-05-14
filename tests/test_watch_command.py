@@ -3,6 +3,7 @@
 Signal tests are in test_watch_signals.py (subprocess-based, @pytest.mark.slow).
 """
 
+import pytest
 from unittest.mock import MagicMock, patch
 
 from cja_auto_sdr.cli.commands.watch import (
@@ -225,3 +226,23 @@ def test_run_watch_emits_baseline_then_exits_on_stop(MockRunner, capsys):
     captured = capsys.readouterr()
     assert '"type":"baseline"' in captured.out
     assert '"data_view_id":"dv_abc"' in captured.out
+
+
+@patch("cja_auto_sdr.cli.commands.watch.parse_duration_seconds")
+def test_run_watch_invalid_interval_uses_exit_error(mock_parse, capsys):
+    """Issue 3: defensive --interval failure path now uses _exit_error
+    (ConsoleColors.error wrapper + sys.exit(1)) instead of raw print/return."""
+    mock_parse.return_value = None  # simulate invalid interval
+
+    args = MagicMock()
+    args.watch_data_views = ["dv_abc"]
+    args.watch_interval = "garbage"
+    args.watch_threshold = 1
+
+    with pytest.raises(SystemExit) as exc:
+        run_watch(args, cja=MagicMock())
+
+    assert exc.value.code == 1
+    captured = capsys.readouterr()
+    assert "ERROR:" in captured.err
+    assert "garbage" in captured.err
