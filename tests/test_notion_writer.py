@@ -291,3 +291,60 @@ def test_create_or_update_page_force_new_ignores_registry(tmp_path):
     )
     assert page_id == "fresh-page-id"
     client.pages.create.assert_called_once()
+
+
+# ---- write_notion_output integration tests ----
+
+
+def test_write_notion_output_returns_notion_url(tmp_path, monkeypatch):
+    monkeypatch.setenv("NOTION_TOKEN", "test-token")
+    monkeypatch.setenv("NOTION_PARENT_PAGE_ID", "parent-id")
+    from cja_auto_sdr.output.writers.notion import write_notion_output
+    mock_client_instance = MagicMock()
+    mock_client_instance.pages.create.return_value = {"id": "new-page-abc"}
+    mock_client_instance.blocks.children.append.return_value = {}
+    with patch(
+        "cja_auto_sdr.output.writers.notion._require_notion_client",
+    ) as mock_cls:
+        mock_cls.return_value = MagicMock(return_value=mock_client_instance)
+        result = write_notion_output(
+            data_dict={
+                "Metrics": pd.DataFrame({"Name": ["m1"], "Type": ["metric"]}),
+            },
+            metadata_dict={"Data View Name": "Test DV", "Data View ID": "dv_001"},
+            base_filename="test_sdr",
+            output_dir=str(tmp_path),
+            logger=logging.getLogger("test"),
+        )
+    assert result.startswith("notion://pages/")
+
+
+def test_write_notion_output_with_force_new(tmp_path, monkeypatch):
+    import json
+    monkeypatch.setenv("NOTION_TOKEN", "test-token")
+    monkeypatch.setenv("NOTION_PARENT_PAGE_ID", "parent-id")
+    (tmp_path / ".notion_pages.json").write_text(json.dumps({"dv_001": "old-page"}))
+    from cja_auto_sdr.output.writers.notion import write_notion_output
+    mock_client_instance = MagicMock()
+    mock_client_instance.pages.create.return_value = {"id": "fresh-page"}
+    mock_client_instance.blocks.children.append.return_value = {}
+    with patch(
+        "cja_auto_sdr.output.writers.notion._require_notion_client",
+    ) as mock_cls:
+        mock_cls.return_value = MagicMock(return_value=mock_client_instance)
+        write_notion_output(
+            data_dict={
+                "Metrics": pd.DataFrame({"Name": ["m1"], "Type": ["metric"]}),
+            },
+            metadata_dict={"Data View Name": "Test DV", "Data View ID": "dv_001"},
+            base_filename="test_sdr",
+            output_dir=str(tmp_path),
+            logger=logging.getLogger("test"),
+            force_new=True,
+        )
+    mock_client_instance.pages.create.assert_called_once()
+
+
+def test_notion_registered_in_writer_registry():
+    from cja_auto_sdr.output.registry import WRITER_REGISTRY
+    assert "notion" in WRITER_REGISTRY

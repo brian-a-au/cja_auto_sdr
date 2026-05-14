@@ -301,3 +301,47 @@ def create_or_update_page(
     _append_blocks(client, page_id, blocks)
     store_page_id(registry_path, data_view_id, page_id)
     return page_id
+
+
+# ---------------------------------------------------------------------------
+# Writer entry point (matches writer protocol)
+# ---------------------------------------------------------------------------
+
+def write_notion_output(
+    data_dict: dict[str, pd.DataFrame],
+    metadata_dict: dict[str, Any],
+    base_filename: str,
+    output_dir: str | Path,
+    logger: logging.Logger,
+    *,
+    force_new: bool = False,
+) -> str:
+    """Publish SDR data to a Notion page.
+
+    Returns a notion://pages/<page_id> identifier (not a file path).
+    """
+    logger.info("Publishing to Notion...")
+
+    client_cls = _require_notion_client()
+    token, parent_page_id = resolve_notion_credentials()
+
+    data_view_id = str(metadata_dict.get("Data View ID", base_filename))
+    dv_name = str(metadata_dict.get("Data View Name", base_filename))
+    page_title = f"{dv_name} — SDR"
+
+    blocks = build_sdr_blocks(data_dict, metadata_dict)
+    registry_path = get_registry_path(output_dir)
+
+    client = client_cls(auth=token)
+    page_id = create_or_update_page(
+        client,
+        parent_page_id,
+        page_title,
+        data_view_id,
+        blocks,
+        registry_path,
+        force_new=force_new,
+    )
+
+    logger.info("Notion page published: notion://pages/%s", page_id)
+    return f"notion://pages/{page_id}"

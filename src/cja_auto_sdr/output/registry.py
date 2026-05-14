@@ -7,6 +7,7 @@ from cja_auto_sdr.output.writers import (
     write_json_output,
     write_markdown_output,
 )
+from cja_auto_sdr.output.writers.notion import write_notion_output
 
 WRITER_REGISTRY = {
     "csv": write_csv_output,
@@ -16,6 +17,7 @@ WRITER_REGISTRY = {
     "json": write_json_output,
     "markdown": write_markdown_output,
     "md": write_markdown_output,
+    "notion": write_notion_output,
 }
 
 
