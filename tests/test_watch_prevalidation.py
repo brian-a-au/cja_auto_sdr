@@ -128,3 +128,21 @@ def test_watch_rejects_positional_data_views():
     result = _run(["dv_old", "--watch", "dv_new", "--interval", "1h"])
     assert result.returncode == 1
     assert "positional data view" in result.stderr
+
+
+def test_watch_dedupes_duplicate_data_view_ids():
+    """Issue 4: duplicate --watch IDs are deduped at parse time with a
+    stderr warning. The loop should never see the same ID twice."""
+    # Use an invalid --interval value so run_watch exits via _exit_error
+    # before contacting the API. Dedup runs in _validate_semantic_flag_relationships
+    # (which happens first), so the WARNING is still emitted to stderr.
+    result = _run(["--watch", "dv_abc", "dv_abc", "dv_def", "--interval", "garbage"])
+    assert "WARNING" in result.stderr
+    assert "dv_abc" in result.stderr
+    assert "deduplicat" in result.stderr.lower()
+
+
+def test_watch_no_warning_when_no_duplicates():
+    """Sanity: distinct IDs produce no dedup warning."""
+    result = _run(["--watch", "dv_abc", "dv_def", "--interval", "garbage"])
+    assert "deduplicat" not in result.stderr.lower()
