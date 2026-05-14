@@ -189,6 +189,7 @@ def run_watch(args: Any, *, cja: Any | None = None) -> int:
     )
 
     cycle = 0
+    cycles_completed = 0
     stop_reason = "fatal"  # overwritten if signal handler runs
     try:
         while True:
@@ -204,6 +205,7 @@ def run_watch(args: Any, *, cja: Any | None = None) -> int:
                         data_view_id=event.data_view_id,
                         total_changes=getattr(event, "total_changes", 0),
                     )
+            cycles_completed = cycle
             if _stop_requested.is_set():
                 break
             _sleep_with_stop(interval_seconds)
@@ -213,7 +215,7 @@ def run_watch(args: Any, *, cja: Any | None = None) -> int:
                 break
         stop_reason = _stop_reason_holder.get("reason", "fatal")
     finally:
-        emitter.loop_stop(reason=stop_reason, cycles_completed=cycle)
+        emitter.loop_stop(reason=stop_reason, cycles_completed=cycles_completed)
         _stop_reason_holder.clear()
         _restore_signal_handlers()
 
