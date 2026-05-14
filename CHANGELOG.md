@@ -18,8 +18,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   for the data view; the new page ID replaces the old entry in the registry.
 - Idempotent page registry (`.notion_pages.json`) so re-runs update existing
   pages in place rather than accumulating duplicates. Registry writes are
-  serialized across batch workers via an `fcntl.flock` sidecar lock so
-  parallel `--format notion` batch runs do not lose entries.
+  serialized across batch workers via an `fcntl.flock` sidecar lock on
+  POSIX and `msvcrt.locking` on Windows, so parallel `--format notion`
+  batch runs do not lose entries on either platform.
+- `--format notion` is rejected in non-SDR modes (diff, org-report,
+  discovery) with an actionable error pointing users to `--push-to-notion`
+  for publishing saved artifacts. Previously the format was silently
+  accepted by those code paths and produced no output.
 - `notion` optional extra: `uv pip install 'cja-auto-sdr[notion]'`. The
   `notion-client` SDK is added unconditionally to the dev dependency group
   so tests run without the optional install flag.

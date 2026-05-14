@@ -90,6 +90,42 @@ def test_store_page_id_creates_sidecar_lock_file(tmp_path):
     assert (tmp_path / (REGISTRY_FILENAME + ".lock")).exists()
 
 
+def test_exclusive_registry_lock_falls_back_to_msvcrt_when_fcntl_missing(
+    tmp_path,
+    monkeypatch,
+):
+    """Simulate the Windows path: fcntl import fails, msvcrt.locking is used."""
+    import builtins
+
+    from cja_auto_sdr.output import notion_registry as nr_mod
+
+    fake_msvcrt = type(
+        "FakeMsvcrt",
+        (),
+        {
+            "LK_LOCK": 1,
+            "LK_UNLCK": 0,
+            "locking": staticmethod(lambda fd, mode, nbytes: None),
+        },
+    )()
+    real_import = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        if name == "fcntl":
+            raise ImportError("simulated: no fcntl on Windows")
+        if name == "msvcrt":
+            return fake_msvcrt
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+
+    reg_path = tmp_path / REGISTRY_FILENAME
+    # Should not raise — msvcrt fallback path runs and yields to the body.
+    nr_mod.store_page_id(reg_path, "dv_win", "page-win")
+    data = json.loads(reg_path.read_text())
+    assert data["dv_win"] == "page-win"
+
+
 def test_store_page_id_concurrent_workers_preserve_all_entries(tmp_path):
     """Concurrent store_page_id calls from a process pool must not lose entries.
 

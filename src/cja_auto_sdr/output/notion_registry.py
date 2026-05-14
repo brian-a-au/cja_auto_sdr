@@ -33,27 +33,46 @@ def _lock_path_for(registry_path: Path) -> Path:
 def _exclusive_registry_lock(registry_path: Path):
     """Serialize concurrent read-modify-write on the registry.
 
-    Uses ``fcntl.flock`` on a sidecar lock file so process-pool workers (the
-    only concurrency model this project supports) cannot clobber each other's
-    updates. On platforms without ``fcntl`` (Windows), the lock degrades to a
-    no-op — the caller is responsible for avoiding concurrent writes there.
+    Uses ``fcntl.flock`` on POSIX and ``msvcrt.locking`` on Windows against a
+    sidecar lock file, so process-pool workers on either platform cannot
+    clobber each other's updates. The package is declared OS-independent, so
+    both paths must provide real cross-process locking.
     """
     lock_path = _lock_path_for(registry_path)
     lock_path.parent.mkdir(parents=True, exist_ok=True)
 
-    try:
-        import fcntl  # POSIX only
-    except ImportError:  # pragma: no cover — Windows fallback
-        yield
-        return
-
     fd = lock_path.open("a+")
     try:
-        fcntl.flock(fd.fileno(), fcntl.LOCK_EX)
+        try:
+            import fcntl  # POSIX
+
+            fcntl.flock(fd.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(fd.fileno(), fcntl.LOCK_UN)
+            return
+        except ImportError:
+            pass
+
+        # Windows path: msvcrt.locking takes an exclusive byte-range lock and
+        # blocks until acquired (LK_LOCK retries internally; loop in case of
+        # the documented "lock violation" raise after retries exhaust).
+        import msvcrt
+        import time
+
+        fd.seek(0)
+        while True:
+            try:
+                msvcrt.locking(fd.fileno(), msvcrt.LK_LOCK, 1)
+                break
+            except OSError:
+                time.sleep(0.05)
         try:
             yield
         finally:
-            fcntl.flock(fd.fileno(), fcntl.LOCK_UN)
+            fd.seek(0)
+            msvcrt.locking(fd.fileno(), msvcrt.LK_UNLCK, 1)
     finally:
         fd.close()
 

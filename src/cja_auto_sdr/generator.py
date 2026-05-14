@@ -1813,6 +1813,15 @@ def _validate_semantic_flag_relationships(
         _exit_error("--quality-report cannot be used with --skip-validation")
     if getattr(args, "quality_report", None) and non_sdr_mode:
         _exit_error("--quality-report is only supported in SDR generation mode")
+    if (
+        _normalize_output_format(getattr(args, "format", None)) == "notion"
+        and non_sdr_mode
+        and inferred_mode != RunMode.PUSH_TO_NOTION
+    ):
+        _exit_error(
+            "--format notion is only supported in SDR generation mode "
+            "(use --push-to-notion <json_file> to publish a saved artifact instead)",
+        )
     if getattr(args, "allow_partial", False) and getattr(args, "quality_report", None):
         _exit_error("--allow-partial cannot be used with --quality-report")
     if getattr(args, "allow_partial", False) and getattr(args, "fail_on_quality", None):
