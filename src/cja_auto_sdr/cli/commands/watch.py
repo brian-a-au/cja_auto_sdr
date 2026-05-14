@@ -187,6 +187,16 @@ def run_watch(args: Any, *, cja: Any | None = None) -> int:
         interval_seconds=interval_seconds,
         watch_threshold=args.watch_threshold,
     )
+    if not getattr(args, "quiet", False):
+        from cja_auto_sdr.core.colors import ConsoleColors
+
+        print(
+            ConsoleColors.info(
+                "note: watch holds snapshots in memory; baselines reset on restart. "
+                "For persistent snapshots, run `cja_auto_sdr <dv_id> --snapshot file.json` first."
+            ),
+            file=sys.stderr,
+        )
 
     cycle = 0
     cycles_completed = 0

@@ -273,3 +273,46 @@ def test_run_watch_restores_signal_handlers_on_exit(MockRunner):
 
     assert _signal.getsignal(_signal.SIGINT) is sentinel_int
     assert _signal.getsignal(_signal.SIGTERM) is sentinel_term
+
+
+@patch("cja_auto_sdr.cli.commands.watch.WatchCycleRunner")
+def test_run_watch_emits_in_memory_note_on_stderr(MockRunner, capsys):
+    """Issue 6: operators should be told once that watch holds snapshots in memory."""
+    runner = MockRunner.return_value
+    runner.run_cycle.return_value = iter([])
+    args = MagicMock()
+    args.watch_data_views = ["dv_abc"]
+    args.watch_interval = "1h"
+    args.watch_threshold = 1
+    args.quiet = False
+
+    _stop_requested.set()
+    try:
+        run_watch(args, cja=MagicMock())
+    finally:
+        _stop_requested.clear()
+
+    captured = capsys.readouterr()
+    assert "snapshots in memory" in captured.err
+    assert captured.err.count("snapshots in memory") == 1, "note should fire once, not per cycle"
+
+
+@patch("cja_auto_sdr.cli.commands.watch.WatchCycleRunner")
+def test_run_watch_suppresses_in_memory_note_in_quiet_mode(MockRunner, capsys):
+    """Quiet mode suppresses the in-memory note."""
+    runner = MockRunner.return_value
+    runner.run_cycle.return_value = iter([])
+    args = MagicMock()
+    args.watch_data_views = ["dv_abc"]
+    args.watch_interval = "1h"
+    args.watch_threshold = 1
+    args.quiet = True
+
+    _stop_requested.set()
+    try:
+        run_watch(args, cja=MagicMock())
+    finally:
+        _stop_requested.clear()
+
+    captured = capsys.readouterr()
+    assert "snapshots in memory" not in captured.err
