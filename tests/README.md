@@ -152,10 +152,12 @@ tests/
 ├── test_watch_prevalidation.py      # Watch flag semantic prevalidation tests
 ├── test_watch_command.py            # Watch command dispatch and signal handler tests
 ├── test_watch_signals.py            # SIGINT/SIGTERM exit-0 contract tests
+├── test_watch_dispatch.py           # End-to-end dispatch wiring tests
+├── test_watch_logging.py            # Structured-log event emission tests
 └── README.md                        # This file
 ```
 
-**Total: 7,998 comprehensive tests**
+**Total: 8,010 comprehensive tests**
 
 ### Test Count Breakdown
 
@@ -164,16 +166,16 @@ tests/
 
 | Category | Tests | Files | Notes |
 |----------|-------|-------|-------|
-| `unit` | 7,892 | 137 | Default primary category for files without explicit integration/e2e/smoke scope |
+| `unit` | 7,904 | 139 | Default primary category for files without explicit integration/e2e/smoke scope |
 | `integration` | 73 | 3 | Cross-module integration suites |
 | `e2e` | 23 | 2 | End-to-end suites with a mocked external boundary |
 | `smoke` | 10 | 1 | Lightweight command-mode coverage |
 | `slow` | 0 | 0 | Overlay marker; these tests are also counted in a primary category |
-| **Primary Total** | **7,998** | **143** | **unit + integration + e2e + smoke** |
+| **Primary Total** | **8,010** | **145** | **unit + integration + e2e + smoke** |
 
 | CI Slice | Tests | Files | Selector |
 |----------|-------|-------|----------|
-| `test-unit` | 7,892 | 137 | `-m "unit and not slow"` |
+| `test-unit` | 7,904 | 139 | `-m "unit and not slow"` |
 | `test-integration` | 96 | 5 | `-m "integration or e2e or slow"` |
 | `smoke-test` | 10 | 1 | `-m smoke` |
 
@@ -323,10 +325,12 @@ tests/
 | `test_watch_events.py` | 8 | cja-watch-event/v1 NDJSON schema conformance tests |
 | `test_watch_pipeline.py` | 6 | Watch pipeline cycle orchestrator tests |
 | `test_watch_cli.py` | 11 | Watch mode argparse acceptance and rejection tests |
-| `test_watch_prevalidation.py` | 41 | Watch flag semantic prevalidation tests |
-| `test_watch_command.py` | 7 | Watch command dispatch and signal handler tests |
+| `test_watch_prevalidation.py` | 43 | Watch flag semantic prevalidation tests |
+| `test_watch_command.py` | 11 | Watch command dispatch and signal handler tests |
 | `test_watch_signals.py` | 2 | SIGINT/SIGTERM exit-0 contract tests |
-| **Total** | **7,998** | **Collected via pytest --collect-only** |
+| `test_watch_dispatch.py` | 2 | End-to-end dispatch wiring tests |
+| `test_watch_logging.py` | 4 | Structured-log event emission tests |
+| **Total** | **8,010** | **Collected via pytest --collect-only** |
 
 ## Running Tests
 
@@ -784,7 +788,7 @@ the `tests/README.md` inventory tree or count table.
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (7,998 tests total)
+- [x] Comprehensive test coverage (8,010 tests total)
 - [x] Org-wide analysis tests (test_org_report.py) - 211 tests (including large org scaling, output path aliases, memory warnings, smart cache invalidation)
 - [x] Org-wide analysis integration tests (test_org_report_integration.py) - 17 tests (end-to-end flows, caching, filtering, governance thresholds)
 - [x] Profile management tests (test_profiles.py) - 78 tests

@@ -87,12 +87,17 @@ def test_run_watch_emits_loop_stop_with_sigint_reason(MockRunner, mock_emit):
 def test_cycle_complete_fires_once_per_baseline_or_change_event(MockRunner, mock_emit):
     """One baseline → one cycle_complete."""
     runner = MockRunner.return_value
-    runner.run_cycle.return_value = iter([
-        BaselineEvent(
-            ts="t", cycle=1, data_view_id="dv_a",
-            snapshot_id="s", component_counts={},
-        ),
-    ])
+    runner.run_cycle.return_value = iter(
+        [
+            BaselineEvent(
+                ts="t",
+                cycle=1,
+                data_view_id="dv_a",
+                snapshot_id="s",
+                component_counts={},
+            ),
+        ]
+    )
     args = MagicMock()
     args.watch_data_views = ["dv_a"]
     args.watch_interval = "1h"

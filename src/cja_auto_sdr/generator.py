@@ -1874,9 +1874,7 @@ def _validate_semantic_flag_relationships(
         duplicates = sorted(dv for dv, n in counts.items() if n > 1)
         if duplicates:
             print(
-                ConsoleColors.warning(
-                    f"WARNING: --watch deduplicated repeat ID(s): {', '.join(duplicates)}"
-                ),
+                ConsoleColors.warning(f"WARNING: --watch deduplicated repeat ID(s): {', '.join(duplicates)}"),
                 file=sys.stderr,
             )
             # Preserve original ordering while deduping.
