@@ -3,8 +3,10 @@
 Signal tests are in test_watch_signals.py (subprocess-based, @pytest.mark.slow).
 """
 
-import pytest
+import signal as _signal
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from cja_auto_sdr.cli.commands.watch import (
     _LoggingEmitter,
@@ -246,3 +248,28 @@ def test_run_watch_invalid_interval_uses_exit_error(mock_parse, capsys):
     captured = capsys.readouterr()
     assert "ERROR:" in captured.err
     assert "garbage" in captured.err
+
+
+@patch("cja_auto_sdr.cli.commands.watch.WatchCycleRunner")
+def test_run_watch_restores_signal_handlers_on_exit(MockRunner):
+    """Issue 1: run_watch must restore the previous SIGINT/SIGTERM handlers
+    so calling it from a test session doesn't leave the watch handler
+    installed across subsequent SIGINT delivery."""
+    sentinel_int = _signal.getsignal(_signal.SIGINT)
+    sentinel_term = _signal.getsignal(_signal.SIGTERM)
+
+    runner = MockRunner.return_value
+    runner.run_cycle.return_value = iter([])
+    args = MagicMock()
+    args.watch_data_views = ["dv_abc"]
+    args.watch_interval = "1h"
+    args.watch_threshold = 1
+
+    _stop_requested.set()
+    try:
+        run_watch(args, cja=MagicMock())
+    finally:
+        _stop_requested.clear()
+
+    assert _signal.getsignal(_signal.SIGINT) is sentinel_int
+    assert _signal.getsignal(_signal.SIGTERM) is sentinel_term

@@ -29,15 +29,34 @@ _stop_requested = threading.Event()
 _stop_reason_holder: dict[str, str] = {}
 
 
+# Module-scope cache of previous signal handlers, populated by
+# _install_signal_handlers and consumed by _restore_signal_handlers.
+_previous_handlers: dict[int, Any] = {}
+
+
 def _install_signal_handlers() -> None:
-    """Install SIGINT/SIGTERM handlers that set _stop_requested + record the reason."""
+    """Install SIGINT/SIGTERM handlers and remember the previous values."""
+    # Defensive: clear stale state from a prior invocation whose restore
+    # didn't run (e.g. a test crashed between install and the finally block).
+    # Without this, the second install would capture the watch handler as
+    # "previous" and a subsequent restore would re-install it — silent test
+    # pollution that's hard to debug.
+    _previous_handlers.clear()
 
     def _handler(signum, _frame):
         _stop_reason_holder["reason"] = "sigint" if signum == signal.SIGINT else "sigterm"
         _stop_requested.set()
 
-    signal.signal(signal.SIGINT, _handler)
-    signal.signal(signal.SIGTERM, _handler)
+    _previous_handlers[signal.SIGINT] = signal.signal(signal.SIGINT, _handler)
+    _previous_handlers[signal.SIGTERM] = signal.signal(signal.SIGTERM, _handler)
+
+
+def _restore_signal_handlers() -> None:
+    """Restore the handlers that were in place before _install_signal_handlers."""
+    for signum, previous in _previous_handlers.items():
+        if previous is not None:
+            signal.signal(signum, previous)
+    _previous_handlers.clear()
 
 
 class _LoggingEmitter:
@@ -196,5 +215,6 @@ def run_watch(args: Any, *, cja: Any | None = None) -> int:
     finally:
         emitter.loop_stop(reason=stop_reason, cycles_completed=cycle)
         _stop_reason_holder.clear()
+        _restore_signal_handlers()
 
     return 0
