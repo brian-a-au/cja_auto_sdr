@@ -495,6 +495,7 @@ class RunMode(Enum):
     DRY_RUN = "dry_run"
     INVENTORY_SUMMARY = "inventory_summary"
     WATCH = "watch"
+    PUSH_TO_NOTION = "push_to_notion"
     SDR = "sdr"
 
 
@@ -512,6 +513,57 @@ def _exit_error(msg: str) -> NoReturn:
     """Print a coloured error message to stderr and exit with code 1."""
     print(ConsoleColors.error(f"ERROR: {msg}"), file=sys.stderr)
     sys.exit(1)
+
+
+def _push_to_notion_from_json(
+    json_file: str,
+    output_dir: str | None = None,
+    force_new: bool = False,
+) -> str:
+    """Read an SDR JSON artifact and publish it to Notion.
+
+    Returns the notion://pages/<id> identifier on success. Exits code 1 on
+    file-not-found or JSON parse errors.
+    """
+    from cja_auto_sdr.output.writers.notion import write_notion_output
+
+    json_path = Path(json_file)
+    if not json_path.exists():
+        _exit_error(f"--push-to-notion: file not found: {json_file}")
+
+    try:
+        payload = json.loads(json_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        _exit_error(f"--push-to-notion: invalid JSON in {json_file}: {exc}")
+
+    metadata_dict = payload.get("metadata", {})
+    data_dict: dict[str, pd.DataFrame] = {}
+    if payload.get("metrics"):
+        data_dict["Metrics"] = pd.DataFrame(payload["metrics"])
+    if payload.get("dimensions"):
+        data_dict["Dimensions"] = pd.DataFrame(payload["dimensions"])
+    if payload.get("data_quality"):
+        data_dict["Data Quality"] = pd.DataFrame(payload["data_quality"])
+    if payload.get("derived_fields", {}).get("fields"):
+        data_dict["Derived Fields"] = pd.DataFrame(payload["derived_fields"]["fields"])
+    if payload.get("calculated_metrics", {}).get("metrics"):
+        data_dict["Calculated Metrics"] = pd.DataFrame(
+            payload["calculated_metrics"]["metrics"],
+        )
+    if payload.get("segments", {}).get("segments"):
+        data_dict["Segments"] = pd.DataFrame(payload["segments"]["segments"])
+
+    effective_output_dir = output_dir or str(json_path.parent)
+    base_filename = json_path.stem
+
+    return write_notion_output(
+        data_dict=data_dict,
+        metadata_dict=metadata_dict,
+        base_filename=base_filename,
+        output_dir=effective_output_dir,
+        logger=logging.getLogger(__name__),
+        force_new=force_new,
+    )
 
 
 def _normalize_output_format(raw_format: Any) -> str | None:
@@ -1431,6 +1483,7 @@ def _run_mode_checks(args: argparse.Namespace) -> tuple[tuple[RunMode, bool], ..
         (RunMode.DRY_RUN, getattr(args, "dry_run", False)),
         (RunMode.INVENTORY_SUMMARY, getattr(args, "inventory_summary", False)),
         (RunMode.WATCH, getattr(args, "watch_data_views", None) is not None),
+        (RunMode.PUSH_TO_NOTION, getattr(args, "push_to_notion", None) is not None),
     )
 
 
@@ -3823,6 +3876,18 @@ def process_single_dataview(
                 elif fmt == "markdown":
                     markdown_output = write_markdown_output(data_dict, metadata_dict, base_filename, output_dir, logger)
                     output_files.append(markdown_output)
+
+                elif fmt == "notion":
+                    from cja_auto_sdr.output.writers.notion import write_notion_output
+                    notion_output = write_notion_output(
+                        data_dict,
+                        metadata_dict,
+                        base_filename,
+                        output_dir,
+                        logger,
+                        force_new=getattr(args, "notion_force_new", False),
+                    )
+                    output_files.append(notion_output)
 
             if len(output_files) > 1:
                 logger.info(f"✓ SDR generation complete! {len(output_files)} files created")
@@ -6766,6 +6831,16 @@ def _main_impl(run_state: dict[str, Any] | None = None):
 
     if inferred_mode == RunMode.ORG_REPORT_SNAPSHOTS:
         _handle_org_report_snapshot_cli(args, output_to_stdout=output_to_stdout, run_state=run_state)
+
+    if inferred_mode == RunMode.PUSH_TO_NOTION:
+        json_file = getattr(args, "push_to_notion", None)
+        force_new = getattr(args, "notion_force_new", False)
+        output_dir = getattr(args, "output_dir", None)
+        result = _push_to_notion_from_json(
+            json_file, output_dir=output_dir, force_new=force_new,
+        )
+        print(result)
+        sys.exit(0)
 
     # Handle --watch mode (continuous monitoring loop). Dispatched before color theme
     # setup and the other CLI subcommand handlers so that --watch takes precedence over
