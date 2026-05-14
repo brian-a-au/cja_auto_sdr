@@ -25,6 +25,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   discovery) with an actionable error pointing users to `--push-to-notion`
   for publishing saved artifacts. Previously the format was silently
   accepted by those code paths and produced no output.
+- Sections larger than Notion's per-block 100-children API limit are
+  automatically split into multiple sibling tables under the same heading
+  (header + ≤ 99 data rows per table). Data views with > 99 metrics,
+  dimensions, segments, calculated metrics, or derived fields in any one
+  component publish without `validation_error`.
 - `notion` optional extra: `uv pip install 'cja-auto-sdr[notion]'`. The
   `notion-client` SDK is added unconditionally to the dev dependency group
   so tests run without the optional install flag.

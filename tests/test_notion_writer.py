@@ -85,6 +85,62 @@ def test_section_blocks_empty_df_returns_empty_list():
     assert blocks == []
 
 
+def test_section_blocks_small_df_emits_single_table():
+    df = pd.DataFrame({"Name": [f"m{i}" for i in range(50)], "Type": ["metric"] * 50})
+    blocks = _section_blocks("Metrics", df)
+    # heading + one table
+    assert len(blocks) == 2
+    assert blocks[0]["type"] == "heading_2"
+    assert blocks[1]["type"] == "table"
+    # header row + 50 data rows = 51 children, well within 100
+    assert len(blocks[1]["table"]["children"]) == 51
+
+
+def test_section_blocks_splits_large_df_into_sibling_tables():
+    """A section with > 99 data rows must split into sibling tables under one heading.
+
+    Notion caps a single block's children at 100 (including a table's
+    table_row children). Each emitted table must contain at most 1 header
+    row + 99 data rows, and the union must preserve every input row.
+    """
+    n = 250
+    df = pd.DataFrame({"Name": [f"m{i:03d}" for i in range(n)], "Type": ["metric"] * n})
+    blocks = _section_blocks("Metrics", df)
+
+    # 1 heading + ceil(250 / 99) = 3 tables = 4 blocks
+    assert len(blocks) == 4
+    assert blocks[0]["type"] == "heading_2"
+    assert all(b["type"] == "table" for b in blocks[1:])
+
+    # Every table must respect the 100-children Notion API cap.
+    for table in blocks[1:]:
+        assert len(table["table"]["children"]) <= 100
+
+    # All data rows preserved across the sibling tables, in original order.
+    recovered: list[str] = []
+    for table in blocks[1:]:
+        # children[0] is the header row; skip it.
+        for row in table["table"]["children"][1:]:
+            recovered.append(row["table_row"]["cells"][0][0]["text"]["content"])
+    assert recovered == [f"m{i:03d}" for i in range(n)]
+
+
+def test_section_blocks_chunks_at_99_data_rows():
+    """Each split table holds at most 99 data rows + 1 header = 100 children."""
+    df = pd.DataFrame({"Name": [f"d{i:03d}" for i in range(99)], "Type": ["dim"] * 99})
+    blocks = _section_blocks("Dimensions", df)
+    # 99 rows == single chunk (heading + one table, 100 children total).
+    assert len(blocks) == 2
+    assert len(blocks[1]["table"]["children"]) == 100
+
+    df_overflow = pd.DataFrame({"Name": [f"d{i:03d}" for i in range(100)], "Type": ["dim"] * 100})
+    blocks_overflow = _section_blocks("Dimensions", df_overflow)
+    # 100 rows must split: heading + two tables (99 + 1).
+    assert len(blocks_overflow) == 3
+    assert len(blocks_overflow[1]["table"]["children"]) == 100  # header + 99
+    assert len(blocks_overflow[2]["table"]["children"]) == 2  # header + 1
+
+
 def test_dq_callout_blocks_warn_severity():
     dq_df = pd.DataFrame(
         {

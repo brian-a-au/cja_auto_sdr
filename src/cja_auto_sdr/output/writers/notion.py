@@ -50,6 +50,13 @@ _DQ_SEVERITY_ICONS = {
     "INFO": "ℹ️",
 }
 
+# Notion's API caps the ``children`` array of a single block (including a
+# ``table`` block's row children) at 100 entries per request. Reserve one slot
+# for the header row and cap data rows at 99 so each emitted table fits in a
+# single append call. Sections larger than this are split into multiple
+# sibling tables under the same heading.
+_MAX_TABLE_DATA_ROWS = 99
+
 
 # ---------------------------------------------------------------------------
 # Block builder helpers (pure functions, no API calls)
@@ -127,10 +134,13 @@ def _section_blocks(section_name: str, df: pd.DataFrame) -> list[dict]:
     if df is None or df.empty:
         return []
     icon = _SECTION_ICONS.get(section_name, "📄")
-    return [
-        _heading2_block(f"{icon} {section_name}"),
-        _table_block(df),
-    ]
+    blocks: list[dict] = [_heading2_block(f"{icon} {section_name}")]
+    # Split sections larger than the per-table cap into sibling tables under
+    # the same heading so each table stays within Notion's 100-children limit.
+    for start in range(0, len(df), _MAX_TABLE_DATA_ROWS):
+        chunk = df.iloc[start : start + _MAX_TABLE_DATA_ROWS]
+        blocks.append(_table_block(chunk))
+    return blocks
 
 
 def _dq_callout_blocks(dq_df: pd.DataFrame) -> list[dict]:
