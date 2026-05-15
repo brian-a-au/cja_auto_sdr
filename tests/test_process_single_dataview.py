@@ -1111,6 +1111,63 @@ class TestProcessSingleDataviewFailures:
         assert result.success is False
         assert "permission" in result.error_message.lower()
 
+    @patch("cja_auto_sdr.generator.setup_logging")
+    @patch("cja_auto_sdr.generator.initialize_cja")
+    @patch("cja_auto_sdr.generator.ParallelAPIFetcher")
+    @patch("cja_auto_sdr.generator.DataQualityChecker")
+    @patch("cja_auto_sdr.output.writers.notion.write_notion_output")
+    def test_notion_writer_failure_returns_failed_result_not_systemexit(
+        self,
+        mock_write_notion,
+        mock_dq_checker_class,
+        mock_fetcher_class,
+        mock_init_cja,
+        mock_setup_logging,
+        mock_config_file,
+        temp_output_dir,
+        sample_metrics_df,
+        sample_dimensions_df,
+        sample_dataview_info,
+    ):
+        """Notion writer errors must return a failed ProcessingResult — never SystemExit.
+
+        Regression: when invoked inside a batch worker, raising SystemExit kills the
+        pool worker and aborts the whole batch, defeating --continue-on-error. The
+        Notion error path must surface as ProcessingResult(success=False) so the
+        batch can mark this data view failed and proceed.
+        """
+        from cja_auto_sdr.output.writers.notion import NotionConfigurationError
+
+        mock_logger = Mock()
+        mock_logger.handlers = []
+        mock_setup_logging.return_value = mock_logger
+        mock_init_cja.return_value = Mock()
+
+        mock_fetcher = Mock()
+        mock_fetcher.fetch_all_data.return_value = (sample_metrics_df, sample_dimensions_df, sample_dataview_info)
+        mock_fetcher_class.return_value = mock_fetcher
+
+        mock_dq_checker = Mock()
+        mock_dq_checker.issues = []
+        mock_dq_checker.get_issues_dataframe.return_value = pd.DataFrame(
+            columns=["Severity", "Category", "Type", "Item Name", "Issue", "Details"],
+        )
+        mock_dq_checker_class.return_value = mock_dq_checker
+
+        mock_write_notion.side_effect = NotionConfigurationError("NOTION_API_KEY not set")
+
+        result = process_single_dataview(
+            data_view_id="dv_test_12345",
+            config_file=mock_config_file,
+            output_dir=temp_output_dir,
+            output_format="notion",
+        )
+
+        assert result.success is False
+        assert "NOTION_API_KEY" in result.error_message
+        assert result.failure_code == "OUTPUT_WRITE_FAILED"
+        assert result.failure_reason == "output_write_failed:NotionConfigurationError"
+
 
 class TestProcessSingleDataviewOutputFormats:
     """Tests for different output formats"""

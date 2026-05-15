@@ -128,3 +128,41 @@ def test_format_notion_allowed_in_sdr_mode():
         skip_validation=False,
     )
     _validate_semantic_flag_relationships(args, inferred_mode=RunMode.SDR)
+
+
+def test_push_to_notion_rejected_with_list_snapshots():
+    """--push-to-notion + --list-snapshots must exit 1; snapshot mode would silently win otherwise."""
+    import argparse
+
+    from cja_auto_sdr.generator import (
+        RunMode,
+        _validate_semantic_flag_relationships,
+    )
+
+    args = argparse.Namespace(
+        push_to_notion="./sdr.json",
+        list_snapshots=True,
+        skip_validation=False,
+    )
+    with pytest.raises(SystemExit) as exc_info:
+        _validate_semantic_flag_relationships(args, inferred_mode=RunMode.PUSH_TO_NOTION)
+    assert exc_info.value.code == 1
+
+
+def test_push_to_notion_rejected_with_prune_snapshots():
+    """--push-to-notion + --prune-snapshots must exit 1; snapshot mode would silently win otherwise."""
+    import argparse
+
+    from cja_auto_sdr.generator import (
+        RunMode,
+        _validate_semantic_flag_relationships,
+    )
+
+    args = argparse.Namespace(
+        push_to_notion="./sdr.json",
+        prune_snapshots=True,
+        skip_validation=False,
+    )
+    with pytest.raises(SystemExit) as exc_info:
+        _validate_semantic_flag_relationships(args, inferred_mode=RunMode.PUSH_TO_NOTION)
+    assert exc_info.value.code == 1

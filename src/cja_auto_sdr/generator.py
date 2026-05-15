@@ -1846,6 +1846,10 @@ def _validate_semantic_flag_relationships(
             _exit_error("--push-to-notion is incompatible with --diff-snapshot")
         if getattr(args, "compare_snapshots", None) is not None:
             _exit_error("--push-to-notion is incompatible with --compare-snapshots")
+        if getattr(args, "list_snapshots", False):
+            _exit_error("--push-to-notion is incompatible with --list-snapshots")
+        if getattr(args, "prune_snapshots", False):
+            _exit_error("--push-to-notion is incompatible with --prune-snapshots")
         if getattr(args, "batch", False):
             _exit_error("--push-to-notion is incompatible with --batch")
         if getattr(args, "watch_data_views", None) is not None:
@@ -3946,7 +3950,26 @@ def process_single_dataview(
                             force_new=notion_force_new,
                         )
                     except (NotionConfigurationError, NotionDependencyError, NotionAPIError) as exc:
-                        _exit_error(str(exc))
+                        # Must return a failed ProcessingResult here rather than calling
+                        # _exit_error: this code runs inside batch workers, and SystemExit
+                        # from a worker kills the pool worker instead of letting
+                        # --continue-on-error mark this data view failed and proceed.
+                        logger.critical("Notion output failed: %s", exc)
+                        logger.info("=" * BANNER_WIDTH)
+                        logger.info("EXECUTION FAILED")
+                        logger.info("=" * BANNER_WIDTH)
+                        logger.info("Data View: %s (%s)", dv_name, data_view_id)
+                        logger.info("Error: %s", exc)
+                        logger.info("Duration: %.2fs", time.perf_counter() - start_time)
+                        logger.info("=" * BANNER_WIDTH)
+                        flush_logging_handlers(logger)
+                        return _finalize_result(
+                            data_view_name=dv_name,
+                            success=False,
+                            error_message=str(exc),
+                            failure_code=FAILURE_CODE_OUTPUT_WRITE_FAILED,
+                            failure_reason=f"output_write_failed:{type(exc).__name__}",
+                        )
                     output_files.append(notion_output)
 
             if len(output_files) > 1:
