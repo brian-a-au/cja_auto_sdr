@@ -189,6 +189,33 @@ jobs:
       - name: Smoke test - parser and contract tests
         run: uv run pytest tests/ -q --tb=short -m smoke
 
+  no-extras-smoke:
+    # Confirm the package imports and runs without the optional `notion-client`
+    # extra installed. The `dev` group includes notion-client for tests, so we
+    # explicitly skip both --dev and --all-extras here to get the real shape
+    # users see when they install plain `cja-auto-sdr`.
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.14"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - name: Sync runtime deps only (no extras, no dev group)
+        run: uv sync --no-dev --no-default-groups
+      - name: Confirm notion_client is NOT installed in this environment
+        run: |
+          if uv run python -c "import notion_client" 2>/dev/null; then
+            echo "::error::notion_client was installed without the [notion] extra — optional-dep contract is broken" >&2
+            exit 1
+          fi
+      - name: Package imports cleanly without notion_client
+        run: |
+          uv run python -m cja_auto_sdr --version
+          uv run python -c "import cja_auto_sdr; import cja_auto_sdr.output.writers.notion as _n; print('module loads:', _n.__name__)"
+
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -217,7 +244,7 @@ jobs:
 
   ci-gate:
     if: always()
-    needs: [test-unit, test-integration, run-summary-contract, smoke-test, build]
+    needs: [test-unit, test-integration, run-summary-contract, smoke-test, no-extras-smoke, build]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -233,6 +260,7 @@ jobs:
             [test-integration]="${{ needs.test-integration.result }}"
             [run-summary-contract]="${{ needs.run-summary-contract.result }}"
             [smoke-test]="${{ needs.smoke-test.result }}"
+            [no-extras-smoke]="${{ needs.no-extras-smoke.result }}"
             [build]="${{ needs.build.result }}"
           )
           failed=0

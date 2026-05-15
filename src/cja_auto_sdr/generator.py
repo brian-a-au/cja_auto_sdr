@@ -523,9 +523,15 @@ def _push_to_notion_from_json(
     """Read an SDR JSON artifact and publish it to Notion.
 
     Returns the notion://pages/<id> identifier on success. Exits code 1 on
-    file-not-found or JSON parse errors.
+    file-not-found, JSON parse errors, missing Notion config/dep, or Notion
+    API failures (auth, rate-limit, etc.) with a friendly message.
     """
-    from cja_auto_sdr.output.writers.notion import write_notion_output
+    from cja_auto_sdr.output.writers.notion import (
+        NotionAPIError,
+        NotionConfigurationError,
+        NotionDependencyError,
+        write_notion_output,
+    )
 
     json_path = Path(json_file)
     if not json_path.exists():
@@ -558,14 +564,17 @@ def _push_to_notion_from_json(
     effective_output_dir = output_dir or str(json_path.parent)
     base_filename = json_path.stem
 
-    return write_notion_output(
-        data_dict=data_dict,
-        metadata_dict=metadata_dict,
-        base_filename=base_filename,
-        output_dir=effective_output_dir,
-        logger=logging.getLogger(__name__),
-        force_new=force_new,
-    )
+    try:
+        return write_notion_output(
+            data_dict=data_dict,
+            metadata_dict=metadata_dict,
+            base_filename=base_filename,
+            output_dir=effective_output_dir,
+            logger=logging.getLogger(__name__),
+            force_new=force_new,
+        )
+    except (NotionConfigurationError, NotionDependencyError, NotionAPIError) as exc:
+        _exit_error(str(exc))
 
 
 def _normalize_output_format(raw_format: Any) -> str | None:
@@ -1822,6 +1831,34 @@ def _validate_semantic_flag_relationships(
             "--format notion is only supported in SDR generation mode "
             "(use --push-to-notion <json_file> to publish a saved artifact instead)",
         )
+    # --push-to-notion is documented as mutually exclusive with other generation/
+    # mode flags. _run_mode_checks dispatches by precedence, so without these
+    # rejections a typo like `--push-to-notion file.json --org-report` would
+    # silently drop --push-to-notion. Reject the common footguns explicitly.
+    if getattr(args, "push_to_notion", None) is not None:
+        if getattr(args, "org_report", False):
+            _exit_error("--push-to-notion is incompatible with --org-report")
+        if getattr(args, "diff", False):
+            _exit_error("--push-to-notion is incompatible with --diff")
+        if getattr(args, "snapshot", None) is not None:
+            _exit_error("--push-to-notion is incompatible with --snapshot")
+        if getattr(args, "diff_snapshot", None) is not None:
+            _exit_error("--push-to-notion is incompatible with --diff-snapshot")
+        if getattr(args, "compare_snapshots", None) is not None:
+            _exit_error("--push-to-notion is incompatible with --compare-snapshots")
+        if getattr(args, "batch", False):
+            _exit_error("--push-to-notion is incompatible with --batch")
+        if getattr(args, "watch_data_views", None) is not None:
+            _exit_error("--push-to-notion is incompatible with --watch")
+        if getattr(args, "inventory_summary", False):
+            _exit_error("--push-to-notion is incompatible with --inventory-summary")
+        if getattr(args, "dry_run", False):
+            _exit_error("--push-to-notion is incompatible with --dry-run")
+        if getattr(args, "data_views", None):
+            _exit_error(
+                "--push-to-notion is incompatible with positional data view arguments "
+                "(it publishes a saved JSON artifact, not a fresh generation)",
+            )
     if getattr(args, "allow_partial", False) and getattr(args, "quality_report", None):
         _exit_error("--allow-partial cannot be used with --quality-report")
     if getattr(args, "allow_partial", False) and getattr(args, "fail_on_quality", None):
@@ -3892,16 +3929,24 @@ def process_single_dataview(
                     output_files.append(markdown_output)
 
                 elif fmt == "notion":
-                    from cja_auto_sdr.output.writers.notion import write_notion_output
-
-                    notion_output = write_notion_output(
-                        data_dict,
-                        metadata_dict,
-                        base_filename,
-                        output_dir,
-                        logger,
-                        force_new=notion_force_new,
+                    from cja_auto_sdr.output.writers.notion import (
+                        NotionAPIError,
+                        NotionConfigurationError,
+                        NotionDependencyError,
+                        write_notion_output,
                     )
+
+                    try:
+                        notion_output = write_notion_output(
+                            data_dict,
+                            metadata_dict,
+                            base_filename,
+                            output_dir,
+                            logger,
+                            force_new=notion_force_new,
+                        )
+                    except (NotionConfigurationError, NotionDependencyError, NotionAPIError) as exc:
+                        _exit_error(str(exc))
                     output_files.append(notion_output)
 
             if len(output_files) > 1:

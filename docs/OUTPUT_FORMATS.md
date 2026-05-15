@@ -416,6 +416,12 @@ cja_auto_sdr --push-to-notion ./reports/dv_12345_sdr.json
 - Empty sections are omitted automatically
 - Footer paragraph with tool version
 
+**Behaviour and caveats:**
+- **Auto-regenerated pages overwrite manual edits.** When the registry contains a page ID for the data view, the writer clears every child block before re-appending the freshly generated SDR. Any annotations, comments-as-blocks, or layout changes a user added inside Notion will be lost on the next run. Use `--notion-force-new` to break the registry link and produce a new page (the old one is left in place as an orphan) when you need to preserve manual edits.
+- **`--push-to-notion` is mutually exclusive with all other generation flags.** Combining it with `--org-report`, `--diff`, `--snapshot`, `--batch`, `--watch`, `--inventory-summary`, `--dry-run`, or positional data view IDs exits with an actionable error (rather than silently dropping `--push-to-notion`).
+- **Large sections split into sibling tables.** Notion caps a block's children array at 100. Sections with more than 99 data rows are split into multiple sibling tables under the same heading, preserving row order.
+- **API failures surface as friendly messages.** Missing/invalid `NOTION_TOKEN`, deleted parent pages, and rate-limit errors print a one-line summary and exit 1; 429 responses are retried with exponential backoff (or `Retry-After` if Notion provides it) before giving up.
+
 ---
 
 ### 7. All Formats

@@ -5,13 +5,19 @@ Credentials (env vars required, not stored in config.json):
   NOTION_PARENT_PAGE_ID   — Parent page under which SDR child pages are created
 
 Install the optional dep: uv pip install 'cja-auto-sdr[notion]'
+
+The pages this writer publishes are auto-regenerated on every run. Manual edits
+made inside Notion will be overwritten on the next sync — the page is cleared
+and rewritten in place. Use --notion-force-new to break that link and produce
+a fresh page (the old one is left untouched, becoming an orphan).
 """
 
 from __future__ import annotations
 
 import logging
 import os
-import sys
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
@@ -24,7 +30,12 @@ from cja_auto_sdr.output.notion_registry import (
     store_page_id,
 )
 
-__all__ = ["write_notion_output"]
+__all__ = [
+    "NotionAPIError",
+    "NotionConfigurationError",
+    "NotionDependencyError",
+    "write_notion_output",
+]
 
 _SECTION_ORDER = [
     "Data Quality",
@@ -56,6 +67,34 @@ _DQ_SEVERITY_ICONS = {
 # single append call. Sections larger than this are split into multiple
 # sibling tables under the same heading.
 _MAX_TABLE_DATA_ROWS = 99
+
+# Concurrent block-deletes on update. Notion's API does not support bulk
+# delete, so an N-block page costs N round-trips. Keep the pool small to stay
+# well clear of Notion's per-integration rate limit (~3 rps default).
+_DELETE_WORKER_COUNT = 4
+
+# 429 retry budget. Notion returns 429 with a ``Retry-After`` header in
+# seconds; we honour it when present, otherwise fall back to exponential
+# backoff. Total wall time worst-case: ~1+2+4 = 7s on top of any Retry-After.
+_RATE_LIMIT_MAX_ATTEMPTS = 3
+_RATE_LIMIT_BASE_DELAY_SECONDS = 1.0
+
+
+# ---------------------------------------------------------------------------
+# Exceptions (raised from this module; CLI dispatch converts to exit codes)
+# ---------------------------------------------------------------------------
+
+
+class NotionConfigurationError(Exception):
+    """Required Notion configuration (env vars) is missing or invalid."""
+
+
+class NotionDependencyError(Exception):
+    """The ``notion-client`` optional extra is not installed."""
+
+
+class NotionAPIError(Exception):
+    """A Notion API call failed in a way the user can act on (auth, perms, rate-limit)."""
 
 
 # ---------------------------------------------------------------------------
@@ -109,8 +148,12 @@ def _table_row_block(cells: list[str]) -> dict:
     }
 
 
-def _table_block(df: pd.DataFrame) -> dict:
+def _table_block(df: pd.DataFrame) -> dict | None:
     cols = list(df.columns)
+    # Notion rejects table blocks with table_width == 0. A DataFrame with no
+    # columns has nothing to render — return None and let the caller skip it.
+    if not cols:
+        return None
     rows = [_table_row_block(cols)]
     for _, row in df.iterrows():
         rows.append(
@@ -131,7 +174,7 @@ def _table_block(df: pd.DataFrame) -> dict:
 
 
 def _section_blocks(section_name: str, df: pd.DataFrame) -> list[dict]:
-    if df is None or df.empty:
+    if df is None or df.empty or not list(df.columns):
         return []
     icon = _SECTION_ICONS.get(section_name, "📄")
     blocks: list[dict] = [_heading2_block(f"{icon} {section_name}")]
@@ -139,7 +182,13 @@ def _section_blocks(section_name: str, df: pd.DataFrame) -> list[dict]:
     # the same heading so each table stays within Notion's 100-children limit.
     for start in range(0, len(df), _MAX_TABLE_DATA_ROWS):
         chunk = df.iloc[start : start + _MAX_TABLE_DATA_ROWS]
-        blocks.append(_table_block(chunk))
+        table = _table_block(chunk)
+        if table is not None:
+            blocks.append(table)
+    # If every chunk degenerated (shouldn't happen given the column guard
+    # above), drop the orphan heading so we don't render a bare section title.
+    if len(blocks) == 1:
+        return []
     return blocks
 
 
@@ -199,12 +248,15 @@ def build_sdr_blocks(
 
 
 # ---------------------------------------------------------------------------
-# Credential resolution
+# Credential resolution + optional-dep loader
 # ---------------------------------------------------------------------------
 
 
 def resolve_notion_credentials() -> tuple[str, str]:
-    """Return (NOTION_TOKEN, NOTION_PARENT_PAGE_ID) from env / .env file."""
+    """Return (NOTION_TOKEN, NOTION_PARENT_PAGE_ID) from env / .env file.
+
+    Raises NotionConfigurationError if either env var is missing.
+    """
     try:
         from dotenv import load_dotenv
 
@@ -216,34 +268,31 @@ def resolve_notion_credentials() -> tuple[str, str]:
     parent_page_id = os.environ.get("NOTION_PARENT_PAGE_ID")
 
     if not token:
-        print(
-            "ERROR: NOTION_TOKEN is not set. Set it as an environment variable or add it to a .env file.",
-            file=sys.stderr,
+        raise NotionConfigurationError(
+            "NOTION_TOKEN is not set. Set it as an environment variable or add it to a .env file.",
         )
-        sys.exit(1)
 
     if not parent_page_id:
-        print(
-            "ERROR: NOTION_PARENT_PAGE_ID is not set. Set it as an environment variable or add it to a .env file.",
-            file=sys.stderr,
+        raise NotionConfigurationError(
+            "NOTION_PARENT_PAGE_ID is not set. Set it as an environment variable or add it to a .env file.",
         )
-        sys.exit(1)
 
     return token, parent_page_id
 
 
 def _require_notion_client():
-    """Return notion_client.Client class or exit with install instructions."""
+    """Return notion_client.Client class.
+
+    Raises NotionDependencyError if the optional extra is not installed.
+    """
     try:
         from notion_client import Client
 
         return Client
-    except ImportError:
-        print(
-            "ERROR: Notion output requires the notion extra.\nInstall it with: uv pip install 'cja-auto-sdr[notion]'",
-            file=sys.stderr,
-        )
-        sys.exit(1)
+    except ImportError as exc:
+        raise NotionDependencyError(
+            "Notion output requires the notion extra.\nInstall it with: uv pip install 'cja-auto-sdr[notion]'",
+        ) from exc
 
 
 # ---------------------------------------------------------------------------
@@ -251,19 +300,136 @@ def _require_notion_client():
 # ---------------------------------------------------------------------------
 
 
-def _clear_page_blocks(client: Any, page_id: str) -> None:
-    """Delete all child blocks from a Notion page (no bulk-clear API exists)."""
-    cursor = None
+def _extract_api_error_code(err: Exception) -> str | None:
+    """Return the Notion API error ``code`` attribute when present."""
+    code = getattr(err, "code", None)
+    if isinstance(code, str):
+        return code
+    # APIResponseError stringifies its code via str(.code) in some SDK versions.
+    if code is not None:
+        return str(code)
+    return None
+
+
+def _extract_retry_after_seconds(err: Exception) -> float | None:
+    """Return the Retry-After value (in seconds) for a 429 if the SDK exposes it."""
+    headers = getattr(err, "headers", None) or {}
+    raw = headers.get("Retry-After") or headers.get("retry-after")
+    if raw is None:
+        return None
+    try:
+        return float(raw)
+    except TypeError, ValueError:
+        return None
+
+
+def _is_notion_api_error(err: Exception) -> bool:
+    """Best-effort check for a notion_client APIResponseError without forcing import."""
+    if err.__class__.__name__ in {"APIResponseError", "HTTPResponseError"}:
+        return True
+    # Walk the MRO by class name so we don't depend on notion_client being
+    # importable at module-load time.
+    return any(c.__name__ in {"APIResponseError", "HTTPResponseError"} for c in type(err).__mro__)
+
+
+def _friendly_notion_error_message(err: Exception) -> str:
+    """Map a Notion API error to a friendly, actionable message."""
+    code = _extract_api_error_code(err)
+    if code in {"unauthorized", "restricted_resource"}:
+        return (
+            "Notion API rejected the request: the integration token is missing, invalid, "
+            "or does not have access to NOTION_PARENT_PAGE_ID. Verify NOTION_TOKEN and "
+            "confirm the parent page is shared with the integration."
+        )
+    if code == "object_not_found":
+        return (
+            "Notion API could not find the target page. The page may have been deleted "
+            "or the integration was removed from it. Re-run with --notion-force-new to "
+            "create a fresh page, or share the parent page with the integration again."
+        )
+    if code == "rate_limited":
+        return "Notion API rate limit exceeded after retries. Try again later or reduce concurrency."
+    if code == "validation_error":
+        return f"Notion API rejected the payload: {err}"
+    return f"Notion API call failed ({code or 'unknown error'}): {err}"
+
+
+def _call_with_rate_limit_retry(func, *args, **kwargs):
+    """Invoke a Notion SDK call, retrying with backoff on 429 rate-limit errors.
+
+    Non-rate-limit API errors are re-raised immediately for the caller to map
+    to a friendly message; this helper only owns the 429 retry policy.
+    """
+    delay = _RATE_LIMIT_BASE_DELAY_SECONDS
+    last_exc: Exception | None = None
+    for attempt in range(1, _RATE_LIMIT_MAX_ATTEMPTS + 1):
+        try:
+            return func(*args, **kwargs)
+        except Exception as exc:
+            if not _is_notion_api_error(exc) or _extract_api_error_code(exc) != "rate_limited":
+                raise
+            last_exc = exc
+            if attempt == _RATE_LIMIT_MAX_ATTEMPTS:
+                break
+            retry_after = _extract_retry_after_seconds(exc)
+            time.sleep(retry_after if retry_after is not None else delay)
+            delay *= 2
+    # All retries exhausted. Re-raise the last 429 so the caller maps it to
+    # a friendly message via _friendly_notion_error_message.
+    assert last_exc is not None
+    raise last_exc
+
+
+def _list_all_child_block_ids(client: Any, page_id: str) -> list[str]:
+    """Return every direct child block ID of ``page_id`` across all pages.
+
+    Collect first, delete second: cursors returned by Notion are content-based,
+    so iterating list-then-delete-in-loop produces undefined behaviour once
+    the page changes mid-iteration.
+    """
+    block_ids: list[str] = []
+    cursor: str | None = None
     while True:
         kwargs: dict[str, Any] = {"block_id": page_id}
         if cursor:
             kwargs["start_cursor"] = cursor
-        response = client.blocks.children.list(**kwargs)
+        response = _call_with_rate_limit_retry(client.blocks.children.list, **kwargs)
         for block in response.get("results", []):
-            client.blocks.delete(block_id=block["id"])
+            block_id = block.get("id")
+            if block_id:
+                block_ids.append(block_id)
         if not response.get("has_more"):
             break
         cursor = response.get("next_cursor")
+        if cursor is None:
+            break
+    return block_ids
+
+
+def _clear_page_blocks(client: Any, page_id: str) -> None:
+    """Delete all child blocks from a Notion page (no bulk-clear API exists).
+
+    Listing and deletion are split into two phases so the pagination cursor
+    cannot drift, and the per-block DELETE calls are issued from a small
+    thread pool to keep update time tolerable for large pages.
+    """
+    block_ids = _list_all_child_block_ids(client, page_id)
+    if not block_ids:
+        return
+
+    def _delete_one(block_id: str) -> None:
+        _call_with_rate_limit_retry(client.blocks.delete, block_id=block_id)
+
+    if len(block_ids) == 1:
+        _delete_one(block_ids[0])
+        return
+
+    with ThreadPoolExecutor(max_workers=_DELETE_WORKER_COUNT) as pool:
+        futures = [pool.submit(_delete_one, bid) for bid in block_ids]
+        for fut in as_completed(futures):
+            # Re-raise the first delete failure; remaining futures complete
+            # naturally as the pool unwinds.
+            fut.result()
 
 
 def _append_blocks(
@@ -274,7 +440,8 @@ def _append_blocks(
 ) -> None:
     """Append blocks to a Notion page in batches (API limit: 100 per call)."""
     for i in range(0, len(blocks), batch_size):
-        client.blocks.children.append(
+        _call_with_rate_limit_retry(
+            client.blocks.children.append,
             block_id=page_id,
             children=blocks[i : i + batch_size],
         )
@@ -304,7 +471,8 @@ def create_or_update_page(
         _append_blocks(client, existing_page_id, blocks)
         return existing_page_id
 
-    page = client.pages.create(
+    page = _call_with_rate_limit_retry(
+        client.pages.create,
         parent={"page_id": parent_page_id},
         properties={"title": [{"type": "text", "text": {"content": page_title}}]},
     )
@@ -334,6 +502,9 @@ def write_notion_output(
     ``base_filename`` is accepted for writer-protocol parity with file-emitting
     writers and is used as a fallback when ``metadata_dict`` lacks
     ``Data View ID`` or ``Data View Name``.
+
+    Raises NotionConfigurationError / NotionDependencyError / NotionAPIError —
+    callers (CLI dispatcher) are responsible for converting these to exit codes.
     """
     logger.info("✓ Publishing to Notion...")
 
@@ -348,15 +519,20 @@ def write_notion_output(
     registry_path = get_registry_path(output_dir)
 
     client = client_cls(auth=token)
-    page_id = create_or_update_page(
-        client,
-        parent_page_id,
-        page_title,
-        data_view_id,
-        blocks,
-        registry_path,
-        force_new=force_new,
-    )
+    try:
+        page_id = create_or_update_page(
+            client,
+            parent_page_id,
+            page_title,
+            data_view_id,
+            blocks,
+            registry_path,
+            force_new=force_new,
+        )
+    except Exception as exc:
+        if _is_notion_api_error(exc):
+            raise NotionAPIError(_friendly_notion_error_message(exc)) from exc
+        raise
 
     logger.info("✓ Notion page published: notion://pages/%s", page_id)
     return f"notion://pages/{page_id}"

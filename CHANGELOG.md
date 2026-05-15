@@ -58,6 +58,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `docs/QUICK_REFERENCE.md`, `docs/AGENT_AUTOMATION.md`.
 - `tools/cja_sdr_generate.json` — `notion` added to format enum.
 
+### Fixed (post-review hardening for v3.7.0)
+- `--push-to-notion` is now explicitly mutually exclusive with `--org-report`,
+  `--diff`, `--snapshot`, `--diff-snapshot`, `--compare-snapshots`, `--batch`,
+  `--watch`, `--inventory-summary`, `--dry-run`, and positional data view
+  arguments. Previously the `RunMode` dispatcher resolved by precedence, so
+  combining `--push-to-notion` with one of those flags silently dropped the
+  Notion publish. The CHANGELOG's "mutually exclusive" claim was aspirational;
+  it is now enforced by `_validate_semantic_flag_relationships`.
+- Notion API errors now surface as friendly, actionable messages instead of
+  raw `notion_client` stack traces. `unauthorized` / `restricted_resource`
+  point at `NOTION_TOKEN` and the parent-page share; `object_not_found`
+  suggests `--notion-force-new`; `validation_error` includes the upstream
+  detail. 429 rate-limit responses retry up to 3 times with exponential
+  backoff (honouring `Retry-After` when Notion provides it) before exiting.
+- `_clear_page_blocks` now lists every block ID first and deletes second.
+  Notion's pagination cursors are content-based, so the prior list-then-
+  delete-in-loop pattern could skip blocks once mid-page state changed.
+  Deletes are issued from a 4-worker thread pool, keeping update time
+  tolerable on large pages while staying well clear of the per-integration
+  rate limit.
+- `_table_block` returns `None` for zero-column DataFrames (Notion rejects
+  `table_width=0`); `_section_blocks` filters and avoids emitting an orphan
+  heading. Empty input was previously possible for unusual section payloads.
+- The Notion writer no longer calls `sys.exit` from library code. It raises
+  `NotionConfigurationError` (missing env vars), `NotionDependencyError`
+  (missing `notion-client` extra), or `NotionAPIError` (mapped API failures);
+  the two CLI entry points (`_push_to_notion_from_json` and the SDR pipeline
+  writer dispatch) convert these to exit code 1 with a friendly message.
+- New CI job `no-extras-smoke` syncs runtime deps only (no `--dev`, no
+  `--all-extras`), confirms `notion-client` is not installed, and asserts the
+  package and the Notion writer module both import cleanly. Catches future
+  regressions where a top-level `import notion_client` slips in.
+- Static guard test ensures no top-level `notion_client` imports exist in
+  `src/cja_auto_sdr/` — the extra must only be imported lazily inside a
+  function body.
+
 ## [3.6.1] — 2026-05-14
 
 ### Fixed

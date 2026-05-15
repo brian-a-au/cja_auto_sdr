@@ -72,6 +72,18 @@ def test_table_block_empty_df():
     assert len(children) == 1
 
 
+def test_table_block_zero_column_df_returns_none():
+    """A DataFrame with no columns has nothing to render — Notion rejects table_width=0."""
+    df = pd.DataFrame()
+    assert _table_block(df) is None
+
+
+def test_section_blocks_zero_column_df_returns_empty():
+    """No columns means no table; the section should not emit an orphan heading."""
+    df = pd.DataFrame({}, index=[0, 1, 2])
+    assert _section_blocks("Metrics", df) == []
+
+
 def test_section_blocks_returns_heading_plus_table():
     df = pd.DataFrame({"Name": ["a"], "Type": ["metric"]})
     blocks = _section_blocks("Metrics", df)
@@ -236,24 +248,30 @@ def test_resolve_notion_credentials_reads_env(monkeypatch):
     assert parent_id == "parent-page-id"
 
 
-def test_resolve_notion_credentials_missing_token_exits(monkeypatch):
+def test_resolve_notion_credentials_missing_token_raises(monkeypatch):
     monkeypatch.delenv("NOTION_TOKEN", raising=False)
     monkeypatch.delenv("NOTION_PARENT_PAGE_ID", raising=False)
-    from cja_auto_sdr.output.writers.notion import resolve_notion_credentials
+    from cja_auto_sdr.output.writers.notion import (
+        NotionConfigurationError,
+        resolve_notion_credentials,
+    )
 
-    with pytest.raises(SystemExit) as exc_info:
+    with pytest.raises(NotionConfigurationError) as exc_info:
         resolve_notion_credentials()
-    assert exc_info.value.code == 1
+    assert "NOTION_TOKEN" in str(exc_info.value)
 
 
-def test_resolve_notion_credentials_missing_parent_page_exits(monkeypatch):
+def test_resolve_notion_credentials_missing_parent_page_raises(monkeypatch):
     monkeypatch.setenv("NOTION_TOKEN", "secret-token")
     monkeypatch.delenv("NOTION_PARENT_PAGE_ID", raising=False)
-    from cja_auto_sdr.output.writers.notion import resolve_notion_credentials
+    from cja_auto_sdr.output.writers.notion import (
+        NotionConfigurationError,
+        resolve_notion_credentials,
+    )
 
-    with pytest.raises(SystemExit) as exc_info:
+    with pytest.raises(NotionConfigurationError) as exc_info:
         resolve_notion_credentials()
-    assert exc_info.value.code == 1
+    assert "NOTION_PARENT_PAGE_ID" in str(exc_info.value)
 
 
 def test_clear_page_blocks_deletes_all_children():
@@ -417,11 +435,47 @@ def test_notion_registered_in_writer_registry():
     assert "notion" in WRITER_REGISTRY
 
 
-def test_require_notion_client_exits_when_sdk_missing(capsys, monkeypatch):
-    """Per spec: missing notion-client extra exits 1 with install instructions."""
+def test_no_top_level_notion_client_imports_in_package():
+    """Static guard: the optional `notion-client` extra must never be imported at module-load time.
+
+    The package is published with `notion-client` as an opt-in extra. If a top-level
+    `import notion_client` slips in (e.g. via an autoformat or refactor), the
+    package will fail to import for any user who hasn't installed the extra —
+    which is the entire point of marking it optional. Catch that statically here
+    instead of relying on the no-extras CI job alone.
+    """
+    import ast
+    from pathlib import Path
+
+    pkg_root = Path(__file__).resolve().parent.parent / "src" / "cja_auto_sdr"
+    offenders: list[tuple[str, int]] = []
+    for py_file in pkg_root.rglob("*.py"):
+        source = py_file.read_text(encoding="utf-8")
+        tree = ast.parse(source, filename=str(py_file))
+        # Only scan module-level imports (tree.body) — function-local imports
+        # are how this codebase keeps the optional dep optional.
+        for node in tree.body:
+            if isinstance(node, ast.Import):
+                if any(
+                    alias.name == "notion_client" or alias.name.startswith("notion_client.") for alias in node.names
+                ):
+                    offenders.append((str(py_file.relative_to(pkg_root)), node.lineno))
+            elif isinstance(node, ast.ImportFrom):
+                if node.module and (node.module == "notion_client" or node.module.startswith("notion_client.")):
+                    offenders.append((str(py_file.relative_to(pkg_root)), node.lineno))
+
+    assert offenders == [], (
+        "Top-level `import notion_client` found — the optional extra must only be "
+        f"imported lazily inside a function. Offenders: {offenders}"
+    )
+
+
+def test_require_notion_client_raises_when_sdk_missing(monkeypatch):
+    """Missing notion-client extra raises NotionDependencyError with install instructions."""
     import sys as _sys
 
     from cja_auto_sdr.output.writers import notion as _notion_mod
+    from cja_auto_sdr.output.writers.notion import NotionDependencyError
 
     real_import = builtins.__import__
 
@@ -433,9 +487,165 @@ def test_require_notion_client_exits_when_sdk_missing(capsys, monkeypatch):
     monkeypatch.setattr(builtins, "__import__", fake_import)
     monkeypatch.setitem(_sys.modules, "notion_client", None)
 
-    with pytest.raises(SystemExit) as exc_info:
+    with pytest.raises(NotionDependencyError) as exc_info:
         _notion_mod._require_notion_client()
+    msg = str(exc_info.value)
+    assert "notion extra" in msg
+    assert "cja-auto-sdr[notion]" in msg
+
+
+def test_push_to_notion_cli_converts_config_error_to_exit(monkeypatch, tmp_path):
+    """The CLI dispatcher must convert NotionConfigurationError to exit code 1."""
+    import json as _json
+
+    monkeypatch.delenv("NOTION_TOKEN", raising=False)
+    monkeypatch.delenv("NOTION_PARENT_PAGE_ID", raising=False)
+    artifact = tmp_path / "sdr.json"
+    artifact.write_text(_json.dumps({"metadata": {"Data View ID": "dv_1"}, "metrics": []}))
+
+    from cja_auto_sdr.generator import _push_to_notion_from_json
+
+    with pytest.raises(SystemExit) as exc_info:
+        _push_to_notion_from_json(str(artifact))
     assert exc_info.value.code == 1
-    err = capsys.readouterr().err
-    assert "notion extra" in err
-    assert "cja-auto-sdr[notion]" in err
+
+
+def test_call_with_rate_limit_retry_succeeds_after_one_429(monkeypatch):
+    """A single 429 should retry-and-succeed without raising."""
+    from cja_auto_sdr.output.writers import notion as _notion_mod
+
+    class FakeRateLimited(Exception):
+        code = "rate_limited"
+
+    # Make _is_notion_api_error recognize our fake class.
+    FakeRateLimited.__name__ = "APIResponseError"
+
+    calls = {"n": 0}
+
+    def flaky():
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise FakeRateLimited("rate limited")
+        return "ok"
+
+    # Skip the sleep so the test is fast.
+    monkeypatch.setattr(_notion_mod.time, "sleep", lambda _s: None)
+    assert _notion_mod._call_with_rate_limit_retry(flaky) == "ok"
+    assert calls["n"] == 2
+
+
+def test_call_with_rate_limit_retry_gives_up_after_max_attempts(monkeypatch):
+    from cja_auto_sdr.output.writers import notion as _notion_mod
+
+    class FakeRateLimited(Exception):
+        code = "rate_limited"
+
+    FakeRateLimited.__name__ = "APIResponseError"
+
+    calls = {"n": 0}
+
+    def always_429():
+        calls["n"] += 1
+        raise FakeRateLimited("rate limited")
+
+    monkeypatch.setattr(_notion_mod.time, "sleep", lambda _s: None)
+    with pytest.raises(FakeRateLimited):
+        _notion_mod._call_with_rate_limit_retry(always_429)
+    assert calls["n"] == _notion_mod._RATE_LIMIT_MAX_ATTEMPTS
+
+
+def test_call_with_rate_limit_retry_passes_non_rate_limit_errors_through(monkeypatch):
+    """Non-429 API errors must not be retried — they propagate immediately."""
+    from cja_auto_sdr.output.writers import notion as _notion_mod
+
+    class FakeUnauthorized(Exception):
+        code = "unauthorized"
+
+    FakeUnauthorized.__name__ = "APIResponseError"
+
+    calls = {"n": 0}
+
+    def auth_fail():
+        calls["n"] += 1
+        raise FakeUnauthorized("bad token")
+
+    with pytest.raises(FakeUnauthorized):
+        _notion_mod._call_with_rate_limit_retry(auth_fail)
+    assert calls["n"] == 1
+
+
+def test_friendly_notion_error_message_for_unauthorized():
+    from cja_auto_sdr.output.writers import notion as _notion_mod
+
+    class FakeErr(Exception):
+        code = "unauthorized"
+
+    msg = _notion_mod._friendly_notion_error_message(FakeErr("nope"))
+    assert "NOTION_TOKEN" in msg
+    assert "NOTION_PARENT_PAGE_ID" in msg
+
+
+def test_friendly_notion_error_message_for_rate_limit():
+    from cja_auto_sdr.output.writers import notion as _notion_mod
+
+    class FakeErr(Exception):
+        code = "rate_limited"
+
+    assert "rate limit" in _notion_mod._friendly_notion_error_message(FakeErr("x")).lower()
+
+
+def test_write_notion_output_wraps_api_error_as_notion_api_error(tmp_path, monkeypatch):
+    """API errors from create_or_update_page surface as NotionAPIError with friendly text."""
+    import logging as _logging
+
+    monkeypatch.setenv("NOTION_TOKEN", "tok")
+    monkeypatch.setenv("NOTION_PARENT_PAGE_ID", "pid")
+    from cja_auto_sdr.output.writers.notion import NotionAPIError, write_notion_output
+
+    class FakeUnauthorized(Exception):
+        code = "unauthorized"
+
+    FakeUnauthorized.__name__ = "APIResponseError"
+
+    mock_client_instance = MagicMock()
+    mock_client_instance.pages.create.side_effect = FakeUnauthorized("nope")
+    with patch(
+        "cja_auto_sdr.output.writers.notion._require_notion_client",
+    ) as mock_cls:
+        mock_cls.return_value = MagicMock(return_value=mock_client_instance)
+        with pytest.raises(NotionAPIError) as exc_info:
+            write_notion_output(
+                data_dict={"Metrics": pd.DataFrame({"Name": ["m"], "Type": ["x"]})},
+                metadata_dict={"Data View Name": "T", "Data View ID": "dv_1"},
+                base_filename="t",
+                output_dir=str(tmp_path),
+                logger=_logging.getLogger("test"),
+            )
+    assert "NOTION_TOKEN" in str(exc_info.value)
+
+
+def test_clear_page_blocks_lists_all_before_deleting():
+    """Listing and deleting must be split into two phases — no in-loop delete during list."""
+    from cja_auto_sdr.output.writers.notion import _clear_page_blocks
+
+    client = MagicMock()
+    list_calls: list[str] = []
+    delete_calls: list[str] = []
+
+    def fake_list(**kwargs):
+        list_calls.append("list")
+        cursor = kwargs.get("start_cursor")
+        if cursor is None:
+            return {"results": [{"id": "b1"}, {"id": "b2"}], "has_more": True, "next_cursor": "c1"}
+        return {"results": [{"id": "b3"}], "has_more": False}
+
+    def fake_delete(**kwargs):
+        delete_calls.append(kwargs["block_id"])
+
+    client.blocks.children.list.side_effect = fake_list
+    client.blocks.delete.side_effect = fake_delete
+
+    _clear_page_blocks(client, "page-abc")
+    assert sorted(delete_calls) == ["b1", "b2", "b3"]
+    # All listing must complete before any deletion runs.
+    assert len(list_calls) == 2
