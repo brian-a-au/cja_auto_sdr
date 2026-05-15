@@ -60,12 +60,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed (post-review hardening for v3.7.0)
 - `--push-to-notion` is now explicitly mutually exclusive with `--org-report`,
-  `--diff`, `--snapshot`, `--diff-snapshot`, `--compare-snapshots`, `--batch`,
+  `--diff`, `--snapshot`, `--diff-snapshot`, `--compare-snapshots`,
+  `--list-snapshots`, `--prune-snapshots`, `--list-org-report-snapshots`,
+  `--inspect-org-report-snapshot`, `--prune-org-report-snapshots`, `--batch`,
   `--watch`, `--inventory-summary`, `--dry-run`, and positional data view
   arguments. Previously the `RunMode` dispatcher resolved by precedence, so
   combining `--push-to-notion` with one of those flags silently dropped the
   Notion publish. The CHANGELOG's "mutually exclusive" claim was aspirational;
-  it is now enforced by `_validate_semantic_flag_relationships`.
+  it is now enforced by `_validate_semantic_flag_relationships` via a
+  table-driven check (`_PUSH_TO_NOTION_INCOMPATIBLE_FLAGS`) so adding a new
+  mode flag forces an explicit decision here.
+- Batch workers no longer abort the whole batch when one data view hits a
+  Notion writer error. The Notion failure path in `process_single_dataview`
+  previously raised `SystemExit` via `_exit_error`, which killed the pool
+  worker and made `--continue-on-error` ineffective. The handler now returns
+  a structured failed `ProcessingResult` (`FAILURE_CODE_OUTPUT_WRITE_FAILED`)
+  so the batch can mark the data view failed and proceed.
 - Notion API errors now surface as friendly, actionable messages instead of
   raw `notion_client` stack traces. `unauthorized` / `restricted_resource`
   point at `NOTION_TOKEN` and the parent-page share; `object_not_found`

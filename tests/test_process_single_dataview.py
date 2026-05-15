@@ -1135,6 +1135,10 @@ class TestProcessSingleDataviewFailures:
         pool worker and aborts the whole batch, defeating --continue-on-error. The
         Notion error path must surface as ProcessingResult(success=False) so the
         batch can mark this data view failed and proceed.
+
+        This is the producer-side contract test. BatchProcessor's downstream handling
+        of failed ProcessingResults (including --continue-on-error behavior) is covered
+        by tests/test_batch_processor.py.
         """
         from cja_auto_sdr.output.writers.notion import NotionConfigurationError
 

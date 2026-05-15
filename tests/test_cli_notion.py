@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import argparse
 import sys
 from unittest.mock import patch
 
 import pytest
 
 from cja_auto_sdr.cli.parser import parse_arguments
+from cja_auto_sdr.generator import RunMode, _validate_semantic_flag_relationships
 
 
 def _parse(args):
@@ -62,13 +64,6 @@ def test_push_to_notion_standalone_policy_registered():
 
 def test_format_notion_rejected_for_diff_mode():
     """--format notion in diff mode must exit 1 with actionable error (Notion is SDR-only)."""
-    import argparse
-
-    from cja_auto_sdr.generator import (
-        RunMode,
-        _validate_semantic_flag_relationships,
-    )
-
     args = argparse.Namespace(
         format="notion",
         diff=True,
@@ -81,13 +76,6 @@ def test_format_notion_rejected_for_diff_mode():
 
 def test_format_notion_rejected_for_org_report_mode():
     """--format notion in org-report mode must exit 1 (Notion is SDR-only)."""
-    import argparse
-
-    from cja_auto_sdr.generator import (
-        RunMode,
-        _validate_semantic_flag_relationships,
-    )
-
     args = argparse.Namespace(
         format="notion",
         skip_validation=False,
@@ -99,13 +87,6 @@ def test_format_notion_rejected_for_org_report_mode():
 
 def test_format_notion_allowed_in_push_to_notion_mode():
     """--push-to-notion + --format notion must not error — push handler ignores --format."""
-    import argparse
-
-    from cja_auto_sdr.generator import (
-        RunMode,
-        _validate_semantic_flag_relationships,
-    )
-
     args = argparse.Namespace(
         format="notion",
         push_to_notion="./sdr.json",
@@ -116,13 +97,6 @@ def test_format_notion_allowed_in_push_to_notion_mode():
 
 def test_format_notion_allowed_in_sdr_mode():
     """--format notion in SDR mode must validate cleanly."""
-    import argparse
-
-    from cja_auto_sdr.generator import (
-        RunMode,
-        _validate_semantic_flag_relationships,
-    )
-
     args = argparse.Namespace(
         format="notion",
         skip_validation=False,
@@ -130,38 +104,37 @@ def test_format_notion_allowed_in_sdr_mode():
     _validate_semantic_flag_relationships(args, inferred_mode=RunMode.SDR)
 
 
-def test_push_to_notion_rejected_with_list_snapshots():
-    """--push-to-notion + --list-snapshots must exit 1; snapshot mode would silently win otherwise."""
-    import argparse
+# Mode flags that --push-to-notion must reject. _run_mode_checks dispatches by
+# precedence — every flag below would otherwise win and silently drop the
+# publish. Parametrized to mirror the table-driven impl
+# (_PUSH_TO_NOTION_INCOMPATIBLE_FLAGS) so a future addition there gets
+# coverage by adding one line here.
+_PUSH_TO_NOTION_MUTEX_CASES: tuple[tuple[str, object], ...] = (
+    ("org_report", True),
+    ("diff", True),
+    ("snapshot", "./snap.json"),
+    ("diff_snapshot", ["./a.json", "./b.json"]),
+    ("compare_snapshots", ["./a.json", "./b.json"]),
+    ("list_snapshots", True),
+    ("prune_snapshots", True),
+    ("list_org_report_snapshots", True),
+    ("inspect_org_report_snapshot", "./snap.json"),
+    ("prune_org_report_snapshots", True),
+    ("batch", True),
+    ("watch_data_views", ["dv_123"]),
+    ("inventory_summary", True),
+    ("dry_run", True),
+    ("data_views", ["dv_123"]),
+)
 
-    from cja_auto_sdr.generator import (
-        RunMode,
-        _validate_semantic_flag_relationships,
-    )
 
+@pytest.mark.parametrize(("dest", "value"), _PUSH_TO_NOTION_MUTEX_CASES)
+def test_push_to_notion_rejects_incompatible_mode_flag(dest, value):
+    """Each mode flag in the mutex table must cause --push-to-notion to exit 1."""
     args = argparse.Namespace(
         push_to_notion="./sdr.json",
-        list_snapshots=True,
         skip_validation=False,
-    )
-    with pytest.raises(SystemExit) as exc_info:
-        _validate_semantic_flag_relationships(args, inferred_mode=RunMode.PUSH_TO_NOTION)
-    assert exc_info.value.code == 1
-
-
-def test_push_to_notion_rejected_with_prune_snapshots():
-    """--push-to-notion + --prune-snapshots must exit 1; snapshot mode would silently win otherwise."""
-    import argparse
-
-    from cja_auto_sdr.generator import (
-        RunMode,
-        _validate_semantic_flag_relationships,
-    )
-
-    args = argparse.Namespace(
-        push_to_notion="./sdr.json",
-        prune_snapshots=True,
-        skip_validation=False,
+        **{dest: value},
     )
     with pytest.raises(SystemExit) as exc_info:
         _validate_semantic_flag_relationships(args, inferred_mode=RunMode.PUSH_TO_NOTION)

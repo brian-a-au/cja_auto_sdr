@@ -1794,6 +1794,39 @@ def _dispatch_prevalidation_mode(
         _handle_sample_config_prevalidation(run_state=run_state)
 
 
+# Flags that --push-to-notion must reject explicitly. _run_mode_checks
+# dispatches by precedence (snapshot maintenance, org-report, diff, etc.
+# all fire before PUSH_TO_NOTION), so without these rejections a typo like
+# `--push-to-notion file.json --list-snapshots` would silently run the
+# other mode and ignore the publish request. Table-driven so adding a new
+# mode flag forces an explicit decision here.
+#
+# Each entry: (args dest, user-facing label, optional override message).
+# A flag is "present" when getattr(args, dest, None) is truthy.
+_PUSH_TO_NOTION_INCOMPATIBLE_FLAGS: tuple[tuple[str, str, str | None], ...] = (
+    ("org_report", "--org-report", None),
+    ("diff", "--diff", None),
+    ("snapshot", "--snapshot", None),
+    ("diff_snapshot", "--diff-snapshot", None),
+    ("compare_snapshots", "--compare-snapshots", None),
+    ("list_snapshots", "--list-snapshots", None),
+    ("prune_snapshots", "--prune-snapshots", None),
+    ("list_org_report_snapshots", "--list-org-report-snapshots", None),
+    ("inspect_org_report_snapshot", "--inspect-org-report-snapshot", None),
+    ("prune_org_report_snapshots", "--prune-org-report-snapshots", None),
+    ("batch", "--batch", None),
+    ("watch_data_views", "--watch", None),
+    ("inventory_summary", "--inventory-summary", None),
+    ("dry_run", "--dry-run", None),
+    (
+        "data_views",
+        "positional data view arguments",
+        "--push-to-notion is incompatible with positional data view arguments "
+        "(it publishes a saved JSON artifact, not a fresh generation)",
+    ),
+)
+
+
 def _validate_semantic_flag_relationships(
     args: argparse.Namespace,
     *,
@@ -1831,38 +1864,13 @@ def _validate_semantic_flag_relationships(
             "--format notion is only supported in SDR generation mode "
             "(use --push-to-notion <json_file> to publish a saved artifact instead)",
         )
-    # --push-to-notion is documented as mutually exclusive with other generation/
-    # mode flags. _run_mode_checks dispatches by precedence, so without these
-    # rejections a typo like `--push-to-notion file.json --org-report` would
-    # silently drop --push-to-notion. Reject the common footguns explicitly.
+    # Reject --push-to-notion alongside flags that would otherwise win the
+    # mode dispatch and silently drop the publish request. Table at module
+    # scope: _PUSH_TO_NOTION_INCOMPATIBLE_FLAGS.
     if getattr(args, "push_to_notion", None) is not None:
-        if getattr(args, "org_report", False):
-            _exit_error("--push-to-notion is incompatible with --org-report")
-        if getattr(args, "diff", False):
-            _exit_error("--push-to-notion is incompatible with --diff")
-        if getattr(args, "snapshot", None) is not None:
-            _exit_error("--push-to-notion is incompatible with --snapshot")
-        if getattr(args, "diff_snapshot", None) is not None:
-            _exit_error("--push-to-notion is incompatible with --diff-snapshot")
-        if getattr(args, "compare_snapshots", None) is not None:
-            _exit_error("--push-to-notion is incompatible with --compare-snapshots")
-        if getattr(args, "list_snapshots", False):
-            _exit_error("--push-to-notion is incompatible with --list-snapshots")
-        if getattr(args, "prune_snapshots", False):
-            _exit_error("--push-to-notion is incompatible with --prune-snapshots")
-        if getattr(args, "batch", False):
-            _exit_error("--push-to-notion is incompatible with --batch")
-        if getattr(args, "watch_data_views", None) is not None:
-            _exit_error("--push-to-notion is incompatible with --watch")
-        if getattr(args, "inventory_summary", False):
-            _exit_error("--push-to-notion is incompatible with --inventory-summary")
-        if getattr(args, "dry_run", False):
-            _exit_error("--push-to-notion is incompatible with --dry-run")
-        if getattr(args, "data_views", None):
-            _exit_error(
-                "--push-to-notion is incompatible with positional data view arguments "
-                "(it publishes a saved JSON artifact, not a fresh generation)",
-            )
+        for dest, label, override in _PUSH_TO_NOTION_INCOMPATIBLE_FLAGS:
+            if getattr(args, dest, None):
+                _exit_error(override or f"--push-to-notion is incompatible with {label}")
     if getattr(args, "allow_partial", False) and getattr(args, "quality_report", None):
         _exit_error("--allow-partial cannot be used with --quality-report")
     if getattr(args, "allow_partial", False) and getattr(args, "fail_on_quality", None):
@@ -3955,6 +3963,11 @@ def process_single_dataview(
                         # from a worker kills the pool worker instead of letting
                         # --continue-on-error mark this data view failed and proceed.
                         logger.critical("Notion output failed: %s", exc)
+                        # Config/dependency errors are user-facing setup issues with
+                        # actionable messages; an API error wraps an unexpected upstream
+                        # condition and deserves a traceback for debug logs.
+                        if isinstance(exc, NotionAPIError):
+                            logger.exception("Full exception details:")
                         logger.info("=" * BANNER_WIDTH)
                         logger.info("EXECUTION FAILED")
                         logger.info("=" * BANNER_WIDTH)
