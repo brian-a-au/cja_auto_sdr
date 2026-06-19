@@ -53,11 +53,17 @@ _SECTION_ICONS = {
     "Derived Fields": "🔬",
 }
 _DQ_HEADING_ICON = "🛡️"
+# Keys cover the CJA quality engine vocabulary (core.constants.QUALITY_SEVERITY_ORDER:
+# CRITICAL/HIGH/MEDIUM/LOW/INFO) plus the generic ERROR/WARN logging vocabulary for
+# safety. Unmapped severities fall back to the info icon in _dq_callout_blocks.
 _DQ_SEVERITY_ICONS = {
-    "ERROR": "🔴",
     "CRITICAL": "🔴",
+    "HIGH": "🔴",
+    "ERROR": "🔴",
+    "MEDIUM": "⚠️",
     "WARN": "⚠️",
     "WARNING": "⚠️",
+    "LOW": "ℹ️",
     "INFO": "ℹ️",
 }
 

@@ -178,6 +178,43 @@ def test_dq_callout_blocks_error_severity():
     assert blocks[0]["callout"]["icon"]["emoji"] == "🔴"
 
 
+@pytest.mark.parametrize(
+    ("severity", "expected_emoji"),
+    [
+        # CJA quality engine vocabulary (core.constants.QUALITY_SEVERITY_ORDER).
+        ("CRITICAL", "🔴"),
+        ("HIGH", "🔴"),
+        ("MEDIUM", "⚠️"),
+        ("LOW", "ℹ️"),
+        ("INFO", "ℹ️"),
+        # Generic logging vocabulary kept for safety.
+        ("ERROR", "🔴"),
+        ("WARN", "⚠️"),
+        ("WARNING", "⚠️"),
+        # Severity strings are upper-cased before lookup.
+        ("high", "🔴"),
+        ("medium", "⚠️"),
+        # Unknown severities fall back to the info icon.
+        ("BOGUS", "ℹ️"),
+    ],
+)
+def test_dq_callout_blocks_severity_icon_mapping(severity, expected_emoji):
+    """Severity icons must cover the CJA engine's CRITICAL/HIGH/MEDIUM/LOW/INFO vocabulary.
+
+    Regression: HIGH and MEDIUM previously fell through to the info icon because
+    the mapper only knew the ERROR/WARN/INFO vocabulary.
+    """
+    dq_df = pd.DataFrame(
+        {
+            "Severity": [severity],
+            "Component": ["item_x"],
+            "Issue": ["some issue"],
+        }
+    )
+    blocks = _dq_callout_blocks(dq_df)
+    assert blocks[0]["callout"]["icon"]["emoji"] == expected_emoji
+
+
 def test_dq_callout_blocks_empty_df_returns_empty():
     blocks = _dq_callout_blocks(pd.DataFrame())
     assert blocks == []

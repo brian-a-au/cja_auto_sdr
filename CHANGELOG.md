@@ -103,6 +103,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Static guard test ensures no top-level `notion_client` imports exist in
   `src/cja_auto_sdr/` — the extra must only be imported lazily inside a
   function body.
+- Data quality severity icons now cover the full CJA quality vocabulary. The
+  icon map keyed only on `ERROR`/`WARN`/`INFO`, so `HIGH` and `MEDIUM` issues
+  fell through to the info icon (the engine emits `CRITICAL`/`HIGH`/`MEDIUM`/
+  `LOW`/`INFO`). `CRITICAL`/`HIGH` now render 🔴, `MEDIUM`/`WARN` render ⚠️, and
+  `LOW`/`INFO` render ℹ️. Found during the live Notion smoke against a real data
+  view; covered by a parametrized regression test.
+- `.notion_pages.json` and `.notion_pages.json.lock` (the per-working-directory
+  page registry) plus `.env.*` secret files are now in `.gitignore`, so running
+  `--format notion` inside a repo cannot accidentally commit the registry or
+  Notion credentials.
 
 ## [3.6.1] — 2026-05-14
 

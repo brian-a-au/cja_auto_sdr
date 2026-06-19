@@ -8,8 +8,14 @@ htmlcov/
 config.json
 myconfig.json
 .env
+.env.*
+!.env.example
 *.key
 *.pem
+
+# Notion integration registry (runtime state, per working directory)
+.notion_pages.json
+.notion_pages.json.lock
 
 # Build artifacts
 build/
