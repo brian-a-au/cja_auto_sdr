@@ -495,6 +495,7 @@ class RunMode(Enum):
     DRY_RUN = "dry_run"
     INVENTORY_SUMMARY = "inventory_summary"
     WATCH = "watch"
+    PUSH_TO_NOTION = "push_to_notion"
     SDR = "sdr"
 
 
@@ -512,6 +513,68 @@ def _exit_error(msg: str) -> NoReturn:
     """Print a coloured error message to stderr and exit with code 1."""
     print(ConsoleColors.error(f"ERROR: {msg}"), file=sys.stderr)
     sys.exit(1)
+
+
+def _push_to_notion_from_json(
+    json_file: str,
+    output_dir: str | None = None,
+    force_new: bool = False,
+) -> str:
+    """Read an SDR JSON artifact and publish it to Notion.
+
+    Returns the notion://pages/<id> identifier on success. Exits code 1 on
+    file-not-found, JSON parse errors, missing Notion config/dep, or Notion
+    API failures (auth, rate-limit, etc.) with a friendly message.
+    """
+    from cja_auto_sdr.output.writers.notion import (
+        NotionAPIError,
+        NotionConfigurationError,
+        NotionDependencyError,
+        write_notion_output,
+    )
+
+    json_path = Path(json_file)
+    if not json_path.exists():
+        _exit_error(f"--push-to-notion: file not found: {json_file}")
+
+    try:
+        payload = json.loads(json_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        _exit_error(f"--push-to-notion: invalid JSON in {json_file}: {exc}")
+    except OSError as exc:
+        _exit_error(f"--push-to-notion: failed to read {json_file}: {exc}")
+
+    metadata_dict = payload.get("metadata", {})
+    data_dict: dict[str, pd.DataFrame] = {}
+    if payload.get("metrics"):
+        data_dict["Metrics"] = pd.DataFrame(payload["metrics"])
+    if payload.get("dimensions"):
+        data_dict["Dimensions"] = pd.DataFrame(payload["dimensions"])
+    if payload.get("data_quality"):
+        data_dict["Data Quality"] = pd.DataFrame(payload["data_quality"])
+    if payload.get("derived_fields", {}).get("fields"):
+        data_dict["Derived Fields"] = pd.DataFrame(payload["derived_fields"]["fields"])
+    if payload.get("calculated_metrics", {}).get("metrics"):
+        data_dict["Calculated Metrics"] = pd.DataFrame(
+            payload["calculated_metrics"]["metrics"],
+        )
+    if payload.get("segments", {}).get("segments"):
+        data_dict["Segments"] = pd.DataFrame(payload["segments"]["segments"])
+
+    effective_output_dir = output_dir or str(json_path.parent)
+    base_filename = json_path.stem
+
+    try:
+        return write_notion_output(
+            data_dict=data_dict,
+            metadata_dict=metadata_dict,
+            base_filename=base_filename,
+            output_dir=effective_output_dir,
+            logger=logging.getLogger(__name__),
+            force_new=force_new,
+        )
+    except (NotionConfigurationError, NotionDependencyError, NotionAPIError) as exc:
+        _exit_error(str(exc))
 
 
 def _normalize_output_format(raw_format: Any) -> str | None:
@@ -923,7 +986,7 @@ def _resolve_requested_output_formats(output_format: str) -> frozenset[str]:
 
 
 STANDARD_COMPONENT_ENDPOINTS: frozenset[str] = frozenset({"metrics", "dimensions"})
-EMBEDDED_METADATA_FORMATS: frozenset[str] = frozenset({"json", "html", "markdown"})
+EMBEDDED_METADATA_FORMATS: frozenset[str] = frozenset({"json", "html", "markdown", "notion"})
 
 
 def _should_emit_standard_sdr_sections(*, inventory_only: bool) -> bool:
@@ -1430,6 +1493,7 @@ def _run_mode_checks(args: argparse.Namespace) -> tuple[tuple[RunMode, bool], ..
         ),
         (RunMode.DRY_RUN, getattr(args, "dry_run", False)),
         (RunMode.INVENTORY_SUMMARY, getattr(args, "inventory_summary", False)),
+        (RunMode.PUSH_TO_NOTION, getattr(args, "push_to_notion", None) is not None),
         (RunMode.WATCH, getattr(args, "watch_data_views", None) is not None),
     )
 
@@ -1730,6 +1794,39 @@ def _dispatch_prevalidation_mode(
         _handle_sample_config_prevalidation(run_state=run_state)
 
 
+# Flags that --push-to-notion must reject explicitly. _run_mode_checks
+# dispatches by precedence (snapshot maintenance, org-report, diff, etc.
+# all fire before PUSH_TO_NOTION), so without these rejections a typo like
+# `--push-to-notion file.json --list-snapshots` would silently run the
+# other mode and ignore the publish request. Table-driven so adding a new
+# mode flag forces an explicit decision here.
+#
+# Each entry: (args dest, user-facing label, optional override message).
+# A flag is "present" when getattr(args, dest, None) is truthy.
+_PUSH_TO_NOTION_INCOMPATIBLE_FLAGS: tuple[tuple[str, str, str | None], ...] = (
+    ("org_report", "--org-report", None),
+    ("diff", "--diff", None),
+    ("snapshot", "--snapshot", None),
+    ("diff_snapshot", "--diff-snapshot", None),
+    ("compare_snapshots", "--compare-snapshots", None),
+    ("list_snapshots", "--list-snapshots", None),
+    ("prune_snapshots", "--prune-snapshots", None),
+    ("list_org_report_snapshots", "--list-org-report-snapshots", None),
+    ("inspect_org_report_snapshot", "--inspect-org-report-snapshot", None),
+    ("prune_org_report_snapshots", "--prune-org-report-snapshots", None),
+    ("batch", "--batch", None),
+    ("watch_data_views", "--watch", None),
+    ("inventory_summary", "--inventory-summary", None),
+    ("dry_run", "--dry-run", None),
+    (
+        "data_views",
+        "positional data view arguments",
+        "--push-to-notion is incompatible with positional data view arguments "
+        "(it publishes a saved JSON artifact, not a fresh generation)",
+    ),
+)
+
+
 def _validate_semantic_flag_relationships(
     args: argparse.Namespace,
     *,
@@ -1758,6 +1855,22 @@ def _validate_semantic_flag_relationships(
         _exit_error("--quality-report cannot be used with --skip-validation")
     if getattr(args, "quality_report", None) and non_sdr_mode:
         _exit_error("--quality-report is only supported in SDR generation mode")
+    if (
+        _normalize_output_format(getattr(args, "format", None)) == "notion"
+        and non_sdr_mode
+        and inferred_mode != RunMode.PUSH_TO_NOTION
+    ):
+        _exit_error(
+            "--format notion is only supported in SDR generation mode "
+            "(use --push-to-notion <json_file> to publish a saved artifact instead)",
+        )
+    # Reject --push-to-notion alongside flags that would otherwise win the
+    # mode dispatch and silently drop the publish request. Table at module
+    # scope: _PUSH_TO_NOTION_INCOMPATIBLE_FLAGS.
+    if getattr(args, "push_to_notion", None) is not None:
+        for dest, label, override in _PUSH_TO_NOTION_INCOMPATIBLE_FLAGS:
+            if getattr(args, dest, None):
+                _exit_error(override or f"--push-to-notion is incompatible with {label}")
     if getattr(args, "allow_partial", False) and getattr(args, "quality_report", None):
         _exit_error("--allow-partial cannot be used with --quality-report")
     if getattr(args, "allow_partial", False) and getattr(args, "fail_on_quality", None):
@@ -2986,6 +3099,7 @@ def process_single_dataview(
     allow_partial: bool = False,
     production_mode: bool = False,
     batch_id: str | None = None,
+    notion_force_new: bool = False,
     processing_config: ProcessingConfig | None = None,
 ) -> ProcessingResult:
     """
@@ -3050,6 +3164,7 @@ def process_single_dataview(
             allow_partial=allow_partial,
             production_mode=production_mode,
             batch_id=batch_id,
+            notion_force_new=notion_force_new,
         )
 
     config_file = processing_config.config_file
@@ -3079,6 +3194,7 @@ def process_single_dataview(
     quality_report_only = processing_config.quality_report_only
     allow_partial = processing_config.allow_partial
     production_mode = processing_config.production_mode
+    notion_force_new = processing_config.notion_force_new
     batch_id = processing_config.batch_id
 
     start_time = time.perf_counter()
@@ -3823,6 +3939,51 @@ def process_single_dataview(
                 elif fmt == "markdown":
                     markdown_output = write_markdown_output(data_dict, metadata_dict, base_filename, output_dir, logger)
                     output_files.append(markdown_output)
+
+                elif fmt == "notion":
+                    from cja_auto_sdr.output.writers.notion import (
+                        NotionAPIError,
+                        NotionConfigurationError,
+                        NotionDependencyError,
+                        write_notion_output,
+                    )
+
+                    try:
+                        notion_output = write_notion_output(
+                            data_dict,
+                            metadata_dict,
+                            base_filename,
+                            output_dir,
+                            logger,
+                            force_new=notion_force_new,
+                        )
+                    except (NotionConfigurationError, NotionDependencyError, NotionAPIError) as exc:
+                        # Must return a failed ProcessingResult here rather than calling
+                        # _exit_error: this code runs inside batch workers, and SystemExit
+                        # from a worker kills the pool worker instead of letting
+                        # --continue-on-error mark this data view failed and proceed.
+                        logger.critical("Notion output failed: %s", exc)
+                        # Config/dependency errors are user-facing setup issues with
+                        # actionable messages; an API error wraps an unexpected upstream
+                        # condition and deserves a traceback for debug logs.
+                        if isinstance(exc, NotionAPIError):
+                            logger.exception("Full exception details:")
+                        logger.info("=" * BANNER_WIDTH)
+                        logger.info("EXECUTION FAILED")
+                        logger.info("=" * BANNER_WIDTH)
+                        logger.info("Data View: %s (%s)", dv_name, data_view_id)
+                        logger.info("Error: %s", exc)
+                        logger.info("Duration: %.2fs", time.perf_counter() - start_time)
+                        logger.info("=" * BANNER_WIDTH)
+                        flush_logging_handlers(logger)
+                        return _finalize_result(
+                            data_view_name=dv_name,
+                            success=False,
+                            error_message=str(exc),
+                            failure_code=FAILURE_CODE_OUTPUT_WRITE_FAILED,
+                            failure_reason=f"output_write_failed:{type(exc).__name__}",
+                        )
+                    output_files.append(notion_output)
 
             if len(output_files) > 1:
                 logger.info(f"✓ SDR generation complete! {len(output_files)} files created")
@@ -6766,6 +6927,18 @@ def _main_impl(run_state: dict[str, Any] | None = None):
 
     if inferred_mode == RunMode.ORG_REPORT_SNAPSHOTS:
         _handle_org_report_snapshot_cli(args, output_to_stdout=output_to_stdout, run_state=run_state)
+
+    if inferred_mode == RunMode.PUSH_TO_NOTION:
+        json_file = getattr(args, "push_to_notion", None)
+        force_new = getattr(args, "notion_force_new", False)
+        output_dir = getattr(args, "output_dir", None)
+        result = _push_to_notion_from_json(
+            json_file,
+            output_dir=output_dir,
+            force_new=force_new,
+        )
+        print(result)
+        sys.exit(0)
 
     # Handle --watch mode (continuous monitoring loop). Dispatched before color theme
     # setup and the other CLI subcommand handlers so that --watch takes precedence over

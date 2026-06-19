@@ -11,6 +11,7 @@ The tool supports multiple output formats beyond Excel, providing flexible integ
 | **JSON** | Hierarchical structured data | APIs, automation, integration with tools |
 | **HTML** | Professional web-ready report | Web viewing, sharing, presentations |
 | **Markdown** (.md) | GitHub/Confluence compatible tables | Documentation, version control, PRs |
+| **Notion** | Notion page with structured blocks | Collaborative docs, Notion-based wikis |
 | **Console** | Terminal output with ASCII formatting | Quick review, diff comparison, org-wide analysis, discovery |
 | **All** | Generate all formats simultaneously (includes console in diff/org-wide modes) | Complete documentation package |
 
@@ -23,6 +24,7 @@ The tool supports multiple output formats beyond Excel, providing flexible integ
 | JSON | ✓ | ✓ | ✓ | ✓ |
 | HTML | ✓ | ✓ | ✓ | ✗ |
 | Markdown | ✓ | ✓ | ✓ | ✗ |
+| Notion | ✓ | ✗ | ✗ | ✗ |
 | Console/Table | ✗ | ✓ (default) | ✓ (default) | ✓ (default) |
 | All | ✓ | ✓ | ✓ | ✗ |
 
@@ -389,7 +391,40 @@ pandoc CJA_DataView_myview_dv_12345_SDR.md -o report.pdf
 
 ---
 
-### 6. All Formats
+### 6. Notion Format
+
+Publishes the SDR directly to a Notion page. Requires `NOTION_TOKEN` and `NOTION_PARENT_PAGE_ID` environment variables and the `notion` optional extra (`uv pip install 'cja-auto-sdr[notion]'`).
+
+Each run creates or updates a single page under the configured parent. Page IDs are tracked in `.notion_pages.json` in the output directory so re-runs update in place rather than accumulating duplicates.
+
+**Usage:**
+```bash
+# Publish SDR directly to Notion
+cja_auto_sdr dv_12345 --format notion
+
+# Force a new page even if one already exists
+cja_auto_sdr dv_12345 --format notion --notion-force-new
+
+# Push an existing JSON artifact to Notion (no CJA API call)
+cja_auto_sdr --push-to-notion ./reports/dv_12345_sdr.json
+```
+
+**Block layout:**
+- Metadata callout (data view name, ID, timestamp, version)
+- Data Quality callouts (one per issue, severity-coded; omitted if none)
+- Heading + inline table for Metrics, Dimensions, Segments, Calculated Metrics, Derived Fields
+- Empty sections are omitted automatically
+- Footer paragraph with tool version
+
+**Behaviour and caveats:**
+- **Auto-regenerated pages overwrite manual edits.** When the registry contains a page ID for the data view, the writer clears every child block before re-appending the freshly generated SDR. Any annotations, comments-as-blocks, or layout changes a user added inside Notion will be lost on the next run. Use `--notion-force-new` to break the registry link and produce a new page (the old one is left in place as an orphan) when you need to preserve manual edits.
+- **`--push-to-notion` is mutually exclusive with all other generation flags.** Combining it with `--org-report`, `--diff`, `--snapshot`, `--batch`, `--watch`, `--inventory-summary`, `--dry-run`, or positional data view IDs exits with an actionable error (rather than silently dropping `--push-to-notion`).
+- **Large sections split into sibling tables.** Notion caps a block's children array at 100. Sections with more than 99 data rows are split into multiple sibling tables under the same heading, preserving row order.
+- **API failures surface as friendly messages.** Missing/invalid `NOTION_TOKEN`, deleted parent pages, and rate-limit errors print a one-line summary and exit 1; 429 responses are retried with exponential backoff (or `Retry-After` if Notion provides it) before giving up.
+
+---
+
+### 7. All Formats
 
 Generate all output formats in a single run for complete documentation packages.
 

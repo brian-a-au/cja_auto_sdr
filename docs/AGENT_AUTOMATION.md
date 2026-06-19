@@ -424,6 +424,28 @@ The run summary includes an `advisories` rollup key when advisories are present 
 | PagerDuty     | Events API v2              | Exit code 2 (policy violation)  | `curl -X POST https://events.pagerduty.com/v2/enqueue` |
 | Microsoft Teams | Incoming webhook          | Exit code 2 or 3               | `curl -X POST $TEAMS_WEBHOOK -d '{"text":"..."}'` |
 | GitHub Issues | `gh issue create`          | Exit code 2 (governance alert)  | `gh issue create --title "SDR drift detected" --body "$(cat summary.json)"` |
+| Notion        | `--format notion` or `--push-to-notion` | Every run or post-pipeline | `cja_auto_sdr dv_12345 --format notion` |
+
+### Publishing to Notion
+
+Notion is supported as a first-class output destination for SDR generation. Install the optional extra and set the two required env vars:
+
+```bash
+uv pip install 'cja-auto-sdr[notion]'
+export NOTION_TOKEN=secret_...
+export NOTION_PARENT_PAGE_ID=<page-id>
+```
+
+```bash
+# Two-step CI pattern: generate JSON, then push to Notion separately
+uv run cja_auto_sdr dv_12345 --format json --output-dir ./artifacts
+uv run cja_auto_sdr --push-to-notion ./artifacts/dv_12345_sdr.json
+
+# Single-step: generate and publish in one command
+uv run cja_auto_sdr dv_12345 --format notion
+```
+
+Page IDs are tracked in `.notion_pages.json` so re-runs update the existing page rather than accumulating duplicates. Use `--notion-force-new` to override.
 
 Pattern:
 

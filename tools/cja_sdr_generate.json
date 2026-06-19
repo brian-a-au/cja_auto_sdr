@@ -10,8 +10,8 @@
       },
       "format": {
         "type": "string",
-        "enum": ["excel", "csv", "json", "html", "markdown", "all", "reports", "data", "ci"],
-        "description": "Output format for the SDR artifact. Supports direct formats plus aliases: 'all' (all formats + console), 'reports' (excel + markdown), 'data' (csv + json), and 'ci' (json + markdown). JSON is recommended for machine-readable downstream processing."
+        "enum": ["excel", "csv", "json", "html", "markdown", "notion", "all", "reports", "data", "ci"],
+        "description": "Output format for the SDR artifact. Supports direct formats plus aliases: 'all' (all formats + console), 'reports' (excel + markdown), 'data' (csv + json), and 'ci' (json + markdown). Use 'notion' to publish directly to a Notion page (requires NOTION_TOKEN and NOTION_PARENT_PAGE_ID env vars and the 'notion' optional extra). JSON is recommended for machine-readable downstream processing."
       },
       "output": {
         "type": "string",

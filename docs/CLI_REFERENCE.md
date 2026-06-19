@@ -167,6 +167,7 @@ cja-auto-sdr [OPTIONS] DATA_VIEW_ID_OR_NAME [...]
 | `json` | ✓ | ✓ | ✓ | ✓ |
 | `html` | ✓ | ✓ | ✓ | ✗ |
 | `markdown` | ✓ | ✓ | ✓ | ✗ |
+| `notion` | ✓ | ✗ | ✗ | ✗ |
 | `console` | ✗ | ✓ (default) | ✓ (default) | ✓ (default) |
 | `all` | ✓ | ✓ | ✓ | ✗ |
 
@@ -489,6 +490,36 @@ Cache is stored in `~/.cja_auto_sdr/cache/org_report_cache.json`.
 > **Derived Fields:** `--include-derived` is for **SDR generation only**, not diff. Derived fields are already included in the standard metrics/dimensions API output, so changes to derived fields are automatically captured in the Metrics/Dimensions diff sections. The `--include-derived` flag provides additional logic analysis (complexity scores, functions used, branch counts) that is valuable for SDR documentation but would be duplicative in diff mode.
 >
 > **Snapshot/Diff Tip:** `--include-all-inventory` automatically excludes `--include-derived` in `--snapshot`, `--diff-snapshot`, `--compare-snapshots`, and `--compare-with-prev` modes.
+
+### Notion Integration
+
+Publish SDRs directly to a Notion page, or push a previously-generated JSON artifact to Notion without re-calling the CJA API. Requires `NOTION_TOKEN` and `NOTION_PARENT_PAGE_ID` environment variables. Install the extra first:
+
+```bash
+uv pip install 'cja-auto-sdr[notion]'
+```
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--format notion` | Publish SDR to a Notion page as part of generation | - |
+| `--push-to-notion JSON_FILE` | Push an existing SDR JSON artifact to Notion (standalone mode; no CJA API call) | - |
+| `--notion-force-new` | Force a new Notion page instead of updating the existing one for this data view | False |
+
+```bash
+# Publish SDR directly to Notion
+cja_auto_sdr dv_12345 --format notion
+
+# Push an existing JSON artifact to Notion (no CJA API call)
+cja_auto_sdr --push-to-notion ./reports/dv_12345_sdr.json
+
+# Force a new Notion page even if one already exists
+cja_auto_sdr dv_12345 --format notion --notion-force-new
+cja_auto_sdr --push-to-notion ./reports/dv_12345_sdr.json --notion-force-new
+```
+
+> **Idempotency:** Page IDs are tracked in `.notion_pages.json` in the output directory so re-runs update the existing page rather than creating duplicates. Use `--notion-force-new` to override.
+>
+> **Stdout:** `--push-to-notion` prints the resulting `notion://pages/<id>` identifier to stdout on success. Avoid combining with `--run-summary-json -` / `--output -` if you need to consume stdout machine-readably, since the two outputs will be interleaved.
 
 ### Watch Mode
 

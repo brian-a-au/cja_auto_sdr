@@ -48,5 +48,6 @@ def process_single_dataview_worker(args: WorkerArgs) -> ProcessingResult:
             allow_partial=args.allow_partial,
             production_mode=args.production_mode,
             batch_id=args.batch_id,
+            notion_force_new=args.notion_force_new,
         ),
     )

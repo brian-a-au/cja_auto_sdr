@@ -7,6 +7,113 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.7.0] — 2026-05-14
+
+### Added
+- `--format notion` — publish SDR directly to a Notion page in a single command.
+- `--push-to-notion <file>` — push an existing JSON artifact to Notion without
+  re-calling the CJA API. Mutually exclusive with generation flags via the
+  `RunMode.PUSH_TO_NOTION` dispatch.
+- `--notion-force-new` — force a new Notion page even if one already exists
+  for the data view; the new page ID replaces the old entry in the registry.
+- Idempotent page registry (`.notion_pages.json`) so re-runs update existing
+  pages in place rather than accumulating duplicates. Registry writes are
+  serialized across batch workers via an `fcntl.flock` sidecar lock on
+  POSIX and `msvcrt.locking` on Windows, so parallel `--format notion`
+  batch runs do not lose entries on either platform.
+- `--format notion` is rejected in non-SDR modes (diff, org-report,
+  discovery) with an actionable error pointing users to `--push-to-notion`
+  for publishing saved artifacts. Previously the format was silently
+  accepted by those code paths and produced no output.
+- Sections larger than Notion's per-block 100-children API limit are
+  automatically split into multiple sibling tables under the same heading
+  (header + ≤ 99 data rows per table). Data views with > 99 metrics,
+  dimensions, segments, calculated metrics, or derived fields in any one
+  component publish without `validation_error`.
+- `notion` optional extra: `uv pip install 'cja-auto-sdr[notion]'`. The
+  `notion-client` SDK is added unconditionally to the dev dependency group
+  so tests run without the optional install flag.
+- `notion` joins `json`/`html`/`markdown` in `EMBEDDED_METADATA_FORMATS`, so
+  direct `--format notion` runs send real SDR metadata (data view name, ID,
+  generation timestamp) to the Notion page rather than falling back to the
+  base filename.
+
+### Tests
+- `tests/test_notion_registry.py` — 13 tests covering registry CRUD,
+  atomic writes, missing-file behavior, the sidecar lock file, and a
+  real-`ProcessPoolExecutor` concurrent-write test that asserts all entries
+  survive parallel batch worker writes.
+- `tests/test_notion_writer.py` — 29 tests covering the block builder
+  (pure functions), credential resolution, Notion API layer (clear/append/
+  create-or-update), `write_notion_output` integration with mocked client,
+  and the missing-`notion-client`-extra guardrail.
+- `tests/test_cli_notion.py` — 9 tests covering CLI flag wiring,
+  `--push-to-notion` default, simultaneous flags, and standalone policy.
+- `tests/test_push_to_notion.py` — 5 tests covering the push handler:
+  JSON deserialization, file-not-found, invalid-JSON exits, OSError on
+  read, and `RunMode.PUSH_TO_NOTION` precedence over `RunMode.WATCH`.
+
+### Documentation
+- New Notion sections in `docs/OUTPUT_FORMATS.md`, `docs/CLI_REFERENCE.md`,
+  `docs/QUICK_REFERENCE.md`, `docs/AGENT_AUTOMATION.md`.
+- `tools/cja_sdr_generate.json` — `notion` added to format enum.
+
+### Fixed (post-review hardening for v3.7.0)
+- `--push-to-notion` is now explicitly mutually exclusive with `--org-report`,
+  `--diff`, `--snapshot`, `--diff-snapshot`, `--compare-snapshots`,
+  `--list-snapshots`, `--prune-snapshots`, `--list-org-report-snapshots`,
+  `--inspect-org-report-snapshot`, `--prune-org-report-snapshots`, `--batch`,
+  `--watch`, `--inventory-summary`, `--dry-run`, and positional data view
+  arguments. Previously the `RunMode` dispatcher resolved by precedence, so
+  combining `--push-to-notion` with one of those flags silently dropped the
+  Notion publish. The CHANGELOG's "mutually exclusive" claim was aspirational;
+  it is now enforced by `_validate_semantic_flag_relationships` via a
+  table-driven check (`_PUSH_TO_NOTION_INCOMPATIBLE_FLAGS`) so adding a new
+  mode flag forces an explicit decision here.
+- Batch workers no longer abort the whole batch when one data view hits a
+  Notion writer error. The Notion failure path in `process_single_dataview`
+  previously raised `SystemExit` via `_exit_error`, which killed the pool
+  worker and made `--continue-on-error` ineffective. The handler now returns
+  a structured failed `ProcessingResult` (`FAILURE_CODE_OUTPUT_WRITE_FAILED`)
+  so the batch can mark the data view failed and proceed.
+- Notion API errors now surface as friendly, actionable messages instead of
+  raw `notion_client` stack traces. `unauthorized` / `restricted_resource`
+  point at `NOTION_TOKEN` and the parent-page share; `object_not_found`
+  suggests `--notion-force-new`; `validation_error` includes the upstream
+  detail. 429 rate-limit responses retry up to 3 times with exponential
+  backoff (honouring `Retry-After` when Notion provides it) before exiting.
+- `_clear_page_blocks` now lists every block ID first and deletes second.
+  Notion's pagination cursors are content-based, so the prior list-then-
+  delete-in-loop pattern could skip blocks once mid-page state changed.
+  Deletes are issued from a 4-worker thread pool, keeping update time
+  tolerable on large pages while staying well clear of the per-integration
+  rate limit.
+- `_table_block` returns `None` for zero-column DataFrames (Notion rejects
+  `table_width=0`); `_section_blocks` filters and avoids emitting an orphan
+  heading. Empty input was previously possible for unusual section payloads.
+- The Notion writer no longer calls `sys.exit` from library code. It raises
+  `NotionConfigurationError` (missing env vars), `NotionDependencyError`
+  (missing `notion-client` extra), or `NotionAPIError` (mapped API failures);
+  the two CLI entry points (`_push_to_notion_from_json` and the SDR pipeline
+  writer dispatch) convert these to exit code 1 with a friendly message.
+- New CI job `no-extras-smoke` syncs runtime deps only (no `--dev`, no
+  `--all-extras`), confirms `notion-client` is not installed, and asserts the
+  package and the Notion writer module both import cleanly. Catches future
+  regressions where a top-level `import notion_client` slips in.
+- Static guard test ensures no top-level `notion_client` imports exist in
+  `src/cja_auto_sdr/` — the extra must only be imported lazily inside a
+  function body.
+- Data quality severity icons now cover the full CJA quality vocabulary. The
+  icon map keyed only on `ERROR`/`WARN`/`INFO`, so `HIGH` and `MEDIUM` issues
+  fell through to the info icon (the engine emits `CRITICAL`/`HIGH`/`MEDIUM`/
+  `LOW`/`INFO`). `CRITICAL`/`HIGH` now render 🔴, `MEDIUM`/`WARN` render ⚠️, and
+  `LOW`/`INFO` render ℹ️. Found during the live Notion smoke against a real data
+  view; covered by a parametrized regression test.
+- `.notion_pages.json` and `.notion_pages.json.lock` (the per-working-directory
+  page registry) plus `.env.*` secret files are now in `.gitignore`, so running
+  `--format notion` inside a repo cannot accidentally commit the registry or
+  Notion credentials.
+
 ## [3.6.1] — 2026-05-14
 
 ### Fixed

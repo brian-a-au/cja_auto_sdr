@@ -429,6 +429,7 @@ def _run_quality_report_mode(
             quality_report_only=True,
             allow_partial=getattr(args, "allow_partial", False),
             production_mode=args.production,
+            notion_force_new=getattr(args, "notion_force_new", False),
         )
         quality_report_results.append(result)
         processed_results.append(result)
@@ -528,6 +529,7 @@ def _run_batch_mode(
         quality_report_only=quality_report_only,
         allow_partial=getattr(args, "allow_partial", False),
         production_mode=args.production,
+        notion_force_new=getattr(args, "notion_force_new", False),
     )
 
     results = processor.process_batch(data_views)
@@ -727,6 +729,7 @@ def _run_single_mode(
         quality_report_only=quality_report_only,
         allow_partial=getattr(args, "allow_partial", False),
         production_mode=args.production,
+        notion_force_new=getattr(args, "notion_force_new", False),
     )
     processed_results = [result]
 

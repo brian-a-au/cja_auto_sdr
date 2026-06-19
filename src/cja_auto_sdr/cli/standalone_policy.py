@@ -60,12 +60,17 @@ _COMPLETION_STANDALONE_POLICY = StandalonePrevalidationPolicy(
 _SAMPLE_CONFIG_STANDALONE_POLICY = StandalonePrevalidationPolicy(
     ignored_semantic_dests=_WRAPPER_EXECUTION_TOLERATED_SEMANTIC_DESTS,
 )
+_PUSH_TO_NOTION_STANDALONE_POLICY = StandalonePrevalidationPolicy(
+    ignored_semantic_dests=(frozenset({"notion_force_new"}) | _WRAPPER_EXECUTION_TOLERATED_SEMANTIC_DESTS),
+    validate_org_report_mode_scoped_options=False,
+)
 
 _STANDALONE_PREVALIDATION_POLICIES: dict[str, StandalonePrevalidationPolicy] = {
     "completion": _COMPLETION_STANDALONE_POLICY,
     "explain_exit_code": _INFORMATIONAL_STANDALONE_POLICY,
     "exit_codes": _INFORMATIONAL_STANDALONE_POLICY,
     "sample_config": _SAMPLE_CONFIG_STANDALONE_POLICY,
+    "push_to_notion": _PUSH_TO_NOTION_STANDALONE_POLICY,
 }
 
 

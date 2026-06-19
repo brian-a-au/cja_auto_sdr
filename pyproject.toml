@@ -42,10 +42,14 @@ env = [
 completion = [
     "argcomplete>=3.0.0",
 ]
+notion = [
+    "notion-client>=2.0.0",
+]
 full = [
     "scipy>=1.14.0",
     "python-dotenv>=1.0.0",
     "argcomplete>=3.0.0",
+    "notion-client>=2.0.0",
 ]
 
 [build-system]
@@ -73,6 +77,7 @@ dev = [
     "pytest-xdist>=3.6.0",
     "ruff>=0.9.0",
     "openpyxl>=3.1.0",
+    "notion-client>=2.0.0",
 ]
 
 [tool.ruff]
@@ -162,6 +167,7 @@ ignore = [
 "src/cja_auto_sdr/inventory/*.py" = ["F822"] # lazy forwarding modules
 "src/cja_auto_sdr/output/**/*.py" = ["F822"] # lazy forwarding modules
 "src/cja_auto_sdr/output/inventory/summary.py" = ["T201"]  # intentional CLI console output (inventory summary display)
+"src/cja_auto_sdr/output/writers/notion.py" = ["T201", "RUF001", "RUF003"]  # T201: stderr error messages before logger is wired; RUF001/3: intentional Unicode emoji (ℹ ⚠ 🔴)
 "src/cja_auto_sdr/output/run_summary.py" = ["T201"]  # intentional CLI console output (run summary to stdout)
 "src/cja_auto_sdr/output/diff/console.py" = ["RUF001", "RUF003"]  # intentional Unicode box-drawing characters
 "src/cja_auto_sdr/output/diff/grouped.py" = ["RUF001"]  # intentional Unicode arrow (→) in output
@@ -169,6 +175,7 @@ ignore = [
 "src/cja_auto_sdr/output/sdr/__init__.py" = ["F822", "ERA001", "RUF001", "RUF003"]  # F822: lazy forwarding; ERA001: section header comments; RUF001/3: intentional Unicode symbols
 "src/cja_auto_sdr/pipeline/*.py" = ["F822"]  # lazy forwarding modules
 "tests/**" = ["B", "SIM", "RUF012", "PERF", "DTZ", "S105", "S108", "S110", "S314", "PT017", "PT018", "PT019", "ARG", "T201", "ERA001", "PD011", "FLY002"]
+"tests/test_notion_writer.py" = ["RUF001", "RUF003"]  # intentional Unicode emoji (ℹ ⚠ 🔴) in severity-icon assertions
 "scripts/orchestrator.py" = ["T201"]  # intentional CLI output in standalone script
 "scripts/create_sample_outputs.py" = ["T201"]  # intentional CLI output in standalone script
 "scripts/stress_test.py" = ["T201"]  # intentional CLI output in standalone script

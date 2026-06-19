@@ -490,8 +490,8 @@ Requirements:
         "--format",
         type=str,
         default=None,
-        choices=["console", "excel", "csv", "json", "html", "markdown", "all", "reports", "data", "ci"],
-        help="Output format: excel, csv, json, html, markdown, all, or shorthand (reports=excel+markdown, data=csv+json, ci=json+markdown). Default: excel for SDR, console for diff",
+        choices=["console", "excel", "csv", "json", "html", "markdown", "notion", "all", "reports", "data", "ci"],
+        help="Output format: excel, csv, json, html, markdown, notion, all, or shorthand (reports=excel+markdown, data=csv+json, ci=json+markdown). Default: excel for SDR, console for diff",
     )
 
     parser.add_argument(
@@ -1439,6 +1439,26 @@ Requirements:
         default=3600,
         dest="org_lock_stale_threshold",
         help="Stale lease recovery threshold in seconds for the org-report concurrency lock (default: 3600)",
+    )
+
+    # --- Notion Integration --------------------------------------------------
+    notion_group = parser.add_argument_group("Notion Integration")
+    notion_group.add_argument(
+        "--push-to-notion",
+        type=str,
+        default=None,
+        metavar="JSON_FILE",
+        dest="push_to_notion",
+        help="Push an existing SDR JSON artifact to Notion without re-calling the CJA API. "
+        "Mutually exclusive with generation flags. Requires NOTION_TOKEN and NOTION_PARENT_PAGE_ID env vars.",
+    )
+    notion_group.add_argument(
+        "--notion-force-new",
+        action="store_true",
+        default=False,
+        dest="notion_force_new",
+        help="Force creation of a new Notion page even if one already exists for this data view. "
+        "The new page ID replaces the old entry in .notion_pages.json.",
     )
 
     # --- Watch Mode ----------------------------------------------------------

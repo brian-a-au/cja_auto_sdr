@@ -31,6 +31,9 @@ from cja_auto_sdr.generator import _build_processing_execution_policy
         ("json", True, True, False, False, False, False, {"metrics", "dimensions"}, True, True, False, False),
         ("json", False, False, False, False, True, False, {"metrics", "dimensions"}, False, True, True, True),
         ("json", False, False, False, False, True, True, {"metrics", "dimensions"}, False, True, True, False),
+        # notion must emit embedded metadata so the Notion page gets real SDR metadata
+        # (Data View Name, Data View ID, timestamp) rather than falling back to base_filename.
+        ("notion", False, False, False, False, False, False, {"metrics", "dimensions"}, False, True, True, True),
     ],
 )
 def test_build_processing_execution_policy_matrix(
