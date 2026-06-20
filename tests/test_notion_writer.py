@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import builtins
 import logging
+import sys
+import types
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
@@ -276,7 +278,20 @@ def test_build_sdr_blocks_dq_section_omitted_when_empty():
 # ---- API layer tests (mocked Client) ----
 
 
+def _neutralize_dotenv(monkeypatch):
+    """Install a no-op ``dotenv`` so a developer's local .env can't leak into
+    these resolver tests. ``resolve_notion_credentials`` calls
+    ``from dotenv import load_dotenv; load_dotenv()``, and python-dotenv's
+    ``find_dotenv`` searches upward from the source file (not the cwd), so
+    chdir is not enough — we replace the module with a no-op loader. Works
+    whether or not python-dotenv is installed."""
+    fake = types.ModuleType("dotenv")
+    fake.load_dotenv = lambda *args, **kwargs: False
+    monkeypatch.setitem(sys.modules, "dotenv", fake)
+
+
 def test_resolve_notion_credentials_reads_env(monkeypatch):
+    _neutralize_dotenv(monkeypatch)
     monkeypatch.setenv("NOTION_TOKEN", "secret-token")
     monkeypatch.setenv("NOTION_PARENT_PAGE_ID", "parent-page-id")
     from cja_auto_sdr.output.writers.notion import resolve_notion_credentials
@@ -287,6 +302,7 @@ def test_resolve_notion_credentials_reads_env(monkeypatch):
 
 
 def test_resolve_notion_credentials_missing_token_raises(monkeypatch):
+    _neutralize_dotenv(monkeypatch)
     monkeypatch.delenv("NOTION_TOKEN", raising=False)
     monkeypatch.delenv("NOTION_PARENT_PAGE_ID", raising=False)
     from cja_auto_sdr.output.writers.notion import (
@@ -300,6 +316,7 @@ def test_resolve_notion_credentials_missing_token_raises(monkeypatch):
 
 
 def test_resolve_notion_credentials_missing_parent_page_raises(monkeypatch):
+    _neutralize_dotenv(monkeypatch)
     monkeypatch.setenv("NOTION_TOKEN", "secret-token")
     monkeypatch.delenv("NOTION_PARENT_PAGE_ID", raising=False)
     from cja_auto_sdr.output.writers.notion import (
