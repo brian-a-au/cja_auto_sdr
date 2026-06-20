@@ -1460,6 +1460,27 @@ Requirements:
         help="Force creation of a new Notion page even if one already exists for this data view. "
         "The new page ID replaces the old entry in .notion_pages.json.",
     )
+    notion_group.add_argument(
+        "--notion-database-id",
+        type=str,
+        default=None,
+        dest="notion_database_id",
+        help=(
+            "Notion database ID for the SDR Registry. When set, each Notion publish "
+            "also upserts a row in this database (keyed by Data View ID). Falls back "
+            "to env var NOTION_DATABASE_ID if not provided."
+        ),
+    )
+    notion_group.add_argument(
+        "--notion-create-database",
+        action="store_true",
+        default=False,
+        dest="notion_create_database",
+        help=(
+            "Create a fresh SDR Registry database under NOTION_PARENT_PAGE_ID on "
+            "first run. Ignored if --notion-database-id (or NOTION_DATABASE_ID) is set."
+        ),
+    )
 
     # --- Watch Mode ----------------------------------------------------------
     watch_group = parser.add_argument_group("Watch")
