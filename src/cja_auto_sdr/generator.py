@@ -5926,7 +5926,6 @@ def run_org_report(
             if not quiet:
                 _status_print(f"\n{ConsoleColors.success('✓')} CSV reports saved to: {csv_dir}")
         elif output_format == "notion":
-            from cja_auto_sdr.org.writers.notion import write_org_report_notion
             from cja_auto_sdr.output.writers.notion import (
                 NotionAPIError,
                 NotionConfigurationError,
