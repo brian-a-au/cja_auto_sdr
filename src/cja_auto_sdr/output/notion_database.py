@@ -17,9 +17,10 @@ metadata.
 from __future__ import annotations
 
 import datetime as _dt
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import pandas as pd
+if TYPE_CHECKING:
+    import pandas as pd
 
 __all__ = [
     "DATABASE_SCHEMA",
