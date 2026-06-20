@@ -1906,13 +1906,15 @@ def _validate_semantic_flag_relationships(
     if (
         _normalize_output_format(getattr(args, "format", None)) == "notion"
         and getattr(args, "notion_create_database", False)
-        and getattr(args, "batch", False)
+        # Batch is explicit (--batch) OR implicit (more than one data view); both
+        # would create a separate database per data view.
+        and (getattr(args, "batch", False) or len(getattr(args, "data_views", None) or []) > 1)
     ):
         _exit_error(
-            "--notion-create-database cannot be combined with --batch — each data view "
-            "would create a separate database. Bootstrap the registry once (run a single "
-            "data view with --notion-create-database), then pass --notion-database-id <id> "
-            "to the batch.",
+            "--notion-create-database cannot be combined with batch processing (--batch or "
+            "multiple data views) — each data view would create a separate database. "
+            "Bootstrap the registry once (run a single data view with --notion-create-database), "
+            "then pass --notion-database-id <id> for the batch.",
         )
     # Reject --push-to-notion alongside flags that would otherwise win the
     # mode dispatch and silently drop the publish request. Table at module

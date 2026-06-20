@@ -310,3 +310,25 @@ def test_build_row_properties_captured_at_unparseable_yields_none() -> None:
     }
     props = build_row_properties(data_dict, metadata, "page-x", tool_version="3.8.0")
     assert props["Captured At"] == {"date": None}
+
+
+def test_find_existing_row_id_returns_match() -> None:
+    """find_existing_row_id queries the data source by Data View ID and returns the row id."""
+    from cja_auto_sdr.output.notion_database import find_existing_row_id
+
+    client = MagicMock()
+    client.data_sources.query.return_value = {"results": [{"id": "row-123"}]}
+    rid = find_existing_row_id(client, data_source_id="ds-1", data_view_id="dv1")
+    assert rid == "row-123"
+    kwargs = client.data_sources.query.call_args.kwargs
+    assert kwargs["data_source_id"] == "ds-1"
+    assert kwargs["filter"]["property"] == "Data View ID"
+    assert kwargs["filter"]["rich_text"]["equals"] == "dv1"
+
+
+def test_find_existing_row_id_returns_none_when_no_match() -> None:
+    from cja_auto_sdr.output.notion_database import find_existing_row_id
+
+    client = MagicMock()
+    client.data_sources.query.return_value = {"results": []}
+    assert find_existing_row_id(client, data_source_id="ds-1", data_view_id="dv1") is None

@@ -618,16 +618,36 @@ def test_notion_create_database_with_batch_rejected(capsys) -> None:
         workers=1,
         watch_data_views=None,
         notion_create_database=True,
-        batch=["dv_a", "dv_b"],
+        batch=True,
+        data_views=["dv_a"],
     )
     with pytest.raises(SystemExit) as exc_info:
         _validate_semantic_flag_relationships(args, inferred_mode=RunMode.SDR)
     assert exc_info.value.code == 1
     captured = capsys.readouterr()
-    assert "--notion-create-database cannot be combined with --batch" in captured.err
+    assert "--notion-create-database cannot be combined with batch processing" in captured.err
 
 
-def test_notion_create_database_without_batch_allowed() -> None:
+def test_notion_create_database_with_implicit_batch_rejected(capsys) -> None:
+    """Multiple data views without --batch is still a batch — --notion-create-database must exit 1."""
+    args = argparse.Namespace(
+        format="notion",
+        skip_validation=False,
+        push_to_notion=None,
+        workers=1,
+        watch_data_views=None,
+        notion_create_database=True,
+        batch=False,
+        data_views=["dv_a", "dv_b"],
+    )
+    with pytest.raises(SystemExit) as exc_info:
+        _validate_semantic_flag_relationships(args, inferred_mode=RunMode.SDR)
+    assert exc_info.value.code == 1
+    captured = capsys.readouterr()
+    assert "--notion-create-database cannot be combined with batch processing" in captured.err
+
+
+def test_notion_create_database_single_data_view_allowed() -> None:
     """--notion-create-database on a single data view (no --batch) must NOT raise."""
     args = argparse.Namespace(
         format="notion",
@@ -637,6 +657,7 @@ def test_notion_create_database_without_batch_allowed() -> None:
         watch_data_views=None,
         notion_create_database=True,
         batch=False,
+        data_views=["dv_a"],
     )
     _validate_semantic_flag_relationships(args, inferred_mode=RunMode.SDR)
 

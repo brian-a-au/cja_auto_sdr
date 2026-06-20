@@ -757,6 +757,8 @@ def test_writer_upserts_db_row_when_database_id_provided(tmp_path, monkeypatch):
         "id": "ds-given",
         "properties": {name: {"id": "x"} for name in DATABASE_SCHEMA},
     }
+    # No existing row in the database for this data view (registry is also empty).
+    fake_client.data_sources.query.return_value = {"results": []}
 
     with patch("cja_auto_sdr.output.writers.notion._require_notion_client", return_value=fake_client_class):
         result = write_notion_output(
@@ -843,3 +845,66 @@ def test_writer_converts_ensure_database_value_error_to_notion_config_error(tmp_
 
     assert "Data Quality" in str(exc_info.value)
     assert "bad-db" in str(exc_info.value)
+
+
+def test_writer_falls_back_to_query_when_registry_missing(tmp_path, monkeypatch):
+    """When the registry has no row id, query the DB by Data View ID rather than create a duplicate."""
+    from cja_auto_sdr.output.writers.notion import write_notion_output
+
+    monkeypatch.setenv("NOTION_TOKEN", "fake-token")
+    monkeypatch.setenv("NOTION_PARENT_PAGE_ID", "parent-page")
+
+    fake_client_class = MagicMock()
+    fake_client = fake_client_class.return_value
+    fake_client.pages.create.return_value = {"id": "new-page-id"}  # detail page only
+    fake_client.databases.retrieve.return_value = {"id": "db-given", "data_sources": [{"id": "ds-given"}]}
+    fake_client.data_sources.retrieve.return_value = {
+        "id": "ds-given",
+        "properties": {name: {"id": "x"} for name in DATABASE_SCHEMA},
+    }
+    # Registry is empty (tmp_path) but the DB already has a row for this data view.
+    fake_client.data_sources.query.return_value = {"results": [{"id": "existing-row-id"}]}
+    fake_client.pages.update.return_value = {"id": "existing-row-id"}
+
+    with patch("cja_auto_sdr.output.writers.notion._require_notion_client", return_value=fake_client_class):
+        write_notion_output(
+            {"Metrics": pd.DataFrame([{"a": 1}])},
+            {"Data View ID": "dv1", "Data View Name": "X"},
+            "X",
+            tmp_path,
+            MagicMock(),
+            database_id="db-given",
+        )
+
+    # The existing row is updated, not duplicated: pages.create only for the detail page.
+    assert fake_client.pages.create.call_count == 1
+    fake_client.pages.update.assert_called_once()
+    assert fake_client.pages.update.call_args.kwargs["page_id"] == "existing-row-id"
+
+
+def test_writer_logs_created_database_id(tmp_path, monkeypatch):
+    """--notion-create-database surfaces the newly created database id via the logger."""
+    from cja_auto_sdr.output.writers.notion import write_notion_output
+
+    monkeypatch.setenv("NOTION_TOKEN", "fake-token")
+    monkeypatch.setenv("NOTION_PARENT_PAGE_ID", "parent-page")
+
+    fake_client_class = MagicMock()
+    fake_client = fake_client_class.return_value
+    fake_client.pages.create.side_effect = [{"id": "new-page-id"}, {"id": "new-row-id"}]
+    fake_client.databases.create.return_value = {"id": "new-db-id", "data_sources": [{"id": "new-ds-id"}]}
+    fake_client.data_sources.query.return_value = {"results": []}
+    mock_logger = MagicMock()
+
+    with patch("cja_auto_sdr.output.writers.notion._require_notion_client", return_value=fake_client_class):
+        write_notion_output(
+            {"Metrics": pd.DataFrame([{"a": 1}])},
+            {"Data View ID": "dv1", "Data View Name": "X"},
+            "X",
+            tmp_path,
+            mock_logger,
+            create_database=True,
+        )
+
+    logged = " ".join(str(c.args) for c in mock_logger.info.call_args_list)
+    assert "new-db-id" in logged

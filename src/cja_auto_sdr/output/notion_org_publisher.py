@@ -7,7 +7,12 @@ from pathlib import Path
 from typing import Any
 
 from cja_auto_sdr.core.version import __version__
-from cja_auto_sdr.output.notion_database import build_catalog_row_properties, ensure_database, upsert_database_row
+from cja_auto_sdr.output.notion_database import (
+    build_catalog_row_properties,
+    ensure_database,
+    find_existing_row_id,
+    upsert_database_row,
+)
 from cja_auto_sdr.output.notion_registry import (
     get_registry_path,
     lookup_database_row_id,
@@ -44,7 +49,7 @@ def publish_org_report_catalog_to_notion(
     registry_path = get_registry_path(output_dir)
 
     try:
-        _db_id, ds_id = ensure_database(
+        db_id, ds_id = ensure_database(
             client,
             parent_page_id=parent_page_id,
             database_id=database_id,
@@ -56,6 +61,13 @@ def publish_org_report_catalog_to_notion(
         if _is_notion_api_error(exc):
             raise NotionAPIError(_friendly_notion_error_message(exc)) from exc
         raise
+    if database_id is None and create_database:
+        # Surface the bootstrapped database ID so it can be captured/automated.
+        logger.info("✓ Created Notion SDR Registry database: %s", db_id)
+        logger.info(
+            "  Reuse it with --notion-database-id %s (or set NOTION_DATABASE_ID).",
+            db_id,
+        )
 
     cataloged: list[str] = []
     for summary in org_report.data_view_summaries:
@@ -80,6 +92,12 @@ def publish_org_report_catalog_to_notion(
                 captured_at=org_report.timestamp,
             )
             existing_row_id = lookup_database_row_id(registry_path, dv_id)
+            if existing_row_id is None:
+                existing_row_id = find_existing_row_id(
+                    client,
+                    data_source_id=ds_id,
+                    data_view_id=dv_id,
+                )
             row_id = upsert_database_row(
                 client,
                 data_source_id=ds_id,

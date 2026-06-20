@@ -557,6 +557,7 @@ def write_notion_output(
             from cja_auto_sdr.output.notion_database import (
                 build_row_properties,
                 ensure_database,
+                find_existing_row_id,
                 upsert_database_row,
             )
             from cja_auto_sdr.output.notion_registry import (
@@ -565,7 +566,7 @@ def write_notion_output(
             )
 
             try:
-                _db_id, ds_id = ensure_database(
+                db_id, ds_id = ensure_database(
                     client,
                     parent_page_id=parent_page_id,
                     database_id=database_id,
@@ -573,13 +574,29 @@ def write_notion_output(
                 )
             except ValueError as exc:
                 raise NotionConfigurationError(str(exc)) from exc
+            if database_id is None and create_database:
+                # Surface the bootstrapped database ID so it can be captured/automated.
+                logger.info("✓ Created Notion SDR Registry database: %s", db_id)
+                logger.info(
+                    "  Reuse it with --notion-database-id %s (or set NOTION_DATABASE_ID).",
+                    db_id,
+                )
             properties = build_row_properties(
                 data_dict,
                 metadata_dict,
                 page_id,
                 tool_version=__version__,
             )
+            # Prefer the local registry, but fall back to querying the database by
+            # Data View ID so a missing/stale registry (fresh checkout, different
+            # --output-dir) does not create a duplicate row for the same data view.
             existing_row_id = lookup_database_row_id(registry_path, data_view_id)
+            if existing_row_id is None:
+                existing_row_id = find_existing_row_id(
+                    client,
+                    data_source_id=ds_id,
+                    data_view_id=data_view_id,
+                )
             row_id = upsert_database_row(
                 client,
                 data_source_id=ds_id,

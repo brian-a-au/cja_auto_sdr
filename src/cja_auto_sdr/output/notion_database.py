@@ -29,6 +29,7 @@ __all__ = [
     "build_row_properties",
     "derive_data_quality_status",
     "ensure_database",
+    "find_existing_row_id",
     "upsert_database_row",
 ]
 
@@ -241,6 +242,29 @@ def ensure_database(
     if not data_sources:
         raise ValueError("Notion did not return a data source for the created database")
     return str(created["id"]), str(data_sources[0]["id"])
+
+
+def find_existing_row_id(
+    client: Any,
+    *,
+    data_source_id: str,
+    data_view_id: str,
+) -> str | None:
+    """Return the existing row (page) ID for ``data_view_id`` in the data source.
+
+    Queries the data source by the ``Data View ID`` property so an upsert is keyed
+    by data view ID even when the local registry has no record (fresh checkout,
+    different ``--output-dir``, or a stale/missing ``.notion_pages.json``). Returns
+    ``None`` when no matching row exists. Notion API errors propagate to the caller,
+    which maps them to a friendly message.
+    """
+    response = client.data_sources.query(
+        data_source_id=data_source_id,
+        filter={"property": "Data View ID", "rich_text": {"equals": data_view_id}},
+        page_size=1,
+    )
+    results = response.get("results") or []
+    return str(results[0]["id"]) if results else None
 
 
 def upsert_database_row(
