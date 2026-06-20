@@ -751,6 +751,10 @@ def test_writer_upserts_db_row_when_database_id_provided(tmp_path, monkeypatch):
     ]
     fake_client.databases.retrieve.return_value = {
         "id": "db-given",
+        "data_sources": [{"id": "ds-given"}],
+    }
+    fake_client.data_sources.retrieve.return_value = {
+        "id": "ds-given",
         "properties": {name: {"id": "x"} for name in DATABASE_SCHEMA},
     }
 
@@ -768,6 +772,35 @@ def test_writer_upserts_db_row_when_database_id_provided(tmp_path, monkeypatch):
     fake_client.databases.retrieve.assert_called_once_with(database_id="db-given")
     # one page.create for the SDR page, one for the DB row
     assert fake_client.pages.create.call_count == 2
+    # DB row must use data_source_id parent
+    db_row_call = fake_client.pages.create.call_args_list[1]
+    assert db_row_call.kwargs["parent"] == {"type": "data_source_id", "data_source_id": "ds-given"}
+
+
+def test_writer_client_built_with_notion_version(tmp_path, monkeypatch):
+    """write_notion_output must build the Notion client with notion_version='2025-09-03'."""
+    from cja_auto_sdr.output.writers.notion import write_notion_output
+
+    monkeypatch.setenv("NOTION_TOKEN", "fake-token")
+    monkeypatch.setenv("NOTION_PARENT_PAGE_ID", "parent-page")
+
+    fake_client_class = MagicMock()
+    fake_client = fake_client_class.return_value
+    fake_client.pages.create.return_value = {"id": "new-page-id"}
+    fake_client.blocks.children.append.return_value = {}
+
+    with patch("cja_auto_sdr.output.writers.notion._require_notion_client", return_value=fake_client_class):
+        write_notion_output(
+            {"Metrics": pd.DataFrame()},
+            {"Data View ID": "dv1", "Data View Name": "X"},
+            "X",
+            tmp_path,
+            MagicMock(),
+        )
+
+    # The client class must be called with notion_version="2025-09-03"
+    call_kwargs = fake_client_class.call_args.kwargs
+    assert call_kwargs.get("notion_version") == "2025-09-03"
 
 
 def test_writer_converts_ensure_database_value_error_to_notion_config_error(tmp_path, monkeypatch):

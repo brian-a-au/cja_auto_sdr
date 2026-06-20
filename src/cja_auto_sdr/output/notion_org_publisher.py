@@ -17,6 +17,7 @@ from cja_auto_sdr.output.notion_registry import (
 from cja_auto_sdr.output.writers.notion import (
     NotionAPIError,
     NotionConfigurationError,
+    _build_client,
     _friendly_notion_error_message,
     _is_notion_api_error,
     _require_notion_client,
@@ -38,12 +39,12 @@ def publish_org_report_catalog_to_notion(
 ) -> list[str]:
     token, parent_page_id = resolve_notion_credentials()
     Client = _require_notion_client()
-    client = Client(auth=token)
+    client = _build_client(Client, token)
 
     registry_path = get_registry_path(output_dir)
 
     try:
-        db_id = ensure_database(
+        _db_id, ds_id = ensure_database(
             client,
             parent_page_id=parent_page_id,
             database_id=database_id,
@@ -51,6 +52,10 @@ def publish_org_report_catalog_to_notion(
         )
     except ValueError as exc:
         raise NotionConfigurationError(str(exc)) from exc
+    except Exception as exc:
+        if _is_notion_api_error(exc):
+            raise NotionAPIError(_friendly_notion_error_message(exc)) from exc
+        raise
 
     cataloged: list[str] = []
     for summary in org_report.data_view_summaries:
@@ -77,7 +82,7 @@ def publish_org_report_catalog_to_notion(
             existing_row_id = lookup_database_row_id(registry_path, dv_id)
             row_id = upsert_database_row(
                 client,
-                database_id=db_id,
+                data_source_id=ds_id,
                 existing_row_id=existing_row_id,
                 properties=props,
             )

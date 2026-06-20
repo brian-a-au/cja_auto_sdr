@@ -45,7 +45,7 @@ def _apply_base_patches():
     patches["cja_auto_sdr.output.notion_org_publisher._require_notion_client"].return_value = MagicMock(
         return_value=MagicMock()
     )
-    patches["cja_auto_sdr.output.notion_org_publisher.ensure_database"].return_value = "db-123"
+    patches["cja_auto_sdr.output.notion_org_publisher.ensure_database"].return_value = ("db-123", "ds-123")
     patches["cja_auto_sdr.output.notion_org_publisher.upsert_database_row"].return_value = "row-id"
     patches["cja_auto_sdr.output.notion_org_publisher.lookup_page_id"].return_value = None
     patches["cja_auto_sdr.output.notion_org_publisher.lookup_database_row_id"].return_value = None
@@ -75,10 +75,13 @@ def test_serial_iteration_two_good_summaries():
         upsert = patches["cja_auto_sdr.output.notion_org_publisher.upsert_database_row"]
         assert upsert.call_count == 2
         # Verify order: first call for dv_001, second for dv_002
-        first_props = upsert.call_args_list[0].kwargs["properties"]
-        second_props = upsert.call_args_list[1].kwargs["properties"]
-        assert first_props["Name"]["title"][0]["text"]["content"] == "DV One"
-        assert second_props["Name"]["title"][0]["text"]["content"] == "DV Two"
+        first_call = upsert.call_args_list[0]
+        second_call = upsert.call_args_list[1]
+        assert first_call.kwargs["properties"]["Name"]["title"][0]["text"]["content"] == "DV One"
+        assert second_call.kwargs["properties"]["Name"]["title"][0]["text"]["content"] == "DV Two"
+        # Verify data_source_id is threaded through
+        assert first_call.kwargs["data_source_id"] == "ds-123"
+        assert second_call.kwargs["data_source_id"] == "ds-123"
     finally:
         patch.stopall()
 
@@ -224,6 +227,39 @@ def test_ensure_database_value_error_raises_notion_config_error():
                 output_dir="/tmp/test_out",
                 logger=logger,
                 database_id=None,
+                create_database=False,
+            )
+    finally:
+        patch.stopall()
+
+
+def test_ensure_database_notion_api_error_raises_notion_api_error():
+    """ensure_database Notion API error → NotionAPIError (not raw API error traceback)."""
+    patches = _apply_base_patches()
+    try:
+        from cja_auto_sdr.output.notion_org_publisher import publish_org_report_catalog_to_notion
+        from cja_auto_sdr.output.writers.notion import NotionAPIError
+
+        # Simulate a Notion APIResponseError from databases.retrieve on bad id
+        class FakeAPIResponseError(Exception):
+            def __init__(self):
+                super().__init__("object_not_found")
+                self.code = "object_not_found"
+
+        FakeAPIResponseError.__name__ = "APIResponseError"
+        FakeAPIResponseError.__qualname__ = "APIResponseError"
+
+        patches["cja_auto_sdr.output.notion_org_publisher.ensure_database"].side_effect = FakeAPIResponseError()
+
+        org_report = _make_org_report([])
+        logger = MagicMock()
+
+        with pytest.raises(NotionAPIError):
+            publish_org_report_catalog_to_notion(
+                org_report,
+                output_dir="/tmp/test_out",
+                logger=logger,
+                database_id="bad-id",
                 create_database=False,
             )
     finally:

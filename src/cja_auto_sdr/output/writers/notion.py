@@ -301,6 +301,11 @@ def _require_notion_client():
         ) from exc
 
 
+def _build_client(client_cls, token):
+    """Construct a Notion client with an explicit API version pin."""
+    return client_cls(auth=token, notion_version="2025-09-03")
+
+
 # ---------------------------------------------------------------------------
 # Notion API operations
 # ---------------------------------------------------------------------------
@@ -530,7 +535,7 @@ def write_notion_output(
     blocks = build_sdr_blocks(data_dict, metadata_dict)
     registry_path = get_registry_path(output_dir)
 
-    client = client_cls(auth=token)
+    client = _build_client(client_cls, token)
     try:
         page_id = create_or_update_page(
             client,
@@ -554,7 +559,7 @@ def write_notion_output(
             )
 
             try:
-                db_id = ensure_database(
+                _db_id, ds_id = ensure_database(
                     client,
                     parent_page_id=parent_page_id,
                     database_id=database_id,
@@ -571,7 +576,7 @@ def write_notion_output(
             existing_row_id = lookup_database_row_id(registry_path, data_view_id)
             row_id = upsert_database_row(
                 client,
-                database_id=db_id,
+                data_source_id=ds_id,
                 existing_row_id=existing_row_id,
                 properties=properties,
             )

@@ -98,10 +98,28 @@ def _count(df: pd.DataFrame | None) -> int:
 
 
 def _iso_date_value(raw: str | None) -> dict | None:
-    """Format a date string as Notion's ``{"start": iso}`` shape, or None."""
+    """Format a date string as Notion's ``{"start": iso}`` shape, or None.
+
+    Handles ISO-8601 strings directly and also the ``"YYYY-MM-DD HH:MM:SS TZ"``
+    shape produced by CJA metadata (e.g. ``"2026-06-19 14:20:00 PDT"``).
+    Returns ``None`` for unparseable input so callers emit ``{"date": None}``.
+    """
     if not raw:
         return None
-    return {"start": str(raw)}
+    s = str(raw).strip()
+    try:
+        return {"start": _dt.datetime.fromisoformat(s).isoformat()}
+    except ValueError:
+        pass
+    import re
+
+    m = re.match(r"(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})", s)
+    if m:
+        return {"start": f"{m.group(1)}T{m.group(2)}"}
+    m = re.match(r"(\d{4}-\d{2}-\d{2})", s)
+    if m:
+        return {"start": m.group(1)}
+    return None
 
 
 def build_row_properties(
@@ -182,25 +200,30 @@ def ensure_database(
     parent_page_id: str,
     database_id: str | None,
     create_if_missing: bool,
-) -> str:
-    """Return the database ID to write rows into.
+) -> tuple[str, str]:
+    """Return ``(database_id, data_source_id)`` for the SDR Registry database.
 
-    * If ``database_id`` is given, retrieve it and verify it has all required
-      properties; raise ``ValueError`` listing the missing ones if not.
+    * If ``database_id`` is given, retrieve it and verify the data source has
+      all required properties; raise ``ValueError`` listing the missing ones if not.
     * If ``database_id`` is ``None`` and ``create_if_missing`` is True,
-      create a fresh database under ``parent_page_id`` and return its ID.
+      create a fresh database under ``parent_page_id`` and return both IDs.
     * Otherwise raise ``ValueError`` instructing the user to pass
       ``--notion-create-database`` or ``NOTION_DATABASE_ID``.
     """
     if database_id is not None:
-        existing = client.databases.retrieve(database_id=database_id)
-        existing_props = set(existing.get("properties", {}).keys())
+        db = client.databases.retrieve(database_id=database_id)
+        data_sources = db.get("data_sources") or []
+        if not data_sources:
+            raise ValueError(f"Database {database_id} has no data sources")
+        ds_id = str(data_sources[0]["id"])
+        ds = client.data_sources.retrieve(data_source_id=ds_id)
+        existing_props = set((ds.get("properties") or {}).keys())
         missing = set(DATABASE_SCHEMA) - existing_props
         if missing:
             raise ValueError(
                 f"Database {database_id} is missing required properties: {sorted(missing)}",
             )
-        return str(existing["id"])
+        return str(db["id"]), ds_id
 
     if not create_if_missing:
         raise ValueError(
@@ -212,24 +235,26 @@ def ensure_database(
     created = client.databases.create(
         parent={"type": "page_id", "page_id": parent_page_id},
         title=[{"type": "text", "text": {"content": "CJA SDR Registry"}}],
-        properties=DATABASE_SCHEMA,
+        initial_data_source={"properties": DATABASE_SCHEMA},
     )
-    return str(created["id"])
+    data_sources = created.get("data_sources") or []
+    if not data_sources:
+        raise ValueError("Notion did not return a data source for the created database")
+    return str(created["id"]), str(data_sources[0]["id"])
 
 
 def upsert_database_row(
     client: Any,
     *,
-    database_id: str,
+    data_source_id: str,
     existing_row_id: str | None,
     properties: dict[str, dict],
 ) -> str:
     """Create or update a database row; return its page ID."""
     if existing_row_id:
-        updated = client.pages.update(page_id=existing_row_id, properties=properties)
-        return str(updated["id"])
+        return str(client.pages.update(page_id=existing_row_id, properties=properties)["id"])
     created = client.pages.create(
-        parent={"database_id": database_id},
+        parent={"type": "data_source_id", "data_source_id": data_source_id},
         properties=properties,
     )
     return str(created["id"])
