@@ -218,6 +218,20 @@ cja_auto_sdr --sample-config
 | `LOG_FORMAT` | Log output format: `text` (human-readable) or `json` (structured) | text |
 | `OUTPUT_DIR` | Default output directory for generated files | Current directory |
 
+### Notion Integration Environment Variables
+
+These variables are used when publishing SDRs to Notion (`--format notion`, `--push-to-notion`, or `--notion-create-database`).
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `NOTION_TOKEN` | Notion integration token (starts with `secret_`) | **Yes** (for any Notion output) |
+| `NOTION_PARENT_PAGE_ID` | ID of the Notion page under which SDR detail pages are created. Also used as the parent when bootstrapping a new registry database with `--notion-create-database` | **Yes** (for any Notion output) |
+| `NOTION_DATABASE_ID` | ID of an existing "CJA SDR Registry" database. When set, every `--format notion` run upserts the data view's row in the registry with all counts and Data Quality. Unset = no database row written (v3.7.0 behavior preserved). Can also be supplied via `--notion-database-id` | No |
+
+> **Bootstrapping `NOTION_DATABASE_ID`:** Run `cja_auto_sdr --notion-create-database` once. It creates a new "CJA SDR Registry" database under `NOTION_PARENT_PAGE_ID` and prints the new database ID to stdout. Copy that value into your environment or `.env` file as `NOTION_DATABASE_ID`, then use it on subsequent runs.
+>
+> **Unset behavior:** If `NOTION_DATABASE_ID` is not set (and `--notion-database-id` is not passed), `--format notion` runs exactly as in v3.7.0 — the SDR detail page is created or updated, but no registry row is written.
+
 ### Setting Environment Variables
 
 **macOS/Linux (current session):**

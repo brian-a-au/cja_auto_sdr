@@ -335,7 +335,7 @@ If `scipy` is not installed and `--cluster` is used, a warning is logged and clu
 
 | Option | Description |
 |--------|-------------|
-| `--format FORMAT` | Output format: `console`, `json`, `excel`, `markdown`, `html`, `csv`, `all`, or aliases |
+| `--format FORMAT` | Output format: `console`, `json`, `excel`, `markdown`, `html`, `csv`, `notion`, `all`, or aliases |
 | `--output PATH` | Specific output file path |
 | `--output-dir DIR` | Output directory (default: current) |
 
@@ -352,6 +352,9 @@ cja_auto_sdr --org-report --format reports
 
 # Generate CSV + JSON for data pipelines
 cja_auto_sdr --org-report --format data
+
+# Publish a lightweight Notion catalog (counts only; no detail pages)
+cja_auto_sdr --org-report --format notion
 ```
 
 ## Output Formats
@@ -446,6 +449,30 @@ Multiple CSV files in a directory:
 - `org_report_distribution.csv`
 - `org_report_similarity.csv`
 - `org_report_recommendations.csv`
+
+### Notion (v3.8.0 — lightweight catalog)
+
+`--org-report --format notion` writes one row to the "CJA SDR Registry" database per data view in the org report summary. Requires `NOTION_TOKEN`, `NOTION_PARENT_PAGE_ID`, and `NOTION_DATABASE_ID` (or `--notion-database-id`).
+
+**What is populated:**
+- Name, Data View ID, Metrics Count, Dimensions Count, owner, dates
+- SDR Page link (`notion://pages/<id>`) where a previously published detail page exists
+
+**What is NOT populated (catalog limitations):**
+- Segments Count, Calculated Metrics Count, Derived Fields Count — the org report does not fetch these
+- Data Quality — not run in org-report mode; shows `unknown`
+
+**Detail pages are not created.** The org-report catalog is a read-only summary pass over existing registry rows and org-summary data. For complete rows with all 14 properties and linked detail pages, use `--batch <ids> --format notion` (or per-data-view `cja_auto_sdr <dv_id> --format notion`).
+
+> **Full org-report detail-page generation** (writing a complete Notion page per data view directly from org-report mode) is planned for a future release. For now, the recommended pattern is: run `--org-report --format notion` to populate a quick catalog, then run `--batch <ids> --format notion` for any data views that need complete rows and detail pages.
+
+```bash
+# Lightweight catalog from org report
+cja_auto_sdr --org-report --format notion
+
+# Follow up with batch for complete rows on specific data views
+cja_auto_sdr --batch dv_12345 dv_67890 --format notion
+```
 
 ## Use Cases
 

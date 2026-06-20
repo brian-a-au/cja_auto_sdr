@@ -26,8 +26,8 @@
       },
       "format": {
         "type": "string",
-        "enum": ["console", "json", "csv", "html", "markdown", "excel"],
-        "description": "Output format for the org report. Use 'json' for agent/machine-readable output."
+        "enum": ["console", "json", "csv", "html", "markdown", "excel", "notion"],
+        "description": "Output format for the org report. Use 'json' for agent/machine-readable output. Use 'notion' to publish a lightweight catalog row per data view to the CJA SDR Registry database (requires NOTION_TOKEN, NOTION_PARENT_PAGE_ID, and NOTION_DATABASE_ID or notion_database_id). The org-report Notion catalog fills Name, Data View ID, Metrics/Dimensions Count, owner/dates, and SDR Page link — it does NOT populate Segments, Calculated Metrics, Derived Fields counts or Data Quality, and does NOT create detail pages. Runs serially."
       },
       "output": {
         "type": "string",
@@ -69,6 +69,10 @@
         "type": "integer",
         "description": "Maximum number of data views to process. Useful for testing or sampling large orgs.",
         "minimum": 1
+      },
+      "notion_database_id": {
+        "type": "string",
+        "description": "ID of the CJA SDR Registry Notion database. Required when format is 'notion'. Falls back to the NOTION_DATABASE_ID env var. The org-report writes lightweight catalog rows only — no detail pages, and Segments/CM/DF counts and Data Quality are not populated."
       }
     },
     "required": []
