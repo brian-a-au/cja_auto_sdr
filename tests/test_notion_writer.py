@@ -751,3 +751,43 @@ def test_writer_upserts_db_row_when_database_id_provided(tmp_path, monkeypatch):
     fake_client.databases.retrieve.assert_called_once_with(database_id="db-given")
     # one page.create for the SDR page, one for the DB row
     assert fake_client.pages.create.call_count == 2
+
+
+def test_writer_converts_ensure_database_value_error_to_notion_config_error(tmp_path, monkeypatch):
+    """Schema-mismatched database_id surfaces as NotionConfigurationError, not raw ValueError.
+
+    Acceptance criterion AC#3: when ensure_database raises ValueError (missing required
+    properties), write_notion_output must re-raise it as NotionConfigurationError so the
+    CLI dispatcher can convert it to a clean exit 1 rather than a raw traceback.
+    """
+    from cja_auto_sdr.output.writers.notion import NotionConfigurationError, write_notion_output
+
+    monkeypatch.setenv("NOTION_TOKEN", "fake-token")
+    monkeypatch.setenv("NOTION_PARENT_PAGE_ID", "parent-page")
+
+    fake_client_class = MagicMock()
+    fake_client = fake_client_class.return_value
+    fake_client.pages.create.return_value = {"id": "new-page-id"}
+    fake_client.blocks.children.append.return_value = {}
+
+    err_msg = "Database bad-db is missing required properties: ['Data Quality']"
+
+    with (
+        patch("cja_auto_sdr.output.writers.notion._require_notion_client", return_value=fake_client_class),
+        patch(
+            "cja_auto_sdr.output.notion_database.ensure_database",
+            side_effect=ValueError(err_msg),
+        ),
+        pytest.raises(NotionConfigurationError) as exc_info,
+    ):
+        write_notion_output(
+            data_dict={"Metrics": pd.DataFrame({"Name": ["m1"], "Type": ["metric"]})},
+            metadata_dict={"Data View ID": "dv_bad", "Data View Name": "Bad DV"},
+            base_filename="bad_sdr",
+            output_dir=str(tmp_path),
+            logger=logging.getLogger("test"),
+            database_id="bad-db",
+        )
+
+    assert "Data Quality" in str(exc_info.value)
+    assert "bad-db" in str(exc_info.value)

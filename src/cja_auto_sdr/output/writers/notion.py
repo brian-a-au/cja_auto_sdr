@@ -553,12 +553,15 @@ def write_notion_output(
                 store_database_row_id,
             )
 
-            db_id = ensure_database(
-                client,
-                parent_page_id=parent_page_id,
-                database_id=database_id,
-                create_if_missing=create_database,
-            )
+            try:
+                db_id = ensure_database(
+                    client,
+                    parent_page_id=parent_page_id,
+                    database_id=database_id,
+                    create_if_missing=create_database,
+                )
+            except ValueError as exc:
+                raise NotionConfigurationError(str(exc)) from exc
             properties = build_row_properties(
                 data_dict,
                 metadata_dict,
