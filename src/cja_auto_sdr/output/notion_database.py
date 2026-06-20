@@ -24,6 +24,7 @@ import pandas as pd
 __all__ = [
     "DATABASE_SCHEMA",
     "DATA_QUALITY_OPTIONS",
+    "build_catalog_row_properties",
     "build_row_properties",
     "derive_data_quality_status",
     "ensure_database",
@@ -133,6 +134,44 @@ def build_row_properties(
         "Data Quality": {
             "select": {"name": derive_data_quality_status(data_dict.get("Data Quality"))},
         },
+    }
+
+
+def build_catalog_row_properties(
+    *,
+    data_view_name: str,
+    data_view_id: str,
+    metrics_count: int,
+    dimensions_count: int,
+    page_id: str | None = None,
+    tool_version: str,
+    captured_at: str | None = None,
+    now: _dt.datetime | None = None,
+) -> dict[str, dict]:
+    """Build the Notion ``properties`` payload for an org-report catalog row.
+
+    Unlike ``build_row_properties``, this version accepts pre-counted metric and
+    dimension counts directly (from the org-report summary), leaving unmeasured
+    columns (Segments, Calculated Metrics, Derived Fields) as ``None`` and
+    Data Quality as "unknown".
+    """
+    now = now or _dt.datetime.now(_dt.UTC)
+    sdr_page_url = f"notion://pages/{page_id}" if page_id else ""
+    return {
+        "Name": {"title": _title(data_view_name)},
+        "Data View ID": {"rich_text": _rt(data_view_id)},
+        "SDR Page": {"rich_text": _rt(sdr_page_url)},
+        "Last Updated": {"date": {"start": now.isoformat()}},
+        "Tool Version": {"rich_text": _rt(tool_version)},
+        "Captured At": {"date": _iso_date_value(captured_at)},
+        "Currency": {"rich_text": _rt("")},
+        "Timezone": {"rich_text": _rt("")},
+        "Metrics Count": {"number": metrics_count},
+        "Dimensions Count": {"number": dimensions_count},
+        "Segments Count": {"number": None},
+        "Calculated Metrics Count": {"number": None},
+        "Derived Fields Count": {"number": None},
+        "Data Quality": {"select": {"name": "unknown"}},
     }
 
 

@@ -156,3 +156,41 @@ def test_ensure_database_refuses_to_create_without_flag() -> None:
             database_id=None,
             create_if_missing=False,
         )
+
+
+def test_build_catalog_row_properties_shape() -> None:
+    """build_catalog_row_properties leaves unmeasured columns as None/empty/unknown."""
+    from cja_auto_sdr.output.notion_database import build_catalog_row_properties
+
+    props = build_catalog_row_properties(
+        data_view_name="My DV",
+        data_view_id="dv_abc",
+        metrics_count=8,
+        dimensions_count=4,
+        page_id="page-111",
+        tool_version="3.8.0",
+        captured_at="2026-06-19T00:00:00Z",
+    )
+
+    assert props["Name"]["title"][0]["text"]["content"] == "My DV"
+    assert props["Data View ID"]["rich_text"][0]["text"]["content"] == "dv_abc"
+    assert "page-111" in props["SDR Page"]["rich_text"][0]["text"]["content"]
+    assert props["Metrics Count"] == {"number": 8}
+    assert props["Dimensions Count"] == {"number": 4}
+    assert props["Segments Count"] == {"number": None}
+    assert props["Calculated Metrics Count"] == {"number": None}
+    assert props["Derived Fields Count"] == {"number": None}
+    assert props["Data Quality"] == {"select": {"name": "unknown"}}
+    assert props["Currency"]["rich_text"][0]["text"]["content"] == ""
+    assert props["Timezone"]["rich_text"][0]["text"]["content"] == ""
+    assert props["Tool Version"]["rich_text"][0]["text"]["content"] == "3.8.0"
+
+    # No page_id case
+    props_no_page = build_catalog_row_properties(
+        data_view_name="My DV",
+        data_view_id="dv_abc",
+        metrics_count=0,
+        dimensions_count=0,
+        tool_version="3.8.0",
+    )
+    assert props_no_page["SDR Page"]["rich_text"][0]["text"]["content"] == ""

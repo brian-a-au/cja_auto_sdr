@@ -253,6 +253,7 @@ from cja_auto_sdr.org.writers.compat import JSON_WRITER_OVERRIDE_MAPPING as _ORG
 from cja_auto_sdr.org.writers.compat import (
     MARKDOWN_WRITER_OVERRIDE_MAPPING as _ORG_MARKDOWN_WRITER_OVERRIDE_MAPPING,
 )
+from cja_auto_sdr.org.writers.compat import NOTION_WRITER_OVERRIDE_MAPPING as _ORG_NOTION_WRITER_OVERRIDE_MAPPING
 from cja_auto_sdr.org.writers.compat import make_compat_wrapper as _make_org_writer_compat_wrapper
 from cja_auto_sdr.org.writers.console import (
     write_org_report_comparison_console as _write_org_report_comparison_console_impl,
@@ -265,6 +266,7 @@ from cja_auto_sdr.org.writers.html import write_org_report_html as _write_org_re
 from cja_auto_sdr.org.writers.json import build_org_report_json_data as _build_org_report_json_data_impl
 from cja_auto_sdr.org.writers.json import write_org_report_json as _write_org_report_json_impl
 from cja_auto_sdr.org.writers.markdown import write_org_report_markdown as _write_org_report_markdown_impl
+from cja_auto_sdr.org.writers.notion import write_org_report_notion as _write_org_report_notion_impl
 
 PARALLEL_INVENTORY_MIN_TASKS = 2
 
@@ -5613,6 +5615,7 @@ def _build_org_report_trending_window(
 # - write_org_report_markdown
 # - write_org_report_html
 # - write_org_report_csv
+# - write_org_report_notion
 # - _normalize_org_report_output_format
 # - _validate_org_report_output_request
 
@@ -5622,6 +5625,7 @@ _ORG_WRITER_EXCEL_MODULE = "cja_auto_sdr.org.writers.excel"
 _ORG_WRITER_HTML_MODULE = "cja_auto_sdr.org.writers.html"
 _ORG_WRITER_JSON_MODULE = "cja_auto_sdr.org.writers.json"
 _ORG_WRITER_MARKDOWN_MODULE = "cja_auto_sdr.org.writers.markdown"
+_ORG_WRITER_NOTION_MODULE = "cja_auto_sdr.org.writers.notion"
 
 write_org_report_console = _make_org_writer_compat_wrapper(
     __name__,
@@ -5677,6 +5681,12 @@ write_org_report_csv = _make_org_writer_compat_wrapper(
     target_module_name=_ORG_WRITER_CSV_MODULE,
     override_mapping=_ORG_CSV_WRITER_OVERRIDE_MAPPING,
 )
+write_org_report_notion = _make_org_writer_compat_wrapper(
+    __name__,
+    _write_org_report_notion_impl,
+    target_module_name=_ORG_WRITER_NOTION_MODULE,
+    override_mapping=_ORG_NOTION_WRITER_OVERRIDE_MAPPING,
+)
 
 
 def _populate_org_report_advisory_rollup(
@@ -5710,12 +5720,14 @@ def run_org_report(
     quiet: bool = False,
     trending_window: int | None = None,
     runtime_details: dict[str, Any] | None = None,
+    notion_database_id: str | None = None,
+    notion_create_database: bool = False,
 ) -> tuple[bool, bool]:
     """Run org-wide component analysis and generate report.
 
     Args:
         config_file: Path to CJA configuration file
-        output_format: Output format (console, json, excel, markdown, html, csv, all)
+        output_format: Output format (console, json, excel, markdown, html, csv, notion, all)
         output_path: Optional specific output file path
         output_dir: Output directory for generated files
         org_config: OrgReportConfig with analysis parameters
@@ -5723,6 +5735,8 @@ def run_org_report(
         quiet: Suppress progress output
         trending_window: If set, compute trending across last N cached snapshots
         runtime_details: Optional mutable dict to receive additive lock execution details
+        notion_database_id: Optional Notion database ID for catalog rows
+        notion_create_database: If True, create the Notion database when none exists
 
     Returns:
         Tuple of (success, thresholds_exceeded) - thresholds_exceeded triggers exit code 2
@@ -5911,6 +5925,30 @@ def run_org_report(
             csv_dir = write_org_report_csv(result, output_path_obj, output_dir, logger, trending=trending)
             if not quiet:
                 _status_print(f"\n{ConsoleColors.success('✓')} CSV reports saved to: {csv_dir}")
+        elif output_format == "notion":
+            from cja_auto_sdr.org.writers.notion import write_org_report_notion
+            from cja_auto_sdr.output.writers.notion import (
+                NotionAPIError,
+                NotionConfigurationError,
+                NotionDependencyError,
+            )
+
+            try:
+                cataloged = write_org_report_notion(
+                    result,
+                    output_dir,
+                    logger,
+                    notion_database_id=notion_database_id,
+                    notion_create_database=notion_create_database,
+                )
+            except (NotionConfigurationError, NotionDependencyError, NotionAPIError) as exc:
+                _status_print(ConsoleColors.error(f"ERROR: {exc}"))
+                return False, False
+            else:
+                if not quiet:
+                    _status_print(
+                        f"\n{ConsoleColors.success('✓')} Cataloged {len(cataloged)} data view(s) to Notion registry"
+                    )
         elif output_format == "all":
             # Generate all formats
             write_org_report_console(result, org_config, quiet, trending=trending)
@@ -6823,6 +6861,8 @@ def _dispatch_post_validation_report_modes(
         trending_window = getattr(args, "trending_window", None)
 
         lock_details: dict[str, Any] = {}
+        notion_database_id = getattr(args, "notion_database_id", None) or os.environ.get("NOTION_DATABASE_ID")
+        notion_create_database = getattr(args, "notion_create_database", False)
         success, thresholds_exceeded = run_org_report(
             config_file=args.config_file,
             output_format=output_format,
@@ -6833,6 +6873,8 @@ def _dispatch_post_validation_report_modes(
             quiet=org_report_quiet,
             trending_window=trending_window,
             runtime_details=lock_details,
+            notion_database_id=notion_database_id,
+            notion_create_database=notion_create_database,
         )
         advisory_rollup = lock_details.pop("advisory_rollup", None)
         if run_state is not None:
