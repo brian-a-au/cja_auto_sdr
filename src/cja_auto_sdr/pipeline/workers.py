@@ -49,5 +49,7 @@ def process_single_dataview_worker(args: WorkerArgs) -> ProcessingResult:
             production_mode=args.production_mode,
             batch_id=args.batch_id,
             notion_force_new=args.notion_force_new,
+            notion_database_id=args.notion_database_id,
+            notion_create_database=args.notion_create_database,
         ),
     )

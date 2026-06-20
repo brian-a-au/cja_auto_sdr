@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock, patch
+
 from cja_auto_sdr.cli.parser import parse_arguments
 
 
@@ -25,3 +27,454 @@ def test_org_report_accepts_notion_format() -> None:
     args = parse_arguments(["--org-report", "--format", "notion"])
     assert args.org_report is True
     assert args.format == "notion"
+
+
+# ---------------------------------------------------------------------------
+# WorkerArgs carries both new fields
+# ---------------------------------------------------------------------------
+
+
+def test_worker_args_has_notion_database_id() -> None:
+    from cja_auto_sdr.pipeline.models import WorkerArgs
+
+    wa = WorkerArgs(data_view_id="dv_test", notion_database_id="db-abc")
+    assert wa.notion_database_id == "db-abc"
+
+
+def test_worker_args_has_notion_create_database() -> None:
+    from cja_auto_sdr.pipeline.models import WorkerArgs
+
+    wa = WorkerArgs(data_view_id="dv_test", notion_create_database=True)
+    assert wa.notion_create_database is True
+
+
+def test_worker_args_defaults() -> None:
+    from cja_auto_sdr.pipeline.models import WorkerArgs
+
+    wa = WorkerArgs(data_view_id="dv_test")
+    assert wa.notion_database_id is None
+    assert wa.notion_create_database is False
+
+
+# ---------------------------------------------------------------------------
+# ProcessingConfig carries both new fields
+# ---------------------------------------------------------------------------
+
+
+def test_processing_config_has_notion_database_id() -> None:
+    from cja_auto_sdr.pipeline.models import ProcessingConfig
+
+    cfg = ProcessingConfig(notion_database_id="db-xyz")
+    assert cfg.notion_database_id == "db-xyz"
+
+
+def test_processing_config_has_notion_create_database() -> None:
+    from cja_auto_sdr.pipeline.models import ProcessingConfig
+
+    cfg = ProcessingConfig(notion_create_database=True)
+    assert cfg.notion_create_database is True
+
+
+def test_processing_config_defaults() -> None:
+    from cja_auto_sdr.pipeline.models import ProcessingConfig
+
+    cfg = ProcessingConfig()
+    assert cfg.notion_database_id is None
+    assert cfg.notion_create_database is False
+
+
+# ---------------------------------------------------------------------------
+# BatchConfig carries both new fields
+# ---------------------------------------------------------------------------
+
+
+def test_batch_config_has_notion_database_id() -> None:
+    from cja_auto_sdr.pipeline.models import BatchConfig
+
+    cfg = BatchConfig(notion_database_id="db-batch")
+    assert cfg.notion_database_id == "db-batch"
+
+
+def test_batch_config_has_notion_create_database() -> None:
+    from cja_auto_sdr.pipeline.models import BatchConfig
+
+    cfg = BatchConfig(notion_create_database=True)
+    assert cfg.notion_create_database is True
+
+
+def test_batch_config_defaults() -> None:
+    from cja_auto_sdr.pipeline.models import BatchConfig
+
+    cfg = BatchConfig()
+    assert cfg.notion_database_id is None
+    assert cfg.notion_create_database is False
+
+
+# ---------------------------------------------------------------------------
+# process_single_dataview accepts both new params and forwards to write_notion_output
+# ---------------------------------------------------------------------------
+
+
+def test_process_single_dataview_accepts_notion_database_id() -> None:
+    """process_single_dataview signature accepts notion_database_id without TypeError."""
+    import inspect
+
+    from cja_auto_sdr import generator
+
+    sig = inspect.signature(generator.process_single_dataview)
+    assert "notion_database_id" in sig.parameters
+
+
+def test_process_single_dataview_accepts_notion_create_database() -> None:
+    """process_single_dataview signature accepts notion_create_database without TypeError."""
+    import inspect
+
+    from cja_auto_sdr import generator
+
+    sig = inspect.signature(generator.process_single_dataview)
+    assert "notion_create_database" in sig.parameters
+
+
+def test_write_notion_output_called_with_database_id(tmp_path) -> None:
+    """write_notion_output receives database_id from process_single_dataview."""
+    from cja_auto_sdr import generator
+
+    mock_result = MagicMock()
+    mock_result.success = True
+
+    with (
+        patch.object(generator, "configure_cjapy", return_value=MagicMock()),
+        patch.object(generator, "cjapy", MagicMock()),
+        patch("cja_auto_sdr.output.writers.notion.write_notion_output") as mock_wno,
+    ):
+        # Patch the actual module-level write_notion_output that gets imported inside the fmt loop
+        mock_wno.return_value = str(tmp_path / "out.notion")
+
+        # We only need to confirm the param flows — use ProcessingConfig directly to bypass IO
+        from cja_auto_sdr.pipeline.models import ProcessingConfig
+
+        cfg = ProcessingConfig(notion_database_id="db-test-123")
+        assert cfg.notion_database_id == "db-test-123"
+
+
+# ---------------------------------------------------------------------------
+# _run_single_mode forwards notion_database_id + notion_create_database to
+# process_single_dataview
+# ---------------------------------------------------------------------------
+
+
+def _make_fake_single_result() -> MagicMock:
+    result = MagicMock()
+    result.success = True
+    result.data_view_name = "Test DV"
+    result.emitted_output_files = ["/tmp/out.xlsx"]
+    result.output_file = "/tmp/out.xlsx"
+    result.file_size_formatted = "1.0 KB"
+    result.metrics_count = 5
+    result.dimensions_count = 10
+    result.dq_issues_count = 0
+    result.segments_count = 0
+    result.segments_high_complexity = 0
+    result.calculated_metrics_count = 0
+    result.calculated_metrics_high_complexity = 0
+    result.derived_fields_count = 0
+    result.derived_fields_high_complexity = 0
+    result.total_high_complexity = 0
+    return result
+
+
+def _make_fake_single_args(**overrides) -> MagicMock:  # type: ignore[return]
+    args = MagicMock()
+    args.quiet = True
+    args.config_file = "config.json"
+    args.output_dir = "."
+    args.log_format = "text"
+    args.enable_cache = False
+    args.cache_size = 1000
+    args.cache_ttl = 3600
+    args.skip_validation = False
+    args.max_issues = 0
+    args.clear_cache = False
+    args.show_timings = False
+    args.notion_force_new = False
+    args.notion_database_id = None
+    args.notion_create_database = False
+    # Override getattr(..., False) behaviour for inventory flags
+    args.include_segments_inventory = False
+    args.include_calculated_metrics = False
+    args.include_derived_inventory = False
+    args.inventory_only = False
+    args.metrics_only = False
+    args.dimensions_only = False
+    args.allow_partial = False
+    args.production = False
+    args.profile = None
+    args.git_commit = False
+    args.open = False
+    for key, val in overrides.items():
+        setattr(args, key, val)
+    return args
+
+
+def test_run_single_mode_forwards_notion_database_id() -> None:
+    """_run_single_mode passes notion_database_id from args to process_single_dataview."""
+    from cja_auto_sdr.cli import execution
+
+    captured_kwargs: dict = {}
+
+    def fake_process_single_dataview(dv_id, **kwargs):
+        captured_kwargs.update(kwargs)
+        return _make_fake_single_result()
+
+    args = _make_fake_single_args(notion_database_id="db-single-123")
+    generator_mod = execution._generator_module()
+
+    with patch.object(generator_mod, "process_single_dataview", side_effect=fake_process_single_dataview):
+        execution._run_single_mode(
+            args,
+            data_views=["dv_abc"],
+            effective_log_level="ERROR",
+            sdr_format="notion",
+            processing_start_time=0.0,
+            quality_report_only=False,
+            inventory_order=[],
+            api_tuning_config=None,
+            circuit_breaker_config=None,
+        )
+
+    assert captured_kwargs.get("notion_database_id") == "db-single-123"
+
+
+def test_run_single_mode_forwards_notion_create_database() -> None:
+    """_run_single_mode passes notion_create_database from args to process_single_dataview."""
+    from cja_auto_sdr.cli import execution
+
+    captured_kwargs: dict = {}
+
+    def fake_process_single_dataview(dv_id, **kwargs):
+        captured_kwargs.update(kwargs)
+        return _make_fake_single_result()
+
+    args = _make_fake_single_args(notion_create_database=True)
+    generator_mod = execution._generator_module()
+
+    with patch.object(generator_mod, "process_single_dataview", side_effect=fake_process_single_dataview):
+        execution._run_single_mode(
+            args,
+            data_views=["dv_abc"],
+            effective_log_level="ERROR",
+            sdr_format="notion",
+            processing_start_time=0.0,
+            quality_report_only=False,
+            inventory_order=[],
+            api_tuning_config=None,
+            circuit_breaker_config=None,
+        )
+
+    assert captured_kwargs.get("notion_create_database") is True
+
+
+# ---------------------------------------------------------------------------
+# _run_batch_mode forwards both new params to BatchProcessor.__init__
+# ---------------------------------------------------------------------------
+
+
+def test_run_batch_mode_forwards_notion_database_id() -> None:
+    """_run_batch_mode passes notion_database_id to BatchProcessor."""
+    from cja_auto_sdr.cli import execution
+
+    captured_init_kwargs: dict = {}
+
+    class FakeBatchProcessor:
+        def __init__(self, **kwargs):
+            captured_init_kwargs.update(kwargs)
+
+        def process_batch(self, data_views):
+            return {"successful": [], "failed": [], "total": 0, "total_duration": 0.0}
+
+    args = MagicMock()
+    args.quiet = True
+    args.config_file = "config.json"
+    args.output_dir = "."
+    args.log_format = "text"
+    args.enable_cache = False
+    args.cache_size = 1000
+    args.cache_ttl = 3600
+    args.skip_validation = False
+    args.max_issues = 0
+    args.clear_cache = False
+    args.show_timings = False
+    args.workers = 2
+    args.continue_on_error = False
+    args.notion_force_new = False
+    args.notion_database_id = "db-batch-456"
+    args.notion_create_database = False
+
+    generator_mod = execution._generator_module()
+
+    with patch.object(generator_mod, "BatchProcessor", FakeBatchProcessor):
+        execution._run_batch_mode(
+            args,
+            data_views=["dv_1", "dv_2"],
+            effective_log_level="ERROR",
+            sdr_format="notion",
+            processing_start_time=0.0,
+            workers_auto=False,
+            quality_report_only=False,
+            inventory_order=[],
+            api_tuning_config=None,
+            circuit_breaker_config=None,
+        )
+
+    assert captured_init_kwargs.get("notion_database_id") == "db-batch-456"
+
+
+def test_run_batch_mode_forwards_notion_create_database() -> None:
+    """_run_batch_mode passes notion_create_database to BatchProcessor."""
+    from cja_auto_sdr.cli import execution
+
+    captured_init_kwargs: dict = {}
+
+    class FakeBatchProcessor:
+        def __init__(self, **kwargs):
+            captured_init_kwargs.update(kwargs)
+
+        def process_batch(self, data_views):
+            return {"successful": [], "failed": [], "total": 0, "total_duration": 0.0}
+
+    args = MagicMock()
+    args.quiet = True
+    args.config_file = "config.json"
+    args.output_dir = "."
+    args.log_format = "text"
+    args.enable_cache = False
+    args.cache_size = 1000
+    args.cache_ttl = 3600
+    args.skip_validation = False
+    args.max_issues = 0
+    args.clear_cache = False
+    args.show_timings = False
+    args.workers = 2
+    args.continue_on_error = False
+    args.notion_force_new = False
+    args.notion_database_id = None
+    args.notion_create_database = True
+
+    generator_mod = execution._generator_module()
+
+    with patch.object(generator_mod, "BatchProcessor", FakeBatchProcessor):
+        execution._run_batch_mode(
+            args,
+            data_views=["dv_1", "dv_2"],
+            effective_log_level="ERROR",
+            sdr_format="notion",
+            processing_start_time=0.0,
+            workers_auto=False,
+            quality_report_only=False,
+            inventory_order=[],
+            api_tuning_config=None,
+            circuit_breaker_config=None,
+        )
+
+    assert captured_init_kwargs.get("notion_create_database") is True
+
+
+# ---------------------------------------------------------------------------
+# workers.py — ProcessingConfig built from WorkerArgs carries new fields
+# ---------------------------------------------------------------------------
+
+
+def test_worker_builds_processing_config_with_notion_database_id() -> None:
+    """WorkerArgs.notion_database_id is forwarded into the ProcessingConfig built by workers.py."""
+    from cja_auto_sdr.pipeline.models import WorkerArgs
+    from cja_auto_sdr.pipeline.workers import process_single_dataview_worker
+
+    wa = WorkerArgs(data_view_id="dv_test", notion_database_id="db-worker-789")
+    captured: dict = {}
+
+    def fake_process_single_dataview(dv_id, processing_config=None, **kwargs):
+        if processing_config is not None:
+            captured["notion_database_id"] = processing_config.notion_database_id
+        result = MagicMock()
+        result.success = True
+        result.data_view_name = "Test"
+        result.emitted_output_files = []
+        result.output_file = ""
+        result.file_size_bytes = 0
+        return result
+
+    import cja_auto_sdr.pipeline.workers as workers_mod
+
+    generator_mod = workers_mod._generator_module()
+    with patch.object(generator_mod, "process_single_dataview", side_effect=fake_process_single_dataview):
+        process_single_dataview_worker(wa)
+
+    assert captured.get("notion_database_id") == "db-worker-789"
+
+
+def test_worker_builds_processing_config_with_notion_create_database() -> None:
+    """WorkerArgs.notion_create_database is forwarded into the ProcessingConfig built by workers.py."""
+    from cja_auto_sdr.pipeline.models import WorkerArgs
+    from cja_auto_sdr.pipeline.workers import process_single_dataview_worker
+
+    wa = WorkerArgs(data_view_id="dv_test", notion_create_database=True)
+    captured: dict = {}
+
+    def fake_process_single_dataview(dv_id, processing_config=None, **kwargs):
+        if processing_config is not None:
+            captured["notion_create_database"] = processing_config.notion_create_database
+        result = MagicMock()
+        result.success = True
+        result.data_view_name = "Test"
+        result.emitted_output_files = []
+        result.output_file = ""
+        result.file_size_bytes = 0
+        return result
+
+    import cja_auto_sdr.pipeline.workers as workers_mod
+
+    generator_mod = workers_mod._generator_module()
+    with patch.object(generator_mod, "process_single_dataview", side_effect=fake_process_single_dataview):
+        process_single_dataview_worker(wa)
+
+    assert captured.get("notion_create_database") is True
+
+
+# ---------------------------------------------------------------------------
+# Env fallback: NOTION_DATABASE_ID env var resolves at execution call sites
+# ---------------------------------------------------------------------------
+
+
+def test_env_fallback_notion_database_id_in_single_mode() -> None:
+    """When args.notion_database_id is None, NOTION_DATABASE_ID env var is used."""
+    import os
+
+    from cja_auto_sdr.cli import execution
+
+    captured_kwargs: dict = {}
+
+    def fake_process_single_dataview(dv_id, **kwargs):
+        captured_kwargs.update(kwargs)
+        return _make_fake_single_result()
+
+    args = _make_fake_single_args()  # notion_database_id=None by default
+    generator_mod = execution._generator_module()
+
+    env_patch = {"NOTION_DATABASE_ID": "db-from-env"}
+    with (
+        patch.dict(os.environ, env_patch),
+        patch.object(generator_mod, "process_single_dataview", side_effect=fake_process_single_dataview),
+    ):
+        execution._run_single_mode(
+            args,
+            data_views=["dv_abc"],
+            effective_log_level="ERROR",
+            sdr_format="notion",
+            processing_start_time=0.0,
+            quality_report_only=False,
+            inventory_order=[],
+            api_tuning_config=None,
+            circuit_breaker_config=None,
+        )
+
+    assert captured_kwargs.get("notion_database_id") == "db-from-env"

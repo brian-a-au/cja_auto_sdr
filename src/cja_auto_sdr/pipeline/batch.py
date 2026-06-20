@@ -62,6 +62,8 @@ class BatchProcessor:
         allow_partial: bool = False,
         production_mode: bool = False,
         notion_force_new: bool = False,
+        notion_database_id: str | None = None,
+        notion_create_database: bool = False,
         batch_config: BatchConfig | None = None,
     ):
         generator = _generator_module()
@@ -98,6 +100,8 @@ class BatchProcessor:
                 allow_partial=allow_partial,
                 production_mode=production_mode,
                 notion_force_new=notion_force_new,
+                notion_database_id=notion_database_id,
+                notion_create_database=notion_create_database,
             )
 
         self.config_file = batch_config.config_file
@@ -130,6 +134,8 @@ class BatchProcessor:
         self.allow_partial = batch_config.allow_partial
         self.production_mode = batch_config.production_mode
         self.notion_force_new = batch_config.notion_force_new
+        self.notion_database_id = batch_config.notion_database_id
+        self.notion_create_database = batch_config.notion_create_database
         self.batch_id = str(uuid.uuid4())[:8]
         base_logger = generator.setup_logging(batch_mode=True, log_level=self.log_level, log_format=self.log_format)
         self.logger = generator.with_log_context(base_logger, run_mode="batch", batch_id=self.batch_id)
@@ -202,6 +208,8 @@ class BatchProcessor:
                 production_mode=self.production_mode,
                 batch_id=self.batch_id,
                 notion_force_new=self.notion_force_new,
+                notion_database_id=self.notion_database_id,
+                notion_create_database=self.notion_create_database,
             )
             for dv_id in data_view_ids
         ]

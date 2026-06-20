@@ -519,6 +519,8 @@ def _push_to_notion_from_json(
     json_file: str,
     output_dir: str | None = None,
     force_new: bool = False,
+    database_id: str | None = None,
+    create_database: bool = False,
 ) -> str:
     """Read an SDR JSON artifact and publish it to Notion.
 
@@ -572,6 +574,8 @@ def _push_to_notion_from_json(
             output_dir=effective_output_dir,
             logger=logging.getLogger(__name__),
             force_new=force_new,
+            database_id=database_id,
+            create_database=create_database,
         )
     except (NotionConfigurationError, NotionDependencyError, NotionAPIError) as exc:
         _exit_error(str(exc))
@@ -3100,6 +3104,8 @@ def process_single_dataview(
     production_mode: bool = False,
     batch_id: str | None = None,
     notion_force_new: bool = False,
+    notion_database_id: str | None = None,
+    notion_create_database: bool = False,
     processing_config: ProcessingConfig | None = None,
 ) -> ProcessingResult:
     """
@@ -3165,6 +3171,8 @@ def process_single_dataview(
             production_mode=production_mode,
             batch_id=batch_id,
             notion_force_new=notion_force_new,
+            notion_database_id=notion_database_id,
+            notion_create_database=notion_create_database,
         )
 
     config_file = processing_config.config_file
@@ -3195,6 +3203,8 @@ def process_single_dataview(
     allow_partial = processing_config.allow_partial
     production_mode = processing_config.production_mode
     notion_force_new = processing_config.notion_force_new
+    notion_database_id = processing_config.notion_database_id
+    notion_create_database = processing_config.notion_create_database
     batch_id = processing_config.batch_id
 
     start_time = time.perf_counter()
@@ -3956,6 +3966,8 @@ def process_single_dataview(
                             output_dir,
                             logger,
                             force_new=notion_force_new,
+                            database_id=notion_database_id,
+                            create_database=notion_create_database,
                         )
                     except (NotionConfigurationError, NotionDependencyError, NotionAPIError) as exc:
                         # Must return a failed ProcessingResult here rather than calling
@@ -6932,10 +6944,14 @@ def _main_impl(run_state: dict[str, Any] | None = None):
         json_file = getattr(args, "push_to_notion", None)
         force_new = getattr(args, "notion_force_new", False)
         output_dir = getattr(args, "output_dir", None)
+        notion_database_id = getattr(args, "notion_database_id", None) or os.environ.get("NOTION_DATABASE_ID")
+        notion_create_database = getattr(args, "notion_create_database", False)
         result = _push_to_notion_from_json(
             json_file,
             output_dir=output_dir,
             force_new=force_new,
+            database_id=notion_database_id,
+            create_database=notion_create_database,
         )
         print(result)
         sys.exit(0)
