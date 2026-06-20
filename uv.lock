@@ -119,8 +119,8 @@ requires-dist = [
     { name = "argcomplete", marker = "extra == 'completion'", specifier = ">=3.0.0" },
     { name = "argcomplete", marker = "extra == 'full'", specifier = ">=3.0.0" },
     { name = "cjapy", specifier = ">=0.3.1" },
-    { name = "notion-client", marker = "extra == 'full'", specifier = ">=2.0.0" },
-    { name = "notion-client", marker = "extra == 'notion'", specifier = ">=2.0.0" },
+    { name = "notion-client", marker = "extra == 'full'", specifier = ">=3.0.0" },
+    { name = "notion-client", marker = "extra == 'notion'", specifier = ">=3.0.0" },
     { name = "numpy", specifier = ">=2.2.0,!=2.4.0" },
     { name = "pandas", specifier = ">=2.3.3,<3" },
     { name = "python-dotenv", marker = "extra == 'env'", specifier = ">=1.0.0" },
@@ -134,7 +134,7 @@ provides-extras = ["clustering", "completion", "env", "full", "notion"]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "notion-client", specifier = ">=2.0.0" },
+    { name = "notion-client", specifier = ">=3.0.0" },
     { name = "openpyxl", specifier = ">=3.1.0" },
     { name = "pytest", specifier = ">=9.0.3" },
     { name = "pytest-cov", specifier = ">=4.1.0" },
