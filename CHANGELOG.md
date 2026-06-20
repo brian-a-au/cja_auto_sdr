@@ -7,6 +7,20 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.8.0] - 2026-05-15
+
+### Added
+- **SDR Registry database in Notion.** A Notion database that catalogs SDRs, one row per data view, with metadata properties (Metrics / Dimensions / Segments / Calculated Metrics / Derived Fields counts, Data Quality status, Captured At, Tool Version) and an `SDR Page` rich-text link to the detail page. Bootstrap a new database with `--notion-create-database` (prints the new database ID to capture into `NOTION_DATABASE_ID`), or attach an existing one with `--notion-database-id <id>` / the `NOTION_DATABASE_ID` env var.
+- **Per-data-view database rows.** When a database is configured, each `cja_auto_sdr <dv> --format notion` run upserts that data view's row (keyed by Data View ID) alongside publishing its detail page.
+- **`--org-report --format notion` publishes a lightweight org-wide catalog.** One database row per data view built from the org report's summary: Name, Data View ID, metric and dimension counts, owner, dates, and a link to the detail page where one already exists. The org report does not fetch segments, calculated metrics, or derived fields, and does not run data-quality validation, so those count columns are left empty and Data Quality shows `unknown`; the run does not create detail pages. It runs serially (`--workers > 1` and `--watch` are rejected with `--format notion`). For complete rows plus detail pages across many data views, use `--batch <ids> --format notion`.
+- **Registry v2 schema.** `.notion_pages.json` now stores `{page_id, database_row_id}` per data view. Legacy v1 string entries are read transparently and rewritten on the next sync — no migration step.
+
+### Compatibility
+- The v3.7.0 page output and `.notion_pages.json` registry are unchanged for callers that do not configure a database. Existing automation keeps working without modification.
+
+### v3.9 preview
+- Full-fidelity `--org-report --format notion` that fetches each data view and publishes complete detail pages plus complete rows; a true Notion `relation` for the `SDR Page` property; orphan-page pruning for `--notion-force-new`.
+
 ## [3.7.0] — 2026-05-14
 
 ### Added
