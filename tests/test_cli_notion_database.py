@@ -609,8 +609,9 @@ def test_effective_workers_for_format_caps_notion() -> None:
     assert _effective_workers_for_format(excel_args, 8, workers_auto=True) == (8, True)
 
 
-def test_notion_create_database_with_batch_rejected(capsys) -> None:
+def test_notion_create_database_with_batch_rejected(capsys, monkeypatch) -> None:
     """--notion-create-database with --batch must exit 1 (each worker would create its own DB)."""
+    monkeypatch.delenv("NOTION_DATABASE_ID", raising=False)
     args = argparse.Namespace(
         format="notion",
         skip_validation=False,
@@ -618,6 +619,7 @@ def test_notion_create_database_with_batch_rejected(capsys) -> None:
         workers=1,
         watch_data_views=None,
         notion_create_database=True,
+        notion_database_id=None,
         batch=True,
         data_views=["dv_a"],
     )
@@ -628,8 +630,9 @@ def test_notion_create_database_with_batch_rejected(capsys) -> None:
     assert "--notion-create-database cannot be combined with batch processing" in captured.err
 
 
-def test_notion_create_database_with_implicit_batch_rejected(capsys) -> None:
+def test_notion_create_database_with_implicit_batch_rejected(capsys, monkeypatch) -> None:
     """Multiple data views without --batch is still a batch — --notion-create-database must exit 1."""
+    monkeypatch.delenv("NOTION_DATABASE_ID", raising=False)
     args = argparse.Namespace(
         format="notion",
         skip_validation=False,
@@ -637,6 +640,7 @@ def test_notion_create_database_with_implicit_batch_rejected(capsys) -> None:
         workers=1,
         watch_data_views=None,
         notion_create_database=True,
+        notion_database_id=None,
         batch=False,
         data_views=["dv_a", "dv_b"],
     )
@@ -647,8 +651,10 @@ def test_notion_create_database_with_implicit_batch_rejected(capsys) -> None:
     assert "--notion-create-database cannot be combined with batch processing" in captured.err
 
 
-def test_notion_create_database_single_data_view_allowed() -> None:
-    """--notion-create-database on a single data view (no --batch) must NOT raise."""
+def test_notion_create_database_with_batch_allowed_when_database_id_set(monkeypatch) -> None:
+    """--notion-create-database is a no-op when a database ID is configured, so a batch
+    with both flags must NOT be rejected."""
+    monkeypatch.delenv("NOTION_DATABASE_ID", raising=False)
     args = argparse.Namespace(
         format="notion",
         skip_validation=False,
@@ -656,6 +662,25 @@ def test_notion_create_database_single_data_view_allowed() -> None:
         workers=1,
         watch_data_views=None,
         notion_create_database=True,
+        notion_database_id="db-existing",
+        batch=True,
+        data_views=["dv_a", "dv_b"],
+    )
+    # Must NOT raise — the existing database is reused for every data view.
+    _validate_semantic_flag_relationships(args, inferred_mode=RunMode.SDR)
+
+
+def test_notion_create_database_single_data_view_allowed(monkeypatch) -> None:
+    """--notion-create-database on a single data view (no --batch) must NOT raise."""
+    monkeypatch.delenv("NOTION_DATABASE_ID", raising=False)
+    args = argparse.Namespace(
+        format="notion",
+        skip_validation=False,
+        push_to_notion=None,
+        workers=1,
+        watch_data_views=None,
+        notion_create_database=True,
+        notion_database_id=None,
         batch=False,
         data_views=["dv_a"],
     )

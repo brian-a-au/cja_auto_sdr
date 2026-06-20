@@ -908,3 +908,15 @@ def test_writer_logs_created_database_id(tmp_path, monkeypatch):
 
     logged = " ".join(str(c.args) for c in mock_logger.info.call_args_list)
     assert "new-db-id" in logged
+
+
+def test_resolve_notion_credentials_parent_optional_when_not_required(monkeypatch):
+    """require_parent=False returns the token without requiring NOTION_PARENT_PAGE_ID."""
+    _neutralize_dotenv(monkeypatch)
+    monkeypatch.setenv("NOTION_TOKEN", "tok")
+    monkeypatch.delenv("NOTION_PARENT_PAGE_ID", raising=False)
+    from cja_auto_sdr.output.writers.notion import resolve_notion_credentials
+
+    token, parent = resolve_notion_credentials(require_parent=False)
+    assert token == "tok"
+    assert parent is None

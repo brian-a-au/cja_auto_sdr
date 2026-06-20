@@ -258,10 +258,14 @@ def build_sdr_blocks(
 # ---------------------------------------------------------------------------
 
 
-def resolve_notion_credentials() -> tuple[str, str]:
+def resolve_notion_credentials(*, require_parent: bool = True) -> tuple[str, str | None]:
     """Return (NOTION_TOKEN, NOTION_PARENT_PAGE_ID) from env / .env file.
 
-    Raises NotionConfigurationError if either env var is missing.
+    Always raises NotionConfigurationError if NOTION_TOKEN is missing.
+    NOTION_PARENT_PAGE_ID is required only when ``require_parent`` is True — i.e.
+    when a detail page or a new database will be created under it. Upserting rows
+    into an already-configured database does not need a parent page, so callers
+    that only do that pass ``require_parent=False``.
     """
     try:
         from dotenv import load_dotenv
@@ -278,7 +282,7 @@ def resolve_notion_credentials() -> tuple[str, str]:
             "NOTION_TOKEN is not set. Set it as an environment variable or add it to a .env file.",
         )
 
-    if not parent_page_id:
+    if require_parent and not parent_page_id:
         raise NotionConfigurationError(
             "NOTION_PARENT_PAGE_ID is not set. Set it as an environment variable or add it to a .env file.",
         )

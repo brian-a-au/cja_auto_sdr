@@ -42,7 +42,11 @@ def publish_org_report_catalog_to_notion(
     force_new: bool = False,  # noqa: ARG001 — accepted for signature parity; not used
     continue_on_error: bool = False,
 ) -> list[str]:
-    token, parent_page_id = resolve_notion_credentials()
+    # A parent page is only needed to bootstrap a new database. Upserting catalog
+    # rows into an existing database (database_id set) creates no pages or database,
+    # so do not force NOTION_PARENT_PAGE_ID in that case.
+    needs_parent = database_id is None and create_database
+    token, parent_page_id = resolve_notion_credentials(require_parent=needs_parent)
     Client = _require_notion_client()
     client = _build_client(Client, token)
 

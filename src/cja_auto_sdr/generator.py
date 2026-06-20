@@ -1903,9 +1903,16 @@ def _validate_semantic_flag_relationships(
                 "--workers > 1 is not supported with --format notion"
                 " — concurrent writes to .notion_pages.json would race",
             )
+    # --notion-create-database is a no-op when a database ID is already configured
+    # (ensure_database validates the existing DB rather than creating one), so only
+    # the create-without-an-ID case would make a separate database per data view.
+    _notion_database_configured = bool(
+        getattr(args, "notion_database_id", None) or os.environ.get("NOTION_DATABASE_ID"),
+    )
     if (
         _normalize_output_format(getattr(args, "format", None)) == "notion"
         and getattr(args, "notion_create_database", False)
+        and not _notion_database_configured
         # Batch is explicit (--batch) OR implicit (more than one data view); both
         # would create a separate database per data view.
         and (getattr(args, "batch", False) or len(getattr(args, "data_views", None) or []) > 1)
