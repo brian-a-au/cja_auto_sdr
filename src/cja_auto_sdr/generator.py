@@ -1862,12 +1862,22 @@ def _validate_semantic_flag_relationships(
     if (
         _normalize_output_format(getattr(args, "format", None)) == "notion"
         and non_sdr_mode
-        and inferred_mode != RunMode.PUSH_TO_NOTION
+        and inferred_mode not in (RunMode.PUSH_TO_NOTION, RunMode.ORG_REPORT)
     ):
         _exit_error(
-            "--format notion is only supported in SDR generation mode "
+            "--format notion is only supported in SDR generation or org-report mode "
             "(use --push-to-notion <json_file> to publish a saved artifact instead)",
         )
+    if _normalize_output_format(getattr(args, "format", None)) == "notion":
+        try:
+            _workers = int(getattr(args, "workers", 1) or 1)
+        except TypeError, ValueError:
+            _workers = 1
+        if _workers > 1:
+            _exit_error(
+                "--workers > 1 is not supported with --format notion"
+                " — concurrent writes to .notion_pages.json would race",
+            )
     # Reject --push-to-notion alongside flags that would otherwise win the
     # mode dispatch and silently drop the publish request. Table at module
     # scope: _PUSH_TO_NOTION_INCOMPATIBLE_FLAGS.
@@ -1892,6 +1902,8 @@ def _validate_semantic_flag_relationships(
     if watch_active and getattr(args, "watch_interval", None) is None:
         _exit_error("--watch requires --interval")
     if watch_active:
+        if _normalize_output_format(getattr(args, "format", None)) == "notion":
+            _exit_error("--watch is not supported with --format notion")
         if getattr(args, "format", None) is not None:
             _exit_error("--watch is incompatible with --format")
         if getattr(args, "output", None) is not None:

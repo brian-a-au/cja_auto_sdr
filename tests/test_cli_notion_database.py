@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import argparse
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from cja_auto_sdr.cli.parser import parse_arguments
+from cja_auto_sdr.generator import RunMode, _validate_semantic_flag_relationships
 
 
 def test_notion_database_id_flag_parses() -> None:
@@ -506,3 +510,89 @@ def test_env_fallback_notion_database_id_in_single_mode() -> None:
         )
 
     assert captured_kwargs.get("notion_database_id") == "db-from-env"
+
+
+# ---------------------------------------------------------------------------
+# Task 6: --org-report allowed; --workers > 1 and --watch rejected with notion
+# ---------------------------------------------------------------------------
+
+
+def test_org_report_notion_allowed() -> None:
+    """--format notion must be ALLOWED in org-report mode (Task 6)."""
+    args = argparse.Namespace(
+        format="notion",
+        skip_validation=False,
+        push_to_notion=None,
+        workers=1,
+        watch_data_views=None,
+    )
+    # Must NOT raise — org-report is now a permitted mode for --format notion.
+    _validate_semantic_flag_relationships(args, inferred_mode=RunMode.ORG_REPORT)
+
+
+def test_workers_gt_1_with_notion_rejected(capsys) -> None:
+    """--workers > 1 with --format notion must exit 1."""
+    args = argparse.Namespace(
+        format="notion",
+        skip_validation=False,
+        push_to_notion=None,
+        workers=4,
+        watch_data_views=None,
+    )
+    with pytest.raises(SystemExit) as exc_info:
+        _validate_semantic_flag_relationships(args, inferred_mode=RunMode.SDR)
+    assert exc_info.value.code == 1
+    captured = capsys.readouterr()
+    assert "--workers > 1 is not supported with --format notion" in captured.err
+
+
+def test_watch_with_notion_rejected(capsys) -> None:
+    """--watch combined with --format notion must exit 1."""
+    args = argparse.Namespace(
+        format="notion",
+        skip_validation=False,
+        push_to_notion=None,
+        workers=1,
+        watch_data_views=["dv_abc123"],
+        watch_interval="1h",
+        watch_threshold=1,
+        output=None,
+        org_report=False,
+        diff=False,
+        quality_policy=None,
+        fail_on_quality=None,
+        batch=False,
+        list_dataviews=False,
+        list_connections=False,
+        list_datasets=False,
+        snapshot=None,
+        list_snapshots=False,
+        prune_snapshots=False,
+        diff_snapshot=None,
+        compare_with_prev=False,
+        compare_snapshots=None,
+        diff_labels=None,
+        inventory_summary=False,
+        include_all_inventory=False,
+        git_init=False,
+        git_commit=False,
+        profile_list=False,
+        profile_import=None,
+        profile_add=None,
+        profile_test=None,
+        profile_show=None,
+        git_push=False,
+        stats=False,
+        describe_dataview=None,
+        list_metrics=None,
+        list_dimensions=None,
+        list_segments=None,
+        list_calculated_metrics=None,
+        trending_window=None,
+        data_views=None,
+    )
+    with pytest.raises(SystemExit) as exc_info:
+        _validate_semantic_flag_relationships(args, inferred_mode=RunMode.SDR)
+    assert exc_info.value.code == 1
+    captured = capsys.readouterr()
+    assert "--watch is not supported with --format notion" in captured.err
