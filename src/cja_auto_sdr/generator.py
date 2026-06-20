@@ -592,6 +592,26 @@ def _normalize_output_format(raw_format: Any) -> str | None:
     return normalized or None
 
 
+def _effective_workers_for_format(
+    args: argparse.Namespace,
+    requested_workers: int,
+    *,
+    workers_auto: bool,
+) -> tuple[int, bool]:
+    """Cap the worker count to 1 for ``--format notion``.
+
+    Notion registry and database writes are serialized, so a Notion run must use
+    a single worker. Explicit ``--workers > 1`` with ``--format notion`` is
+    rejected earlier in validation; this additionally caps the *auto-resolved*
+    batch worker count (which would otherwise scale with the data-view count and
+    contradict the single-worker guarantee). Returns ``(workers, workers_auto)``
+    unchanged for any other format.
+    """
+    if _normalize_output_format(getattr(args, "format", None)) == "notion":
+        return 1, False
+    return requested_workers, workers_auto
+
+
 def _resolve_command_output_format(
     raw_format: Any,
     *,
@@ -1880,6 +1900,17 @@ def _validate_semantic_flag_relationships(
                 "--workers > 1 is not supported with --format notion"
                 " — concurrent writes to .notion_pages.json would race",
             )
+    if (
+        _normalize_output_format(getattr(args, "format", None)) == "notion"
+        and getattr(args, "notion_create_database", False)
+        and getattr(args, "batch", False)
+    ):
+        _exit_error(
+            "--notion-create-database cannot be combined with --batch — each data view "
+            "would create a separate database. Bootstrap the registry once (run a single "
+            "data view with --notion-create-database), then pass --notion-database-id <id> "
+            "to the batch.",
+        )
     # Reject --push-to-notion alongside flags that would otherwise win the
     # mode dispatch and silently drop the publish request. Table at module
     # scope: _PUSH_TO_NOTION_INCOMPATIBLE_FLAGS.
@@ -6946,6 +6977,14 @@ def _main_impl(run_state: dict[str, Any] | None = None):
         _exit_error("--workers must be at least 1")
     if not workers_auto and args.workers > MAX_BATCH_WORKERS:
         _exit_error(f"--workers cannot exceed {MAX_BATCH_WORKERS}")
+    # --format notion serializes registry/database writes: force a single worker
+    # (this also caps the auto-resolved batch worker count, which would otherwise
+    # scale with the data-view count).
+    args.workers, workers_auto = _effective_workers_for_format(
+        args,
+        args.workers,
+        workers_auto=workers_auto,
+    )
     if args.cache_size < 1:
         _exit_error("--cache-size must be at least 1")
     if args.cache_ttl < 1:

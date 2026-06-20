@@ -596,3 +596,46 @@ def test_watch_with_notion_rejected(capsys) -> None:
     assert exc_info.value.code == 1
     captured = capsys.readouterr()
     assert "--watch is not supported with --format notion" in captured.err
+
+
+def test_effective_workers_for_format_caps_notion() -> None:
+    """--format notion forces a single worker even when auto-resolved; other formats unchanged."""
+    from cja_auto_sdr.generator import _effective_workers_for_format
+
+    notion_args = argparse.Namespace(format="notion")
+    assert _effective_workers_for_format(notion_args, 8, workers_auto=True) == (1, False)
+
+    excel_args = argparse.Namespace(format="excel")
+    assert _effective_workers_for_format(excel_args, 8, workers_auto=True) == (8, True)
+
+
+def test_notion_create_database_with_batch_rejected(capsys) -> None:
+    """--notion-create-database with --batch must exit 1 (each worker would create its own DB)."""
+    args = argparse.Namespace(
+        format="notion",
+        skip_validation=False,
+        push_to_notion=None,
+        workers=1,
+        watch_data_views=None,
+        notion_create_database=True,
+        batch=["dv_a", "dv_b"],
+    )
+    with pytest.raises(SystemExit) as exc_info:
+        _validate_semantic_flag_relationships(args, inferred_mode=RunMode.SDR)
+    assert exc_info.value.code == 1
+    captured = capsys.readouterr()
+    assert "--notion-create-database cannot be combined with --batch" in captured.err
+
+
+def test_notion_create_database_without_batch_allowed() -> None:
+    """--notion-create-database on a single data view (no --batch) must NOT raise."""
+    args = argparse.Namespace(
+        format="notion",
+        skip_validation=False,
+        push_to_notion=None,
+        workers=1,
+        watch_data_views=None,
+        notion_create_database=True,
+        batch=False,
+    )
+    _validate_semantic_flag_relationships(args, inferred_mode=RunMode.SDR)
