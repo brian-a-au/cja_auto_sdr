@@ -798,9 +798,11 @@ def test_writer_client_built_with_notion_version(tmp_path, monkeypatch):
             MagicMock(),
         )
 
-    # The client class must be called with notion_version="2025-09-03"
+    # The client class must be called with notion_version="2025-09-03" and the SDK
+    # log level raised so per-request-fail warnings don't duplicate our friendly errors.
     call_kwargs = fake_client_class.call_args.kwargs
     assert call_kwargs.get("notion_version") == "2025-09-03"
+    assert call_kwargs.get("log_level") == logging.ERROR
 
 
 def test_writer_converts_ensure_database_value_error_to_notion_config_error(tmp_path, monkeypatch):

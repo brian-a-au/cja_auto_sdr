@@ -302,8 +302,13 @@ def _require_notion_client():
 
 
 def _build_client(client_cls, token):
-    """Construct a Notion client with an explicit API version pin."""
-    return client_cls(auth=token, notion_version="2025-09-03")
+    """Construct a Notion client with an explicit API version pin.
+
+    ``log_level`` is raised to ERROR so the SDK's per-request-fail WARNING
+    logging (e.g. a 404 for a bad database id) does not duplicate the friendly,
+    actionable message we surface ourselves.
+    """
+    return client_cls(auth=token, notion_version="2025-09-03", log_level=logging.ERROR)
 
 
 # ---------------------------------------------------------------------------
@@ -354,9 +359,10 @@ def _friendly_notion_error_message(err: Exception) -> str:
         )
     if code == "object_not_found":
         return (
-            "Notion API could not find the target page. The page may have been deleted "
-            "or the integration was removed from it. Re-run with --notion-force-new to "
-            "create a fresh page, or share the parent page with the integration again."
+            "Notion API could not find the target page or database. Verify the ID and "
+            "that it is shared with the integration. For a detail page, re-run with "
+            "--notion-force-new; for a database, check --notion-database-id / "
+            "NOTION_DATABASE_ID."
         )
     if code == "rate_limited":
         return "Notion API rate limit exceeded after retries. Try again later or reduce concurrency."

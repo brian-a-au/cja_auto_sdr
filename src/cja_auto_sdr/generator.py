@@ -1885,6 +1885,9 @@ def _validate_semantic_flag_relationships(
         _normalize_output_format(getattr(args, "format", None)) == "notion"
         and non_sdr_mode
         and inferred_mode not in (RunMode.PUSH_TO_NOTION, RunMode.ORG_REPORT)
+        # Watch mode is also non-SDR, but it has a more specific rejection below;
+        # let it fall through so the user sees the watch-specific message.
+        and getattr(args, "watch_data_views", None) is None
     ):
         _exit_error(
             "--format notion is only supported in SDR generation or org-report mode "
@@ -4020,11 +4023,11 @@ def process_single_dataview(
                         # from a worker kills the pool worker instead of letting
                         # --continue-on-error mark this data view failed and proceed.
                         logger.critical("Notion output failed: %s", exc)
-                        # Config/dependency errors are user-facing setup issues with
-                        # actionable messages; an API error wraps an unexpected upstream
-                        # condition and deserves a traceback for debug logs.
+                        # All three are user-facing with actionable messages, so the
+                        # default output shows only the friendly message. The API-error
+                        # traceback is kept at debug level for troubleshooting.
                         if isinstance(exc, NotionAPIError):
-                            logger.exception("Full exception details:")
+                            logger.debug("Full exception details:", exc_info=True)
                         logger.info("=" * BANNER_WIDTH)
                         logger.info("EXECUTION FAILED")
                         logger.info("=" * BANNER_WIDTH)

@@ -639,3 +639,57 @@ def test_notion_create_database_without_batch_allowed() -> None:
         batch=False,
     )
     _validate_semantic_flag_relationships(args, inferred_mode=RunMode.SDR)
+
+
+def test_watch_with_notion_rejected_in_watch_mode(capsys) -> None:
+    """In real WATCH mode, watch + notion must show the watch-specific message,
+    not the generic non-SDR rejection (which would otherwise shadow it)."""
+    args = argparse.Namespace(
+        format="notion",
+        skip_validation=False,
+        push_to_notion=None,
+        workers=1,
+        watch_data_views=["dv_abc123"],
+        watch_interval="1h",
+        watch_threshold=1,
+        output=None,
+        org_report=False,
+        diff=False,
+        quality_policy=None,
+        fail_on_quality=None,
+        batch=False,
+        list_dataviews=False,
+        list_connections=False,
+        list_datasets=False,
+        snapshot=None,
+        list_snapshots=False,
+        prune_snapshots=False,
+        diff_snapshot=None,
+        compare_with_prev=False,
+        compare_snapshots=None,
+        diff_labels=None,
+        inventory_summary=False,
+        include_all_inventory=False,
+        git_init=False,
+        git_commit=False,
+        profile_list=False,
+        profile_import=None,
+        profile_add=None,
+        profile_test=None,
+        profile_show=None,
+        git_push=False,
+        stats=False,
+        describe_dataview=None,
+        list_metrics=None,
+        list_dimensions=None,
+        list_segments=None,
+        list_calculated_metrics=None,
+        trending_window=None,
+        data_views=None,
+    )
+    with pytest.raises(SystemExit) as exc_info:
+        _validate_semantic_flag_relationships(args, inferred_mode=RunMode.WATCH)
+    assert exc_info.value.code == 1
+    captured = capsys.readouterr()
+    assert "--watch is not supported with --format notion" in captured.err
+    assert "only supported in SDR generation" not in captured.err
