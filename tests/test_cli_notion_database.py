@@ -137,24 +137,52 @@ def test_process_single_dataview_accepts_notion_create_database() -> None:
 
 def test_write_notion_output_called_with_database_id(tmp_path) -> None:
     """write_notion_output receives database_id from process_single_dataview."""
-    from cja_auto_sdr import generator
+    from unittest.mock import Mock
 
-    mock_result = MagicMock()
-    mock_result.success = True
+    import pandas as pd
+
+    from cja_auto_sdr.generator import process_single_dataview
+
+    sample_metrics = pd.DataFrame(
+        [{"id": "m1", "name": "Metric 1", "type": "standard", "description": "", "title": "Metric 1"}]
+    )
+    sample_dimensions = pd.DataFrame(
+        [{"id": "d1", "name": "Dimension 1", "type": "string", "description": "", "title": "Dimension 1"}]
+    )
+    sample_dv_info = {"id": "dv_test_12345", "name": "Test DV", "owner": {"name": "Owner"}, "description": ""}
+
+    mock_logger = Mock()
+    mock_logger.handlers = []
+
+    mock_fetcher = Mock()
+    mock_fetcher.fetch_all_data.return_value = (sample_metrics, sample_dimensions, sample_dv_info)
+
+    mock_dq_checker = Mock()
+    mock_dq_checker.issues = []
+    mock_dq_checker.get_issues_dataframe.return_value = pd.DataFrame(
+        columns=["Severity", "Category", "Type", "Item Name", "Issue", "Details"]
+    )
 
     with (
-        patch.object(generator, "configure_cjapy", return_value=MagicMock()),
-        patch.object(generator, "cjapy", MagicMock()),
+        patch("cja_auto_sdr.generator.setup_logging", return_value=mock_logger),
+        patch("cja_auto_sdr.generator.initialize_cja", return_value=Mock()),
+        patch("cja_auto_sdr.generator.ParallelAPIFetcher", return_value=mock_fetcher),
+        patch("cja_auto_sdr.generator.DataQualityChecker", return_value=mock_dq_checker),
         patch("cja_auto_sdr.output.writers.notion.write_notion_output") as mock_wno,
     ):
-        # Patch the actual module-level write_notion_output that gets imported inside the fmt loop
         mock_wno.return_value = str(tmp_path / "out.notion")
 
-        # We only need to confirm the param flows — use ProcessingConfig directly to bypass IO
-        from cja_auto_sdr.pipeline.models import ProcessingConfig
+        process_single_dataview(
+            data_view_id="dv_test_12345",
+            config_file=str(tmp_path / "config.json"),
+            output_dir=str(tmp_path),
+            output_format="notion",
+            notion_database_id="db-test-123",
+        )
 
-        cfg = ProcessingConfig(notion_database_id="db-test-123")
-        assert cfg.notion_database_id == "db-test-123"
+    mock_wno.assert_called_once()
+    _, kwargs = mock_wno.call_args
+    assert kwargs.get("database_id") == "db-test-123"
 
 
 # ---------------------------------------------------------------------------
