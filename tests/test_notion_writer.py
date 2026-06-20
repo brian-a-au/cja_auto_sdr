@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 import pandas as pd
 import pytest
 
+from cja_auto_sdr.output.notion_database import DATABASE_SCHEMA
 from cja_auto_sdr.output.writers.notion import (
     _callout_block,
     _dq_callout_blocks,
@@ -686,3 +687,67 @@ def test_clear_page_blocks_lists_all_before_deleting():
     assert sorted(delete_calls) == ["b1", "b2", "b3"]
     # All listing must complete before any deletion runs.
     assert len(list_calls) == 2
+
+
+# ---------------------------------------------------------------------------
+# write_notion_output — database upsert path
+# ---------------------------------------------------------------------------
+
+
+def test_writer_skips_db_upsert_when_database_id_is_none(tmp_path, monkeypatch):
+    """v3.7.0 callers that don't pass a database_id are unaffected."""
+    from cja_auto_sdr.output.writers.notion import write_notion_output
+
+    monkeypatch.setenv("NOTION_TOKEN", "fake-token")
+    monkeypatch.setenv("NOTION_PARENT_PAGE_ID", "parent-page")
+
+    fake_client_class = MagicMock()
+    fake_client = fake_client_class.return_value
+    fake_client.pages.create.return_value = {"id": "new-page-id"}
+    fake_client.blocks.children.append.return_value = {}
+
+    with patch("cja_auto_sdr.output.writers.notion._require_notion_client", return_value=fake_client_class):
+        result = write_notion_output(
+            {"Metrics": pd.DataFrame()},
+            {"Data View ID": "dv1", "Data View Name": "X"},
+            "X",
+            tmp_path,
+            MagicMock(),
+        )
+
+    assert result == "notion://pages/new-page-id"
+    fake_client.databases.retrieve.assert_not_called()
+    fake_client.databases.create.assert_not_called()
+
+
+def test_writer_upserts_db_row_when_database_id_provided(tmp_path, monkeypatch):
+    from cja_auto_sdr.output.writers.notion import write_notion_output
+
+    monkeypatch.setenv("NOTION_TOKEN", "fake-token")
+    monkeypatch.setenv("NOTION_PARENT_PAGE_ID", "parent-page")
+
+    fake_client_class = MagicMock()
+    fake_client = fake_client_class.return_value
+    fake_client.pages.create.side_effect = [
+        {"id": "new-page-id"},  # detail page
+        {"id": "new-row-id"},  # DB row
+    ]
+    fake_client.databases.retrieve.return_value = {
+        "id": "db-given",
+        "properties": {name: {"id": "x"} for name in DATABASE_SCHEMA},
+    }
+
+    with patch("cja_auto_sdr.output.writers.notion._require_notion_client", return_value=fake_client_class):
+        result = write_notion_output(
+            {"Metrics": pd.DataFrame([{"a": 1}])},
+            {"Data View ID": "dv1", "Data View Name": "X"},
+            "X",
+            tmp_path,
+            MagicMock(),
+            database_id="db-given",
+        )
+
+    assert result == "notion://pages/new-page-id"
+    fake_client.databases.retrieve.assert_called_once_with(database_id="db-given")
+    # one page.create for the SDR page, one for the DB row
+    assert fake_client.pages.create.call_count == 2

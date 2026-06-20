@@ -501,13 +501,19 @@ def write_notion_output(
     logger: logging.Logger,
     *,
     force_new: bool = False,
+    database_id: str | None = None,
+    create_database: bool = False,
 ) -> str:
-    """Publish SDR data to a Notion page.
+    """Publish SDR data to a Notion page (and optionally a DB row).
 
     Returns a ``notion://pages/<page_id>`` identifier (not a file path).
     ``base_filename`` is accepted for writer-protocol parity with file-emitting
     writers and is used as a fallback when ``metadata_dict`` lacks
     ``Data View ID`` or ``Data View Name``.
+
+    When ``database_id`` is provided (or ``create_database`` is True and the
+    env var ``NOTION_DATABASE_ID`` is unset), also upserts a row in the SDR
+    Registry database keyed by ``Data View ID``.
 
     Raises NotionConfigurationError / NotionDependencyError / NotionAPIError —
     callers (CLI dispatcher) are responsible for converting these to exit codes.
@@ -535,6 +541,39 @@ def write_notion_output(
             registry_path,
             force_new=force_new,
         )
+
+        if database_id is not None or create_database:
+            from cja_auto_sdr.output.notion_database import (
+                build_row_properties,
+                ensure_database,
+                upsert_database_row,
+            )
+            from cja_auto_sdr.output.notion_registry import (
+                lookup_database_row_id,
+                store_database_row_id,
+            )
+
+            db_id = ensure_database(
+                client,
+                parent_page_id=parent_page_id,
+                database_id=database_id,
+                create_if_missing=create_database,
+            )
+            properties = build_row_properties(
+                data_dict,
+                metadata_dict,
+                page_id,
+                tool_version=__version__,
+            )
+            existing_row_id = lookup_database_row_id(registry_path, data_view_id)
+            row_id = upsert_database_row(
+                client,
+                database_id=db_id,
+                existing_row_id=existing_row_id,
+                properties=properties,
+            )
+            store_database_row_id(registry_path, data_view_id, row_id)
+            logger.info("✓ Notion DB row upserted: %s", row_id)
     except Exception as exc:
         if _is_notion_api_error(exc):
             raise NotionAPIError(_friendly_notion_error_message(exc)) from exc
