@@ -275,6 +275,11 @@ cja_auto_sdr "Production Analytics"
 | Export as HTML | `cja_auto_sdr dv_12345 --format html` |
 | Export as Markdown | `cja_auto_sdr dv_12345 --format markdown` |
 | Generate all formats | `cja_auto_sdr dv_12345 --format all` |
+| **Notion SDR Registry (v3.8.0)** | |
+| Bootstrap registry database (one-time) | `cja_auto_sdr --notion-create-database` |
+| Publish detail page + registry row | `cja_auto_sdr dv_12345 --format notion` (with `NOTION_DATABASE_ID` set) |
+| Batch publish with complete rows | `cja_auto_sdr --batch dv_1 dv_2 dv_3 --format notion` |
+| Org-report lightweight catalog | `cja_auto_sdr --org-report --format notion` (counts only; no detail pages) |
 | **Quick Stats & Discovery** | |
 | Quick stats (no full report) | `cja_auto_sdr dv_12345 --stats` |
 | Stats as JSON | `cja_auto_sdr dv_12345 --stats --format json` |

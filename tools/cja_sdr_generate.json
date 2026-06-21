@@ -11,7 +11,7 @@
       "format": {
         "type": "string",
         "enum": ["excel", "csv", "json", "html", "markdown", "notion", "all", "reports", "data", "ci"],
-        "description": "Output format for the SDR artifact. Supports direct formats plus aliases: 'all' (all formats + console), 'reports' (excel + markdown), 'data' (csv + json), and 'ci' (json + markdown). Use 'notion' to publish directly to a Notion page (requires NOTION_TOKEN and NOTION_PARENT_PAGE_ID env vars and the 'notion' optional extra). JSON is recommended for machine-readable downstream processing."
+        "description": "Output format for the SDR artifact. Supports direct formats plus aliases: 'all' (all formats + console), 'reports' (excel + markdown), 'data' (csv + json), and 'ci' (json + markdown). Use 'notion' to publish directly to a Notion page (requires NOTION_TOKEN and NOTION_PARENT_PAGE_ID env vars and the 'notion' optional extra). When NOTION_DATABASE_ID or notion_database_id is set, also upserts a complete 14-property row in the CJA SDR Registry database. JSON is recommended for machine-readable downstream processing."
       },
       "output": {
         "type": "string",
@@ -68,6 +68,18 @@
         "type": "string",
         "enum": ["text", "json"],
         "description": "Log output format. Use 'json' when ingesting logs programmatically."
+      },
+      "notion_database_id": {
+        "type": "string",
+        "description": "ID of the CJA SDR Registry Notion database. When provided (or set via NOTION_DATABASE_ID env var), upserts a 14-property row after publishing the detail page. Falls back to the NOTION_DATABASE_ID env var. Unset = no row written."
+      },
+      "notion_create_database": {
+        "type": "boolean",
+        "description": "Bootstrap a new CJA SDR Registry database under NOTION_PARENT_PAGE_ID, print the new database ID to stdout, and exit. Use the printed ID as notion_database_id or NOTION_DATABASE_ID for subsequent runs."
+      },
+      "notion_force_new": {
+        "type": "boolean",
+        "description": "Force creation of a new Notion page even if one already exists for this data view. Breaks the .notion_pages.json link (old page is left as an orphan)."
       }
     },
     "required": ["data_view_id"]

@@ -402,6 +402,8 @@ cja_auto_sdr --list-dataviews  # Uses client-a
 | `--format notion` | Publish SDR directly to Notion (requires `NOTION_TOKEN` + `NOTION_PARENT_PAGE_ID`) |
 | `--push-to-notion JSON_FILE` | Push existing JSON artifact to Notion (no CJA API call) |
 | `--notion-force-new` | Force a new Notion page instead of updating existing |
+| `--notion-database-id ID` | ID of the "CJA SDR Registry" database; upserts a row after publishing. Falls back to `NOTION_DATABASE_ID` env var |
+| `--notion-create-database` | Bootstrap a new "CJA SDR Registry" database under `NOTION_PARENT_PAGE_ID`, print its ID, and exit |
 
 > **Retention precedence:** Explicit values are preserved in both forms: `--keep-last 0` / `--keep-last=0` and `--keep-since 90d` / `--keep-since=90d`.
 
@@ -414,11 +416,13 @@ cja_auto_sdr --list-dataviews  # Uses client-a
 | `json` | ✅ | ✅ | ✅ | ✅ | JSON for integrations |
 | `html` | ✅ | ✅ | ✅ | ❌ | Browser-viewable |
 | `markdown` | ✅ | ✅ | ✅ | ❌ | Documentation-ready |
-| `notion` | ✅ | ❌ | ❌ | ❌ | Publish SDR to Notion page |
+| `notion` | ✅ | ❌ | ✅ (catalog only) | ❌ | Publish SDR to Notion page; org-report writes lightweight catalog rows (counts only, no detail pages) |
 | `console` | ❌ | ✅ (default) | ✅ (default) | ✅ (default) | Terminal output |
 | `all` | ✅ | ✅ | ✅ | ❌ | All formats |
 
 > Discovery column covers both discovery commands (`--list-dataviews`, etc.) and inspection commands (`--describe-dataview`, `--list-metrics`, etc.).
+>
+> **Org-report Notion catalog:** `--org-report --format notion` writes one registry row per data view (Name, Data View ID, Metrics Count, Dimensions Count, SDR Page link if available). Segments, Calculated Metrics, Derived Fields counts and Data Quality are not populated. No detail pages are created. For full rows and detail pages use `--batch <ids> --format notion`.
 
 ### Format Aliases (Shortcuts)
 
@@ -544,6 +548,26 @@ cja_auto_sdr dv_12345 --snapshot ./baseline.json --include-all-inventory
 
 # Compare against snapshot with inventory (same behavior)
 cja_auto_sdr dv_12345 --diff-snapshot ./baseline.json --include-all-inventory
+
+# --- Notion SDR Registry (v3.8.0) ---
+
+# Bootstrap the registry database (one-time; prints the database ID)
+cja_auto_sdr --notion-create-database
+
+# Publish a detail page AND upsert a complete registry row (all 14 properties)
+export NOTION_DATABASE_ID=<id-from-bootstrap>
+cja_auto_sdr dv_12345 --format notion
+
+# Or pass the database ID explicitly
+cja_auto_sdr dv_12345 --format notion --notion-database-id <id>
+
+# Batch: publish multiple data views with complete registry rows
+cja_auto_sdr --batch dv_12345 dv_67890 --format notion
+
+# Org-report catalog (lightweight rows — counts only, no detail pages)
+# Populates Name, Data View ID, Metrics/Dimensions Count, SDR Page link
+# Segments/CM/DF counts and Data Quality are NOT filled in
+cja_auto_sdr --org-report --format notion
 ```
 
 ## Environment Variables

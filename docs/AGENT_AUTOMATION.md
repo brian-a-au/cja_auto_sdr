@@ -428,7 +428,7 @@ The run summary includes an `advisories` rollup key when advisories are present 
 
 ### Publishing to Notion
 
-Notion is supported as a first-class output destination for SDR generation. Install the optional extra and set the two required env vars:
+Notion is supported as a first-class output destination for SDR generation and org-report catalog publishing. Install the optional extra and set the required env vars:
 
 ```bash
 uv pip install 'cja-auto-sdr[notion]'
@@ -441,11 +441,43 @@ export NOTION_PARENT_PAGE_ID=<page-id>
 uv run cja_auto_sdr dv_12345 --format json --output-dir ./artifacts
 uv run cja_auto_sdr --push-to-notion ./artifacts/dv_12345_sdr.json
 
-# Single-step: generate and publish in one command
+# Single-step: generate detail page and publish
 uv run cja_auto_sdr dv_12345 --format notion
 ```
 
 Page IDs are tracked in `.notion_pages.json` so re-runs update the existing page rather than accumulating duplicates. Use `--notion-force-new` to override.
+
+**SDR Registry database pattern (v3.8.0):**
+
+The registry database maintains one row per data view in a "CJA SDR Registry" Notion database, keyed by Data View ID. It has 14 properties covering counts, data quality, timezone, currency, and a link to the detail page.
+
+```bash
+# One-time: bootstrap the registry database
+uv run cja_auto_sdr --notion-create-database
+# Prints: notion://databases/<id>  ← save this
+
+export NOTION_DATABASE_ID=<id-from-above>
+
+# Per-data-view: publish detail page + upsert complete registry row
+uv run cja_auto_sdr dv_12345 --format notion
+
+# Batch: multiple data views with complete rows
+uv run cja_auto_sdr --batch dv_12345 dv_67890 dv_abcde --format notion
+```
+
+**Org-report catalog pattern (v3.8.0 — lightweight):**
+
+`--org-report --format notion` writes a lightweight catalog row per data view from the org report summary. This is fast (serial, no extra API calls) but only fills Name, Data View ID, Metrics Count, Dimensions Count, owner/dates, and an SDR Page link where a detail page already exists. Segments, Calculated Metrics, Derived Fields counts, and Data Quality are not populated.
+
+```bash
+# Lightweight catalog from org report (fast, counts only)
+uv run cja_auto_sdr --org-report --format notion
+
+# Follow up with batch for complete rows on key data views
+uv run cja_auto_sdr --batch dv_12345 dv_67890 --format notion
+```
+
+Use `--org-report --format notion` for a quick high-level view; use `--batch --format notion` when you need complete rows with all 14 properties.
 
 Pattern:
 

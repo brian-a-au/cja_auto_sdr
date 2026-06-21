@@ -24,11 +24,13 @@ The tool supports multiple output formats beyond Excel, providing flexible integ
 | JSON | ✓ | ✓ | ✓ | ✓ |
 | HTML | ✓ | ✓ | ✓ | ✗ |
 | Markdown | ✓ | ✓ | ✓ | ✗ |
-| Notion | ✓ | ✗ | ✗ | ✗ |
+| Notion | ✓ | ✗ | ✓ (catalog only) | ✗ |
 | Console/Table | ✗ | ✓ (default) | ✓ (default) | ✓ (default) |
 | All | ✓ | ✓ | ✓ | ✗ |
 
 > The Discovery column covers both discovery commands (`--list-dataviews`, `--list-connections`, `--list-datasets`) and discovery inspection commands (`--describe-dataview`, `--list-metrics`, `--list-dimensions`, `--list-segments`, `--list-calculated-metrics`). All output console (table), JSON, or CSV. They do not generate file-based formats like Excel, HTML, or Markdown.
+>
+> **Notion + Org-Wide Analysis:** `--org-report --format notion` writes a lightweight catalog row per data view (Name, Data View ID, Metrics/Dimensions Count, SDR Page link). Segments, Calculated Metrics, Derived Fields counts, and Data Quality are not populated. No detail pages are created. For complete rows, use `--batch <ids> --format notion`.
 
 ### Format Aliases (introduced in v3.2.0)
 
@@ -393,7 +395,7 @@ pandoc CJA_DataView_myview_dv_12345_SDR.md -o report.pdf
 
 ### 6. Notion Format
 
-Publishes the SDR directly to a Notion page. Requires `NOTION_TOKEN` and `NOTION_PARENT_PAGE_ID` environment variables and the `notion` optional extra (`uv pip install 'cja-auto-sdr[notion]'`).
+Publishes the SDR directly to a Notion page and (optionally) upserts a row in a "CJA SDR Registry" database. Requires `NOTION_TOKEN` and `NOTION_PARENT_PAGE_ID` environment variables and the `notion` optional extra (`uv pip install 'cja-auto-sdr[notion]'`).
 
 Each run creates or updates a single page under the configured parent. Page IDs are tracked in `.notion_pages.json` in the output directory so re-runs update in place rather than accumulating duplicates.
 
@@ -407,6 +409,13 @@ cja_auto_sdr dv_12345 --format notion --notion-force-new
 
 # Push an existing JSON artifact to Notion (no CJA API call)
 cja_auto_sdr --push-to-notion ./reports/dv_12345_sdr.json
+
+# Publish and upsert a registry row (requires NOTION_DATABASE_ID)
+export NOTION_DATABASE_ID=<database-id>
+cja_auto_sdr dv_12345 --format notion
+
+# Bootstrap a new registry database and capture its ID
+cja_auto_sdr --notion-create-database
 ```
 
 **Block layout:**
@@ -421,6 +430,60 @@ cja_auto_sdr --push-to-notion ./reports/dv_12345_sdr.json
 - **`--push-to-notion` is mutually exclusive with all other generation flags.** Combining it with `--org-report`, `--diff`, `--snapshot`, `--batch`, `--watch`, `--inventory-summary`, `--dry-run`, or positional data view IDs exits with an actionable error (rather than silently dropping `--push-to-notion`).
 - **Large sections split into sibling tables.** Notion caps a block's children array at 100. Sections with more than 99 data rows are split into multiple sibling tables under the same heading, preserving row order.
 - **API failures surface as friendly messages.** Missing/invalid `NOTION_TOKEN`, deleted parent pages, and rate-limit errors print a one-line summary and exit 1; 429 responses are retried with exponential backoff (or `Retry-After` if Notion provides it) before giving up.
+- **`--workers > 1` and `--watch` are rejected** with exit 1 when `--format notion` is active. Use `--batch <ids> --format notion` for multiple data views.
+
+#### Notion Registry Database (v3.8.0)
+
+When `NOTION_DATABASE_ID` is set (or `--notion-database-id` is passed), every `--format notion` run upserts a row in the "CJA SDR Registry" database, keyed by Data View ID. If the env var and flag are both unset, no row is written (v3.7.0 behavior preserved).
+
+**Registry properties (14 total):**
+
+| Property | Type | Description |
+|----------|------|-------------|
+| Name | Title | Data view display name |
+| Data View ID | Text | CJA data view ID (e.g. `dv_abc123`) — primary key for upsert |
+| SDR Page | URL | `notion://pages/<page_id>` string pointing to the detail page (NOT a Notion relation) |
+| Last Updated | Date | Timestamp of the most recent upsert |
+| Tool Version | Text | `cja-auto-sdr` version that wrote the row |
+| Captured At | Date | When the data was captured from the CJA API |
+| Currency | Text | Data view currency setting |
+| Timezone | Text | Data view timezone setting |
+| Metrics Count | Number | Total metrics in the data view |
+| Dimensions Count | Number | Total dimensions in the data view |
+| Segments Count | Number | Total segments scoped to the data view |
+| Calculated Metrics Count | Number | Total calculated metrics for the data view |
+| Derived Fields Count | Number | Total derived fields in the data view |
+| Data Quality | Select | Summary of data quality status (`passed`, `issues_found`, `skipped`, `unknown`) |
+
+> **`SDR Page` is a URL string, not a Notion relation.** The property holds `notion://pages/<id>` as plain text. This avoids permission constraints that would prevent cross-database relations in most Notion workspace configurations.
+>
+> **Registry file v1 → v2 migration:** `.notion_pages.json` previously stored a plain page ID string per data view. From v3.8.0 it stores `{"page_id": "...", "database_row_id": "..."}`. Legacy v1 entries are read transparently and rewritten to v2 format on the next sync — no manual migration is needed.
+
+**Bootstrap workflow:**
+
+```bash
+# 1. Create the registry database (one-time setup)
+cja_auto_sdr --notion-create-database
+# Prints: notion://databases/<id>
+
+# 2. Add the database ID to your environment
+export NOTION_DATABASE_ID=<id>  # or add to .env
+
+# 3. Publish data views — detail page + complete registry row
+cja_auto_sdr dv_12345 --format notion
+cja_auto_sdr --batch dv_12345 dv_67890 dv_abcde --format notion
+```
+
+**Org-report catalog (lightweight):**
+
+`--org-report --format notion` writes one registry row per data view from the org report summary. It fills Name, Data View ID, Metrics Count, Dimensions Count, owner/dates, and an SDR Page link where a detail page already exists. The following columns are **not** populated because the org report does not fetch that data:
+
+- Segments Count
+- Calculated Metrics Count
+- Derived Fields Count
+- Data Quality (shows `unknown`)
+
+Detail pages are not created. For complete rows with all counts and linked detail pages, use `--batch <ids> --format notion` instead. Full org-report detail-page generation is planned for a future release.
 
 ---
 

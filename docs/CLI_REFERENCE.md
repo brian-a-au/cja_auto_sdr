@@ -167,7 +167,7 @@ cja-auto-sdr [OPTIONS] DATA_VIEW_ID_OR_NAME [...]
 | `json` | ✓ | ✓ | ✓ | ✓ |
 | `html` | ✓ | ✓ | ✓ | ✗ |
 | `markdown` | ✓ | ✓ | ✓ | ✗ |
-| `notion` | ✓ | ✗ | ✗ | ✗ |
+| `notion` | ✓ | ✗ | ✓ (catalog only — see note) | ✗ |
 | `console` | ✗ | ✓ (default) | ✓ (default) | ✓ (default) |
 | `all` | ✓ | ✓ | ✓ | ✗ |
 
@@ -176,6 +176,8 @@ cja-auto-sdr [OPTIONS] DATA_VIEW_ID_OR_NAME [...]
 > **Note:** Console format is supported for diff comparison, org-wide analysis, and discovery. Using `--format console` with SDR generation will show an error with suggested alternatives.
 >
 > **Note:** In diff and org-wide modes, `--format all` includes console output (displayed in terminal) in addition to all file formats.
+>
+> **Note:** `--org-report --format notion` publishes a **lightweight catalog** only — one registry row per data view from the org report summary. It fills Name, Data View ID, Metrics Count, Dimensions Count, owner/dates, and an SDR Page link where a detail page already exists. It does **not** fetch segments, calculated metrics, or derived fields; does **not** run data-quality validation (those columns are left empty, Data Quality shows `unknown`); does **not** create detail pages; and runs serially. For complete rows with all counts and detail pages, use `--batch <ids> --format notion` instead.
 
 ### Configuration
 
@@ -493,7 +495,7 @@ Cache is stored in `~/.cja_auto_sdr/cache/org_report_cache.json`.
 
 ### Notion Integration
 
-Publish SDRs directly to a Notion page, or push a previously-generated JSON artifact to Notion without re-calling the CJA API. Requires `NOTION_TOKEN` and `NOTION_PARENT_PAGE_ID` environment variables. Install the extra first:
+Publish SDRs directly to a Notion page, maintain a registry database of all published data views, or push a previously-generated JSON artifact to Notion without re-calling the CJA API. Requires `NOTION_TOKEN` and `NOTION_PARENT_PAGE_ID` environment variables. Install the extra first:
 
 ```bash
 uv pip install 'cja-auto-sdr[notion]'
@@ -504,6 +506,8 @@ uv pip install 'cja-auto-sdr[notion]'
 | `--format notion` | Publish SDR to a Notion page as part of generation | - |
 | `--push-to-notion JSON_FILE` | Push an existing SDR JSON artifact to Notion (standalone mode; no CJA API call) | - |
 | `--notion-force-new` | Force a new Notion page instead of updating the existing one for this data view | False |
+| `--notion-database-id ID` | ID of the "CJA SDR Registry" database to upsert a row into after publishing. Falls back to the `NOTION_DATABASE_ID` env var. When neither is set, no row is written | - |
+| `--notion-create-database` | Bootstrap a new "CJA SDR Registry" database under `NOTION_PARENT_PAGE_ID`, print its ID to stdout, and exit. Use this ID as `NOTION_DATABASE_ID` for subsequent runs | - |
 
 ```bash
 # Publish SDR directly to Notion
@@ -515,11 +519,41 @@ cja_auto_sdr --push-to-notion ./reports/dv_12345_sdr.json
 # Force a new Notion page even if one already exists
 cja_auto_sdr dv_12345 --format notion --notion-force-new
 cja_auto_sdr --push-to-notion ./reports/dv_12345_sdr.json --notion-force-new
+
+# --- SDR Registry Database (v3.8.0) ---
+
+# Step 1: Bootstrap the registry database once (prints the database ID)
+cja_auto_sdr --notion-create-database
+# Output: notion://databases/<id>  ← capture this
+
+# Step 2: Set the database ID in your environment
+export NOTION_DATABASE_ID=<id-from-step-1>
+
+# Step 3: Publish a detail page AND upsert a complete registry row
+cja_auto_sdr dv_12345 --format notion
+
+# Equivalently, pass the database ID explicitly
+cja_auto_sdr dv_12345 --format notion --notion-database-id <id>
+
+# Publish batch of data views with complete registry rows
+cja_auto_sdr --batch dv_12345 dv_67890 --format notion
+
+# Org-report Notion catalog (lightweight — counts only, no detail pages)
+# Fills Name, Data View ID, Metrics/Dimensions Count, and SDR Page link
+# where a detail page already exists. Segments/CM/DF counts, and Data Quality
+# are NOT populated (those columns are empty). Runs serially.
+cja_auto_sdr --org-report --format notion
 ```
 
 > **Idempotency:** Page IDs are tracked in `.notion_pages.json` in the output directory so re-runs update the existing page rather than creating duplicates. Use `--notion-force-new` to override.
 >
+> **Registry file (v2):** `.notion_pages.json` now stores `{"page_id": "...", "database_row_id": "..."}` per data view. Legacy v1 string entries (just a page ID) are read transparently and rewritten to v2 format on the next sync — no manual migration needed.
+>
+> **`--workers > 1` and `--watch` are rejected with `--format notion`** (exit 1). For multiple data views, use `--batch <ids> --format notion` (serial within the Notion writer).
+>
 > **Stdout:** `--push-to-notion` prints the resulting `notion://pages/<id>` identifier to stdout on success. Avoid combining with `--run-summary-json -` / `--output -` if you need to consume stdout machine-readably, since the two outputs will be interleaved.
+>
+> **Org-report catalog limitations:** `--org-report --format notion` creates one registry row per data view from the org report summary. Segments count, Calculated Metrics count, Derived Fields count, and Data Quality columns remain empty because the org report does not fetch those details. Detail pages are not created. For complete rows with all counts and a linked detail page, use `--batch <ids> --format notion` (or run `cja_auto_sdr <dv_id> --format notion` per data view). Full org-report detail pages are planned for a future release.
 
 ### Watch Mode
 
@@ -678,6 +712,14 @@ Preset flag for running CJA SDR Generator from AI agents, scripts, and automatio
 | `MAX_RETRIES` | Maximum API retry attempts (overridden by --max-retries) |
 | `RETRY_BASE_DELAY` | Initial retry delay in seconds (overridden by --retry-base-delay) |
 | `RETRY_MAX_DELAY` | Maximum retry delay in seconds (overridden by --retry-max-delay) |
+
+**Notion Integration:**
+
+| Variable | Description |
+|----------|-------------|
+| `NOTION_TOKEN` | Notion integration token (required for `--format notion` and related flags) |
+| `NOTION_PARENT_PAGE_ID` | Notion page ID under which SDR pages and databases are created |
+| `NOTION_DATABASE_ID` | ID of the "CJA SDR Registry" database; when set, every `--format notion` run upserts a registry row. Falls back to `--notion-database-id`. Unset = no row written |
 
 **Console & CI Integration:**
 
