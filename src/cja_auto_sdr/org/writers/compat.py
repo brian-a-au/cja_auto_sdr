@@ -141,6 +141,7 @@ CSV_WRITER_OVERRIDE_MAPPING = freeze_override_mapping(
         "_trending_snapshot_csv_rows": "_trending_snapshot_csv_rows",
     },
 )
+NOTION_WRITER_OVERRIDE_MAPPING = freeze_override_mapping({})
 
 
 def _compat_key(target_module_name: str, attr_name: str) -> _OVERRIDE_KEY:

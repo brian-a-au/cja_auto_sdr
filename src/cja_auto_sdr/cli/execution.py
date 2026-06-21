@@ -430,6 +430,8 @@ def _run_quality_report_mode(
             allow_partial=getattr(args, "allow_partial", False),
             production_mode=args.production,
             notion_force_new=getattr(args, "notion_force_new", False),
+            notion_database_id=getattr(args, "notion_database_id", None) or os.environ.get("NOTION_DATABASE_ID"),
+            notion_create_database=getattr(args, "notion_create_database", False),
         )
         quality_report_results.append(result)
         processed_results.append(result)
@@ -530,6 +532,8 @@ def _run_batch_mode(
         allow_partial=getattr(args, "allow_partial", False),
         production_mode=args.production,
         notion_force_new=getattr(args, "notion_force_new", False),
+        notion_database_id=getattr(args, "notion_database_id", None) or os.environ.get("NOTION_DATABASE_ID"),
+        notion_create_database=getattr(args, "notion_create_database", False),
     )
 
     results = processor.process_batch(data_views)
@@ -730,6 +734,8 @@ def _run_single_mode(
         allow_partial=getattr(args, "allow_partial", False),
         production_mode=args.production,
         notion_force_new=getattr(args, "notion_force_new", False),
+        notion_database_id=getattr(args, "notion_database_id", None) or os.environ.get("NOTION_DATABASE_ID"),
+        notion_create_database=getattr(args, "notion_create_database", False),
     )
     processed_results = [result]
 

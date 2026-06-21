@@ -62,6 +62,16 @@ def test_push_to_notion_standalone_policy_registered():
     assert "notion_force_new" in policy.ignored_semantic_dests
 
 
+def test_push_to_notion_standalone_policy_tolerates_database_flags():
+    """notion_database_id and notion_create_database must be tolerated by the standalone policy."""
+    from cja_auto_sdr.cli.standalone_policy import standalone_prevalidation_policy
+
+    policy = standalone_prevalidation_policy("push_to_notion")
+    assert policy is not None
+    assert "notion_database_id" in policy.ignored_semantic_dests
+    assert "notion_create_database" in policy.ignored_semantic_dests
+
+
 def test_format_notion_rejected_for_diff_mode():
     """--format notion in diff mode must exit 1 with actionable error (Notion is SDR-only)."""
     args = argparse.Namespace(
@@ -74,15 +84,16 @@ def test_format_notion_rejected_for_diff_mode():
     assert exc_info.value.code == 1
 
 
-def test_format_notion_rejected_for_org_report_mode():
-    """--format notion in org-report mode must exit 1 (Notion is SDR-only)."""
+def test_format_notion_allowed_in_org_report_mode():
+    """--format notion in org-report mode must be allowed (Task 6: org-report is now a valid notion target)."""
     args = argparse.Namespace(
         format="notion",
         skip_validation=False,
+        push_to_notion=None,
+        workers=1,
+        watch_data_views=None,
     )
-    with pytest.raises(SystemExit) as exc_info:
-        _validate_semantic_flag_relationships(args, inferred_mode=RunMode.ORG_REPORT)
-    assert exc_info.value.code == 1
+    _validate_semantic_flag_relationships(args, inferred_mode=RunMode.ORG_REPORT)
 
 
 def test_format_notion_allowed_in_push_to_notion_mode():

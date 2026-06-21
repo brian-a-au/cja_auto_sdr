@@ -124,6 +124,8 @@ class WorkerArgs:
     production_mode: bool = False
     batch_id: str | None = None
     notion_force_new: bool = False
+    notion_database_id: str | None = None
+    notion_create_database: bool = False
 
 
 @dataclass(frozen=True)
@@ -159,6 +161,8 @@ class ProcessingConfig:
     production_mode: bool = False
     batch_id: str | None = None
     notion_force_new: bool = False
+    notion_database_id: str | None = None
+    notion_create_database: bool = False
 
 
 @dataclass(frozen=True)
@@ -195,3 +199,5 @@ class BatchConfig:
     allow_partial: bool = False
     production_mode: bool = False
     notion_force_new: bool = False
+    notion_database_id: str | None = None
+    notion_create_database: bool = False

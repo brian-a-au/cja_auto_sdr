@@ -38,6 +38,7 @@ from cja_auto_sdr.org.writers.compat import JSON_WRITER_OVERRIDE_MAPPING as _JSO
 from cja_auto_sdr.org.writers.compat import (
     MARKDOWN_WRITER_OVERRIDE_MAPPING as _MARKDOWN_WRITER_OVERRIDE_MAPPING,
 )
+from cja_auto_sdr.org.writers.compat import NOTION_WRITER_OVERRIDE_MAPPING as _NOTION_WRITER_OVERRIDE_MAPPING
 from cja_auto_sdr.org.writers.compat import make_compat_wrapper as _make_compat_wrapper
 from cja_auto_sdr.org.writers.console import (
     write_org_report_comparison_console as _write_org_report_comparison_console_impl,
@@ -74,6 +75,7 @@ from cja_auto_sdr.org.writers.json import (
 # Re-exports from markdown.py
 # ---------------------------------------------------------------------------
 from cja_auto_sdr.org.writers.markdown import write_org_report_markdown as _write_org_report_markdown_impl
+from cja_auto_sdr.org.writers.notion import write_org_report_notion as _write_org_report_notion_impl
 
 # ---------------------------------------------------------------------------
 # Re-exports from trending.py  (private helpers that tests import directly)
@@ -115,6 +117,7 @@ _EXCEL_MODULE = "cja_auto_sdr.org.writers.excel"
 _HTML_MODULE = "cja_auto_sdr.org.writers.html"
 _JSON_MODULE = "cja_auto_sdr.org.writers.json"
 _MARKDOWN_MODULE = "cja_auto_sdr.org.writers.markdown"
+_NOTION_MODULE = "cja_auto_sdr.org.writers.notion"
 
 write_org_report_console = _make_compat_wrapper(
     __name__,
@@ -170,6 +173,12 @@ write_org_report_csv = _make_compat_wrapper(
     target_module_name=_CSV_MODULE,
     override_mapping=_CSV_WRITER_OVERRIDE_MAPPING,
 )
+write_org_report_notion = _make_compat_wrapper(
+    __name__,
+    _write_org_report_notion_impl,
+    target_module_name=_NOTION_MODULE,
+    override_mapping=_NOTION_WRITER_OVERRIDE_MAPPING,
+)
 
 __all__ = [
     "_flatten_recommendation_for_tabular",
@@ -187,5 +196,6 @@ __all__ = [
     "write_org_report_html",
     "write_org_report_json",
     "write_org_report_markdown",
+    "write_org_report_notion",
     "write_org_report_stats_only",
 ]

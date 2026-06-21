@@ -253,6 +253,7 @@ from cja_auto_sdr.org.writers.compat import JSON_WRITER_OVERRIDE_MAPPING as _ORG
 from cja_auto_sdr.org.writers.compat import (
     MARKDOWN_WRITER_OVERRIDE_MAPPING as _ORG_MARKDOWN_WRITER_OVERRIDE_MAPPING,
 )
+from cja_auto_sdr.org.writers.compat import NOTION_WRITER_OVERRIDE_MAPPING as _ORG_NOTION_WRITER_OVERRIDE_MAPPING
 from cja_auto_sdr.org.writers.compat import make_compat_wrapper as _make_org_writer_compat_wrapper
 from cja_auto_sdr.org.writers.console import (
     write_org_report_comparison_console as _write_org_report_comparison_console_impl,
@@ -265,6 +266,7 @@ from cja_auto_sdr.org.writers.html import write_org_report_html as _write_org_re
 from cja_auto_sdr.org.writers.json import build_org_report_json_data as _build_org_report_json_data_impl
 from cja_auto_sdr.org.writers.json import write_org_report_json as _write_org_report_json_impl
 from cja_auto_sdr.org.writers.markdown import write_org_report_markdown as _write_org_report_markdown_impl
+from cja_auto_sdr.org.writers.notion import write_org_report_notion as _write_org_report_notion_impl
 
 PARALLEL_INVENTORY_MIN_TASKS = 2
 
@@ -519,6 +521,8 @@ def _push_to_notion_from_json(
     json_file: str,
     output_dir: str | None = None,
     force_new: bool = False,
+    database_id: str | None = None,
+    create_database: bool = False,
 ) -> str:
     """Read an SDR JSON artifact and publish it to Notion.
 
@@ -572,6 +576,8 @@ def _push_to_notion_from_json(
             output_dir=effective_output_dir,
             logger=logging.getLogger(__name__),
             force_new=force_new,
+            database_id=database_id,
+            create_database=create_database,
         )
     except (NotionConfigurationError, NotionDependencyError, NotionAPIError) as exc:
         _exit_error(str(exc))
@@ -584,6 +590,26 @@ def _normalize_output_format(raw_format: Any) -> str | None:
 
     normalized = str(raw_format).strip().lower()
     return normalized or None
+
+
+def _effective_workers_for_format(
+    args: argparse.Namespace,
+    requested_workers: int,
+    *,
+    workers_auto: bool,
+) -> tuple[int, bool]:
+    """Cap the worker count to 1 for ``--format notion``.
+
+    Notion registry and database writes are serialized, so a Notion run must use
+    a single worker. Explicit ``--workers > 1`` with ``--format notion`` is
+    rejected earlier in validation; this additionally caps the *auto-resolved*
+    batch worker count (which would otherwise scale with the data-view count and
+    contradict the single-worker guarantee). Returns ``(workers, workers_auto)``
+    unchanged for any other format.
+    """
+    if _normalize_output_format(getattr(args, "format", None)) == "notion":
+        return 1, False
+    return requested_workers, workers_auto
 
 
 def _resolve_command_output_format(
@@ -1858,11 +1884,44 @@ def _validate_semantic_flag_relationships(
     if (
         _normalize_output_format(getattr(args, "format", None)) == "notion"
         and non_sdr_mode
-        and inferred_mode != RunMode.PUSH_TO_NOTION
+        and inferred_mode not in (RunMode.PUSH_TO_NOTION, RunMode.ORG_REPORT)
+        # Watch mode is also non-SDR, but it has a more specific rejection below;
+        # let it fall through so the user sees the watch-specific message.
+        and getattr(args, "watch_data_views", None) is None
     ):
         _exit_error(
-            "--format notion is only supported in SDR generation mode "
+            "--format notion is only supported in SDR generation or org-report mode "
             "(use --push-to-notion <json_file> to publish a saved artifact instead)",
+        )
+    if _normalize_output_format(getattr(args, "format", None)) == "notion":
+        try:
+            _workers = int(getattr(args, "workers", 1) or 1)
+        except TypeError, ValueError:
+            _workers = 1
+        if _workers > 1:
+            _exit_error(
+                "--workers > 1 is not supported with --format notion"
+                " — concurrent writes to .notion_pages.json would race",
+            )
+    # --notion-create-database is a no-op when a database ID is already configured
+    # (ensure_database validates the existing DB rather than creating one), so only
+    # the create-without-an-ID case would make a separate database per data view.
+    _notion_database_configured = bool(
+        getattr(args, "notion_database_id", None) or os.environ.get("NOTION_DATABASE_ID"),
+    )
+    if (
+        _normalize_output_format(getattr(args, "format", None)) == "notion"
+        and getattr(args, "notion_create_database", False)
+        and not _notion_database_configured
+        # Batch is explicit (--batch) OR implicit (more than one data view); both
+        # would create a separate database per data view.
+        and (getattr(args, "batch", False) or len(getattr(args, "data_views", None) or []) > 1)
+    ):
+        _exit_error(
+            "--notion-create-database cannot be combined with batch processing (--batch or "
+            "multiple data views) — each data view would create a separate database. "
+            "Bootstrap the registry once (run a single data view with --notion-create-database), "
+            "then pass --notion-database-id <id> for the batch.",
         )
     # Reject --push-to-notion alongside flags that would otherwise win the
     # mode dispatch and silently drop the publish request. Table at module
@@ -1888,6 +1947,8 @@ def _validate_semantic_flag_relationships(
     if watch_active and getattr(args, "watch_interval", None) is None:
         _exit_error("--watch requires --interval")
     if watch_active:
+        if _normalize_output_format(getattr(args, "format", None)) == "notion":
+            _exit_error("--watch is not supported with --format notion")
         if getattr(args, "format", None) is not None:
             _exit_error("--watch is incompatible with --format")
         if getattr(args, "output", None) is not None:
@@ -3100,6 +3161,8 @@ def process_single_dataview(
     production_mode: bool = False,
     batch_id: str | None = None,
     notion_force_new: bool = False,
+    notion_database_id: str | None = None,
+    notion_create_database: bool = False,
     processing_config: ProcessingConfig | None = None,
 ) -> ProcessingResult:
     """
@@ -3165,6 +3228,8 @@ def process_single_dataview(
             production_mode=production_mode,
             batch_id=batch_id,
             notion_force_new=notion_force_new,
+            notion_database_id=notion_database_id,
+            notion_create_database=notion_create_database,
         )
 
     config_file = processing_config.config_file
@@ -3195,6 +3260,8 @@ def process_single_dataview(
     allow_partial = processing_config.allow_partial
     production_mode = processing_config.production_mode
     notion_force_new = processing_config.notion_force_new
+    notion_database_id = processing_config.notion_database_id
+    notion_create_database = processing_config.notion_create_database
     batch_id = processing_config.batch_id
 
     start_time = time.perf_counter()
@@ -3956,6 +4023,8 @@ def process_single_dataview(
                             output_dir,
                             logger,
                             force_new=notion_force_new,
+                            database_id=notion_database_id,
+                            create_database=notion_create_database,
                         )
                     except (NotionConfigurationError, NotionDependencyError, NotionAPIError) as exc:
                         # Must return a failed ProcessingResult here rather than calling
@@ -3963,11 +4032,11 @@ def process_single_dataview(
                         # from a worker kills the pool worker instead of letting
                         # --continue-on-error mark this data view failed and proceed.
                         logger.critical("Notion output failed: %s", exc)
-                        # Config/dependency errors are user-facing setup issues with
-                        # actionable messages; an API error wraps an unexpected upstream
-                        # condition and deserves a traceback for debug logs.
+                        # All three are user-facing with actionable messages, so the
+                        # default output shows only the friendly message. The API-error
+                        # traceback is kept at debug level for troubleshooting.
                         if isinstance(exc, NotionAPIError):
-                            logger.exception("Full exception details:")
+                            logger.debug("Full exception details:", exc_info=True)
                         logger.info("=" * BANNER_WIDTH)
                         logger.info("EXECUTION FAILED")
                         logger.info("=" * BANNER_WIDTH)
@@ -5589,6 +5658,7 @@ def _build_org_report_trending_window(
 # - write_org_report_markdown
 # - write_org_report_html
 # - write_org_report_csv
+# - write_org_report_notion
 # - _normalize_org_report_output_format
 # - _validate_org_report_output_request
 
@@ -5598,6 +5668,7 @@ _ORG_WRITER_EXCEL_MODULE = "cja_auto_sdr.org.writers.excel"
 _ORG_WRITER_HTML_MODULE = "cja_auto_sdr.org.writers.html"
 _ORG_WRITER_JSON_MODULE = "cja_auto_sdr.org.writers.json"
 _ORG_WRITER_MARKDOWN_MODULE = "cja_auto_sdr.org.writers.markdown"
+_ORG_WRITER_NOTION_MODULE = "cja_auto_sdr.org.writers.notion"
 
 write_org_report_console = _make_org_writer_compat_wrapper(
     __name__,
@@ -5653,6 +5724,12 @@ write_org_report_csv = _make_org_writer_compat_wrapper(
     target_module_name=_ORG_WRITER_CSV_MODULE,
     override_mapping=_ORG_CSV_WRITER_OVERRIDE_MAPPING,
 )
+write_org_report_notion = _make_org_writer_compat_wrapper(
+    __name__,
+    _write_org_report_notion_impl,
+    target_module_name=_ORG_WRITER_NOTION_MODULE,
+    override_mapping=_ORG_NOTION_WRITER_OVERRIDE_MAPPING,
+)
 
 
 def _populate_org_report_advisory_rollup(
@@ -5686,12 +5763,15 @@ def run_org_report(
     quiet: bool = False,
     trending_window: int | None = None,
     runtime_details: dict[str, Any] | None = None,
+    notion_database_id: str | None = None,
+    notion_create_database: bool = False,
+    notion_continue_on_error: bool = False,
 ) -> tuple[bool, bool]:
     """Run org-wide component analysis and generate report.
 
     Args:
         config_file: Path to CJA configuration file
-        output_format: Output format (console, json, excel, markdown, html, csv, all)
+        output_format: Output format (console, json, excel, markdown, html, csv, notion, all)
         output_path: Optional specific output file path
         output_dir: Output directory for generated files
         org_config: OrgReportConfig with analysis parameters
@@ -5699,6 +5779,10 @@ def run_org_report(
         quiet: Suppress progress output
         trending_window: If set, compute trending across last N cached snapshots
         runtime_details: Optional mutable dict to receive additive lock execution details
+        notion_database_id: Optional Notion database ID for catalog rows
+        notion_create_database: If True, create the Notion database when none exists
+        notion_continue_on_error: If True, a failed data view is logged and skipped
+            during --org-report --format notion instead of aborting the catalog run
 
     Returns:
         Tuple of (success, thresholds_exceeded) - thresholds_exceeded triggers exit code 2
@@ -5887,6 +5971,30 @@ def run_org_report(
             csv_dir = write_org_report_csv(result, output_path_obj, output_dir, logger, trending=trending)
             if not quiet:
                 _status_print(f"\n{ConsoleColors.success('✓')} CSV reports saved to: {csv_dir}")
+        elif output_format == "notion":
+            from cja_auto_sdr.output.writers.notion import (
+                NotionAPIError,
+                NotionConfigurationError,
+                NotionDependencyError,
+            )
+
+            try:
+                cataloged = write_org_report_notion(
+                    result,
+                    output_dir,
+                    logger,
+                    notion_database_id=notion_database_id,
+                    notion_create_database=notion_create_database,
+                    continue_on_error=notion_continue_on_error,
+                )
+            except (NotionConfigurationError, NotionDependencyError, NotionAPIError) as exc:
+                _status_print(ConsoleColors.error(f"ERROR: {exc}"))
+                return False, False
+            else:
+                if not quiet:
+                    _status_print(
+                        f"\n{ConsoleColors.success('✓')} Cataloged {len(cataloged)} data view(s) to Notion registry"
+                    )
         elif output_format == "all":
             # Generate all formats
             write_org_report_console(result, org_config, quiet, trending=trending)
@@ -6799,6 +6907,8 @@ def _dispatch_post_validation_report_modes(
         trending_window = getattr(args, "trending_window", None)
 
         lock_details: dict[str, Any] = {}
+        notion_database_id = getattr(args, "notion_database_id", None) or os.environ.get("NOTION_DATABASE_ID")
+        notion_create_database = getattr(args, "notion_create_database", False)
         success, thresholds_exceeded = run_org_report(
             config_file=args.config_file,
             output_format=output_format,
@@ -6809,6 +6919,9 @@ def _dispatch_post_validation_report_modes(
             quiet=org_report_quiet,
             trending_window=trending_window,
             runtime_details=lock_details,
+            notion_database_id=notion_database_id,
+            notion_create_database=notion_create_database,
+            notion_continue_on_error=getattr(args, "continue_on_error", False),
         )
         advisory_rollup = lock_details.pop("advisory_rollup", None)
         if run_state is not None:
@@ -6881,6 +6994,14 @@ def _main_impl(run_state: dict[str, Any] | None = None):
         _exit_error("--workers must be at least 1")
     if not workers_auto and args.workers > MAX_BATCH_WORKERS:
         _exit_error(f"--workers cannot exceed {MAX_BATCH_WORKERS}")
+    # --format notion serializes registry/database writes: force a single worker
+    # (this also caps the auto-resolved batch worker count, which would otherwise
+    # scale with the data-view count).
+    args.workers, workers_auto = _effective_workers_for_format(
+        args,
+        args.workers,
+        workers_auto=workers_auto,
+    )
     if args.cache_size < 1:
         _exit_error("--cache-size must be at least 1")
     if args.cache_ttl < 1:
@@ -6932,10 +7053,14 @@ def _main_impl(run_state: dict[str, Any] | None = None):
         json_file = getattr(args, "push_to_notion", None)
         force_new = getattr(args, "notion_force_new", False)
         output_dir = getattr(args, "output_dir", None)
+        notion_database_id = getattr(args, "notion_database_id", None) or os.environ.get("NOTION_DATABASE_ID")
+        notion_create_database = getattr(args, "notion_create_database", False)
         result = _push_to_notion_from_json(
             json_file,
             output_dir=output_dir,
             force_new=force_new,
+            database_id=notion_database_id,
+            create_database=notion_create_database,
         )
         print(result)
         sys.exit(0)

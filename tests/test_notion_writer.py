@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import builtins
 import logging
+import sys
+import types
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
 import pytest
 
+from cja_auto_sdr.output.notion_database import DATABASE_SCHEMA
 from cja_auto_sdr.output.writers.notion import (
     _callout_block,
     _dq_callout_blocks,
@@ -275,7 +278,20 @@ def test_build_sdr_blocks_dq_section_omitted_when_empty():
 # ---- API layer tests (mocked Client) ----
 
 
+def _neutralize_dotenv(monkeypatch):
+    """Install a no-op ``dotenv`` so a developer's local .env can't leak into
+    these resolver tests. ``resolve_notion_credentials`` calls
+    ``from dotenv import load_dotenv; load_dotenv()``, and python-dotenv's
+    ``find_dotenv`` searches upward from the source file (not the cwd), so
+    chdir is not enough — we replace the module with a no-op loader. Works
+    whether or not python-dotenv is installed."""
+    fake = types.ModuleType("dotenv")
+    fake.load_dotenv = lambda *args, **kwargs: False
+    monkeypatch.setitem(sys.modules, "dotenv", fake)
+
+
 def test_resolve_notion_credentials_reads_env(monkeypatch):
+    _neutralize_dotenv(monkeypatch)
     monkeypatch.setenv("NOTION_TOKEN", "secret-token")
     monkeypatch.setenv("NOTION_PARENT_PAGE_ID", "parent-page-id")
     from cja_auto_sdr.output.writers.notion import resolve_notion_credentials
@@ -286,6 +302,7 @@ def test_resolve_notion_credentials_reads_env(monkeypatch):
 
 
 def test_resolve_notion_credentials_missing_token_raises(monkeypatch):
+    _neutralize_dotenv(monkeypatch)
     monkeypatch.delenv("NOTION_TOKEN", raising=False)
     monkeypatch.delenv("NOTION_PARENT_PAGE_ID", raising=False)
     from cja_auto_sdr.output.writers.notion import (
@@ -299,6 +316,7 @@ def test_resolve_notion_credentials_missing_token_raises(monkeypatch):
 
 
 def test_resolve_notion_credentials_missing_parent_page_raises(monkeypatch):
+    _neutralize_dotenv(monkeypatch)
     monkeypatch.setenv("NOTION_TOKEN", "secret-token")
     monkeypatch.delenv("NOTION_PARENT_PAGE_ID", raising=False)
     from cja_auto_sdr.output.writers.notion import (
@@ -686,3 +704,219 @@ def test_clear_page_blocks_lists_all_before_deleting():
     assert sorted(delete_calls) == ["b1", "b2", "b3"]
     # All listing must complete before any deletion runs.
     assert len(list_calls) == 2
+
+
+# ---------------------------------------------------------------------------
+# write_notion_output — database upsert path
+# ---------------------------------------------------------------------------
+
+
+def test_writer_skips_db_upsert_when_database_id_is_none(tmp_path, monkeypatch):
+    """v3.7.0 callers that don't pass a database_id are unaffected."""
+    from cja_auto_sdr.output.writers.notion import write_notion_output
+
+    monkeypatch.setenv("NOTION_TOKEN", "fake-token")
+    monkeypatch.setenv("NOTION_PARENT_PAGE_ID", "parent-page")
+
+    fake_client_class = MagicMock()
+    fake_client = fake_client_class.return_value
+    fake_client.pages.create.return_value = {"id": "new-page-id"}
+    fake_client.blocks.children.append.return_value = {}
+
+    with patch("cja_auto_sdr.output.writers.notion._require_notion_client", return_value=fake_client_class):
+        result = write_notion_output(
+            {"Metrics": pd.DataFrame()},
+            {"Data View ID": "dv1", "Data View Name": "X"},
+            "X",
+            tmp_path,
+            MagicMock(),
+        )
+
+    assert result == "notion://pages/new-page-id"
+    fake_client.databases.retrieve.assert_not_called()
+    fake_client.databases.create.assert_not_called()
+
+
+def test_writer_upserts_db_row_when_database_id_provided(tmp_path, monkeypatch):
+    from cja_auto_sdr.output.writers.notion import write_notion_output
+
+    monkeypatch.setenv("NOTION_TOKEN", "fake-token")
+    monkeypatch.setenv("NOTION_PARENT_PAGE_ID", "parent-page")
+
+    fake_client_class = MagicMock()
+    fake_client = fake_client_class.return_value
+    fake_client.pages.create.side_effect = [
+        {"id": "new-page-id"},  # detail page
+        {"id": "new-row-id"},  # DB row
+    ]
+    fake_client.databases.retrieve.return_value = {
+        "id": "db-given",
+        "data_sources": [{"id": "ds-given"}],
+    }
+    fake_client.data_sources.retrieve.return_value = {
+        "id": "ds-given",
+        "properties": {name: {"id": "x"} for name in DATABASE_SCHEMA},
+    }
+    # No existing row in the database for this data view (registry is also empty).
+    fake_client.data_sources.query.return_value = {"results": []}
+
+    with patch("cja_auto_sdr.output.writers.notion._require_notion_client", return_value=fake_client_class):
+        result = write_notion_output(
+            {"Metrics": pd.DataFrame([{"a": 1}])},
+            {"Data View ID": "dv1", "Data View Name": "X"},
+            "X",
+            tmp_path,
+            MagicMock(),
+            database_id="db-given",
+        )
+
+    assert result == "notion://pages/new-page-id"
+    fake_client.databases.retrieve.assert_called_once_with(database_id="db-given")
+    # one page.create for the SDR page, one for the DB row
+    assert fake_client.pages.create.call_count == 2
+    # DB row must use data_source_id parent
+    db_row_call = fake_client.pages.create.call_args_list[1]
+    assert db_row_call.kwargs["parent"] == {"type": "data_source_id", "data_source_id": "ds-given"}
+
+
+def test_writer_client_built_with_notion_version(tmp_path, monkeypatch):
+    """write_notion_output must build the Notion client with notion_version='2025-09-03'."""
+    from cja_auto_sdr.output.writers.notion import write_notion_output
+
+    monkeypatch.setenv("NOTION_TOKEN", "fake-token")
+    monkeypatch.setenv("NOTION_PARENT_PAGE_ID", "parent-page")
+
+    fake_client_class = MagicMock()
+    fake_client = fake_client_class.return_value
+    fake_client.pages.create.return_value = {"id": "new-page-id"}
+    fake_client.blocks.children.append.return_value = {}
+
+    with patch("cja_auto_sdr.output.writers.notion._require_notion_client", return_value=fake_client_class):
+        write_notion_output(
+            {"Metrics": pd.DataFrame()},
+            {"Data View ID": "dv1", "Data View Name": "X"},
+            "X",
+            tmp_path,
+            MagicMock(),
+        )
+
+    # The client class must be called with notion_version="2025-09-03" and the SDK
+    # log level raised so per-request-fail warnings don't duplicate our friendly errors.
+    call_kwargs = fake_client_class.call_args.kwargs
+    assert call_kwargs.get("notion_version") == "2025-09-03"
+    assert call_kwargs.get("log_level") == logging.ERROR
+
+
+def test_writer_converts_ensure_database_value_error_to_notion_config_error(tmp_path, monkeypatch):
+    """Schema-mismatched database_id surfaces as NotionConfigurationError, not raw ValueError.
+
+    Acceptance criterion AC#3: when ensure_database raises ValueError (missing required
+    properties), write_notion_output must re-raise it as NotionConfigurationError so the
+    CLI dispatcher can convert it to a clean exit 1 rather than a raw traceback.
+    """
+    from cja_auto_sdr.output.writers.notion import NotionConfigurationError, write_notion_output
+
+    monkeypatch.setenv("NOTION_TOKEN", "fake-token")
+    monkeypatch.setenv("NOTION_PARENT_PAGE_ID", "parent-page")
+
+    fake_client_class = MagicMock()
+    fake_client = fake_client_class.return_value
+    fake_client.pages.create.return_value = {"id": "new-page-id"}
+    fake_client.blocks.children.append.return_value = {}
+
+    err_msg = "Database bad-db is missing required properties: ['Data Quality']"
+
+    with (
+        patch("cja_auto_sdr.output.writers.notion._require_notion_client", return_value=fake_client_class),
+        patch(
+            "cja_auto_sdr.output.notion_database.ensure_database",
+            side_effect=ValueError(err_msg),
+        ),
+        pytest.raises(NotionConfigurationError) as exc_info,
+    ):
+        write_notion_output(
+            data_dict={"Metrics": pd.DataFrame({"Name": ["m1"], "Type": ["metric"]})},
+            metadata_dict={"Data View ID": "dv_bad", "Data View Name": "Bad DV"},
+            base_filename="bad_sdr",
+            output_dir=str(tmp_path),
+            logger=logging.getLogger("test"),
+            database_id="bad-db",
+        )
+
+    assert "Data Quality" in str(exc_info.value)
+    assert "bad-db" in str(exc_info.value)
+
+
+def test_writer_falls_back_to_query_when_registry_missing(tmp_path, monkeypatch):
+    """When the registry has no row id, query the DB by Data View ID rather than create a duplicate."""
+    from cja_auto_sdr.output.writers.notion import write_notion_output
+
+    monkeypatch.setenv("NOTION_TOKEN", "fake-token")
+    monkeypatch.setenv("NOTION_PARENT_PAGE_ID", "parent-page")
+
+    fake_client_class = MagicMock()
+    fake_client = fake_client_class.return_value
+    fake_client.pages.create.return_value = {"id": "new-page-id"}  # detail page only
+    fake_client.databases.retrieve.return_value = {"id": "db-given", "data_sources": [{"id": "ds-given"}]}
+    fake_client.data_sources.retrieve.return_value = {
+        "id": "ds-given",
+        "properties": {name: {"id": "x"} for name in DATABASE_SCHEMA},
+    }
+    # Registry is empty (tmp_path) but the DB already has a row for this data view.
+    fake_client.data_sources.query.return_value = {"results": [{"id": "existing-row-id"}]}
+    fake_client.pages.update.return_value = {"id": "existing-row-id"}
+
+    with patch("cja_auto_sdr.output.writers.notion._require_notion_client", return_value=fake_client_class):
+        write_notion_output(
+            {"Metrics": pd.DataFrame([{"a": 1}])},
+            {"Data View ID": "dv1", "Data View Name": "X"},
+            "X",
+            tmp_path,
+            MagicMock(),
+            database_id="db-given",
+        )
+
+    # The existing row is updated, not duplicated: pages.create only for the detail page.
+    assert fake_client.pages.create.call_count == 1
+    fake_client.pages.update.assert_called_once()
+    assert fake_client.pages.update.call_args.kwargs["page_id"] == "existing-row-id"
+
+
+def test_writer_logs_created_database_id(tmp_path, monkeypatch):
+    """--notion-create-database surfaces the newly created database id via the logger."""
+    from cja_auto_sdr.output.writers.notion import write_notion_output
+
+    monkeypatch.setenv("NOTION_TOKEN", "fake-token")
+    monkeypatch.setenv("NOTION_PARENT_PAGE_ID", "parent-page")
+
+    fake_client_class = MagicMock()
+    fake_client = fake_client_class.return_value
+    fake_client.pages.create.side_effect = [{"id": "new-page-id"}, {"id": "new-row-id"}]
+    fake_client.databases.create.return_value = {"id": "new-db-id", "data_sources": [{"id": "new-ds-id"}]}
+    fake_client.data_sources.query.return_value = {"results": []}
+    mock_logger = MagicMock()
+
+    with patch("cja_auto_sdr.output.writers.notion._require_notion_client", return_value=fake_client_class):
+        write_notion_output(
+            {"Metrics": pd.DataFrame([{"a": 1}])},
+            {"Data View ID": "dv1", "Data View Name": "X"},
+            "X",
+            tmp_path,
+            mock_logger,
+            create_database=True,
+        )
+
+    logged = " ".join(str(c.args) for c in mock_logger.info.call_args_list)
+    assert "new-db-id" in logged
+
+
+def test_resolve_notion_credentials_parent_optional_when_not_required(monkeypatch):
+    """require_parent=False returns the token without requiring NOTION_PARENT_PAGE_ID."""
+    _neutralize_dotenv(monkeypatch)
+    monkeypatch.setenv("NOTION_TOKEN", "tok")
+    monkeypatch.delenv("NOTION_PARENT_PAGE_ID", raising=False)
+    from cja_auto_sdr.output.writers.notion import resolve_notion_credentials
+
+    token, parent = resolve_notion_credentials(require_parent=False)
+    assert token == "tok"
+    assert parent is None

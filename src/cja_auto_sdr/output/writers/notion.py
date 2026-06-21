@@ -258,10 +258,14 @@ def build_sdr_blocks(
 # ---------------------------------------------------------------------------
 
 
-def resolve_notion_credentials() -> tuple[str, str]:
+def resolve_notion_credentials(*, require_parent: bool = True) -> tuple[str, str | None]:
     """Return (NOTION_TOKEN, NOTION_PARENT_PAGE_ID) from env / .env file.
 
-    Raises NotionConfigurationError if either env var is missing.
+    Always raises NotionConfigurationError if NOTION_TOKEN is missing.
+    NOTION_PARENT_PAGE_ID is required only when ``require_parent`` is True — i.e.
+    when a detail page or a new database will be created under it. Upserting rows
+    into an already-configured database does not need a parent page, so callers
+    that only do that pass ``require_parent=False``.
     """
     try:
         from dotenv import load_dotenv
@@ -278,7 +282,7 @@ def resolve_notion_credentials() -> tuple[str, str]:
             "NOTION_TOKEN is not set. Set it as an environment variable or add it to a .env file.",
         )
 
-    if not parent_page_id:
+    if require_parent and not parent_page_id:
         raise NotionConfigurationError(
             "NOTION_PARENT_PAGE_ID is not set. Set it as an environment variable or add it to a .env file.",
         )
@@ -299,6 +303,16 @@ def _require_notion_client():
         raise NotionDependencyError(
             "Notion output requires the notion extra.\nInstall it with: uv pip install 'cja-auto-sdr[notion]'",
         ) from exc
+
+
+def _build_client(client_cls, token):
+    """Construct a Notion client with an explicit API version pin.
+
+    ``log_level`` is raised to ERROR so the SDK's per-request-fail WARNING
+    logging (e.g. a 404 for a bad database id) does not duplicate the friendly,
+    actionable message we surface ourselves.
+    """
+    return client_cls(auth=token, notion_version="2025-09-03", log_level=logging.ERROR)
 
 
 # ---------------------------------------------------------------------------
@@ -349,9 +363,10 @@ def _friendly_notion_error_message(err: Exception) -> str:
         )
     if code == "object_not_found":
         return (
-            "Notion API could not find the target page. The page may have been deleted "
-            "or the integration was removed from it. Re-run with --notion-force-new to "
-            "create a fresh page, or share the parent page with the integration again."
+            "Notion API could not find the target page or database. Verify the ID and "
+            "that it is shared with the integration. For a detail page, re-run with "
+            "--notion-force-new; for a database, check --notion-database-id / "
+            "NOTION_DATABASE_ID."
         )
     if code == "rate_limited":
         return "Notion API rate limit exceeded after retries. Try again later or reduce concurrency."
@@ -501,13 +516,19 @@ def write_notion_output(
     logger: logging.Logger,
     *,
     force_new: bool = False,
+    database_id: str | None = None,
+    create_database: bool = False,
 ) -> str:
-    """Publish SDR data to a Notion page.
+    """Publish SDR data to a Notion page (and optionally a DB row).
 
     Returns a ``notion://pages/<page_id>`` identifier (not a file path).
     ``base_filename`` is accepted for writer-protocol parity with file-emitting
     writers and is used as a fallback when ``metadata_dict`` lacks
     ``Data View ID`` or ``Data View Name``.
+
+    When ``database_id`` is provided (or ``create_database`` is True and the
+    env var ``NOTION_DATABASE_ID`` is unset), also upserts a row in the SDR
+    Registry database keyed by ``Data View ID``.
 
     Raises NotionConfigurationError / NotionDependencyError / NotionAPIError —
     callers (CLI dispatcher) are responsible for converting these to exit codes.
@@ -524,7 +545,7 @@ def write_notion_output(
     blocks = build_sdr_blocks(data_dict, metadata_dict)
     registry_path = get_registry_path(output_dir)
 
-    client = client_cls(auth=token)
+    client = _build_client(client_cls, token)
     try:
         page_id = create_or_update_page(
             client,
@@ -535,6 +556,59 @@ def write_notion_output(
             registry_path,
             force_new=force_new,
         )
+
+        if database_id is not None or create_database:
+            from cja_auto_sdr.output.notion_database import (
+                build_row_properties,
+                ensure_database,
+                find_existing_row_id,
+                upsert_database_row,
+            )
+            from cja_auto_sdr.output.notion_registry import (
+                lookup_database_row_id,
+                store_database_row_id,
+            )
+
+            try:
+                db_id, ds_id = ensure_database(
+                    client,
+                    parent_page_id=parent_page_id,
+                    database_id=database_id,
+                    create_if_missing=create_database,
+                )
+            except ValueError as exc:
+                raise NotionConfigurationError(str(exc)) from exc
+            if database_id is None and create_database:
+                # Surface the bootstrapped database ID so it can be captured/automated.
+                logger.info("✓ Created Notion SDR Registry database: %s", db_id)
+                logger.info(
+                    "  Reuse it with --notion-database-id %s (or set NOTION_DATABASE_ID).",
+                    db_id,
+                )
+            properties = build_row_properties(
+                data_dict,
+                metadata_dict,
+                page_id,
+                tool_version=__version__,
+            )
+            # Prefer the local registry, but fall back to querying the database by
+            # Data View ID so a missing/stale registry (fresh checkout, different
+            # --output-dir) does not create a duplicate row for the same data view.
+            existing_row_id = lookup_database_row_id(registry_path, data_view_id)
+            if existing_row_id is None:
+                existing_row_id = find_existing_row_id(
+                    client,
+                    data_source_id=ds_id,
+                    data_view_id=data_view_id,
+                )
+            row_id = upsert_database_row(
+                client,
+                data_source_id=ds_id,
+                existing_row_id=existing_row_id,
+                properties=properties,
+            )
+            store_database_row_id(registry_path, data_view_id, row_id)
+            logger.info("✓ Notion DB row upserted: %s", row_id)
     except Exception as exc:
         if _is_notion_api_error(exc):
             raise NotionAPIError(_friendly_notion_error_message(exc)) from exc

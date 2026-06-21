@@ -154,12 +154,12 @@ def _validate_org_report_output_request(
     status_print: Callable[..., None],
 ) -> bool:
     """Validate org-report output arguments before expensive analysis starts."""
-    valid_formats = {"console", "json", "excel", "markdown", "html", "csv", "all", *FORMAT_ALIASES}
+    valid_formats = {"console", "json", "excel", "markdown", "html", "csv", "notion", "all", *FORMAT_ALIASES}
     if output_format not in valid_formats:
         status_print(
             ConsoleColors.error(
                 f"ERROR: Unknown format '{output_format}'. Valid formats: "
-                "console, json, excel, markdown, html, csv, all, reports, data, ci",
+                "console, json, excel, markdown, html, csv, notion, all, reports, data, ci",
             ),
         )
         return False

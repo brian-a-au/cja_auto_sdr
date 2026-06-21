@@ -689,6 +689,7 @@ _WRAPPED_LEGACY_ORG_WRITER_EXPORTS = (
     "write_org_report_markdown",
     "write_org_report_html",
     "write_org_report_csv",
+    "write_org_report_notion",
 )
 
 
@@ -1085,6 +1086,7 @@ def test_org_writers_all_continuity():
         "write_org_report_html",
         "write_org_report_json",
         "write_org_report_markdown",
+        "write_org_report_notion",
         "write_org_report_stats_only",
     }
     assert set(mod.__all__) == expected
