@@ -8,7 +8,12 @@ import pytest
 
 from cja_auto_sdr.cli.parser import parse_arguments
 from cja_auto_sdr.cli.standalone_policy import standalone_prevalidation_policy
-from cja_auto_sdr.generator import RunMode, _infer_run_mode_enum, _validate_semantic_flag_relationships
+from cja_auto_sdr.generator import (
+    RunMode,
+    _infer_run_mode_enum,
+    _resolve_semantic_validation_args,
+    _validate_semantic_flag_relationships,
+)
 
 
 def test_flag_parses_default_false() -> None:
@@ -53,5 +58,30 @@ def test_prune_rejects_conflicting_modes(conflict, capsys) -> None:
     setattr(args, conflict, True)
     with pytest.raises(SystemExit) as exc:
         _validate_semantic_flag_relationships(args, inferred_mode=RunMode.NOTION_PRUNE_ORPHANS)
+    assert exc.value.code == 1
+    assert "--notion-prune-orphans" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("argv", "label"),
+    [
+        (["--notion-prune-orphans", "--push-to-notion", "saved.json"], "--push-to-notion"),
+        (["--notion-prune-orphans", "dv_123"], "positional data view arguments"),
+    ],
+)
+def test_prune_conflict_rejected_through_effective_args(argv, label, capsys) -> None:
+    """Regression for the standalone-policy bug: the conflict block must survive arg sanitization.
+
+    The CLI validates ``_resolve_semantic_validation_args(...)`` output, not the raw args. That
+    helper clears every dest in the mode's ``ignored_semantic_dests``. If the prune policy cleared
+    ``notion_prune_orphans``, the whole conflict block would be skipped and these combinations would
+    silently prune. Both argv keep prune as the inferred mode, so the prune policy is the one used.
+    """
+    args = parse_arguments(argv)
+    assert _infer_run_mode_enum(args) is RunMode.NOTION_PRUNE_ORPHANS
+    effective = _resolve_semantic_validation_args(args, inferred_mode=RunMode.NOTION_PRUNE_ORPHANS)
+    assert effective.notion_prune_orphans is True  # policy must NOT clear the mode flag
+    with pytest.raises(SystemExit) as exc:
+        _validate_semantic_flag_relationships(effective, inferred_mode=RunMode.NOTION_PRUNE_ORPHANS)
     assert exc.value.code == 1
     assert "--notion-prune-orphans" in capsys.readouterr().err

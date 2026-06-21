@@ -79,11 +79,7 @@
       },
       "notion_force_new": {
         "type": "boolean",
-        "description": "Force creation of a new Notion page even if one already exists for this data view. The superseded page ID is recorded as an orphan in .notion_pages.json for later pruning."
-      },
-      "notion_prune_orphans": {
-        "type": "boolean",
-        "description": "Archive Notion pages that were left behind by previous notion_force_new runs. Orphaned page IDs are read from .notion_pages.json, archived in Notion (moved to Notion trash — recoverable, not permanently deleted), and cleared from the registry. Requires only NOTION_TOKEN. Combine with dry_run to preview without making changes. Rejected when combined with org_report, diff, batch, watch, or push_to_notion modes. Limitation: only pages orphaned by notion_force_new from v3.9.0 onward are tracked."
+        "description": "Force creation of a new Notion page even if one already exists for this data view. The superseded page ID is recorded as an orphan in .notion_pages.json. Clean it up later with the standalone CLI command `cja_auto_sdr --notion-prune-orphans` (a maintenance command that takes no data view ID, so it is not exposed in this generate manifest)."
       }
     },
     "required": ["data_view_id"]
