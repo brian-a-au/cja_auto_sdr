@@ -32,7 +32,7 @@ def test_load_registry_reads_existing(tmp_path):
     reg_path = tmp_path / REGISTRY_FILENAME
     reg_path.write_text(json.dumps({"dv_123": "page-abc"}))
     result = load_registry(reg_path)
-    assert result == {"dv_123": {"page_id": "page-abc", "database_row_id": None}}
+    assert result == {"dv_123": {"page_id": "page-abc", "database_row_id": None, "orphaned_page_ids": []}}
 
 
 def test_save_registry_writes_json(tmp_path):
@@ -63,7 +63,7 @@ def test_store_page_id_creates_new_entry(tmp_path):
     reg_path = tmp_path / REGISTRY_FILENAME
     store_page_id(reg_path, "dv_123", "page-abc")
     data = json.loads(reg_path.read_text())
-    assert data["dv_123"] == {"page_id": "page-abc", "database_row_id": None}
+    assert data["dv_123"] == {"page_id": "page-abc", "database_row_id": None, "orphaned_page_ids": []}
 
 
 def test_store_page_id_updates_existing_entry(tmp_path):
@@ -71,7 +71,7 @@ def test_store_page_id_updates_existing_entry(tmp_path):
     reg_path.write_text(json.dumps({"dv_123": "page-old"}))
     store_page_id(reg_path, "dv_123", "page-new")
     data = json.loads(reg_path.read_text())
-    assert data["dv_123"] == {"page_id": "page-new", "database_row_id": None}
+    assert data["dv_123"] == {"page_id": "page-new", "database_row_id": None, "orphaned_page_ids": []}
 
 
 def test_store_page_id_preserves_other_entries(tmp_path):
@@ -79,8 +79,8 @@ def test_store_page_id_preserves_other_entries(tmp_path):
     reg_path.write_text(json.dumps({"dv_existing": "page-existing"}))
     store_page_id(reg_path, "dv_new", "page-new")
     data = json.loads(reg_path.read_text())
-    assert data["dv_existing"] == {"page_id": "page-existing", "database_row_id": None}
-    assert data["dv_new"] == {"page_id": "page-new", "database_row_id": None}
+    assert data["dv_existing"] == {"page_id": "page-existing", "database_row_id": None, "orphaned_page_ids": []}
+    assert data["dv_new"] == {"page_id": "page-new", "database_row_id": None, "orphaned_page_ids": []}
 
 
 def test_store_page_id_creates_sidecar_lock_file(tmp_path):
@@ -123,7 +123,7 @@ def test_exclusive_registry_lock_falls_back_to_msvcrt_when_fcntl_missing(
     # Should not raise — msvcrt fallback path runs and yields to the body.
     nr_mod.store_page_id(reg_path, "dv_win", "page-win")
     data = json.loads(reg_path.read_text())
-    assert data["dv_win"] == {"page_id": "page-win", "database_row_id": None}
+    assert data["dv_win"] == {"page_id": "page-win", "database_row_id": None, "orphaned_page_ids": []}
 
 
 def test_store_page_id_concurrent_workers_preserve_all_entries(tmp_path):
@@ -147,4 +147,4 @@ def test_store_page_id_concurrent_workers_preserve_all_entries(tmp_path):
     data = json.loads(reg_path.read_text())
     assert len(data) == n
     for i in range(n):
-        assert data[f"dv_{i:03d}"] == {"page_id": f"page-{i:03d}", "database_row_id": None}
+        assert data[f"dv_{i:03d}"] == {"page_id": f"page-{i:03d}", "database_row_id": None, "orphaned_page_ids": []}
