@@ -30,6 +30,7 @@ __all__ = [
     "build_catalog_row_properties",
     "build_row_properties",
     "derive_data_quality_status",
+    "describe_database_schema",
     "ensure_database",
     "find_existing_row_id",
     "upsert_database_row",
@@ -59,6 +60,24 @@ DATABASE_SCHEMA: dict[str, dict[str, Any]] = {
         },
     },
 }
+
+
+def _schema_property_type(entry: dict) -> str:
+    """Return the Notion property type for a DATABASE_SCHEMA entry (its single key)."""
+    return next(iter(entry))
+
+
+def describe_database_schema() -> str:
+    """Render the canonical registry schema as a human-readable block for stdout."""
+    lines = [f"CJA SDR Registry — database schema ({len(DATABASE_SCHEMA)} properties)", ""]
+    for name, entry in DATABASE_SCHEMA.items():
+        ptype = _schema_property_type(entry)
+        if ptype == "select":
+            options = ", ".join(o["name"] for o in entry["select"].get("options", []))
+            lines.append(f"  {name:<26} {ptype} ({options})")
+        else:
+            lines.append(f"  {name:<26} {ptype}")
+    return "\n".join(lines) + "\n"
 
 
 def _rt(content: str) -> list[dict]:

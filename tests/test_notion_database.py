@@ -365,3 +365,22 @@ def test_data_quality_schema_options_derive_from_constant() -> None:
 
     names = [o["name"] for o in DATABASE_SCHEMA["Data Quality"]["select"]["options"]]
     assert names == DATA_QUALITY_OPTIONS
+
+
+def test_schema_property_type_reads_single_type_key() -> None:
+    from cja_auto_sdr.output.notion_database import _schema_property_type
+
+    assert _schema_property_type({"rich_text": {}}) == "rich_text"
+    assert _schema_property_type({"number": {"format": "number"}}) == "number"
+    assert _schema_property_type({"select": {"options": []}}) == "select"
+
+
+def test_describe_database_schema_lists_every_property_with_type() -> None:
+    from cja_auto_sdr.output.notion_database import DATABASE_SCHEMA, _schema_property_type, describe_database_schema
+
+    text = describe_database_schema()
+    for name, entry in DATABASE_SCHEMA.items():
+        assert name in text
+        assert _schema_property_type(entry) in text
+    # select options are shown for Data Quality
+    assert "healthy" in text and "unknown" in text
