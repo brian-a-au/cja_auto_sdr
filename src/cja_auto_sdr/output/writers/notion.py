@@ -25,6 +25,7 @@ import pandas as pd
 
 from cja_auto_sdr.core.version import __version__
 from cja_auto_sdr.output.notion_registry import (
+    add_orphaned_page_id,
     get_registry_path,
     lookup_page_id,
     store_page_id,
@@ -485,9 +486,9 @@ def create_or_update_page(
     registry unchanged and the next run creates a fresh page. On UPDATE the
     page ID does not change, so the registry is not rewritten.
     """
-    existing_page_id = None if force_new else lookup_page_id(registry_path, data_view_id)
+    existing_page_id = lookup_page_id(registry_path, data_view_id)
 
-    if existing_page_id:
+    if existing_page_id and not force_new:
         _clear_page_blocks(client, existing_page_id)
         _append_blocks(client, existing_page_id, blocks)
         return existing_page_id
@@ -500,6 +501,8 @@ def create_or_update_page(
     page_id = page["id"]
     _append_blocks(client, page_id, blocks)
     store_page_id(registry_path, data_view_id, page_id)
+    if force_new and existing_page_id and existing_page_id != page_id:
+        add_orphaned_page_id(registry_path, data_view_id, existing_page_id)
     return page_id
 
 

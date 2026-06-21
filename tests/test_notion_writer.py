@@ -920,3 +920,46 @@ def test_resolve_notion_credentials_parent_optional_when_not_required(monkeypatc
     token, parent = resolve_notion_credentials(require_parent=False)
     assert token == "tok"
     assert parent is None
+
+
+def test_force_new_records_superseded_page_as_orphan(tmp_path, monkeypatch):
+    """--notion-force-new over an existing page records the old page id as an orphan."""
+    from cja_auto_sdr.output.notion_registry import (
+        get_registry_path,
+        lookup_orphaned_page_ids,
+        lookup_page_id,
+        store_page_id,
+    )
+    from cja_auto_sdr.output.writers.notion import create_or_update_page
+
+    reg = get_registry_path(tmp_path)
+    store_page_id(reg, "dv1", "page-old")  # pretend a prior publish
+
+    client = MagicMock()
+    client.pages.create.return_value = {"id": "page-new"}
+
+    new_id = create_or_update_page(
+        client,
+        "parent",
+        "DV — SDR",
+        "dv1",
+        [],
+        reg,
+        force_new=True,
+    )
+
+    assert new_id == "page-new"
+    assert lookup_page_id(reg, "dv1") == "page-new"
+    assert lookup_orphaned_page_ids(reg, "dv1") == ["page-old"]
+
+
+def test_force_new_with_no_prior_page_records_no_orphan(tmp_path):
+    from cja_auto_sdr.output.notion_registry import get_registry_path, lookup_orphaned_page_ids
+    from cja_auto_sdr.output.writers.notion import create_or_update_page
+
+    reg = get_registry_path(tmp_path)
+    client = MagicMock()
+    client.pages.create.return_value = {"id": "page-new"}
+
+    create_or_update_page(client, "parent", "DV — SDR", "dv1", [], reg, force_new=True)
+    assert lookup_orphaned_page_ids(reg, "dv1") == []
