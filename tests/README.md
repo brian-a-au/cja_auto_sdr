@@ -163,10 +163,11 @@ tests/
 ├── test_notion_org_publisher.py     # --org-report --format notion catalog publisher tests
 ├── test_notion_registry_v2.py       # Notion registry v2 schema and legacy v1 migration tests
 ├── test_cli_notion_prune.py         # CLI flag wiring for --notion-prune-orphans
+├── test_cli_notion_repair.py        # CLI flag wiring for --notion-repair-database and --notion-print-database-schema
 └── README.md                        # This file
 ```
 
-**Total: 8,226 comprehensive tests**
+**Total: 8,248 comprehensive tests**
 
 ### Test Count Breakdown
 
@@ -175,16 +176,16 @@ tests/
 
 | Category | Tests | Files | Notes |
 |----------|-------|-------|-------|
-| `unit` | 8,120 | 148 | Default primary category for files without explicit integration/e2e/smoke scope |
+| `unit` | 8,142 | 149 | Default primary category for files without explicit integration/e2e/smoke scope |
 | `integration` | 73 | 3 | Cross-module integration suites |
 | `e2e` | 23 | 2 | End-to-end suites with a mocked external boundary |
 | `smoke` | 10 | 1 | Lightweight command-mode coverage |
 | `slow` | 0 | 0 | Overlay marker; these tests are also counted in a primary category |
-| **Primary Total** | **8,226** | **154** | **unit + integration + e2e + smoke** |
+| **Primary Total** | **8,248** | **155** | **unit + integration + e2e + smoke** |
 
 | CI Slice | Tests | Files | Selector |
 |----------|-------|-------|----------|
-| `test-unit` | 8,120 | 148 | `-m "unit and not slow"` |
+| `test-unit` | 8,142 | 149 | `-m "unit and not slow"` |
 | `test-integration` | 96 | 5 | `-m "integration or e2e or slow"` |
 | `smoke-test` | 10 | 1 | `-m smoke` |
 
@@ -340,15 +341,16 @@ tests/
 | `test_watch_dispatch.py` | 2 | End-to-end dispatch wiring tests |
 | `test_watch_logging.py` | 4 | Structured-log event emission tests |
 | `test_notion_registry.py` | 14 | Notion page ID registry CRUD tests |
-| `test_notion_writer.py` | 67 | Notion block builder + API layer tests |
+| `test_notion_writer.py` | 70 | Notion block builder + API layer tests |
 | `test_cli_notion.py` | 28 | CLI flag wiring for --format notion and --push-to-notion |
 | `test_push_to_notion.py` | 5 | --push-to-notion JSON ingest and error paths |
 | `test_cli_notion_database.py` | 32 | CLI flag wiring for --notion-create-database and --notion-database-id |
-| `test_notion_database.py` | 25 | Notion database creation and upsert tests |
+| `test_notion_database.py` | 32 | Notion database creation and upsert tests |
 | `test_notion_org_publisher.py` | 10 | --org-report --format notion catalog publisher tests |
 | `test_notion_registry_v2.py` | 11 | Notion registry v2 schema and legacy v1 migration tests |
 | `test_cli_notion_prune.py` | 20 | CLI flag wiring for --notion-prune-orphans |
-| **Total** | **8,226** | **Collected via pytest --collect-only** |
+| `test_cli_notion_repair.py` | 12 | CLI flag wiring for --notion-repair-database and --notion-print-database-schema |
+| **Total** | **8,248** | **Collected via pytest --collect-only** |
 
 ## Running Tests
 
@@ -806,7 +808,7 @@ the `tests/README.md` inventory tree or count table.
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (8,226 tests total)
+- [x] Comprehensive test coverage (8,248 tests total)
 - [x] Org-wide analysis tests (test_org_report.py) - 211 tests (including large org scaling, output path aliases, memory warnings, smart cache invalidation)
 - [x] Org-wide analysis integration tests (test_org_report_integration.py) - 17 tests (end-to-end flows, caching, filtering, governance thresholds)
 - [x] Profile management tests (test_profiles.py) - 78 tests
