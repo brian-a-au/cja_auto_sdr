@@ -31,6 +31,11 @@ _LOCK_SUFFIX = ".lock"
 class RegistryEntry(TypedDict):
     page_id: str | None
     database_row_id: str | None
+    orphaned_page_ids: list[str]
+
+
+def _default_entry() -> RegistryEntry:
+    return {"page_id": None, "database_row_id": None, "orphaned_page_ids": []}
 
 
 def get_registry_path(output_dir: str | Path) -> Path:
@@ -86,15 +91,17 @@ def _exclusive_registry_lock(registry_path: Path):
 
 
 def _coerce_entry(raw: object) -> RegistryEntry:
-    """Read v1 string entries OR v2 dict entries; always return a v2 RegistryEntry."""
+    """Read v1 string entries OR dict entries; always return a current RegistryEntry."""
     if isinstance(raw, str):
-        return {"page_id": raw, "database_row_id": None}
+        return {"page_id": raw, "database_row_id": None, "orphaned_page_ids": []}
     if isinstance(raw, dict):
+        orphans = raw.get("orphaned_page_ids")
         return {
             "page_id": raw.get("page_id"),
             "database_row_id": raw.get("database_row_id"),
+            "orphaned_page_ids": [str(p) for p in orphans] if isinstance(orphans, list) else [],
         }
-    return {"page_id": None, "database_row_id": None}
+    return _default_entry()
 
 
 def load_registry(path: Path) -> dict[str, RegistryEntry]:
@@ -130,10 +137,7 @@ def lookup_database_row_id(registry_path: Path, data_view_id: str) -> str | None
 def _store_field(registry_path: Path, data_view_id: str, field: str, value: str | None) -> None:
     with _exclusive_registry_lock(registry_path):
         registry = load_registry(registry_path)
-        entry: RegistryEntry = registry.get(
-            data_view_id,
-            {"page_id": None, "database_row_id": None},
-        )
+        entry: RegistryEntry = registry.get(data_view_id, _default_entry())
         entry[field] = value  # type: ignore[literal-required]
         registry[data_view_id] = entry
         save_registry(registry_path, registry)
@@ -151,3 +155,34 @@ def store_database_row_id(
 ) -> None:
     """Atomically update the registry's database_row_id for this data view."""
     _store_field(registry_path, data_view_id, "database_row_id", database_row_id)
+
+
+def lookup_orphaned_page_ids(registry_path: Path, data_view_id: str) -> list[str]:
+    """Return the recorded orphan (superseded) page ids for this data view."""
+    return list(load_registry(registry_path).get(data_view_id, {}).get("orphaned_page_ids") or [])
+
+
+def add_orphaned_page_id(registry_path: Path, data_view_id: str, page_id: str) -> None:
+    """Record a superseded detail page id so --notion-prune-orphans can archive it."""
+    with _exclusive_registry_lock(registry_path):
+        registry = load_registry(registry_path)
+        entry: RegistryEntry = registry.get(data_view_id, _default_entry())
+        orphans = list(entry.get("orphaned_page_ids") or [])
+        if page_id not in orphans:
+            orphans.append(page_id)
+        entry["orphaned_page_ids"] = orphans
+        registry[data_view_id] = entry
+        save_registry(registry_path, registry)
+
+
+def remove_orphaned_page_ids(registry_path: Path, data_view_id: str, page_ids: list[str]) -> None:
+    """Drop the given orphan page ids from a data view's record (after pruning)."""
+    to_remove = set(page_ids)
+    with _exclusive_registry_lock(registry_path):
+        registry = load_registry(registry_path)
+        entry = registry.get(data_view_id)
+        if entry is None:
+            return
+        entry["orphaned_page_ids"] = [p for p in (entry.get("orphaned_page_ids") or []) if p not in to_remove]
+        registry[data_view_id] = entry
+        save_registry(registry_path, registry)

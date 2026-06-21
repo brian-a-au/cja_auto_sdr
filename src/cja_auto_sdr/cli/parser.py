@@ -1481,6 +1481,17 @@ Requirements:
             "first run. Ignored if --notion-database-id (or NOTION_DATABASE_ID) is set."
         ),
     )
+    notion_group.add_argument(
+        "--notion-prune-orphans",
+        action="store_true",
+        default=False,
+        dest="notion_prune_orphans",
+        help=(
+            "Archive detail pages left behind by --notion-force-new (tracked in "
+            ".notion_pages.json under --output-dir). Pages go to Notion's trash "
+            "(recoverable), not permanent deletion. Combine with --dry-run to preview."
+        ),
+    )
 
     # --- Watch Mode ----------------------------------------------------------
     watch_group = parser.add_argument_group("Watch")

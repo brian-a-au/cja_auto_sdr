@@ -79,7 +79,7 @@
       },
       "notion_force_new": {
         "type": "boolean",
-        "description": "Force creation of a new Notion page even if one already exists for this data view. Breaks the .notion_pages.json link (old page is left as an orphan)."
+        "description": "Force creation of a new Notion page even if one already exists for this data view. The superseded page ID is recorded as an orphan in .notion_pages.json. Clean it up later with the standalone CLI command `cja_auto_sdr --notion-prune-orphans` (a maintenance command that takes no data view ID, so it is not exposed in this generate manifest)."
       }
     },
     "required": ["data_view_id"]

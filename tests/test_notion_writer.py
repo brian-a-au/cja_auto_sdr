@@ -920,3 +920,131 @@ def test_resolve_notion_credentials_parent_optional_when_not_required(monkeypatc
     token, parent = resolve_notion_credentials(require_parent=False)
     assert token == "tok"
     assert parent is None
+
+
+def test_force_new_records_superseded_page_as_orphan(tmp_path, monkeypatch):
+    """--notion-force-new over an existing page records the old page id as an orphan."""
+    from cja_auto_sdr.output.notion_registry import (
+        get_registry_path,
+        lookup_orphaned_page_ids,
+        lookup_page_id,
+        store_page_id,
+    )
+    from cja_auto_sdr.output.writers.notion import create_or_update_page
+
+    reg = get_registry_path(tmp_path)
+    store_page_id(reg, "dv1", "page-old")  # pretend a prior publish
+
+    client = MagicMock()
+    client.pages.create.return_value = {"id": "page-new"}
+
+    new_id = create_or_update_page(
+        client,
+        "parent",
+        "DV — SDR",
+        "dv1",
+        [],
+        reg,
+        force_new=True,
+    )
+
+    assert new_id == "page-new"
+    assert lookup_page_id(reg, "dv1") == "page-new"
+    assert lookup_orphaned_page_ids(reg, "dv1") == ["page-old"]
+
+
+def test_force_new_with_no_prior_page_records_no_orphan(tmp_path):
+    from cja_auto_sdr.output.notion_registry import get_registry_path, lookup_orphaned_page_ids
+    from cja_auto_sdr.output.writers.notion import create_or_update_page
+
+    reg = get_registry_path(tmp_path)
+    client = MagicMock()
+    client.pages.create.return_value = {"id": "page-new"}
+
+    create_or_update_page(client, "parent", "DV — SDR", "dv1", [], reg, force_new=True)
+    assert lookup_orphaned_page_ids(reg, "dv1") == []
+
+
+# ---------------------------------------------------------------------------
+# Task 3: prune_notion_orphans tests
+# ---------------------------------------------------------------------------
+
+
+def test_prune_orphans_archives_and_clears(tmp_path, monkeypatch):
+    from cja_auto_sdr.output.notion_registry import (
+        add_orphaned_page_id,
+        get_registry_path,
+        lookup_orphaned_page_ids,
+        store_page_id,
+    )
+    from cja_auto_sdr.output.writers.notion import prune_notion_orphans
+
+    monkeypatch.setenv("NOTION_TOKEN", "tok")
+    monkeypatch.delenv("NOTION_PARENT_PAGE_ID", raising=False)  # not required for prune
+
+    reg = get_registry_path(tmp_path)
+    store_page_id(reg, "dv1", "page-current")
+    add_orphaned_page_id(reg, "dv1", "orphan-1")
+    add_orphaned_page_id(reg, "dv1", "orphan-2")
+
+    fake_cls = MagicMock()
+    fake_client = fake_cls.return_value
+    fake_client.pages.update.return_value = {"id": "x"}
+    with patch("cja_auto_sdr.output.writers.notion._require_notion_client", return_value=fake_cls):
+        archived, gone = prune_notion_orphans(tmp_path, MagicMock())
+
+    assert (archived, gone) == (2, 0)
+    assert fake_client.pages.update.call_count == 2
+    # archive == archived=True, by page id
+    assert {c.kwargs["page_id"] for c in fake_client.pages.update.call_args_list} == {"orphan-1", "orphan-2"}
+    assert all(c.kwargs.get("archived") is True for c in fake_client.pages.update.call_args_list)
+    assert lookup_orphaned_page_ids(reg, "dv1") == []  # cleared
+
+
+def test_prune_orphans_dry_run_makes_no_calls(tmp_path, monkeypatch):
+    from cja_auto_sdr.output.notion_registry import add_orphaned_page_id, get_registry_path, lookup_orphaned_page_ids
+    from cja_auto_sdr.output.writers.notion import prune_notion_orphans
+
+    monkeypatch.setenv("NOTION_TOKEN", "tok")
+
+    reg = get_registry_path(tmp_path)
+    add_orphaned_page_id(reg, "dv1", "orphan-1")
+
+    with patch("cja_auto_sdr.output.writers.notion._require_notion_client") as req:
+        archived, gone = prune_notion_orphans(tmp_path, MagicMock(), dry_run=True)
+
+    assert (archived, gone) == (0, 0)
+    req.assert_not_called()  # no client built, no API calls
+    assert lookup_orphaned_page_ids(reg, "dv1") == ["orphan-1"]  # registry untouched
+
+
+def test_prune_orphans_nothing_to_do(tmp_path, monkeypatch):
+    from cja_auto_sdr.output.writers.notion import prune_notion_orphans
+
+    monkeypatch.setenv("NOTION_TOKEN", "tok")
+    with patch("cja_auto_sdr.output.writers.notion._require_notion_client") as req:
+        assert prune_notion_orphans(tmp_path, MagicMock()) == (0, 0)
+    req.assert_not_called()
+
+
+def test_prune_orphans_object_not_found_is_cleared(tmp_path, monkeypatch):
+    from cja_auto_sdr.output.notion_registry import add_orphaned_page_id, get_registry_path, lookup_orphaned_page_ids
+    from cja_auto_sdr.output.writers.notion import prune_notion_orphans
+
+    monkeypatch.setenv("NOTION_TOKEN", "tok")
+
+    reg = get_registry_path(tmp_path)
+    add_orphaned_page_id(reg, "dv1", "gone-page")
+
+    class _NotFound(Exception):
+        code = "object_not_found"
+
+    _NotFound.__name__ = "APIResponseError"
+
+    fake_cls = MagicMock()
+    fake_cls.return_value.pages.update.side_effect = _NotFound()
+    with patch("cja_auto_sdr.output.writers.notion._require_notion_client", return_value=fake_cls):
+        archived, gone = prune_notion_orphans(tmp_path, MagicMock())
+
+    assert (archived, gone) == (0, 1)
+    assert lookup_orphaned_page_ids(reg, "dv1") == []  # dead id removed anyway

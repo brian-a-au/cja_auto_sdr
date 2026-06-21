@@ -67,6 +67,15 @@ _PUSH_TO_NOTION_STANDALONE_POLICY = StandalonePrevalidationPolicy(
     ),
     validate_org_report_mode_scoped_options=False,
 )
+# NOTE: do NOT add "notion_prune_orphans" to ignored_semantic_dests. The mode flag
+# must stay visible to _validate_semantic_flag_relationships — _resolve_semantic_validation_args
+# clears every ignored dest, and clearing the mode flag would skip the entire prune
+# cross-flag conflict block (so --notion-prune-orphans --batch etc. would silently prune).
+# Mirror _PUSH_TO_NOTION_STANDALONE_POLICY, which tolerates only the wrapper flags.
+_NOTION_PRUNE_ORPHANS_STANDALONE_POLICY = StandalonePrevalidationPolicy(
+    ignored_semantic_dests=_WRAPPER_EXECUTION_TOLERATED_SEMANTIC_DESTS,
+    validate_org_report_mode_scoped_options=False,
+)
 
 _STANDALONE_PREVALIDATION_POLICIES: dict[str, StandalonePrevalidationPolicy] = {
     "completion": _COMPLETION_STANDALONE_POLICY,
@@ -74,6 +83,7 @@ _STANDALONE_PREVALIDATION_POLICIES: dict[str, StandalonePrevalidationPolicy] = {
     "exit_codes": _INFORMATIONAL_STANDALONE_POLICY,
     "sample_config": _SAMPLE_CONFIG_STANDALONE_POLICY,
     "push_to_notion": _PUSH_TO_NOTION_STANDALONE_POLICY,
+    "notion_prune_orphans": _NOTION_PRUNE_ORPHANS_STANDALONE_POLICY,
 }
 
 

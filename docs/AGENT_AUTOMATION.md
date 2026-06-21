@@ -479,6 +479,22 @@ uv run cja_auto_sdr --batch dv_12345 dv_67890 --format notion
 
 Use `--org-report --format notion` for a quick high-level view; use `--batch --format notion` when you need complete rows with all 14 properties.
 
+**Orphan page pruning pattern (v3.9.0):**
+
+Each time `--notion-force-new` forces a new page, the superseded page ID is recorded in `.notion_pages.json`. Orphaned pages accumulate in Notion until pruned. Add this maintenance step to your periodic pipeline:
+
+```bash
+# Preview what would be archived (no changes made)
+uv run cja_auto_sdr --notion-prune-orphans --dry-run --output-dir ./artifacts
+
+# Archive orphaned pages (moved to Notion trash — recoverable)
+uv run cja_auto_sdr --notion-prune-orphans --output-dir ./artifacts
+```
+
+`--notion-prune-orphans` requires only `NOTION_TOKEN` (no CJA API credentials needed). It is a standalone maintenance command and is rejected when combined with `--org-report`, `--diff`, `--batch`, `--watch`, or `--push-to-notion`.
+
+> **Limitation:** Only pages orphaned by `--notion-force-new` from v3.9.0 onward are tracked. Pages left behind by earlier runs are not catalogued and are unaffected by pruning.
+
 Pattern:
 
 ```bash

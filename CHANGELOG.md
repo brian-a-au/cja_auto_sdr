@@ -7,6 +7,14 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.9.0] - 2026-06-21
+
+### Added
+- **`--notion-prune-orphans`** — archive detail pages left behind by `--notion-force-new`. The page registry now records each superseded page id (`orphaned_page_ids`); the new command archives those pages in Notion (reversible — they go to the trash, not permanent deletion) and clears them from the registry. It needs only `NOTION_TOKEN`; combine with `--dry-run` to preview what would be archived without making any changes.
+
+### Compatibility
+- The registry change is forward-compatible: existing `.notion_pages.json` files gain `orphaned_page_ids` on the next write, with no migration step. Only pages orphaned by `--notion-force-new` from v3.9.0 onward are tracked.
+
 ## [3.8.0] - 2026-05-15
 
 ### Added
