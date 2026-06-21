@@ -466,3 +466,17 @@ def test_repair_raises_when_no_data_source() -> None:
     client.databases.retrieve.return_value = {"id": "db1", "data_sources": []}
     with pytest.raises(ValueError, match="no data source"):
         repair_database_schema(client, database_id="db1")
+
+
+def test_repair_flags_absent_canonical_title_as_conflict() -> None:
+    """A renamed/absent title ('Name' not in live) is reported as a conflict, not silently skipped."""
+    from cja_auto_sdr.output.notion_database import DATABASE_SCHEMA, _schema_property_type, repair_database_schema
+
+    # Every canonical property present EXCEPT the title 'Name' (title was renamed).
+    existing = {n: {"type": _schema_property_type(e)} for n, e in DATABASE_SCHEMA.items() if n != "Name"}
+    existing["Report"] = {"type": "title"}  # the DB's title under a different name
+    result = repair_database_schema(_fake_repair_client(existing, capture={}), database_id="db1")
+
+    assert ("Name", "title", "missing") in result.conflicts
+    assert "Name" not in result.to_add
+    assert result.applied is False

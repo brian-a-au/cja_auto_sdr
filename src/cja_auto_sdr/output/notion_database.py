@@ -111,8 +111,13 @@ def repair_database_schema(client: Any, *, database_id: str, dry_run: bool = Fal
     for name, entry in DATABASE_SCHEMA.items():
         expected = _schema_property_type(entry)
         if expected == "title":
-            # Every database already has exactly one title; never add a second.
-            if name in live and live[name].get("type") != "title":
+            # A database always has exactly one title, so repair never adds the
+            # canonical title. Surface an absent/renamed title (or a wrong-typed
+            # "Name") as a conflict for manual resolution — otherwise ensure_database
+            # would later reject the database with no hint from repair.
+            if name not in live:
+                conflicts.append((name, expected, "missing"))
+            elif live[name].get("type") != "title":
                 conflicts.append((name, expected, str(live[name].get("type"))))
             continue
         if name not in live:

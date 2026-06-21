@@ -713,9 +713,28 @@ def repair_notion_database(
         raise
 
     for name, expected, actual in result.conflicts:
-        logger.warning("Property %r has type %s, expected %s — left unchanged.", name, actual, expected)
+        if actual == "missing":
+            logger.warning(
+                "Property %r is absent — the database's title column has a different name. "
+                "Rename it to %r in Notion (repair cannot rename properties).",
+                name,
+                name,
+            )
+        else:
+            logger.warning(
+                "Property %r: expected %s, found %s — left unchanged (resolve manually).",
+                name,
+                expected,
+                actual,
+            )
     if not result.to_add:
-        logger.info("Registry database schema is up to date.")
+        if result.conflicts:
+            logger.info(
+                "No properties to add, but %d schema conflict(s) above need manual resolution.",
+                len(result.conflicts),
+            )
+        else:
+            logger.info("Registry database schema is up to date.")
     elif dry_run:
         for name in result.to_add:
             logger.info("[dry-run] would add property: %s", name)

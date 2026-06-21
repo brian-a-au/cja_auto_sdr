@@ -1120,3 +1120,29 @@ def test_repair_notion_database_maps_api_error(monkeypatch):
     with patch("cja_auto_sdr.output.writers.notion._require_notion_client", return_value=fake_cls):
         with pytest.raises(NotionAPIError):
             repair_notion_database("db1", MagicMock())
+
+
+def test_repair_notion_database_conflict_only_not_called_up_to_date(monkeypatch):
+    """Conflicts but nothing to add must NOT log 'up to date' (Codex P2): the schema is not clean."""
+    from cja_auto_sdr.output.notion_database import DATABASE_SCHEMA, _schema_property_type
+    from cja_auto_sdr.output.writers.notion import repair_notion_database
+
+    monkeypatch.setenv("NOTION_TOKEN", "tok")
+
+    live = {n: {"type": _schema_property_type(e)} for n, e in DATABASE_SCHEMA.items()}
+    live["Metrics Count"] = {"type": "rich_text"}  # conflict; nothing missing
+
+    fake_cls = MagicMock()
+    fc = fake_cls.return_value
+    fc.databases.retrieve.return_value = {"id": "db1", "data_sources": [{"id": "ds1"}]}
+    fc.data_sources.retrieve.return_value = {"properties": live}
+    logger = MagicMock()
+
+    with patch("cja_auto_sdr.output.writers.notion._require_notion_client", return_value=fake_cls):
+        result = repair_notion_database("db1", logger)
+
+    assert result.to_add == [] and result.conflicts
+    fc.data_sources.update.assert_not_called()
+    info_msgs = " ".join(str(c.args[0]) for c in logger.info.call_args_list)
+    assert "up to date" not in info_msgs
+    assert "manual resolution" in info_msgs
