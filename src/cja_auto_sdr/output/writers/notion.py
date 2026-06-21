@@ -35,6 +35,7 @@ __all__ = [
     "NotionAPIError",
     "NotionConfigurationError",
     "NotionDependencyError",
+    "repair_notion_database",
     "write_notion_output",
 ]
 
@@ -684,3 +685,43 @@ def prune_notion_orphans(
     suffix = f" ({already_gone} already gone)" if already_gone else ""
     logger.info("✓ Pruned %d orphan page(s)%s.", archived, suffix)
     return (archived, already_gone)
+
+
+def repair_notion_database(
+    database_id: str,
+    logger: logging.Logger,
+    *,
+    dry_run: bool = False,
+):
+    """Reconcile an existing registry database with the canonical schema.
+
+    Needs only NOTION_TOKEN. Returns the SchemaRepairResult. Raises
+    NotionConfigurationError / NotionDependencyError / NotionAPIError (the CLI
+    maps these to exit 1).
+    """
+    from cja_auto_sdr.output.notion_database import repair_database_schema
+
+    token, _ = resolve_notion_credentials(require_parent=False)
+    client = _build_client(_require_notion_client(), token)
+    try:
+        result = repair_database_schema(client, database_id=database_id, dry_run=dry_run)
+    except ValueError as exc:
+        raise NotionConfigurationError(str(exc)) from exc
+    except Exception as exc:
+        if _is_notion_api_error(exc):
+            raise NotionAPIError(_friendly_notion_error_message(exc)) from exc
+        raise
+
+    for name, expected, actual in result.conflicts:
+        logger.warning("Property %r has type %s, expected %s — left unchanged.", name, actual, expected)
+    if not result.to_add:
+        logger.info("Registry database schema is up to date.")
+    elif dry_run:
+        for name in result.to_add:
+            logger.info("[dry-run] would add property: %s", name)
+        logger.info("[dry-run] %d propert(ies) would be added.", len(result.to_add))
+    else:
+        for name in result.to_add:
+            logger.info("✓ Added property: %s", name)
+        logger.info("✓ Repaired registry database: added %d propert(ies).", len(result.to_add))
+    return result
