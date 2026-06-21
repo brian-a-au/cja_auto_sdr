@@ -36,6 +36,7 @@ __all__ = [
 ]
 
 DATA_QUALITY_OPTIONS = ["healthy", "degraded", "partial", "unknown"]
+_DATA_QUALITY_OPTION_COLORS = {"healthy": "green", "degraded": "red", "partial": "yellow", "unknown": "default"}
 
 # Notion database property definitions (used at create time).
 DATABASE_SCHEMA: dict[str, dict[str, Any]] = {
@@ -54,12 +55,7 @@ DATABASE_SCHEMA: dict[str, dict[str, Any]] = {
     "Derived Fields Count": {"number": {"format": "number"}},
     "Data Quality": {
         "select": {
-            "options": [
-                {"name": "healthy", "color": "green"},
-                {"name": "degraded", "color": "red"},
-                {"name": "partial", "color": "yellow"},
-                {"name": "unknown", "color": "default"},
-            ],
+            "options": [{"name": name, "color": _DATA_QUALITY_OPTION_COLORS[name]} for name in DATA_QUALITY_OPTIONS],
         },
     },
 }
@@ -70,7 +66,8 @@ def _rt(content: str) -> list[dict]:
 
 
 def _title(content: str) -> list[dict]:
-    return [{"type": "text", "text": {"content": str(content)[:2000]}}]
+    # Notion title property values use the same rich-text array shape as rich_text.
+    return _rt(content)
 
 
 def derive_data_quality_status(dq_df: pd.DataFrame | None) -> str:

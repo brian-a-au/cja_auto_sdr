@@ -5765,6 +5765,7 @@ def run_org_report(
     runtime_details: dict[str, Any] | None = None,
     notion_database_id: str | None = None,
     notion_create_database: bool = False,
+    notion_continue_on_error: bool = False,
 ) -> tuple[bool, bool]:
     """Run org-wide component analysis and generate report.
 
@@ -5780,6 +5781,8 @@ def run_org_report(
         runtime_details: Optional mutable dict to receive additive lock execution details
         notion_database_id: Optional Notion database ID for catalog rows
         notion_create_database: If True, create the Notion database when none exists
+        notion_continue_on_error: If True, a failed data view is logged and skipped
+            during --org-report --format notion instead of aborting the catalog run
 
     Returns:
         Tuple of (success, thresholds_exceeded) - thresholds_exceeded triggers exit code 2
@@ -5982,6 +5985,7 @@ def run_org_report(
                     logger,
                     notion_database_id=notion_database_id,
                     notion_create_database=notion_create_database,
+                    continue_on_error=notion_continue_on_error,
                 )
             except (NotionConfigurationError, NotionDependencyError, NotionAPIError) as exc:
                 _status_print(ConsoleColors.error(f"ERROR: {exc}"))
@@ -6917,6 +6921,7 @@ def _dispatch_post_validation_report_modes(
             runtime_details=lock_details,
             notion_database_id=notion_database_id,
             notion_create_database=notion_create_database,
+            notion_continue_on_error=getattr(args, "continue_on_error", False),
         )
         advisory_rollup = lock_details.pop("advisory_rollup", None)
         if run_state is not None:

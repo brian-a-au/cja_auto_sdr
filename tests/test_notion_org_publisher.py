@@ -306,3 +306,19 @@ def test_bootstrap_requires_parent_page():
         assert resolve.call_args.kwargs.get("require_parent") is True
     finally:
         patch.stopall()
+
+
+def test_adapter_forwards_continue_on_error():
+    """write_org_report_notion must forward continue_on_error to the publisher."""
+    from cja_auto_sdr.org.writers.notion import write_org_report_notion
+
+    with patch("cja_auto_sdr.output.notion_org_publisher.publish_org_report_catalog_to_notion") as pub:
+        pub.return_value = []
+        write_org_report_notion(
+            MagicMock(),
+            "/tmp/out",
+            MagicMock(),
+            notion_database_id="db-1",
+            continue_on_error=True,
+        )
+        assert pub.call_args.kwargs["continue_on_error"] is True

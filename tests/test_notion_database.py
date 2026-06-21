@@ -357,3 +357,11 @@ def test_db_calls_route_through_rate_limit_retry() -> None:
     assert client.data_sources.query in routed
     assert client.pages.create in routed
     assert client.pages.update in routed
+
+
+def test_data_quality_schema_options_derive_from_constant() -> None:
+    """The Data Quality select options are the single-source DATA_QUALITY_OPTIONS."""
+    from cja_auto_sdr.output.notion_database import DATA_QUALITY_OPTIONS, DATABASE_SCHEMA
+
+    names = [o["name"] for o in DATABASE_SCHEMA["Data Quality"]["select"]["options"]]
+    assert names == DATA_QUALITY_OPTIONS
