@@ -64,6 +64,8 @@ def test_repair_requires_database_id(capsys, monkeypatch) -> None:
         ["--notion-repair-database", "--list-dataviews"],
         ["--notion-repair-database", "--batch", "dv1", "dv2"],
         ["--notion-repair-database", "dv_123"],
+        ["--notion-repair-database", "--notion-prune-orphans"],
+        ["--notion-repair-database", "--notion-create-database"],
     ],
 )
 def test_repair_rejects_other_commands(argv, capsys) -> None:

@@ -1943,6 +1943,8 @@ def _validate_semantic_flag_relationships(
             ("batch", "--batch"),
             ("watch_data_views", "--watch"),
             ("inventory_summary", "--inventory-summary"),
+            ("notion_prune_orphans", "--notion-prune-orphans"),
+            ("notion_create_database", "--notion-create-database"),
         ):
             if getattr(args, dest, None):
                 _exit_error(f"--notion-repair-database cannot be combined with {label}")

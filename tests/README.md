@@ -167,7 +167,7 @@ tests/
 └── README.md                        # This file
 ```
 
-**Total: 8,252 comprehensive tests**
+**Total: 8,254 comprehensive tests**
 
 ### Test Count Breakdown
 
@@ -176,16 +176,16 @@ tests/
 
 | Category | Tests | Files | Notes |
 |----------|-------|-------|-------|
-| `unit` | 8,146 | 149 | Default primary category for files without explicit integration/e2e/smoke scope |
+| `unit` | 8,148 | 149 | Default primary category for files without explicit integration/e2e/smoke scope |
 | `integration` | 73 | 3 | Cross-module integration suites |
 | `e2e` | 23 | 2 | End-to-end suites with a mocked external boundary |
 | `smoke` | 10 | 1 | Lightweight command-mode coverage |
 | `slow` | 0 | 0 | Overlay marker; these tests are also counted in a primary category |
-| **Primary Total** | **8,252** | **155** | **unit + integration + e2e + smoke** |
+| **Primary Total** | **8,254** | **155** | **unit + integration + e2e + smoke** |
 
 | CI Slice | Tests | Files | Selector |
 |----------|-------|-------|----------|
-| `test-unit` | 8,146 | 149 | `-m "unit and not slow"` |
+| `test-unit` | 8,148 | 149 | `-m "unit and not slow"` |
 | `test-integration` | 96 | 5 | `-m "integration or e2e or slow"` |
 | `smoke-test` | 10 | 1 | `-m smoke` |
 
@@ -349,8 +349,8 @@ tests/
 | `test_notion_org_publisher.py` | 10 | --org-report --format notion catalog publisher tests |
 | `test_notion_registry_v2.py` | 11 | Notion registry v2 schema and legacy v1 migration tests |
 | `test_cli_notion_prune.py` | 20 | CLI flag wiring for --notion-prune-orphans |
-| `test_cli_notion_repair.py` | 12 | CLI flag wiring for --notion-repair-database and --notion-print-database-schema |
-| **Total** | **8,252** | **Collected via pytest --collect-only** |
+| `test_cli_notion_repair.py` | 14 | CLI flag wiring for --notion-repair-database and --notion-print-database-schema |
+| **Total** | **8,254** | **Collected via pytest --collect-only** |
 
 ## Running Tests
 
@@ -808,7 +808,7 @@ the `tests/README.md` inventory tree or count table.
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (8,252 tests total)
+- [x] Comprehensive test coverage (8,254 tests total)
 - [x] Org-wide analysis tests (test_org_report.py) - 211 tests (including large org scaling, output path aliases, memory warnings, smart cache invalidation)
 - [x] Org-wide analysis integration tests (test_org_report_integration.py) - 17 tests (end-to-end flows, caching, filtering, governance thresholds)
 - [x] Profile management tests (test_profiles.py) - 78 tests
