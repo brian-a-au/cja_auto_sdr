@@ -1146,3 +1146,22 @@ def test_repair_notion_database_conflict_only_not_called_up_to_date(monkeypatch)
     info_msgs = " ".join(str(c.args[0]) for c in logger.info.call_args_list)
     assert "up to date" not in info_msgs
     assert "manual resolution" in info_msgs
+
+
+def test_repair_notion_database_resolves_db_id_from_env(monkeypatch):
+    """With no explicit id, repair falls back to NOTION_DATABASE_ID from the env/.env (Codex P2)."""
+    from cja_auto_sdr.output.writers.notion import repair_notion_database
+
+    monkeypatch.setenv("NOTION_TOKEN", "tok")
+    monkeypatch.setenv("NOTION_DATABASE_ID", "db-from-env")
+
+    fake_cls = MagicMock()
+    fc = fake_cls.return_value
+    fc.databases.retrieve.return_value = {"id": "db-from-env", "data_sources": [{"id": "ds1"}]}
+    fc.data_sources.retrieve.return_value = {"properties": {"Name": {"type": "title"}}}
+
+    with patch("cja_auto_sdr.output.writers.notion._require_notion_client", return_value=fake_cls):
+        repair_notion_database(None, MagicMock())  # no explicit id → resolved from env
+
+    fc.databases.retrieve.assert_called_once()
+    assert fc.databases.retrieve.call_args.kwargs["database_id"] == "db-from-env"

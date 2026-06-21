@@ -688,18 +688,37 @@ def prune_notion_orphans(
 
 
 def repair_notion_database(
-    database_id: str,
+    database_id: str | None,
     logger: logging.Logger,
     *,
     dry_run: bool = False,
 ):
     """Reconcile an existing registry database with the canonical schema.
 
-    Needs only NOTION_TOKEN. Returns the SchemaRepairResult. Raises
-    NotionConfigurationError / NotionDependencyError / NotionAPIError (the CLI
-    maps these to exit 1).
+    The database id may be passed explicitly or resolved from NOTION_DATABASE_ID
+    (environment or ``.env``). Needs only NOTION_TOKEN. Returns the
+    SchemaRepairResult. Raises NotionConfigurationError / NotionDependencyError /
+    NotionAPIError (the CLI maps these to exit 1).
     """
     from cja_auto_sdr.output.notion_database import repair_database_schema
+
+    # Load .env first so a NOTION_DATABASE_ID configured there is visible. The
+    # database id is resolved before the token check so the missing-database-id
+    # error wins when neither is set. resolve_notion_credentials loads .env too
+    # (idempotent), but it runs later, so do it here for the id lookup.
+    try:
+        from dotenv import load_dotenv
+
+        load_dotenv()
+    except ImportError:
+        pass
+
+    database_id = database_id or os.environ.get("NOTION_DATABASE_ID")
+    if not database_id:
+        raise NotionConfigurationError(
+            "--notion-repair-database requires a database id. Pass --notion-database-id <id> or set "
+            "NOTION_DATABASE_ID (or use --notion-create-database to bootstrap a new registry).",
+        )
 
     token, _ = resolve_notion_credentials(require_parent=False)
     client = _build_client(_require_notion_client(), token)

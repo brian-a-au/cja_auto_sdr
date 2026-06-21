@@ -7108,13 +7108,6 @@ def _main_impl(run_state: dict[str, Any] | None = None):
             repair_notion_database,
         )
 
-        database_id = getattr(args, "notion_database_id", None) or os.environ.get("NOTION_DATABASE_ID")
-        if not database_id:
-            _exit_error(
-                "--notion-repair-database requires a database id. Pass --notion-database-id <id> or set "
-                "NOTION_DATABASE_ID (or use --notion-create-database to bootstrap a new registry).",
-            )
-
         # Same console-logger setup as the prune dispatch: this path runs before
         # setup_logging, so configure INFO output or the report would be suppressed.
         repair_logger = logging.getLogger("notion_repair_database")
@@ -7125,8 +7118,15 @@ def _main_impl(run_state: dict[str, Any] | None = None):
             repair_logger.addHandler(_repair_handler)
             repair_logger.propagate = False
 
+        # repair_notion_database loads .env, then resolves the database id from the
+        # --notion-database-id flag or NOTION_DATABASE_ID (env / .env), so a .env-only
+        # NOTION_DATABASE_ID works. It raises NotionConfigurationError if none is set.
         try:
-            repair_notion_database(database_id, repair_logger, dry_run=getattr(args, "dry_run", False))
+            repair_notion_database(
+                getattr(args, "notion_database_id", None),
+                repair_logger,
+                dry_run=getattr(args, "dry_run", False),
+            )
         except (NotionConfigurationError, NotionDependencyError, NotionAPIError) as exc:
             _exit_error(str(exc))
         sys.exit(0)
