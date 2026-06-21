@@ -475,6 +475,24 @@ cja_auto_sdr dv_12345 --format notion
 cja_auto_sdr --batch dv_12345 dv_67890 dv_abcde --format notion
 ```
 
+**Inspecting and repairing the schema (v3.10.0):**
+
+The canonical registry schema can be printed at any time without credentials:
+
+```bash
+cja_auto_sdr --notion-print-database-schema
+```
+
+When the schema grows across tool versions, use `--notion-repair-database` instead of recreating the database. It is add-only: it adds any missing properties and reports type conflicts, but never changes or removes existing properties or data rows. Requires only `NOTION_TOKEN` and a database id:
+
+```bash
+# Preview what would be added (no changes made)
+cja_auto_sdr --notion-repair-database --dry-run --notion-database-id <id>
+
+# Apply the repair
+cja_auto_sdr --notion-repair-database --notion-database-id <id>
+```
+
 **Org-report catalog (lightweight):**
 
 `--org-report --format notion` writes one registry row per data view from the org report summary. It fills Name, Data View ID, Metrics Count, Dimensions Count, owner/dates, and an SDR Page link where a detail page already exists. The following columns are **not** populated because the org report does not fetch that data:

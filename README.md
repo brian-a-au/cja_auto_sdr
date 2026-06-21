@@ -283,6 +283,10 @@ cja_auto_sdr "Production Analytics"
 | **Notion Maintenance (v3.9.0)** | |
 | Preview orphan pages (dry run) | `cja_auto_sdr --notion-prune-orphans --dry-run --output-dir ./out` |
 | Archive orphan pages (Notion trash) | `cja_auto_sdr --notion-prune-orphans --output-dir ./out` |
+| **Notion Registry Repair (v3.10.0)** | |
+| Print canonical registry schema | `cja_auto_sdr --notion-print-database-schema` |
+| Preview schema repair (dry run) | `cja_auto_sdr --notion-repair-database --dry-run --notion-database-id <id>` |
+| Apply schema repair (add-only) | `cja_auto_sdr --notion-repair-database --notion-database-id <id>` |
 | **Quick Stats & Discovery** | |
 | Quick stats (no full report) | `cja_auto_sdr dv_12345 --stats` |
 | Stats as JSON | `cja_auto_sdr dv_12345 --stats --format json` |
