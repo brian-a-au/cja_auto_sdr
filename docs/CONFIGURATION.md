@@ -222,6 +222,8 @@ cja_auto_sdr --sample-config
 
 These variables are used when publishing SDRs to Notion (`--format notion`, `--push-to-notion`, or `--notion-create-database`).
 
+> **New to Notion?** See the [Notion Setup Guide](NOTION_SETUP.md) for step-by-step instructions on creating the integration, sharing the parent page, and bootstrapping the registry database.
+
 | Variable | Description | Required |
 |----------|-------------|----------|
 | `NOTION_TOKEN` | Notion integration token (starts with `secret_`) | **Yes** (for any Notion output) |

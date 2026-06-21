@@ -269,7 +269,7 @@ When adding new CLI flags, update these docs:
 
 ### Documentation Inventory (`docs/`)
 
-22 files covering: quickstart, CLI reference, quick reference, configuration, installation, use cases, agent automation, org-wide analysis, diff comparison, data quality, batch processing, output formats, performance, git integration, shell completion, troubleshooting, failure codes, data view names, inventory overview, calculated metrics inventory, derived fields inventory, segments inventory.
+23 files covering: quickstart, CLI reference, quick reference, configuration, installation, use cases, agent automation, org-wide analysis, diff comparison, data quality, batch processing, output formats, performance, git integration, shell completion, troubleshooting, failure codes, data view names, inventory overview, calculated metrics inventory, derived fields inventory, segments inventory, notion setup.
 
 ---
 

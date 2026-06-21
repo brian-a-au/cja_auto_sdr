@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 
 import pytest
 
@@ -11,6 +12,7 @@ from cja_auto_sdr.cli.standalone_policy import standalone_prevalidation_policy
 from cja_auto_sdr.generator import (
     RunMode,
     _infer_run_mode_enum,
+    _main_impl,
     _resolve_semantic_validation_args,
     _validate_semantic_flag_relationships,
 )
@@ -85,3 +87,44 @@ def test_prune_conflict_rejected_through_effective_args(argv, label, capsys) -> 
         _validate_semantic_flag_relationships(effective, inferred_mode=RunMode.NOTION_PRUNE_ORPHANS)
     assert exc.value.code == 1
     assert "--notion-prune-orphans" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["--notion-prune-orphans", "--list-dataviews"],
+        ["--notion-prune-orphans", "--stats"],
+        ["--notion-prune-orphans", "--list-snapshots"],
+    ],
+)
+def test_prune_rejects_higher_precedence_modes(argv, capsys) -> None:
+    """A mode that outranks prune in _run_mode_checks must not silently drop the prune request."""
+    args = parse_arguments(argv)
+    inferred = _infer_run_mode_enum(args)
+    assert inferred is not RunMode.NOTION_PRUNE_ORPHANS  # another mode won the dispatch
+    with pytest.raises(SystemExit) as exc:
+        _validate_semantic_flag_relationships(args, inferred_mode=inferred)
+    assert exc.value.code == 1
+    assert "--notion-prune-orphans" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("argv", [["--notion-prune-orphans"], ["--notion-prune-orphans", "--dry-run"]])
+def test_prune_alone_or_with_dry_run_passes_validation(argv) -> None:
+    """Prune by itself (and with the --dry-run sub-flag) must NOT be rejected as a conflict."""
+    args = parse_arguments(argv)
+    assert _infer_run_mode_enum(args) is RunMode.NOTION_PRUNE_ORPHANS
+    # Should not raise SystemExit.
+    _validate_semantic_flag_relationships(args, inferred_mode=RunMode.NOTION_PRUNE_ORPHANS)
+
+
+def test_prune_output_is_visible(tmp_path, capsys, monkeypatch) -> None:
+    """Regression: the prune dispatch configures a console logger so its output is visible.
+
+    With no registry in the output dir there are no orphans, so this exercises the
+    'nothing to prune' message end-to-end without needing a Notion token.
+    """
+    monkeypatch.setattr(sys, "argv", ["cja_auto_sdr", "--notion-prune-orphans", "--output-dir", str(tmp_path)])
+    with pytest.raises(SystemExit) as exc:
+        _main_impl()
+    assert exc.value.code == 0
+    assert "No orphan Notion pages to prune." in capsys.readouterr().out

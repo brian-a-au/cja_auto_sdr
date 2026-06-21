@@ -495,6 +495,8 @@ Cache is stored in `~/.cja_auto_sdr/cache/org_report_cache.json`.
 
 ### Notion Integration
 
+> **First time?** Follow the [Notion Setup Guide](NOTION_SETUP.md) end to end: create the integration, share the parent page, bootstrap the registry database, and run your first publish.
+
 Publish SDRs directly to a Notion page, maintain a registry database of all published data views, or push a previously-generated JSON artifact to Notion without re-calling the CJA API. Requires `NOTION_TOKEN` and `NOTION_PARENT_PAGE_ID` environment variables. Install the extra first:
 
 ```bash

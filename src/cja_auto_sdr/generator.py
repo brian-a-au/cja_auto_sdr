@@ -1926,6 +1926,16 @@ def _validate_semantic_flag_relationships(
             "then pass --notion-database-id <id> for the batch.",
         )
     if getattr(args, "notion_prune_orphans", False):
+        # Modes that outrank NOTION_PRUNE_ORPHANS in _run_mode_checks (discovery,
+        # snapshot maintenance, org-report, diff, config, stats, ...) would win the
+        # dispatch and silently drop the prune request. Fail closed: if any other
+        # mode was inferred, reject. --dry-run is a prune sub-flag and keeps prune
+        # as the inferred mode, so it is not affected.
+        if inferred_mode != RunMode.NOTION_PRUNE_ORPHANS:
+            _exit_error(
+                "--notion-prune-orphans is a standalone maintenance command and cannot be combined with other commands",
+            )
+        # Lower-precedence flags do not change the inferred mode but are still incompatible.
         for dest, label in (
             ("data_views", "positional data view arguments"),
             ("push_to_notion", "--push-to-notion"),
@@ -7071,10 +7081,22 @@ def _main_impl(run_state: dict[str, Any] | None = None):
             prune_notion_orphans,
         )
 
+        # This standalone path runs before setup_logging, and prune_notion_orphans
+        # emits its preview and results via logger.info. Configure a console logger
+        # at INFO here, otherwise the default WARNING threshold would suppress every
+        # line and the command would print nothing.
+        prune_logger = logging.getLogger("notion_prune_orphans")
+        prune_logger.setLevel(logging.INFO)
+        if not prune_logger.handlers:
+            _prune_handler = logging.StreamHandler(sys.stdout)
+            _prune_handler.setFormatter(logging.Formatter("%(message)s"))
+            prune_logger.addHandler(_prune_handler)
+            prune_logger.propagate = False
+
         try:
             prune_notion_orphans(
                 args.output_dir,
-                logging.getLogger(__name__),
+                prune_logger,
                 dry_run=getattr(args, "dry_run", False),
             )
         except (NotionConfigurationError, NotionDependencyError, NotionAPIError) as exc:

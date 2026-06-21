@@ -7,7 +7,7 @@
 [![Version Sync](https://github.com/brian-a-au/cja_auto_sdr/actions/workflows/version-sync.yml/badge.svg)](https://github.com/brian-a-au/cja_auto_sdr/actions/workflows/version-sync.yml)
 [![Python 3.14+](https://img.shields.io/badge/python-3.14%2B-blue.svg)](https://www.python.org/downloads/)
 [![Coverage](https://img.shields.io/badge/coverage-99%25-brightgreen.svg)](tests/)
-[![Tests](https://img.shields.io/badge/tests-8220-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-8226-brightgreen.svg)](tests/)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -354,6 +354,7 @@ cja_auto_sdr "Production Analytics"
 | [Extended Quick Start](docs/QUICKSTART_GUIDE.md) | Complete walkthrough from zero to first SDR |
 | [Installation Guide](docs/INSTALLATION.md) | Detailed setup instructions, authentication options |
 | [Configuration Guide](docs/CONFIGURATION.md) | config.json, environment variables, Profile management |
+| [Notion Setup](docs/NOTION_SETUP.md) | Step-by-step Notion integration setup and overview |
 | [CLI Reference](docs/CLI_REFERENCE.md) | Complete command-line options and examples |
 | [Shell Completion](docs/SHELL_COMPLETION.md) | Enable tab-completion for bash/zsh |
 | [Data Quality](docs/DATA_QUALITY.md) | Validation checks, severity levels, understanding issues |
@@ -476,7 +477,7 @@ cja_auto_sdr/
 │   └── ...                    # Additional guides
 ├── examples/                  # Automation and GitHub Actions examples
 ├── scripts/                   # Utility scripts
-├── tests/                     # Test suite (8,220+ tests)
+├── tests/                     # Test suite (8,226+ tests)
 │   ├── category_rules.py      # File-based test-category rules
 │   ├── conftest.py            # Pytest fixtures and auto-marking
 │   ├── README.md              # Test inventory and execution guide
