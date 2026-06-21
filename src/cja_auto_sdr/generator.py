@@ -496,6 +496,8 @@ class RunMode(Enum):
     DIFF_SNAPSHOT = "diff_snapshot"
     DRY_RUN = "dry_run"
     INVENTORY_SUMMARY = "inventory_summary"
+    NOTION_PRINT_SCHEMA = "notion_print_schema"
+    NOTION_REPAIR_DATABASE = "notion_repair_database"
     NOTION_PRUNE_ORPHANS = "notion_prune_orphans"
     WATCH = "watch"
     PUSH_TO_NOTION = "push_to_notion"
@@ -1472,6 +1474,7 @@ def _run_mode_checks(args: argparse.Namespace) -> tuple[tuple[RunMode, bool], ..
         (RunMode.EXIT_CODES, getattr(args, "exit_codes", False)),
         (RunMode.COMPLETION, completion_shell is not None),
         (RunMode.SAMPLE_CONFIG, getattr(args, "sample_config", False)),
+        (RunMode.NOTION_PRINT_SCHEMA, getattr(args, "notion_print_database_schema", False)),
         (
             RunMode.PROFILE_MANAGEMENT,
             bool(
@@ -1518,6 +1521,7 @@ def _run_mode_checks(args: argparse.Namespace) -> tuple[tuple[RunMode, bool], ..
             RunMode.DIFF_SNAPSHOT,
             bool(getattr(args, "compare_with_prev", False) or getattr(args, "diff_snapshot", None)),
         ),
+        (RunMode.NOTION_REPAIR_DATABASE, getattr(args, "notion_repair_database", False)),
         (RunMode.NOTION_PRUNE_ORPHANS, getattr(args, "notion_prune_orphans", False)),
         (RunMode.DRY_RUN, getattr(args, "dry_run", False)),
         (RunMode.INVENTORY_SUMMARY, getattr(args, "inventory_summary", False)),
@@ -1925,6 +1929,23 @@ def _validate_semantic_flag_relationships(
             "Bootstrap the registry once (run a single data view with --notion-create-database), "
             "then pass --notion-database-id <id> for the batch.",
         )
+    if getattr(args, "notion_repair_database", False):
+        if inferred_mode != RunMode.NOTION_REPAIR_DATABASE:
+            _exit_error(
+                "--notion-repair-database is a standalone maintenance command and cannot be "
+                "combined with other commands",
+            )
+        for dest, label in (
+            ("data_views", "positional data view arguments"),
+            ("push_to_notion", "--push-to-notion"),
+            ("org_report", "--org-report"),
+            ("diff", "--diff"),
+            ("batch", "--batch"),
+            ("watch_data_views", "--watch"),
+            ("inventory_summary", "--inventory-summary"),
+        ):
+            if getattr(args, dest, None):
+                _exit_error(f"--notion-repair-database cannot be combined with {label}")
     if getattr(args, "notion_prune_orphans", False):
         # Modes that outrank NOTION_PRUNE_ORPHANS in _run_mode_checks (discovery,
         # snapshot maintenance, org-report, diff, config, stats, ...) would win the
@@ -7072,6 +7093,43 @@ def _main_impl(run_state: dict[str, Any] | None = None):
 
     if inferred_mode == RunMode.ORG_REPORT_SNAPSHOTS:
         _handle_org_report_snapshot_cli(args, output_to_stdout=output_to_stdout, run_state=run_state)
+
+    if inferred_mode == RunMode.NOTION_PRINT_SCHEMA:
+        from cja_auto_sdr.output.notion_database import describe_database_schema
+
+        print(describe_database_schema(), end="")
+        sys.exit(0)
+
+    if inferred_mode == RunMode.NOTION_REPAIR_DATABASE:
+        from cja_auto_sdr.output.writers.notion import (
+            NotionAPIError,
+            NotionConfigurationError,
+            NotionDependencyError,
+            repair_notion_database,
+        )
+
+        database_id = getattr(args, "notion_database_id", None) or os.environ.get("NOTION_DATABASE_ID")
+        if not database_id:
+            _exit_error(
+                "--notion-repair-database requires a database id. Pass --notion-database-id <id> or set "
+                "NOTION_DATABASE_ID (or use --notion-create-database to bootstrap a new registry).",
+            )
+
+        # Same console-logger setup as the prune dispatch: this path runs before
+        # setup_logging, so configure INFO output or the report would be suppressed.
+        repair_logger = logging.getLogger("notion_repair_database")
+        repair_logger.setLevel(logging.INFO)
+        if not repair_logger.handlers:
+            _repair_handler = logging.StreamHandler(sys.stdout)
+            _repair_handler.setFormatter(logging.Formatter("%(message)s"))
+            repair_logger.addHandler(_repair_handler)
+            repair_logger.propagate = False
+
+        try:
+            repair_notion_database(database_id, repair_logger, dry_run=getattr(args, "dry_run", False))
+        except (NotionConfigurationError, NotionDependencyError, NotionAPIError) as exc:
+            _exit_error(str(exc))
+        sys.exit(0)
 
     if inferred_mode == RunMode.NOTION_PRUNE_ORPHANS:
         from cja_auto_sdr.output.writers.notion import (

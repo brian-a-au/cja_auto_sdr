@@ -288,7 +288,8 @@ def ensure_database(
         missing = set(DATABASE_SCHEMA) - existing_props
         if missing:
             raise ValueError(
-                f"Database {database_id} is missing required properties: {sorted(missing)}",
+                f"Database {database_id} is missing required properties: {sorted(missing)}. "
+                "Run cja_auto_sdr --notion-repair-database to add them.",
             )
         return str(db["id"]), ds_id
 
