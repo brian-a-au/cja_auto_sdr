@@ -34,7 +34,9 @@ def test_standalone_policy_registered() -> None:
     assert standalone_prevalidation_policy("notion_prune_orphans") is not None
 
 
-@pytest.mark.parametrize("conflict", ["org_report", "diff", "batch"])
+@pytest.mark.parametrize(
+    "conflict", ["org_report", "diff", "batch", "push_to_notion", "watch_data_views", "inventory_summary", "data_views"]
+)
 def test_prune_rejects_conflicting_modes(conflict, capsys) -> None:
     args = argparse.Namespace(
         notion_prune_orphans=True,
@@ -43,6 +45,8 @@ def test_prune_rejects_conflicting_modes(conflict, capsys) -> None:
         diff=False,
         batch=False,
         watch_data_views=None,
+        inventory_summary=False,
+        data_views=[],
         skip_validation=False,
         format=None,
     )

@@ -1927,11 +1927,13 @@ def _validate_semantic_flag_relationships(
         )
     if getattr(args, "notion_prune_orphans", False):
         for dest, label in (
+            ("data_views", "positional data view arguments"),
             ("push_to_notion", "--push-to-notion"),
             ("org_report", "--org-report"),
             ("diff", "--diff"),
             ("batch", "--batch"),
             ("watch_data_views", "--watch"),
+            ("inventory_summary", "--inventory-summary"),
         ):
             if getattr(args, dest, None):
                 _exit_error(f"--notion-prune-orphans cannot be combined with {label}")
