@@ -281,7 +281,7 @@ def ensure_database(
         db = _call_with_rate_limit_retry(client.databases.retrieve, database_id=database_id)
         data_sources = db.get("data_sources") or []
         if not data_sources:
-            raise ValueError(f"Database {database_id} has no data sources")
+            raise ValueError(f"Database {database_id} has no data source")
         ds_id = str(data_sources[0]["id"])
         ds = _call_with_rate_limit_retry(client.data_sources.retrieve, data_source_id=ds_id)
         existing_props = set((ds.get("properties") or {}).keys())

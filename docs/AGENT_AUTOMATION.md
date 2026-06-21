@@ -495,6 +495,25 @@ uv run cja_auto_sdr --notion-prune-orphans --output-dir ./artifacts
 
 > **Limitation:** Only pages orphaned by `--notion-force-new` from v3.9.0 onward are tracked. Pages left behind by earlier runs are not catalogued and are unaffected by pruning.
 
+**Registry schema maintenance (v3.10.0):**
+
+Over time, schema additions may leave an existing registry database missing new properties. Two standalone commands help you inspect and repair the database schema without touching any rows or existing properties:
+
+```bash
+# Print the canonical CJA SDR Registry schema and exit (no credentials needed)
+cja_auto_sdr --notion-print-database-schema
+
+# Preview what would be added (no changes made)
+cja_auto_sdr --notion-repair-database --dry-run --notion-database-id <id>
+
+# Apply missing properties to the database
+cja_auto_sdr --notion-repair-database --notion-database-id <id>
+```
+
+`--notion-repair-database` is add-only: it adds missing properties and reports type conflicts, but never changes or removes existing properties or rows. It requires only `NOTION_TOKEN` and a database id (via `--notion-database-id` or the `NOTION_DATABASE_ID` env var). Combine with `--dry-run` to preview changes before applying. It is a standalone maintenance command and is rejected when combined with other commands.
+
+`--notion-print-database-schema` prints the canonical schema and exits immediately — no credentials or network access required.
+
 Pattern:
 
 ```bash

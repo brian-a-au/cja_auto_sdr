@@ -1101,3 +1101,22 @@ def test_repair_notion_database_maps_value_error(monkeypatch):
     with patch("cja_auto_sdr.output.writers.notion._require_notion_client", return_value=fake_cls):
         with pytest.raises(NotionConfigurationError, match="no data source"):
             repair_notion_database("db1", MagicMock())
+
+
+def test_repair_notion_database_maps_api_error(monkeypatch):
+    """databases.retrieve raising an API error surfaces as NotionAPIError."""
+    from cja_auto_sdr.output.writers.notion import NotionAPIError, repair_notion_database
+
+    monkeypatch.setenv("NOTION_TOKEN", "tok")
+
+    class FakeAPIError(Exception):
+        code = "object_not_found"
+
+    FakeAPIError.__name__ = "APIResponseError"
+
+    fake_cls = MagicMock()
+    fake_cls.return_value.databases.retrieve.side_effect = FakeAPIError("not found")
+
+    with patch("cja_auto_sdr.output.writers.notion._require_notion_client", return_value=fake_cls):
+        with pytest.raises(NotionAPIError):
+            repair_notion_database("db1", MagicMock())
