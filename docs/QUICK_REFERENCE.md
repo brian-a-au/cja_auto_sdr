@@ -1,6 +1,6 @@
 # Quick Reference Card
 
-Single-page command cheat sheet for CJA SDR Generator v3.8.0.
+Single-page command cheat sheet for CJA SDR Generator v3.9.0.
 
 ## Four Main Modes
 
@@ -549,7 +549,7 @@ cja_auto_sdr dv_12345 --snapshot ./baseline.json --include-all-inventory
 # Compare against snapshot with inventory (same behavior)
 cja_auto_sdr dv_12345 --diff-snapshot ./baseline.json --include-all-inventory
 
-# --- Notion SDR Registry (v3.8.0) ---
+# --- Notion SDR Registry (v3.9.0) ---
 
 # Bootstrap the registry database (one-time; prints the database ID)
 cja_auto_sdr --notion-create-database
