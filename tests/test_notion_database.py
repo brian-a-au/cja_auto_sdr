@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pandas as pd
 import pytest
@@ -332,3 +332,28 @@ def test_find_existing_row_id_returns_none_when_no_match() -> None:
     client = MagicMock()
     client.data_sources.query.return_value = {"results": []}
     assert find_existing_row_id(client, data_source_id="ds-1", data_view_id="dv1") is None
+
+
+def test_db_calls_route_through_rate_limit_retry() -> None:
+    """ensure_database / find_existing_row_id / upsert_database_row must route Notion
+    SDK calls through _call_with_rate_limit_retry so 429s back off instead of aborting."""
+    from cja_auto_sdr.output import notion_database
+
+    client = MagicMock()
+    client.databases.create.return_value = {"id": "db1", "data_sources": [{"id": "ds1"}]}
+    client.data_sources.query.return_value = {"results": []}
+    client.pages.create.return_value = {"id": "row1"}
+    client.pages.update.return_value = {"id": "row1"}
+
+    real = notion_database._call_with_rate_limit_retry
+    with patch.object(notion_database, "_call_with_rate_limit_retry", wraps=real) as wrapped:
+        notion_database.ensure_database(client, parent_page_id="p", database_id=None, create_if_missing=True)
+        notion_database.find_existing_row_id(client, data_source_id="ds1", data_view_id="dv1")
+        notion_database.upsert_database_row(client, data_source_id="ds1", existing_row_id=None, properties={})
+        notion_database.upsert_database_row(client, data_source_id="ds1", existing_row_id="r", properties={})
+
+    routed = [c.args[0] for c in wrapped.call_args_list]
+    assert client.databases.create in routed
+    assert client.data_sources.query in routed
+    assert client.pages.create in routed
+    assert client.pages.update in routed

@@ -19,6 +19,8 @@ from __future__ import annotations
 import datetime as _dt
 from typing import TYPE_CHECKING, Any
 
+from cja_auto_sdr.output.writers.notion import _call_with_rate_limit_retry
+
 if TYPE_CHECKING:
     import pandas as pd
 
@@ -212,12 +214,12 @@ def ensure_database(
       ``--notion-create-database`` or ``NOTION_DATABASE_ID``.
     """
     if database_id is not None:
-        db = client.databases.retrieve(database_id=database_id)
+        db = _call_with_rate_limit_retry(client.databases.retrieve, database_id=database_id)
         data_sources = db.get("data_sources") or []
         if not data_sources:
             raise ValueError(f"Database {database_id} has no data sources")
         ds_id = str(data_sources[0]["id"])
-        ds = client.data_sources.retrieve(data_source_id=ds_id)
+        ds = _call_with_rate_limit_retry(client.data_sources.retrieve, data_source_id=ds_id)
         existing_props = set((ds.get("properties") or {}).keys())
         missing = set(DATABASE_SCHEMA) - existing_props
         if missing:
@@ -233,7 +235,8 @@ def ensure_database(
             "SDR Registry database under NOTION_PARENT_PAGE_ID.",
         )
 
-    created = client.databases.create(
+    created = _call_with_rate_limit_retry(
+        client.databases.create,
         parent={"type": "page_id", "page_id": parent_page_id},
         title=[{"type": "text", "text": {"content": "CJA SDR Registry"}}],
         initial_data_source={"properties": DATABASE_SCHEMA},
@@ -258,7 +261,8 @@ def find_existing_row_id(
     ``None`` when no matching row exists. Notion API errors propagate to the caller,
     which maps them to a friendly message.
     """
-    response = client.data_sources.query(
+    response = _call_with_rate_limit_retry(
+        client.data_sources.query,
         data_source_id=data_source_id,
         filter={"property": "Data View ID", "rich_text": {"equals": data_view_id}},
         page_size=1,
@@ -276,8 +280,14 @@ def upsert_database_row(
 ) -> str:
     """Create or update a database row; return its page ID."""
     if existing_row_id:
-        return str(client.pages.update(page_id=existing_row_id, properties=properties)["id"])
-    created = client.pages.create(
+        updated = _call_with_rate_limit_retry(
+            client.pages.update,
+            page_id=existing_row_id,
+            properties=properties,
+        )
+        return str(updated["id"])
+    created = _call_with_rate_limit_retry(
+        client.pages.create,
         parent={"type": "data_source_id", "data_source_id": data_source_id},
         properties=properties,
     )
