@@ -496,6 +496,7 @@ class RunMode(Enum):
     DIFF_SNAPSHOT = "diff_snapshot"
     DRY_RUN = "dry_run"
     INVENTORY_SUMMARY = "inventory_summary"
+    NOTION_PRUNE_ORPHANS = "notion_prune_orphans"
     WATCH = "watch"
     PUSH_TO_NOTION = "push_to_notion"
     SDR = "sdr"
@@ -1517,6 +1518,7 @@ def _run_mode_checks(args: argparse.Namespace) -> tuple[tuple[RunMode, bool], ..
             RunMode.DIFF_SNAPSHOT,
             bool(getattr(args, "compare_with_prev", False) or getattr(args, "diff_snapshot", None)),
         ),
+        (RunMode.NOTION_PRUNE_ORPHANS, getattr(args, "notion_prune_orphans", False)),
         (RunMode.DRY_RUN, getattr(args, "dry_run", False)),
         (RunMode.INVENTORY_SUMMARY, getattr(args, "inventory_summary", False)),
         (RunMode.PUSH_TO_NOTION, getattr(args, "push_to_notion", None) is not None),
@@ -1923,6 +1925,16 @@ def _validate_semantic_flag_relationships(
             "Bootstrap the registry once (run a single data view with --notion-create-database), "
             "then pass --notion-database-id <id> for the batch.",
         )
+    if getattr(args, "notion_prune_orphans", False):
+        for dest, label in (
+            ("push_to_notion", "--push-to-notion"),
+            ("org_report", "--org-report"),
+            ("diff", "--diff"),
+            ("batch", "--batch"),
+            ("watch_data_views", "--watch"),
+        ):
+            if getattr(args, dest, None):
+                _exit_error(f"--notion-prune-orphans cannot be combined with {label}")
     # Reject --push-to-notion alongside flags that would otherwise win the
     # mode dispatch and silently drop the publish request. Table at module
     # scope: _PUSH_TO_NOTION_INCOMPATIBLE_FLAGS.
@@ -7048,6 +7060,24 @@ def _main_impl(run_state: dict[str, Any] | None = None):
 
     if inferred_mode == RunMode.ORG_REPORT_SNAPSHOTS:
         _handle_org_report_snapshot_cli(args, output_to_stdout=output_to_stdout, run_state=run_state)
+
+    if inferred_mode == RunMode.NOTION_PRUNE_ORPHANS:
+        from cja_auto_sdr.output.writers.notion import (
+            NotionAPIError,
+            NotionConfigurationError,
+            NotionDependencyError,
+            prune_notion_orphans,
+        )
+
+        try:
+            prune_notion_orphans(
+                args.output_dir,
+                logging.getLogger(__name__),
+                dry_run=getattr(args, "dry_run", False),
+            )
+        except (NotionConfigurationError, NotionDependencyError, NotionAPIError) as exc:
+            _exit_error(str(exc))
+        sys.exit(0)
 
     if inferred_mode == RunMode.PUSH_TO_NOTION:
         json_file = getattr(args, "push_to_notion", None)
