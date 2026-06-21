@@ -401,9 +401,10 @@ cja_auto_sdr --list-dataviews  # Uses client-a
 | `--format-pr-comment` | Output in GitHub/GitLab PR comment format |
 | `--format notion` | Publish SDR directly to Notion (requires `NOTION_TOKEN` + `NOTION_PARENT_PAGE_ID`) |
 | `--push-to-notion JSON_FILE` | Push existing JSON artifact to Notion (no CJA API call) |
-| `--notion-force-new` | Force a new Notion page instead of updating existing |
+| `--notion-force-new` | Force a new Notion page instead of updating existing; records the superseded page as an orphan |
 | `--notion-database-id ID` | ID of the "CJA SDR Registry" database; upserts a row after publishing. Falls back to `NOTION_DATABASE_ID` env var |
 | `--notion-create-database` | Bootstrap a new "CJA SDR Registry" database under `NOTION_PARENT_PAGE_ID`, print its ID, and exit |
+| `--notion-prune-orphans` | Archive Notion pages left behind by `--notion-force-new` (moved to Notion trash, recoverable). Combine with `--dry-run` to preview. Only tracks orphans created from v3.9.0 onward |
 
 > **Retention precedence:** Explicit values are preserved in both forms: `--keep-last 0` / `--keep-last=0` and `--keep-since 90d` / `--keep-since=90d`.
 
@@ -568,6 +569,14 @@ cja_auto_sdr --batch dv_12345 dv_67890 --format notion
 # Populates Name, Data View ID, Metrics/Dimensions Count, SDR Page link
 # Segments/CM/DF counts and Data Quality are NOT filled in
 cja_auto_sdr --org-report --format notion
+
+# --- Notion Orphan Pruning (v3.9.0) ---
+
+# Preview orphan pages left by --notion-force-new (no changes made)
+cja_auto_sdr --notion-prune-orphans --dry-run --output-dir ./out
+
+# Archive orphaned pages (moved to Notion trash — recoverable)
+cja_auto_sdr --notion-prune-orphans --output-dir ./out
 ```
 
 ## Environment Variables

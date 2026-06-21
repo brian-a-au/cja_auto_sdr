@@ -508,6 +508,7 @@ uv pip install 'cja-auto-sdr[notion]'
 | `--notion-force-new` | Force a new Notion page instead of updating the existing one for this data view | False |
 | `--notion-database-id ID` | ID of the "CJA SDR Registry" database to upsert a row into after publishing. Falls back to the `NOTION_DATABASE_ID` env var. When neither is set, no row is written | - |
 | `--notion-create-database` | Bootstrap a new "CJA SDR Registry" database under `NOTION_PARENT_PAGE_ID`, print its ID to stdout, and exit. Use this ID as `NOTION_DATABASE_ID` for subsequent runs | - |
+| `--notion-prune-orphans` | Archive Notion pages that were left behind by `--notion-force-new`. The registry records the superseded page ID each time a new page is forced; this command archives those pages in Notion (moved to Notion trash — recoverable, not permanently deleted) and clears them from the registry. Requires only `NOTION_TOKEN`. Rejected when combined with `--org-report`, `--diff`, `--batch`, `--watch`, or `--push-to-notion`. Combine with `--dry-run` to preview without making changes. **Limitation:** only pages orphaned by `--notion-force-new` from v3.9.0 onward are tracked; pre-existing orphans from earlier runs are not catalogued | - |
 
 ```bash
 # Publish SDR directly to Notion
@@ -519,6 +520,14 @@ cja_auto_sdr --push-to-notion ./reports/dv_12345_sdr.json
 # Force a new Notion page even if one already exists
 cja_auto_sdr dv_12345 --format notion --notion-force-new
 cja_auto_sdr --push-to-notion ./reports/dv_12345_sdr.json --notion-force-new
+
+# --- Orphan Page Pruning (v3.9.0) ---
+
+# Preview orphan pages left by --notion-force-new (no changes made)
+cja_auto_sdr --notion-prune-orphans --dry-run --output-dir ./out
+
+# Archive orphaned pages (moved to Notion trash — recoverable)
+cja_auto_sdr --notion-prune-orphans --output-dir ./out
 
 # --- SDR Registry Database (v3.8.0) ---
 
@@ -548,6 +557,8 @@ cja_auto_sdr --org-report --format notion
 > **Idempotency:** Page IDs are tracked in `.notion_pages.json` in the output directory so re-runs update the existing page rather than creating duplicates. Use `--notion-force-new` to override.
 >
 > **Registry file (v2):** `.notion_pages.json` now stores `{"page_id": "...", "database_row_id": "..."}` per data view. Legacy v1 string entries (just a page ID) are read transparently and rewritten to v2 format on the next sync — no manual migration needed.
+>
+> **Orphan tracking (v3.9.0):** Each time `--notion-force-new` creates a replacement page, the superseded page ID is recorded as an orphan in `.notion_pages.json`. Run `--notion-prune-orphans` to archive those pages in Notion (sent to Notion trash, recoverable) and clear them from the registry. Only pages orphaned from v3.9.0 onward are tracked; pages left behind by earlier runs are not catalogued.
 >
 > **`--workers > 1` and `--watch` are rejected with `--format notion`** (exit 1). For multiple data views, use `--batch <ids> --format notion` (serial within the Notion writer).
 >
