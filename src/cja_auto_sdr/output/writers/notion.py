@@ -619,3 +619,68 @@ def write_notion_output(
 
     logger.info("✓ Notion page published: notion://pages/%s", page_id)
     return f"notion://pages/{page_id}"
+
+
+def _archive_page(client: Any, page_id: str) -> None:
+    """Archive (trash) a Notion page. Reversible from Notion's trash."""
+    _call_with_rate_limit_retry(client.pages.update, page_id=page_id, archived=True)
+
+
+def prune_notion_orphans(
+    output_dir: str | Path,
+    logger: logging.Logger,
+    *,
+    dry_run: bool = False,
+) -> tuple[int, int]:
+    """Archive detail pages recorded as orphans (superseded by --notion-force-new).
+
+    Reads the registry under ``output_dir``, archives each recorded orphan, and
+    removes it from the registry. Returns ``(archived, already_gone)``. Needs only
+    NOTION_TOKEN. Raises NotionConfigurationError / NotionDependencyError /
+    NotionAPIError, which the CLI maps to exit 1.
+    """
+    from cja_auto_sdr.output.notion_registry import (
+        get_registry_path,
+        load_registry,
+        remove_orphaned_page_ids,
+    )
+
+    registry_path = get_registry_path(output_dir)
+    orphans = [
+        (dv_id, page_id)
+        for dv_id, entry in load_registry(registry_path).items()
+        for page_id in (entry.get("orphaned_page_ids") or [])
+    ]
+    if not orphans:
+        logger.info("No orphan Notion pages to prune.")
+        return (0, 0)
+
+    if dry_run:
+        for dv_id, page_id in orphans:
+            logger.info("[dry-run] would archive orphan page %s (data view %s)", page_id, dv_id)
+        logger.info("[dry-run] %d orphan page(s) would be archived.", len(orphans))
+        return (0, 0)
+
+    token, _ = resolve_notion_credentials(require_parent=False)
+    client = _build_client(_require_notion_client(), token)
+
+    archived = 0
+    already_gone = 0
+    for dv_id, page_id in orphans:
+        try:
+            _archive_page(client, page_id)
+            archived += 1
+            logger.info("✓ Archived orphan page %s (data view %s)", page_id, dv_id)
+        except Exception as exc:
+            if _is_notion_api_error(exc) and _extract_api_error_code(exc) == "object_not_found":
+                already_gone += 1
+                logger.info("Orphan page %s already gone (data view %s); clearing.", page_id, dv_id)
+            elif _is_notion_api_error(exc):
+                raise NotionAPIError(_friendly_notion_error_message(exc)) from exc
+            else:
+                raise
+        remove_orphaned_page_ids(registry_path, dv_id, [page_id])
+
+    suffix = f" ({already_gone} already gone)" if already_gone else ""
+    logger.info("✓ Pruned %d orphan page(s)%s.", archived, suffix)
+    return (archived, already_gone)
