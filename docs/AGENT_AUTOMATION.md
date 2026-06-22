@@ -452,9 +452,11 @@ Page IDs are tracked in `.notion_pages.json` so re-runs update the existing page
 The registry database maintains one row per data view in a "CJA SDR Registry" Notion database, keyed by Data View ID. It has 14 properties covering counts, data quality, timezone, currency, and a link to the detail page.
 
 ```bash
-# One-time: bootstrap the registry database
-uv run cja_auto_sdr --notion-create-database
-# Prints: notion://databases/<id>  ← save this
+# One-time: create the registry database on your first publish
+# (--notion-create-database needs a data view + --format notion; it is not standalone)
+uv run cja_auto_sdr dv_12345 --format notion --notion-create-database
+# Prints the new database ID  ← save this
+# Optional custom title: add --notion-database-title "My Registry" (or set NOTION_DATABASE_TITLE)
 
 export NOTION_DATABASE_ID=<id-from-above>
 

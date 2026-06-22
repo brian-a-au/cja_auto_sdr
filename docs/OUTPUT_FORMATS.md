@@ -414,8 +414,8 @@ cja_auto_sdr --push-to-notion ./reports/dv_12345_sdr.json
 export NOTION_DATABASE_ID=<database-id>
 cja_auto_sdr dv_12345 --format notion
 
-# Bootstrap a new registry database and capture its ID
-cja_auto_sdr --notion-create-database
+# Create a new registry database during a publish run and capture its ID
+cja_auto_sdr dv_12345 --format notion --notion-create-database
 ```
 
 **Block layout:**
@@ -454,7 +454,7 @@ When `NOTION_DATABASE_ID` is set (or `--notion-database-id` is passed), every `-
 | Segments Count | Number | Total segments scoped to the data view |
 | Calculated Metrics Count | Number | Total calculated metrics for the data view |
 | Derived Fields Count | Number | Total derived fields in the data view |
-| Data Quality | Select | Summary of data quality status (`passed`, `issues_found`, `skipped`, `unknown`) |
+| Data Quality | Select | Worst data-quality severity as a status (`healthy`, `degraded`, `partial`, `unknown`) |
 
 > **`SDR Page` is a URL string, not a Notion relation.** The property holds `notion://pages/<id>` as plain text. This avoids permission constraints that would prevent cross-database relations in most Notion workspace configurations.
 >
@@ -463,9 +463,9 @@ When `NOTION_DATABASE_ID` is set (or `--notion-database-id` is passed), every `-
 **Bootstrap workflow:**
 
 ```bash
-# 1. Create the registry database (one-time setup)
-cja_auto_sdr --notion-create-database
-# Prints: notion://databases/<id>
+# 1. Create the registry database on your first publish (needs a data view + --format notion)
+cja_auto_sdr dv_12345 --format notion --notion-create-database
+# Prints the new database ID  ← capture it
 
 # 2. Add the database ID to your environment
 export NOTION_DATABASE_ID=<id>  # or add to .env

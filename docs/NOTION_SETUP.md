@@ -108,13 +108,13 @@ Unlike a manual setup, you do not create the database properties yourself. The t
 
 ### Bootstrap a new database
 
-Run this once:
+Add `--notion-create-database` to your first publish run (it needs a data view and `--format notion`; it is not a standalone command):
 
 ```bash
-cja_auto_sdr --notion-create-database
+cja_auto_sdr <data_view_id> --format notion --notion-create-database
 ```
 
-This creates a new "CJA SDR Registry" database under `NOTION_PARENT_PAGE_ID`, with the full schema, and prints the new database ID to stdout. To give the database a different title, add `--notion-database-title "My Title"` (or set `NOTION_DATABASE_TITLE`); the title only applies when the database is created. Copy the printed database ID and set it:
+This creates a new "CJA SDR Registry" database under `NOTION_PARENT_PAGE_ID` with the full schema, publishes that data view's detail page and row, and prints the new database ID. To give the database a different title, add `--notion-database-title "My Title"` (or set `NOTION_DATABASE_TITLE`); the title only applies when the database is created. Copy the printed database ID and set it:
 
 ```bash
 export NOTION_DATABASE_ID=abc123def456abc123def456abc123de
