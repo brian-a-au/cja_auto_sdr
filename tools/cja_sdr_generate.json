@@ -75,7 +75,7 @@
       },
       "notion_create_database": {
         "type": "boolean",
-        "description": "Bootstrap a new CJA SDR Registry database under NOTION_PARENT_PAGE_ID, print the new database ID to stdout, and exit. Use the printed ID as notion_database_id or NOTION_DATABASE_ID for subsequent runs."
+        "description": "Create a new CJA SDR Registry database under NOTION_PARENT_PAGE_ID during this publish run when no database is configured (requires data_view_id and format 'notion'; it is not a standalone command). The new database ID is printed on success — capture it as notion_database_id or NOTION_DATABASE_ID for subsequent runs. Ignored if notion_database_id or NOTION_DATABASE_ID is already set."
       },
       "notion_database_title": {
         "type": "string",

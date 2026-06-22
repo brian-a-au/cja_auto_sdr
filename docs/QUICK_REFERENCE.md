@@ -403,7 +403,8 @@ cja_auto_sdr --list-dataviews  # Uses client-a
 | `--push-to-notion JSON_FILE` | Push existing JSON artifact to Notion (no CJA API call) |
 | `--notion-force-new` | Force a new Notion page instead of updating existing; records the superseded page as an orphan |
 | `--notion-database-id ID` | ID of the "CJA SDR Registry" database; upserts a row after publishing. Falls back to `NOTION_DATABASE_ID` env var |
-| `--notion-create-database` | Bootstrap a new "CJA SDR Registry" database under `NOTION_PARENT_PAGE_ID`, print its ID, and exit |
+| `--notion-create-database` | Create a new "CJA SDR Registry" database during the publish run when none is configured. Pass with a data view and `--format notion`; prints the new ID to capture as `NOTION_DATABASE_ID`. Ignored if a database id is already set |
+| `--notion-database-title NAME` | Title for the database created by `--notion-create-database` (default: `CJA SDR Registry`). Falls back to `NOTION_DATABASE_TITLE`. Applies only when a new database is created |
 | `--notion-prune-orphans` | Archive Notion pages left behind by `--notion-force-new` (moved to Notion trash, recoverable). Combine with `--dry-run` to preview. Only tracks orphans created from v3.9.0 onward |
 | `--notion-repair-database` | Reconcile an existing registry database with the canonical schema. Add-only: adds missing properties, reports type conflicts, never removes existing properties or rows. Requires `NOTION_TOKEN` and a database id (`--notion-database-id` or `NOTION_DATABASE_ID`). Combine with `--dry-run` to preview |
 | `--notion-print-database-schema` | Print the canonical registry schema (property names + types) and exit. No credentials required |
@@ -552,10 +553,11 @@ cja_auto_sdr dv_12345 --snapshot ./baseline.json --include-all-inventory
 # Compare against snapshot with inventory (same behavior)
 cja_auto_sdr dv_12345 --diff-snapshot ./baseline.json --include-all-inventory
 
-# --- Notion SDR Registry (v3.9.0) ---
+# --- Notion SDR Registry (v3.8.0) ---
 
-# Bootstrap the registry database (one-time; prints the database ID)
-cja_auto_sdr --notion-create-database
+# Create the registry database on your first publish (needs a data view + --format notion)
+cja_auto_sdr dv_12345 --format notion --notion-create-database
+# Optional: name it — cja_auto_sdr dv_12345 --format notion --notion-create-database --notion-database-title "My Registry"
 
 # Publish a detail page AND upsert a complete registry row (all 14 properties)
 export NOTION_DATABASE_ID=<id-from-bootstrap>
@@ -570,7 +572,8 @@ cja_auto_sdr --batch dv_12345 dv_67890 --format notion
 # Org-report catalog (lightweight rows — counts only, no detail pages)
 # Populates Name, Data View ID, Metrics/Dimensions Count, SDR Page link
 # Segments/CM/DF counts and Data Quality are NOT filled in
-cja_auto_sdr --org-report --format notion
+# Requires a registry database (writes only rows, no detail pages):
+cja_auto_sdr --org-report --format notion --notion-database-id <id>  # or set NOTION_DATABASE_ID
 
 # --- Notion Orphan Pruning (v3.9.0) ---
 
@@ -580,7 +583,7 @@ cja_auto_sdr --notion-prune-orphans --dry-run --output-dir ./out
 # Archive orphaned pages (moved to Notion trash — recoverable)
 cja_auto_sdr --notion-prune-orphans --output-dir ./out
 
-# --- Registry Schema & Repair (v3.11.0) ---
+# --- Registry Schema & Repair (v3.10.0) ---
 
 # See the canonical registry schema (no credentials required)
 cja_auto_sdr --notion-print-database-schema
@@ -602,6 +605,12 @@ export SCOPES="your_scopes_from_developer_console"
 # Optional settings
 export OUTPUT_DIR=./reports
 export LOG_LEVEL=INFO
+
+# Notion integration (for --format notion / --push-to-notion / registry)
+export NOTION_TOKEN=ntn_...               # or secret_... (older integrations)
+export NOTION_PARENT_PAGE_ID=<page-id>    # parent for detail pages + new databases
+export NOTION_DATABASE_ID=<database-id>   # existing SDR Registry database (enables rows)
+export NOTION_DATABASE_TITLE="CJA SDR Registry"  # title for a newly created database
 
 # Console color policy
 export NO_COLOR=1            # disable ANSI colors globally

@@ -353,8 +353,9 @@ cja_auto_sdr --org-report --format reports
 # Generate CSV + JSON for data pipelines
 cja_auto_sdr --org-report --format data
 
-# Publish a lightweight Notion catalog (counts only; no detail pages)
-cja_auto_sdr --org-report --format notion
+# Publish a lightweight Notion catalog (counts only; no detail pages).
+# Requires a registry database (it writes only rows):
+cja_auto_sdr --org-report --format notion --notion-database-id <id>  # or set NOTION_DATABASE_ID
 ```
 
 ## Output Formats
@@ -452,7 +453,7 @@ Multiple CSV files in a directory:
 
 ### Notion (v3.8.0 — lightweight catalog)
 
-`--org-report --format notion` writes one row to the "CJA SDR Registry" database per data view in the org report summary. Requires `NOTION_TOKEN`, `NOTION_PARENT_PAGE_ID`, and `NOTION_DATABASE_ID` (or `--notion-database-id`).
+`--org-report --format notion` writes one row to the "CJA SDR Registry" database per data view in the org report summary. It creates no detail pages, so a registry database is required: set `NOTION_DATABASE_ID` (or pass `--notion-database-id`). Requires `NOTION_TOKEN`. `NOTION_PARENT_PAGE_ID` is needed only if you bootstrap a new database with `--notion-create-database`.
 
 **What is populated:**
 - Name, Data View ID, Metrics Count, Dimensions Count, owner, dates
@@ -467,8 +468,8 @@ Multiple CSV files in a directory:
 > **Full org-report detail-page generation** (writing a complete Notion page per data view directly from org-report mode) is planned for a future release. For now, the recommended pattern is: run `--org-report --format notion` to populate a quick catalog, then run `--batch <ids> --format notion` for any data views that need complete rows and detail pages.
 
 ```bash
-# Lightweight catalog from org report
-cja_auto_sdr --org-report --format notion
+# Lightweight catalog from org report (requires a registry database)
+cja_auto_sdr --org-report --format notion --notion-database-id <id>  # or set NOTION_DATABASE_ID
 
 # Follow up with batch for complete rows on specific data views
 cja_auto_sdr --batch dv_12345 dv_67890 --format notion
