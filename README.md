@@ -279,7 +279,7 @@ cja_auto_sdr "Production Analytics"
 | Create registry database (first publish) | `cja_auto_sdr dv_12345 --format notion --notion-create-database` (optionally `--notion-database-title "Name"`) |
 | Publish detail page + registry row | `cja_auto_sdr dv_12345 --format notion` (with `NOTION_DATABASE_ID` set) |
 | Batch publish with complete rows | `cja_auto_sdr --batch dv_1 dv_2 dv_3 --format notion` |
-| Org-report lightweight catalog | `cja_auto_sdr --org-report --format notion` (counts only; no detail pages) |
+| Org-report lightweight catalog | `cja_auto_sdr --org-report --format notion --notion-database-id <id>` (counts only; no detail pages; needs a registry database) |
 | **Notion Maintenance (v3.9.0)** | |
 | Preview orphan pages (dry run) | `cja_auto_sdr --notion-prune-orphans --dry-run --output-dir ./out` |
 | Archive orphan pages (Notion trash) | `cja_auto_sdr --notion-prune-orphans --output-dir ./out` |

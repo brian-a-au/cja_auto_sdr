@@ -572,7 +572,8 @@ cja_auto_sdr --batch dv_12345 dv_67890 --format notion
 # Org-report catalog (lightweight rows — counts only, no detail pages)
 # Populates Name, Data View ID, Metrics/Dimensions Count, SDR Page link
 # Segments/CM/DF counts and Data Quality are NOT filled in
-cja_auto_sdr --org-report --format notion
+# Requires a registry database (writes only rows, no detail pages):
+cja_auto_sdr --org-report --format notion --notion-database-id <id>  # or set NOTION_DATABASE_ID
 
 # --- Notion Orphan Pruning (v3.9.0) ---
 
@@ -604,6 +605,12 @@ export SCOPES="your_scopes_from_developer_console"
 # Optional settings
 export OUTPUT_DIR=./reports
 export LOG_LEVEL=INFO
+
+# Notion integration (for --format notion / --push-to-notion / registry)
+export NOTION_TOKEN=ntn_...               # or secret_... (older integrations)
+export NOTION_PARENT_PAGE_ID=<page-id>    # parent for detail pages + new databases
+export NOTION_DATABASE_ID=<database-id>   # existing SDR Registry database (enables rows)
+export NOTION_DATABASE_TITLE="CJA SDR Registry"  # title for a newly created database
 
 # Console color policy
 export NO_COLOR=1            # disable ANSI colors globally

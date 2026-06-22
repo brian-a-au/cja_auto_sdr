@@ -27,7 +27,7 @@
       "format": {
         "type": "string",
         "enum": ["console", "json", "csv", "html", "markdown", "excel", "notion"],
-        "description": "Output format for the org report. Use 'json' for agent/machine-readable output. Use 'notion' to publish a lightweight catalog row per data view to the CJA SDR Registry database (requires NOTION_TOKEN, NOTION_PARENT_PAGE_ID, and NOTION_DATABASE_ID or notion_database_id). The org-report Notion catalog fills Name, Data View ID, Metrics/Dimensions Count, owner/dates, and SDR Page link — it does NOT populate Segments, Calculated Metrics, Derived Fields counts or Data Quality, and does NOT create detail pages. Runs serially."
+        "description": "Output format for the org report. Use 'json' for agent/machine-readable output. Use 'notion' to publish a lightweight catalog row per data view to the CJA SDR Registry database. It writes only rows (no detail pages), so it requires NOTION_TOKEN and a database (NOTION_DATABASE_ID or notion_database_id); NOTION_PARENT_PAGE_ID is not needed (this manifest does not create databases). The org-report Notion catalog fills Name, Data View ID, Metrics/Dimensions Count, owner/dates, and SDR Page link — it does NOT populate Segments, Calculated Metrics, Derived Fields counts or Data Quality, and does NOT create detail pages. Runs serially."
       },
       "output": {
         "type": "string",

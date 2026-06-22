@@ -235,7 +235,7 @@ These variables are used when publishing SDRs to Notion (`--format notion`, `--p
 >
 > **Unset behavior:** If `NOTION_DATABASE_ID` is not set (and `--notion-database-id` is not passed), `--format notion` runs exactly as in v3.7.0 — the SDR detail page is created or updated, but no registry row is written.
 >
-> **Schema drift (v3.11.0):** If the tool adds new registry properties in a later version and your database is missing those columns, run `cja_auto_sdr --notion-repair-database` to add them (add-only — never removes existing properties or rows). Use `--dry-run` to preview first. Run `cja_auto_sdr --notion-print-database-schema` to see the full canonical schema without credentials.
+> **Schema drift (v3.10.0):** If the tool adds new registry properties in a later version and your database is missing those columns, run `cja_auto_sdr --notion-repair-database` to add them (add-only — never removes existing properties or rows). Use `--dry-run` to preview first. Run `cja_auto_sdr --notion-print-database-schema` to see the full canonical schema without credentials.
 
 ### Setting Environment Variables
 

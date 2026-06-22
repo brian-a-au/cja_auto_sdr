@@ -472,8 +472,9 @@ uv run cja_auto_sdr --batch dv_12345 dv_67890 dv_abcde --format notion
 `--org-report --format notion` writes a lightweight catalog row per data view from the org report summary. This is fast (serial, no extra API calls) but only fills Name, Data View ID, Metrics Count, Dimensions Count, owner/dates, and an SDR Page link where a detail page already exists. Segments, Calculated Metrics, Derived Fields counts, and Data Quality are not populated.
 
 ```bash
-# Lightweight catalog from org report (fast, counts only)
-uv run cja_auto_sdr --org-report --format notion
+# Lightweight catalog from org report (fast, counts only).
+# Requires a registry database (it writes only rows, no detail pages):
+uv run cja_auto_sdr --org-report --format notion --notion-database-id <id>  # or set NOTION_DATABASE_ID
 
 # Follow up with batch for complete rows on key data views
 uv run cja_auto_sdr --batch dv_12345 dv_67890 --format notion

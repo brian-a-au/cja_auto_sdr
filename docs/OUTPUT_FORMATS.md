@@ -30,7 +30,7 @@ The tool supports multiple output formats beyond Excel, providing flexible integ
 
 > The Discovery column covers both discovery commands (`--list-dataviews`, `--list-connections`, `--list-datasets`) and discovery inspection commands (`--describe-dataview`, `--list-metrics`, `--list-dimensions`, `--list-segments`, `--list-calculated-metrics`). All output console (table), JSON, or CSV. They do not generate file-based formats like Excel, HTML, or Markdown.
 >
-> **Notion + Org-Wide Analysis:** `--org-report --format notion` writes a lightweight catalog row per data view (Name, Data View ID, Metrics/Dimensions Count, SDR Page link). Segments, Calculated Metrics, Derived Fields counts, and Data Quality are not populated. No detail pages are created. For complete rows, use `--batch <ids> --format notion`.
+> **Notion + Org-Wide Analysis:** `--org-report --format notion` writes a lightweight catalog row per data view (Name, Data View ID, Metrics/Dimensions Count, SDR Page link) and **requires a registry database** (`NOTION_DATABASE_ID` or `--notion-database-id`), since it writes only rows. Segments, Calculated Metrics, Derived Fields counts, and Data Quality are not populated. No detail pages are created. For complete rows, use `--batch <ids> --format notion`.
 
 ### Format Aliases (introduced in v3.2.0)
 
@@ -495,7 +495,7 @@ cja_auto_sdr --notion-repair-database --notion-database-id <id>
 
 **Org-report catalog (lightweight):**
 
-`--org-report --format notion` writes one registry row per data view from the org report summary. It fills Name, Data View ID, Metrics Count, Dimensions Count, owner/dates, and an SDR Page link where a detail page already exists. The following columns are **not** populated because the org report does not fetch that data:
+`--org-report --format notion` writes one registry row per data view from the org report summary. Because it writes only rows (no detail pages), it **requires a registry database** — set `NOTION_DATABASE_ID` or pass `--notion-database-id <id>` (running it without one exits with an error). It fills Name, Data View ID, Metrics Count, Dimensions Count, owner/dates, and an SDR Page link where a detail page already exists. The following columns are **not** populated because the org report does not fetch that data:
 
 - Segments Count
 - Calculated Metrics Count

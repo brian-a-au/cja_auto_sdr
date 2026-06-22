@@ -570,7 +570,9 @@ cja_auto_sdr --batch dv_12345 dv_67890 --format notion
 # Fills Name, Data View ID, Metrics/Dimensions Count, and SDR Page link
 # where a detail page already exists. Segments/CM/DF counts, and Data Quality
 # are NOT populated (those columns are empty). Runs serially.
-cja_auto_sdr --org-report --format notion
+# Requires a registry database (it only writes rows, no pages):
+cja_auto_sdr --org-report --format notion --notion-database-id <id>
+# (or set NOTION_DATABASE_ID; bootstrap one first via a single --format notion --notion-create-database run)
 ```
 
 > **Idempotency:** Page IDs are tracked in `.notion_pages.json` in the output directory so re-runs update the existing page rather than creating duplicates. Use `--notion-force-new` to override.
