@@ -739,3 +739,24 @@ def test_watch_with_notion_rejected_in_watch_mode(capsys) -> None:
     captured = capsys.readouterr()
     assert "--watch is not supported with --format notion" in captured.err
     assert "only supported in SDR generation" not in captured.err
+
+
+def test_notion_database_title_flag_parses() -> None:
+    assert parse_arguments(["--notion-database-title", "X", "dv1"]).notion_database_title == "X"
+    assert parse_arguments(["dv1"]).notion_database_title is None
+
+
+def test_notion_database_title_flag_populates_env(monkeypatch) -> None:
+    """The flag is a convenience that surfaces NOTION_DATABASE_TITLE for the create path."""
+    import os
+    import sys as _sys
+
+    from cja_auto_sdr.generator import _main_impl
+
+    monkeypatch.delenv("NOTION_DATABASE_TITLE", raising=False)
+    monkeypatch.setattr(
+        _sys, "argv", ["cja_auto_sdr", "--notion-print-database-schema", "--notion-database-title", "Custom Reg"]
+    )
+    with pytest.raises(SystemExit):
+        _main_impl()
+    assert os.environ.get("NOTION_DATABASE_TITLE") == "Custom Reg"

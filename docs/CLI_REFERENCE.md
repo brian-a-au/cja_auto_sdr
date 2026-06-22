@@ -510,6 +510,7 @@ uv pip install 'cja-auto-sdr[notion]'
 | `--notion-force-new` | Force a new Notion page instead of updating the existing one for this data view | False |
 | `--notion-database-id ID` | ID of the "CJA SDR Registry" database to upsert a row into after publishing. Falls back to the `NOTION_DATABASE_ID` env var. When neither is set, no row is written | - |
 | `--notion-create-database` | Bootstrap a new "CJA SDR Registry" database under `NOTION_PARENT_PAGE_ID`, print its ID to stdout, and exit. Use this ID as `NOTION_DATABASE_ID` for subsequent runs | - |
+| `--notion-database-title NAME` | Title for the database created by `--notion-create-database`. Falls back to the `NOTION_DATABASE_TITLE` env var. Only applies when a new database is created; ignored when attaching an existing one with `--notion-database-id` | `CJA SDR Registry` |
 | `--notion-prune-orphans` | Archive Notion pages that were left behind by `--notion-force-new`. The registry records the superseded page ID each time a new page is forced; this command archives those pages in Notion (moved to Notion trash — recoverable, not permanently deleted) and clears them from the registry. Requires only `NOTION_TOKEN`. Rejected when combined with `--org-report`, `--diff`, `--batch`, `--watch`, or `--push-to-notion`. Combine with `--dry-run` to preview without making changes. **Limitation:** only pages orphaned by `--notion-force-new` from v3.9.0 onward are tracked; pre-existing orphans from earlier runs are not catalogued | - |
 | `--notion-repair-database` | Reconcile an existing "CJA SDR Registry" database with the canonical schema. **Add-only:** adds missing properties and reports any type conflicts — never changes or removes existing properties or data rows. Requires only `NOTION_TOKEN` and a database ID (`--notion-database-id` or `NOTION_DATABASE_ID`). Use when the schema grows across versions instead of recreating the database. Combine with `--dry-run` to preview what would be added without making changes | - |
 | `--notion-print-database-schema` | Print the canonical "CJA SDR Registry" schema (property names and types) and exit. Requires no credentials. Use this to inspect the expected schema before bootstrapping or repairing a database | - |
@@ -749,6 +750,7 @@ Preset flag for running CJA SDR Generator from AI agents, scripts, and automatio
 | `NOTION_TOKEN` | Notion integration token (required for `--format notion` and related flags) |
 | `NOTION_PARENT_PAGE_ID` | Notion page ID under which SDR pages and databases are created |
 | `NOTION_DATABASE_ID` | ID of the "CJA SDR Registry" database; when set, every `--format notion` run upserts a registry row. Falls back to `--notion-database-id`. Unset = no row written |
+| `NOTION_DATABASE_TITLE` | Title for a database created by `--notion-create-database` (default: `CJA SDR Registry`). Overridden by `--notion-database-title`. No effect when attaching an existing database |
 
 **Console & CI Integration:**
 

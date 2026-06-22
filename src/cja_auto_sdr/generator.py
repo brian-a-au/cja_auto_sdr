@@ -6997,6 +6997,13 @@ def _main_impl(run_state: dict[str, Any] | None = None):
 
     # Parse arguments (will show error and help if no data views provided)
     args = parse_arguments()
+    # --notion-database-title is a convenience for NOTION_DATABASE_TITLE: surface it
+    # in the environment so every create path (single SDR, org-report, push-to-notion)
+    # resolves the new database's title uniformly without threading it through the
+    # pipeline config. The flag wins over a .env value (load_dotenv won't override it).
+    _notion_database_title = getattr(args, "notion_database_title", None)
+    if isinstance(_notion_database_title, str) and _notion_database_title:
+        os.environ["NOTION_DATABASE_TITLE"] = _notion_database_title
     inferred_mode = _infer_run_mode_enum(args)
     active_modes = _active_run_modes(args)
     prevalidation_effective_args = _resolve_semantic_validation_args(args, inferred_mode=inferred_mode)

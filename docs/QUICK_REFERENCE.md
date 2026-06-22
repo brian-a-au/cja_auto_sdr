@@ -1,6 +1,6 @@
 # Quick Reference Card
 
-Single-page command cheat sheet for CJA SDR Generator v3.10.0.
+Single-page command cheat sheet for CJA SDR Generator v3.11.0.
 
 ## Four Main Modes
 
@@ -580,7 +580,7 @@ cja_auto_sdr --notion-prune-orphans --dry-run --output-dir ./out
 # Archive orphaned pages (moved to Notion trash — recoverable)
 cja_auto_sdr --notion-prune-orphans --output-dir ./out
 
-# --- Registry Schema & Repair (v3.10.0) ---
+# --- Registry Schema & Repair (v3.11.0) ---
 
 # See the canonical registry schema (no credentials required)
 cja_auto_sdr --notion-print-database-schema

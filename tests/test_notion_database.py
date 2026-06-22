@@ -480,3 +480,33 @@ def test_repair_flags_absent_canonical_title_as_conflict() -> None:
     assert ("Name", "title", "missing") in result.conflicts
     assert "Name" not in result.to_add
     assert result.applied is False
+
+
+def test_ensure_database_uses_custom_title_from_env(monkeypatch) -> None:
+    """A new registry database is created with the NOTION_DATABASE_TITLE title."""
+    monkeypatch.setenv("NOTION_DATABASE_TITLE", "My Registry")
+    from cja_auto_sdr.output.notion_database import ensure_database
+
+    cap: dict = {}
+    client = MagicMock()
+    client.databases.create.side_effect = lambda **kw: (cap.update(kw), {"id": "db1", "data_sources": [{"id": "ds1"}]})[
+        1
+    ]
+    db_id, ds_id = ensure_database(client, parent_page_id="p", database_id=None, create_if_missing=True)
+
+    assert (db_id, ds_id) == ("db1", "ds1")
+    assert cap["title"][0]["text"]["content"] == "My Registry"
+
+
+def test_ensure_database_default_title_when_env_unset(monkeypatch) -> None:
+    monkeypatch.delenv("NOTION_DATABASE_TITLE", raising=False)
+    from cja_auto_sdr.output.notion_database import DATABASE_DEFAULT_TITLE, ensure_database
+
+    cap: dict = {}
+    client = MagicMock()
+    client.databases.create.side_effect = lambda **kw: (cap.update(kw), {"id": "db1", "data_sources": [{"id": "ds1"}]})[
+        1
+    ]
+    ensure_database(client, parent_page_id="p", database_id=None, create_if_missing=True)
+
+    assert cap["title"][0]["text"]["content"] == DATABASE_DEFAULT_TITLE

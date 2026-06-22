@@ -17,6 +17,7 @@ metadata.
 from __future__ import annotations
 
 import datetime as _dt
+import os
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -26,6 +27,7 @@ if TYPE_CHECKING:
     import pandas as pd
 
 __all__ = [
+    "DATABASE_DEFAULT_TITLE",
     "DATABASE_SCHEMA",
     "DATA_QUALITY_OPTIONS",
     "SchemaRepairResult",
@@ -41,6 +43,10 @@ __all__ = [
 
 DATA_QUALITY_OPTIONS = ["healthy", "degraded", "partial", "unknown"]
 _DATA_QUALITY_OPTION_COLORS = {"healthy": "green", "degraded": "red", "partial": "yellow", "unknown": "default"}
+
+# Default title for a freshly-created registry database. Overridable via the
+# --notion-database-title flag or the NOTION_DATABASE_TITLE env var.
+DATABASE_DEFAULT_TITLE = "CJA SDR Registry"
 
 # Notion database property definitions (used at create time).
 DATABASE_SCHEMA: dict[str, dict[str, Any]] = {
@@ -305,10 +311,14 @@ def ensure_database(
             "SDR Registry database under NOTION_PARENT_PAGE_ID.",
         )
 
+    # Title resolves from NOTION_DATABASE_TITLE (which the --notion-database-title
+    # flag populates) and falls back to the default. This runs after .env is
+    # loaded by the calling writer, so a .env-configured title is honored too.
+    title_text = os.environ.get("NOTION_DATABASE_TITLE") or DATABASE_DEFAULT_TITLE
     created = _call_with_rate_limit_retry(
         client.databases.create,
         parent={"type": "page_id", "page_id": parent_page_id},
-        title=[{"type": "text", "text": {"content": "CJA SDR Registry"}}],
+        title=[{"type": "text", "text": {"content": title_text}}],
         initial_data_source={"properties": DATABASE_SCHEMA},
     )
     data_sources = created.get("data_sources") or []
