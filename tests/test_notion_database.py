@@ -365,3 +365,118 @@ def test_data_quality_schema_options_derive_from_constant() -> None:
 
     names = [o["name"] for o in DATABASE_SCHEMA["Data Quality"]["select"]["options"]]
     assert names == DATA_QUALITY_OPTIONS
+
+
+def test_schema_property_type_reads_single_type_key() -> None:
+    from cja_auto_sdr.output.notion_database import _schema_property_type
+
+    assert _schema_property_type({"rich_text": {}}) == "rich_text"
+    assert _schema_property_type({"number": {"format": "number"}}) == "number"
+    assert _schema_property_type({"select": {"options": []}}) == "select"
+
+
+def test_describe_database_schema_lists_every_property_with_type() -> None:
+    from cja_auto_sdr.output.notion_database import DATABASE_SCHEMA, _schema_property_type, describe_database_schema
+
+    text = describe_database_schema()
+    for name, entry in DATABASE_SCHEMA.items():
+        assert name in text
+        assert _schema_property_type(entry) in text
+    # select options are shown for Data Quality
+    assert "healthy" in text and "unknown" in text
+
+
+# ---------------------------------------------------------------------------
+# repair_database_schema
+# ---------------------------------------------------------------------------
+
+
+def _fake_repair_client(existing_props: dict, *, capture: dict):
+    """A MagicMock client whose data source exposes existing_props and records updates."""
+    client = MagicMock()
+    client.databases.retrieve.return_value = {"id": "db1", "data_sources": [{"id": "ds1"}]}
+    client.data_sources.retrieve.return_value = {"properties": existing_props}
+
+    def _update(*, data_source_id, properties):
+        capture["data_source_id"] = data_source_id
+        capture["properties"] = properties
+        return {"id": data_source_id}
+
+    client.data_sources.update.side_effect = _update
+    return client
+
+
+def test_repair_adds_missing_non_title_properties() -> None:
+    from cja_auto_sdr.output.notion_database import DATABASE_SCHEMA, repair_database_schema
+
+    # Live DB has only Name (title) + Data View ID; everything else is missing.
+    existing = {"Name": {"type": "title"}, "Data View ID": {"type": "rich_text"}}
+    cap: dict = {}
+    client = _fake_repair_client(existing, capture=cap)
+
+    result = repair_database_schema(client, database_id="db1")
+
+    expected_missing = [n for n in DATABASE_SCHEMA if n not in existing]  # excludes Name + Data View ID
+    assert result.to_add == expected_missing
+    assert result.applied is True
+    assert set(cap["properties"].keys()) == set(expected_missing)
+    assert "Name" not in cap["properties"]  # never re-adds the title
+
+
+def test_repair_dry_run_makes_no_update() -> None:
+    from cja_auto_sdr.output.notion_database import repair_database_schema
+
+    client = _fake_repair_client({"Name": {"type": "title"}}, capture={})
+    result = repair_database_schema(client, database_id="db1", dry_run=True)
+
+    assert result.to_add  # things are missing
+    assert result.applied is False
+    client.data_sources.update.assert_not_called()
+
+
+def test_repair_records_type_conflicts_without_changing_them() -> None:
+    from cja_auto_sdr.output.notion_database import repair_database_schema
+
+    # Metrics Count exists but as rich_text instead of number.
+    existing = {"Name": {"type": "title"}, "Metrics Count": {"type": "rich_text"}}
+    cap: dict = {}
+    client = _fake_repair_client(existing, capture=cap)
+
+    result = repair_database_schema(client, database_id="db1")
+
+    assert ("Metrics Count", "number", "rich_text") in result.conflicts
+    assert "Metrics Count" not in cap.get("properties", {})  # conflict never added/changed
+
+
+def test_repair_up_to_date_does_nothing() -> None:
+    from cja_auto_sdr.output.notion_database import DATABASE_SCHEMA, _schema_property_type, repair_database_schema
+
+    existing = {name: {"type": _schema_property_type(entry)} for name, entry in DATABASE_SCHEMA.items()}
+    client = _fake_repair_client(existing, capture={})
+    result = repair_database_schema(client, database_id="db1")
+
+    assert result.to_add == [] and result.conflicts == [] and result.applied is False
+    client.data_sources.update.assert_not_called()
+
+
+def test_repair_raises_when_no_data_source() -> None:
+    from cja_auto_sdr.output.notion_database import repair_database_schema
+
+    client = MagicMock()
+    client.databases.retrieve.return_value = {"id": "db1", "data_sources": []}
+    with pytest.raises(ValueError, match="no data source"):
+        repair_database_schema(client, database_id="db1")
+
+
+def test_repair_flags_absent_canonical_title_as_conflict() -> None:
+    """A renamed/absent title ('Name' not in live) is reported as a conflict, not silently skipped."""
+    from cja_auto_sdr.output.notion_database import DATABASE_SCHEMA, _schema_property_type, repair_database_schema
+
+    # Every canonical property present EXCEPT the title 'Name' (title was renamed).
+    existing = {n: {"type": _schema_property_type(e)} for n, e in DATABASE_SCHEMA.items() if n != "Name"}
+    existing["Report"] = {"type": "title"}  # the DB's title under a different name
+    result = repair_database_schema(_fake_repair_client(existing, capture={}), database_id="db1")
+
+    assert ("Name", "title", "missing") in result.conflicts
+    assert "Name" not in result.to_add
+    assert result.applied is False

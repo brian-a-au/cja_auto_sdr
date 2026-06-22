@@ -1048,3 +1048,120 @@ def test_prune_orphans_object_not_found_is_cleared(tmp_path, monkeypatch):
 
     assert (archived, gone) == (0, 1)
     assert lookup_orphaned_page_ids(reg, "dv1") == []  # dead id removed anyway
+
+
+# ---------------------------------------------------------------------------
+# Task 3: repair_notion_database tests
+# ---------------------------------------------------------------------------
+
+
+def test_repair_notion_database_applies(tmp_path, monkeypatch):
+    from cja_auto_sdr.output.writers.notion import repair_notion_database
+
+    monkeypatch.setenv("NOTION_TOKEN", "tok")
+    monkeypatch.delenv("NOTION_PARENT_PAGE_ID", raising=False)  # not required
+
+    fake_cls = MagicMock()
+    fake_client = fake_cls.return_value
+    fake_client.databases.retrieve.return_value = {"id": "db1", "data_sources": [{"id": "ds1"}]}
+    fake_client.data_sources.retrieve.return_value = {"properties": {"Name": {"type": "title"}}}
+    fake_client.data_sources.update.return_value = {"id": "ds1"}
+
+    with patch("cja_auto_sdr.output.writers.notion._require_notion_client", return_value=fake_cls):
+        result = repair_notion_database("db1", MagicMock())
+
+    assert result.applied is True
+    assert fake_client.data_sources.update.call_count == 1
+
+
+def test_repair_notion_database_dry_run_no_update(tmp_path, monkeypatch):
+    from cja_auto_sdr.output.writers.notion import repair_notion_database
+
+    monkeypatch.setenv("NOTION_TOKEN", "tok")
+
+    fake_cls = MagicMock()
+    fake_client = fake_cls.return_value
+    fake_client.databases.retrieve.return_value = {"id": "db1", "data_sources": [{"id": "ds1"}]}
+    fake_client.data_sources.retrieve.return_value = {"properties": {"Name": {"type": "title"}}}
+
+    with patch("cja_auto_sdr.output.writers.notion._require_notion_client", return_value=fake_cls):
+        result = repair_notion_database("db1", MagicMock(), dry_run=True)
+
+    assert result.applied is False
+    fake_client.data_sources.update.assert_not_called()
+
+
+def test_repair_notion_database_maps_value_error(monkeypatch):
+    from cja_auto_sdr.output.writers.notion import NotionConfigurationError, repair_notion_database
+
+    monkeypatch.setenv("NOTION_TOKEN", "tok")
+
+    fake_cls = MagicMock()
+    fake_cls.return_value.databases.retrieve.return_value = {"id": "db1", "data_sources": []}
+    with patch("cja_auto_sdr.output.writers.notion._require_notion_client", return_value=fake_cls):
+        with pytest.raises(NotionConfigurationError, match="no data source"):
+            repair_notion_database("db1", MagicMock())
+
+
+def test_repair_notion_database_maps_api_error(monkeypatch):
+    """databases.retrieve raising an API error surfaces as NotionAPIError."""
+    from cja_auto_sdr.output.writers.notion import NotionAPIError, repair_notion_database
+
+    monkeypatch.setenv("NOTION_TOKEN", "tok")
+
+    class FakeAPIError(Exception):
+        code = "object_not_found"
+
+    FakeAPIError.__name__ = "APIResponseError"
+
+    fake_cls = MagicMock()
+    fake_cls.return_value.databases.retrieve.side_effect = FakeAPIError("not found")
+
+    with patch("cja_auto_sdr.output.writers.notion._require_notion_client", return_value=fake_cls):
+        with pytest.raises(NotionAPIError):
+            repair_notion_database("db1", MagicMock())
+
+
+def test_repair_notion_database_conflict_only_not_called_up_to_date(monkeypatch):
+    """Conflicts but nothing to add must NOT log 'up to date' (Codex P2): the schema is not clean."""
+    from cja_auto_sdr.output.notion_database import DATABASE_SCHEMA, _schema_property_type
+    from cja_auto_sdr.output.writers.notion import repair_notion_database
+
+    monkeypatch.setenv("NOTION_TOKEN", "tok")
+
+    live = {n: {"type": _schema_property_type(e)} for n, e in DATABASE_SCHEMA.items()}
+    live["Metrics Count"] = {"type": "rich_text"}  # conflict; nothing missing
+
+    fake_cls = MagicMock()
+    fc = fake_cls.return_value
+    fc.databases.retrieve.return_value = {"id": "db1", "data_sources": [{"id": "ds1"}]}
+    fc.data_sources.retrieve.return_value = {"properties": live}
+    logger = MagicMock()
+
+    with patch("cja_auto_sdr.output.writers.notion._require_notion_client", return_value=fake_cls):
+        result = repair_notion_database("db1", logger)
+
+    assert result.to_add == [] and result.conflicts
+    fc.data_sources.update.assert_not_called()
+    info_msgs = " ".join(str(c.args[0]) for c in logger.info.call_args_list)
+    assert "up to date" not in info_msgs
+    assert "manual resolution" in info_msgs
+
+
+def test_repair_notion_database_resolves_db_id_from_env(monkeypatch):
+    """With no explicit id, repair falls back to NOTION_DATABASE_ID from the env/.env (Codex P2)."""
+    from cja_auto_sdr.output.writers.notion import repair_notion_database
+
+    monkeypatch.setenv("NOTION_TOKEN", "tok")
+    monkeypatch.setenv("NOTION_DATABASE_ID", "db-from-env")
+
+    fake_cls = MagicMock()
+    fc = fake_cls.return_value
+    fc.databases.retrieve.return_value = {"id": "db-from-env", "data_sources": [{"id": "ds1"}]}
+    fc.data_sources.retrieve.return_value = {"properties": {"Name": {"type": "title"}}}
+
+    with patch("cja_auto_sdr.output.writers.notion._require_notion_client", return_value=fake_cls):
+        repair_notion_database(None, MagicMock())  # no explicit id → resolved from env
+
+    fc.databases.retrieve.assert_called_once()
+    assert fc.databases.retrieve.call_args.kwargs["database_id"] == "db-from-env"

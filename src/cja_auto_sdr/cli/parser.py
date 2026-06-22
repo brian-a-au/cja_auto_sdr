@@ -1482,6 +1482,24 @@ Requirements:
         ),
     )
     notion_group.add_argument(
+        "--notion-print-database-schema",
+        action="store_true",
+        default=False,
+        dest="notion_print_database_schema",
+        help="Print the canonical CJA SDR Registry database schema and exit. Needs no credentials.",
+    )
+    notion_group.add_argument(
+        "--notion-repair-database",
+        action="store_true",
+        default=False,
+        dest="notion_repair_database",
+        help=(
+            "Reconcile an existing CJA SDR Registry database with the canonical schema "
+            "(add missing properties; never change or remove existing ones). Needs NOTION_TOKEN "
+            "and a database id (--notion-database-id or NOTION_DATABASE_ID). Combine with --dry-run to preview."
+        ),
+    )
+    notion_group.add_argument(
         "--notion-prune-orphans",
         action="store_true",
         default=False,

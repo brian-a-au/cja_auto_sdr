@@ -1,6 +1,6 @@
 # Quick Reference Card
 
-Single-page command cheat sheet for CJA SDR Generator v3.9.0.
+Single-page command cheat sheet for CJA SDR Generator v3.10.0.
 
 ## Four Main Modes
 
@@ -405,6 +405,8 @@ cja_auto_sdr --list-dataviews  # Uses client-a
 | `--notion-database-id ID` | ID of the "CJA SDR Registry" database; upserts a row after publishing. Falls back to `NOTION_DATABASE_ID` env var |
 | `--notion-create-database` | Bootstrap a new "CJA SDR Registry" database under `NOTION_PARENT_PAGE_ID`, print its ID, and exit |
 | `--notion-prune-orphans` | Archive Notion pages left behind by `--notion-force-new` (moved to Notion trash, recoverable). Combine with `--dry-run` to preview. Only tracks orphans created from v3.9.0 onward |
+| `--notion-repair-database` | Reconcile an existing registry database with the canonical schema. Add-only: adds missing properties, reports type conflicts, never removes existing properties or rows. Requires `NOTION_TOKEN` and a database id (`--notion-database-id` or `NOTION_DATABASE_ID`). Combine with `--dry-run` to preview |
+| `--notion-print-database-schema` | Print the canonical registry schema (property names + types) and exit. No credentials required |
 
 > **Retention precedence:** Explicit values are preserved in both forms: `--keep-last 0` / `--keep-last=0` and `--keep-since 90d` / `--keep-since=90d`.
 
@@ -577,6 +579,15 @@ cja_auto_sdr --notion-prune-orphans --dry-run --output-dir ./out
 
 # Archive orphaned pages (moved to Notion trash — recoverable)
 cja_auto_sdr --notion-prune-orphans --output-dir ./out
+
+# --- Registry Schema & Repair (v3.10.0) ---
+
+# See the canonical registry schema (no credentials required)
+cja_auto_sdr --notion-print-database-schema
+
+# Preview what a repair would add, then apply it
+cja_auto_sdr --notion-repair-database --dry-run --notion-database-id <id>
+cja_auto_sdr --notion-repair-database --notion-database-id <id>
 ```
 
 ## Environment Variables

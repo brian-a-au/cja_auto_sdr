@@ -7,6 +7,15 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.10.0] - 2026-06-21
+
+### Added
+- **`--notion-repair-database`** — reconcile an existing CJA SDR Registry database with the canonical schema. It adds any missing properties with a single update and reports properties whose type differs, without changing or removing anything that exists. Needs only `NOTION_TOKEN` and a database id (`--notion-database-id` or `NOTION_DATABASE_ID`); combine with `--dry-run` to preview.
+- **`--notion-print-database-schema`** — print the canonical registry schema (property names and types) and exit. Needs no credentials.
+
+### Changed
+- When a normal `--format notion` run finds a schema-incomplete registry database, the error now names `--notion-repair-database` as the fix.
+
 ## [3.9.0] - 2026-06-21
 
 ### Added

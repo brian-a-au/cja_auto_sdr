@@ -168,7 +168,45 @@ cja_auto_sdr --notion-prune-orphans
 
 The pages are archived, which means they move to the Notion trash and can be restored, not permanently deleted. The current detail page for each data view is never touched. This command needs only `NOTION_TOKEN`. It does not need a parent page or a database. It only cleans up pages that were orphaned by `--notion-force-new` from v3.9.0 onward.
 
-## 8. Publish a saved artifact without re-fetching
+## 8. Maintaining the registry database
+
+As `cja-auto-sdr` adds new registry properties across versions, your existing database may be missing those columns. Rather than recreating the database and losing your historical rows, use `--notion-repair-database` to bring it up to date.
+
+**Inspect the canonical schema first (no credentials required):**
+
+```bash
+cja_auto_sdr --notion-print-database-schema
+```
+
+This prints the full list of expected property names and their types. Compare it against your database in Notion to spot any gaps.
+
+**Preview, then apply the repair:**
+
+```bash
+# Dry run: see what properties would be added (no changes made)
+cja_auto_sdr --notion-repair-database --dry-run --notion-database-id <id>
+
+# Apply: add missing properties to the live database
+cja_auto_sdr --notion-repair-database --notion-database-id <id>
+```
+
+You can also set `NOTION_DATABASE_ID` in your environment so you do not need to pass the flag each time:
+
+```bash
+export NOTION_DATABASE_ID=<id>
+cja_auto_sdr --notion-repair-database --dry-run
+cja_auto_sdr --notion-repair-database
+```
+
+**What the repair does (and does not do):**
+
+- **Adds** any properties that exist in the canonical schema but are missing from the database.
+- **Reports** any property that exists in the database with a different type than the canonical schema expects (type conflicts are flagged in the output but never changed automatically).
+- **Never removes** existing properties or data rows, so historical data is preserved.
+
+After the repair, run a normal `--format notion` publish to populate the new columns for each data view.
+
+## 9. Publish a saved artifact without re-fetching
 
 If you already generated an SDR as a JSON file, you can publish it to Notion without calling the CJA API again:
 
@@ -178,7 +216,7 @@ cja_auto_sdr --push-to-notion path/to/sdr.json
 
 This reads the saved artifact and writes the detail page (and the registry row, if a database is configured).
 
-## 9. Troubleshooting
+## 10. Troubleshooting
 
 | Symptom | Likely cause | Fix |
 |---------|--------------|-----|

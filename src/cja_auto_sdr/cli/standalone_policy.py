@@ -76,6 +76,17 @@ _NOTION_PRUNE_ORPHANS_STANDALONE_POLICY = StandalonePrevalidationPolicy(
     ignored_semantic_dests=_WRAPPER_EXECUTION_TOLERATED_SEMANTIC_DESTS,
     validate_org_report_mode_scoped_options=False,
 )
+# NOTE: do NOT add "notion_repair_database" or "notion_print_database_schema" to
+# ignored_semantic_dests. The mode flag must stay visible to
+# _validate_semantic_flag_relationships — clearing it would skip the conflict guard.
+_NOTION_REPAIR_DATABASE_STANDALONE_POLICY = StandalonePrevalidationPolicy(
+    ignored_semantic_dests=_WRAPPER_EXECUTION_TOLERATED_SEMANTIC_DESTS,
+    validate_org_report_mode_scoped_options=False,
+)
+_NOTION_PRINT_SCHEMA_STANDALONE_POLICY = StandalonePrevalidationPolicy(
+    ignored_semantic_dests=_WRAPPER_EXECUTION_TOLERATED_SEMANTIC_DESTS,
+    validate_org_report_mode_scoped_options=False,
+)
 
 _STANDALONE_PREVALIDATION_POLICIES: dict[str, StandalonePrevalidationPolicy] = {
     "completion": _COMPLETION_STANDALONE_POLICY,
@@ -83,6 +94,8 @@ _STANDALONE_PREVALIDATION_POLICIES: dict[str, StandalonePrevalidationPolicy] = {
     "exit_codes": _INFORMATIONAL_STANDALONE_POLICY,
     "sample_config": _SAMPLE_CONFIG_STANDALONE_POLICY,
     "push_to_notion": _PUSH_TO_NOTION_STANDALONE_POLICY,
+    "notion_repair_database": _NOTION_REPAIR_DATABASE_STANDALONE_POLICY,
+    "notion_print_schema": _NOTION_PRINT_SCHEMA_STANDALONE_POLICY,
     "notion_prune_orphans": _NOTION_PRUNE_ORPHANS_STANDALONE_POLICY,
 }
 

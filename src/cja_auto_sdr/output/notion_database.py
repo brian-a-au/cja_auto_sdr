@@ -17,6 +17,7 @@ metadata.
 from __future__ import annotations
 
 import datetime as _dt
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from cja_auto_sdr.output.writers.notion import _call_with_rate_limit_retry
@@ -27,11 +28,14 @@ if TYPE_CHECKING:
 __all__ = [
     "DATABASE_SCHEMA",
     "DATA_QUALITY_OPTIONS",
+    "SchemaRepairResult",
     "build_catalog_row_properties",
     "build_row_properties",
     "derive_data_quality_status",
+    "describe_database_schema",
     "ensure_database",
     "find_existing_row_id",
+    "repair_database_schema",
     "upsert_database_row",
 ]
 
@@ -59,6 +63,74 @@ DATABASE_SCHEMA: dict[str, dict[str, Any]] = {
         },
     },
 }
+
+
+def _schema_property_type(entry: dict) -> str:
+    """Return the Notion property type for a DATABASE_SCHEMA entry (its single key)."""
+    return next(iter(entry))
+
+
+def describe_database_schema() -> str:
+    """Render the canonical registry schema as a human-readable block for stdout."""
+    lines = [f"CJA SDR Registry — database schema ({len(DATABASE_SCHEMA)} properties)", ""]
+    for name, entry in DATABASE_SCHEMA.items():
+        ptype = _schema_property_type(entry)
+        if ptype == "select":
+            options = ", ".join(o["name"] for o in entry["select"].get("options", []))
+            lines.append(f"  {name:<26} {ptype} ({options})")
+        else:
+            lines.append(f"  {name:<26} {ptype}")
+    return "\n".join(lines) + "\n"
+
+
+@dataclass(frozen=True)
+class SchemaRepairResult:
+    to_add: list[str]
+    conflicts: list[tuple[str, str, str]]  # (name, expected_type, actual_type)
+    applied: bool
+
+
+def repair_database_schema(client: Any, *, database_id: str, dry_run: bool = False) -> SchemaRepairResult:
+    """Add canonical properties missing from an existing registry database.
+
+    Add-only: never changes a property's type, never removes one, never adds a
+    second title. Type mismatches are recorded as conflicts and left untouched.
+    Raises ValueError if the database has no data source.
+    """
+    db = _call_with_rate_limit_retry(client.databases.retrieve, database_id=database_id)
+    data_sources = db.get("data_sources") or []
+    if not data_sources:
+        raise ValueError(f"Database {database_id} has no data source")
+    ds_id = str(data_sources[0]["id"])
+    ds = _call_with_rate_limit_retry(client.data_sources.retrieve, data_source_id=ds_id)
+    live = ds.get("properties") or {}
+
+    to_add: list[str] = []
+    conflicts: list[tuple[str, str, str]] = []
+    payload: dict[str, Any] = {}
+    for name, entry in DATABASE_SCHEMA.items():
+        expected = _schema_property_type(entry)
+        if expected == "title":
+            # A database always has exactly one title, so repair never adds the
+            # canonical title. Surface an absent/renamed title (or a wrong-typed
+            # "Name") as a conflict for manual resolution — otherwise ensure_database
+            # would later reject the database with no hint from repair.
+            if name not in live:
+                conflicts.append((name, expected, "missing"))
+            elif live[name].get("type") != "title":
+                conflicts.append((name, expected, str(live[name].get("type"))))
+            continue
+        if name not in live:
+            to_add.append(name)
+            payload[name] = entry
+        elif live[name].get("type") != expected:
+            conflicts.append((name, expected, str(live[name].get("type"))))
+
+    applied = False
+    if to_add and not dry_run:
+        _call_with_rate_limit_retry(client.data_sources.update, data_source_id=ds_id, properties=payload)
+        applied = True
+    return SchemaRepairResult(to_add=to_add, conflicts=conflicts, applied=applied)
 
 
 def _rt(content: str) -> list[dict]:
@@ -214,14 +286,15 @@ def ensure_database(
         db = _call_with_rate_limit_retry(client.databases.retrieve, database_id=database_id)
         data_sources = db.get("data_sources") or []
         if not data_sources:
-            raise ValueError(f"Database {database_id} has no data sources")
+            raise ValueError(f"Database {database_id} has no data source")
         ds_id = str(data_sources[0]["id"])
         ds = _call_with_rate_limit_retry(client.data_sources.retrieve, data_source_id=ds_id)
         existing_props = set((ds.get("properties") or {}).keys())
         missing = set(DATABASE_SCHEMA) - existing_props
         if missing:
             raise ValueError(
-                f"Database {database_id} is missing required properties: {sorted(missing)}",
+                f"Database {database_id} is missing required properties: {sorted(missing)}. "
+                "Run cja_auto_sdr --notion-repair-database to add them.",
             )
         return str(db["id"]), ds_id
 
