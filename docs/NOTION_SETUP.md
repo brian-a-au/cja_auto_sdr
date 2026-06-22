@@ -114,7 +114,7 @@ Run this once:
 cja_auto_sdr --notion-create-database
 ```
 
-This creates a new "CJA SDR Registry" database under `NOTION_PARENT_PAGE_ID`, with the full schema, and prints the new database ID to stdout. Copy that value and set it:
+This creates a new "CJA SDR Registry" database under `NOTION_PARENT_PAGE_ID`, with the full schema, and prints the new database ID to stdout. To give the database a different title, add `--notion-database-title "My Title"` (or set `NOTION_DATABASE_TITLE`); the title only applies when the database is created. Copy the printed database ID and set it:
 
 ```bash
 export NOTION_DATABASE_ID=abc123def456abc123def456abc123de

@@ -1482,6 +1482,19 @@ Requirements:
         ),
     )
     notion_group.add_argument(
+        "--notion-database-title",
+        type=str,
+        default=None,
+        metavar="NAME",
+        dest="notion_database_title",
+        help=(
+            "Title for the database created by --notion-create-database "
+            "(default: 'CJA SDR Registry'). Falls back to env var NOTION_DATABASE_TITLE. "
+            "Only applies when a new database is created; ignored when attaching an "
+            "existing one with --notion-database-id."
+        ),
+    )
+    notion_group.add_argument(
         "--notion-print-database-schema",
         action="store_true",
         default=False,

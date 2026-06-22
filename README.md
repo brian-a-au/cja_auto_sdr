@@ -7,7 +7,7 @@
 [![Version Sync](https://github.com/brian-a-au/cja_auto_sdr/actions/workflows/version-sync.yml/badge.svg)](https://github.com/brian-a-au/cja_auto_sdr/actions/workflows/version-sync.yml)
 [![Python 3.14+](https://img.shields.io/badge/python-3.14%2B-blue.svg)](https://www.python.org/downloads/)
 [![Coverage](https://img.shields.io/badge/coverage-98%25-brightgreen.svg)](tests/)
-[![Tests](https://img.shields.io/badge/tests-8254-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-8258-brightgreen.svg)](tests/)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -481,7 +481,7 @@ cja_auto_sdr/
 │   └── ...                    # Additional guides
 ├── examples/                  # Automation and GitHub Actions examples
 ├── scripts/                   # Utility scripts
-├── tests/                     # Test suite (8,254+ tests)
+├── tests/                     # Test suite (8,258+ tests)
 │   ├── category_rules.py      # File-based test-category rules
 │   ├── conftest.py            # Pytest fixtures and auto-marking
 │   ├── README.md              # Test inventory and execution guide

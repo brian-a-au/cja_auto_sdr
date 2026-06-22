@@ -229,12 +229,13 @@ These variables are used when publishing SDRs to Notion (`--format notion`, `--p
 | `NOTION_TOKEN` | Notion integration token (starts with `secret_`) | **Yes** (for any Notion output) |
 | `NOTION_PARENT_PAGE_ID` | ID of the Notion page under which SDR detail pages are created. Also used as the parent when bootstrapping a new registry database with `--notion-create-database` | **Yes** (for any Notion output) |
 | `NOTION_DATABASE_ID` | ID of an existing "CJA SDR Registry" database. When set, every `--format notion` run upserts the data view's row in the registry with all counts and Data Quality. Unset = no database row written (v3.7.0 behavior preserved). Can also be supplied via `--notion-database-id` | No |
+| `NOTION_DATABASE_TITLE` | Title for a database created by `--notion-create-database` (default: "CJA SDR Registry"). Overridden by `--notion-database-title`. Applies only when a new database is created; ignored when attaching an existing one | No |
 
 > **Bootstrapping `NOTION_DATABASE_ID`:** Run `cja_auto_sdr --notion-create-database` once. It creates a new "CJA SDR Registry" database under `NOTION_PARENT_PAGE_ID` and prints the new database ID to stdout. Copy that value into your environment or `.env` file as `NOTION_DATABASE_ID`, then use it on subsequent runs.
 >
 > **Unset behavior:** If `NOTION_DATABASE_ID` is not set (and `--notion-database-id` is not passed), `--format notion` runs exactly as in v3.7.0 — the SDR detail page is created or updated, but no registry row is written.
 >
-> **Schema drift (v3.10.0):** If the tool adds new registry properties in a later version and your database is missing those columns, run `cja_auto_sdr --notion-repair-database` to add them (add-only — never removes existing properties or rows). Use `--dry-run` to preview first. Run `cja_auto_sdr --notion-print-database-schema` to see the full canonical schema without credentials.
+> **Schema drift (v3.11.0):** If the tool adds new registry properties in a later version and your database is missing those columns, run `cja_auto_sdr --notion-repair-database` to add them (add-only — never removes existing properties or rows). Use `--dry-run` to preview first. Run `cja_auto_sdr --notion-print-database-schema` to see the full canonical schema without credentials.
 
 ### Setting Environment Variables
 
@@ -942,7 +943,7 @@ cja_auto_sdr --list-dataviews --log-level DEBUG
 At launch, the tool logs diagnostic lines containing the tool version, Python version, platform, active log level, inferred run mode (batch, single, or discovery), and dependency versions. These appear automatically at `INFO` level and are useful for troubleshooting environment issues in CI/CD logs or support requests:
 
 ```text
-CJA SDR Generator v3.10.0 | Python 3.14.2 | darwin | log_level=INFO | mode=single
+CJA SDR Generator v3.11.0 | Python 3.14.2 | darwin | log_level=INFO | mode=single
 Dependencies: cjapy=0.3.0, pandas=2.3.3, numpy=2.2.1, xlsxwriter=3.2.9, tqdm=4.67.0
 ```
 

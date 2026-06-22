@@ -77,6 +77,10 @@
         "type": "boolean",
         "description": "Bootstrap a new CJA SDR Registry database under NOTION_PARENT_PAGE_ID, print the new database ID to stdout, and exit. Use the printed ID as notion_database_id or NOTION_DATABASE_ID for subsequent runs."
       },
+      "notion_database_title": {
+        "type": "string",
+        "description": "Title for the database created by notion_create_database (default: 'CJA SDR Registry'). Falls back to the NOTION_DATABASE_TITLE env var. Only applies when a new database is created; ignored when attaching an existing one via notion_database_id."
+      },
       "notion_force_new": {
         "type": "boolean",
         "description": "Force creation of a new Notion page even if one already exists for this data view. The superseded page ID is recorded as an orphan in .notion_pages.json. Clean it up later with the standalone CLI command `cja_auto_sdr --notion-prune-orphans` (a maintenance command that takes no data view ID, so it is not exposed in this generate manifest)."
