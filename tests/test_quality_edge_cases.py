@@ -6,7 +6,7 @@ data, duplicate detection, description validation, parallel execution.
 
 import logging
 from concurrent.futures import Future
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pandas as pd
 
@@ -256,3 +256,30 @@ class TestParallelExecution:
         severities = df["Severity"].tolist()
         assert severities[0] == "CRITICAL"
         assert severities[1] == "LOW"
+
+    def test_get_issues_dataframe_truncates_to_max_issues(self):
+        """A positive max_issues smaller than the issue count truncates and logs the cap."""
+        mock_logger = MagicMock(spec=logging.Logger)
+        checker = DataQualityChecker(logger=mock_logger, quiet=True)
+        for idx in range(5):
+            checker.add_issue("LOW", "Cat", "Metrics", f"item{idx}", f"issue {idx}")
+
+        df = checker.get_issues_dataframe(max_issues=2)
+
+        # Only the top 2 (post-sort) rows are returned.
+        assert len(df) == 2
+        # The truncation was announced via an info log carrying the cap and total.
+        mock_logger.info.assert_any_call("Limiting data quality issues to top %s (of %s total)", 2, 5)
+
+    def test_get_issues_dataframe_keeps_all_when_under_max_issues(self):
+        """When the issue count does not exceed max_issues, no truncation occurs."""
+        mock_logger = MagicMock(spec=logging.Logger)
+        checker = DataQualityChecker(logger=mock_logger, quiet=True)
+        checker.add_issue("LOW", "Cat", "Metrics", "item0", "issue 0")
+        checker.add_issue("HIGH", "Cat", "Metrics", "item1", "issue 1")
+
+        df = checker.get_issues_dataframe(max_issues=10)
+
+        assert len(df) == 2
+        truncation_logged = any("Limiting data quality issues" in str(call) for call in mock_logger.info.call_args_list)
+        assert not truncation_logged

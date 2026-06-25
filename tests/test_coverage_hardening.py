@@ -854,3 +854,17 @@ class TestPromptForSelectionKeyboardInterrupt:
         with patch("builtins.input", side_effect=KeyboardInterrupt):
             result = prompt_for_selection(options, "Pick one:")
         assert result is None
+
+    def test_keyboard_interrupt_on_tty_returns_none(self) -> None:
+        """Lines 56-58: with a TTY, the input loop is entered and a
+        KeyboardInterrupt during ``input()`` returns None via the handler."""
+        from cja_auto_sdr.cli.interactive import prompt_for_selection
+
+        options = [("id1", "Option 1"), ("id2", "Option 2")]
+        with (
+            patch("sys.stdin") as mock_stdin,
+            patch("builtins.input", side_effect=KeyboardInterrupt),
+        ):
+            mock_stdin.isatty.return_value = True
+            result = prompt_for_selection(options, "Pick one:")
+        assert result is None

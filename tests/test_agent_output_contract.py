@@ -18,6 +18,7 @@ from cja_auto_sdr.cli.agent_output import (
     DIFF_STDOUT_FORMATS,
     DISCOVERY_STDOUT_FORMATS,
     ORG_REPORT_STDOUT_FORMATS,
+    _cli_option_specified,
     is_stdout_path,
     resolve_agent_output_path,
     resolve_agent_quiet,
@@ -82,6 +83,32 @@ class TestIsStdoutPath:
 
     def test_empty_string_is_not_stdout(self):
         assert is_stdout_path("") is False
+
+
+# ---------------------------------------------------------------------------
+# _cli_option_specified tests
+# ---------------------------------------------------------------------------
+
+
+class TestCliOptionSpecified:
+    """Verify explicit long-option detection, including abbreviation resolution."""
+
+    def test_literal_long_option_match(self):
+        """Direct token equality returns True without abbreviation resolution."""
+        assert _cli_option_specified("--agent-mode", ["--agent-mode"]) is True
+
+    def test_value_assignment_form_match(self):
+        """``--option=value`` form is recognised as an explicit option."""
+        assert _cli_option_specified("--output", ["--output=report.json"]) is True
+
+    def test_unambiguous_abbreviation_resolves_to_canonical_option(self):
+        """Line 90: an unambiguous abbreviation (``--agent-mod``) resolves to
+        ``--agent-mode`` via the long-option resolver and returns True."""
+        assert _cli_option_specified("--agent-mode", ["--agent-mod"]) is True
+
+    def test_unrelated_token_returns_false(self):
+        """A token that neither matches literally nor resolves returns False."""
+        assert _cli_option_specified("--agent-mode", ["--nonexistent-flag-xyz"]) is False
 
 
 # ---------------------------------------------------------------------------

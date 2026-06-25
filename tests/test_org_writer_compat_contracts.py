@@ -1108,3 +1108,139 @@ def test_advisories_key_is_additive_does_not_remove_existing_keys(rich_org_repor
 
     # The new key must also be present
     assert "advisories" in data
+
+
+def test_format_trending_dv_label_falls_back_to_id_when_name_is_absent_or_matches():
+    """writers/trending L264: bare id is returned when no distinct display name exists."""
+    from cja_auto_sdr.org.writers.trending import _format_trending_dv_label
+
+    # No name available -> just the id.
+    assert _format_trending_dv_label("dv_001", None) == "dv_001"
+    # Empty name -> still just the id.
+    assert _format_trending_dv_label("dv_001", "") == "dv_001"
+    # Name identical to id -> avoid the redundant "name (id)" form.
+    assert _format_trending_dv_label("dv_001", "dv_001") == "dv_001"
+    # A genuinely distinct name keeps the compact "name (id)" label.
+    assert _format_trending_dv_label("dv_001", "Production") == "Production (dv_001)"
+
+
+# ---------------------------------------------------------------------------
+# Direct unit coverage for org writer compat internal binding/masking helpers
+# ---------------------------------------------------------------------------
+
+
+def test_masked_module_attr_proxy_getattr_delegates_to_wrapped_value():
+    """compat L70: attribute access on the proxy is forwarded to the wrapped callable."""
+    from cja_auto_sdr.org.writers import compat
+
+    def wrapped():
+        return "ok"
+
+    wrapped.custom_marker = "delegated"
+
+    proxy = compat._MaskedModuleAttrProxy("some.module", "wrapped", wrapped)
+    # __getattr__ only fires for attributes not in __slots__, e.g. arbitrary attrs.
+    assert proxy.custom_marker == "delegated"
+    assert proxy.__name__ == "wrapped"
+
+
+def test_peek_masked_module_attr_returns_non_callable_baseline_directly():
+    """compat L179: a non-callable masked baseline is returned without proxy wrapping."""
+    from cja_auto_sdr.org.writers import compat
+
+    module_name = "cja_auto_sdr.test_compat_peek_module"
+    attr_name = "value"
+    key = compat._compat_key(module_name, attr_name)
+
+    non_callable_baseline = "baseline-string"
+
+    def callable_top():
+        return "top"
+
+    compat._MODULE_ATTR_BINDING_STACKS[key] = [non_callable_baseline, callable_top]
+    token = compat._MASKED_MODULE_ATTRS.set({key: 1})
+    try:
+        # depth=1 -> effective_index=0 -> masked is the non-callable baseline.
+        result = compat._peek_masked_module_attr(module_name, attr_name)
+        assert result == non_callable_baseline
+    finally:
+        compat._MASKED_MODULE_ATTRS.reset(token)
+        compat._MODULE_ATTR_BINDING_STACKS.pop(key, None)
+
+
+def test_effective_module_attr_binding_imports_module_when_no_stack():
+    """compat L187-188: with no recorded stack, the live module attribute is read."""
+    from cja_auto_sdr.org.writers import compat
+
+    # core.version has a stable, real attribute and no compat binding stack.
+    result = compat._effective_module_attr_binding("cja_auto_sdr.core.version", "__version__")
+    import cja_auto_sdr.core.version as version_mod
+
+    assert result == version_mod.__version__
+
+
+def test_effective_module_attr_binding_missing_attr_returns_sentinel():
+    """compat L187-188: a missing attribute on an unstacked module yields the sentinel."""
+    from cja_auto_sdr.org.writers import compat
+
+    result = compat._effective_module_attr_binding(
+        "cja_auto_sdr.core.version",
+        "definitely_not_a_real_attribute",
+    )
+    assert result is compat._MISSING
+
+
+def test_record_module_attr_binding_noop_when_value_unchanged():
+    """compat L200: re-recording the current top-of-stack value leaves the stack intact."""
+    from cja_auto_sdr.org.writers import compat
+
+    module_name = "cja_auto_sdr.test_compat_record_module"
+    attr_name = "value"
+    key = compat._compat_key(module_name, attr_name)
+
+    sentinel = object()
+    compat._MODULE_ATTR_BINDING_STACKS[key] = [sentinel]
+    try:
+        compat._record_module_attr_binding(module_name, attr_name, sentinel)
+        # Stack must be untouched (no duplicate push).
+        assert compat._MODULE_ATTR_BINDING_STACKS[key] == [sentinel]
+    finally:
+        compat._MODULE_ATTR_BINDING_STACKS.pop(key, None)
+
+
+def test_suppress_override_is_noop_without_active_override():
+    """compat L282-283: suppressing an unset override key simply yields."""
+    from cja_auto_sdr.org.writers import compat
+
+    entered = False
+    with compat._suppress_override("cja_auto_sdr.test_compat_suppress", "missing_attr"):
+        entered = True
+    assert entered is True
+
+
+def test_mask_module_attrs_is_noop_with_empty_attr_names():
+    """compat L319-320: an empty attr-name iterable short-circuits to a plain yield."""
+    from cja_auto_sdr.org.writers import compat
+
+    entered = False
+    with compat._mask_module_attrs("cja_auto_sdr.test_compat_mask", []):
+        entered = True
+    assert entered is True
+
+
+def test_mask_module_attrs_skips_unregistered_keys_and_yields():
+    """compat L328 + L333-334: attrs without a registered baseline are skipped, then yield."""
+    from cja_auto_sdr.org.writers import compat
+
+    before = compat._current_masked_module_attrs().copy()
+    entered = False
+    # Neither attr name is present in _MASKED_MODULE_BASELINES for this module, so
+    # every key is skipped (L328) and applied_keys stays empty (L333-334).
+    with compat._mask_module_attrs(
+        "cja_auto_sdr.test_compat_mask_unregistered",
+        ["attr_one", "attr_two"],
+    ):
+        entered = True
+        # No masking should have been applied to the active context.
+        assert compat._current_masked_module_attrs() == before
+    assert entered is True

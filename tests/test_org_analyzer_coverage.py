@@ -968,6 +968,76 @@ class TestRunAnalysisImplFeatureFlags:
 
 
 # ===================================================================
+# 10b. _run_analysis_impl - sampled logging + governance threshold branch
+# ===================================================================
+
+
+class TestRunAnalysisImplSamplingAndGovernance:
+    """Tests for sampled-population logging and governance threshold reporting."""
+
+    def _setup(self, mock_cja, logger, *, is_sampled: bool, **config_kwargs):
+        # Three DVs so the default 50% core threshold (ceil(3*0.5)=2) leaves
+        # single-DV components isolated rather than misclassifying them as core.
+        config = OrgReportConfig(skip_lock=True, cja_per_thread=False, skip_similarity=True, **config_kwargs)
+        analyzer = _make_analyzer(mock_cja, logger, config=config)
+        summaries = [
+            DataViewSummary(
+                data_view_id="dv1",
+                data_view_name="DV 1",
+                metric_ids={"m_shared", "m_isolated"},
+                dimension_ids={"d_shared"},
+                metric_count=2,
+                dimension_count=1,
+            ),
+            DataViewSummary(
+                data_view_id="dv2",
+                data_view_name="DV 2",
+                metric_ids={"m_shared"},
+                dimension_ids={"d_shared"},
+                metric_count=1,
+                dimension_count=1,
+            ),
+            DataViewSummary(
+                data_view_id="dv3",
+                data_view_name="DV 3",
+                metric_ids={"m_shared"},
+                dimension_ids={"d_shared"},
+                metric_count=1,
+                dimension_count=1,
+            ),
+        ]
+        patches = [
+            patch.object(
+                analyzer,
+                "_list_and_filter_data_views",
+                return_value=([{"id": "dv1"}, {"id": "dv2"}, {"id": "dv3"}], is_sampled, 10),
+            ),
+            patch.object(analyzer, "_fetch_all_data_views", return_value=summaries),
+            patch.object(analyzer, "_check_memory_warning"),
+        ]
+        return analyzer, patches
+
+    def test_sampled_population_logs_sampled_message(self, mock_cja, logger, caplog):
+        """L415: is_sampled=True logs the 'Sampled N from M' message."""
+        analyzer, patches = self._setup(mock_cja, logger, is_sampled=True)
+        with patches[0], patches[1], patches[2], caplog.at_level(logging.INFO):
+            result = analyzer.run_analysis()
+        assert result.is_sampled is True
+        assert "Sampled 3 from 10 available data views" in caplog.text
+
+    def test_governance_thresholds_checked_and_exceeded(self, mock_cja, logger, caplog):
+        """L490-497: a configured isolated_threshold triggers the governance check + warning."""
+        # isolated_threshold=0.0 means any isolated component exceeds the limit.
+        analyzer, patches = self._setup(mock_cja, logger, is_sampled=False, isolated_threshold=0.0)
+        with patches[0], patches[1], patches[2], caplog.at_level(logging.INFO):
+            result = analyzer.run_analysis()
+        assert result.governance_violations is not None
+        assert result.thresholds_exceeded is True
+        assert "Checking governance thresholds..." in caplog.text
+        assert "Governance thresholds exceeded" in caplog.text
+
+
+# ===================================================================
 # 11. _generate_recommendations branches
 # ===================================================================
 
@@ -2236,6 +2306,27 @@ class TestFetchAllDataViewsFutureException:
         assert result[0].error is not None
         assert "ValueError" in result[0].error
 
+    def test_returned_error_summary_updates_progress_postfix(self, mock_cja, logger):
+        """L787: a fetch that *returns* an error summary still flows through the success path."""
+        # Unlike the raising cases above, the worker returns (does not raise) a
+        # summary whose has_error is True, exercising the error-postfix branch.
+        config = OrgReportConfig(skip_lock=True, cja_per_thread=False)
+        analyzer = _make_analyzer(mock_cja, logger, config=config)
+        analyzer.cache = None
+
+        error_summary = DataViewSummary(
+            data_view_id="dv_err",
+            data_view_name="Errored DV",
+            error="boom from worker",
+        )
+
+        with patch.object(analyzer, "_fetch_data_view_components", return_value=error_summary):
+            result = analyzer._fetch_all_data_views([{"id": "dv_err", "name": "Errored DV"}])
+
+        assert len(result) == 1
+        assert result[0].has_error is True
+        assert result[0].error == "boom from worker"
+
 
 # ===================================================================
 # 24. _fetch_data_view_components - metric/dimension names with include_names (lines 637-638, 676-677)
@@ -2414,6 +2505,24 @@ class TestFetchDataViewComponentsMetadata:
         assert result.created is None
         assert result.modified is None
         assert result.has_description is False
+
+    def test_top_level_fetch_failure_returns_error_summary(self, mock_cja, logger):
+        """L992-994: an exception during component fetch returns an error summary, not a raise."""
+        # getMetrics raising is outside the metadata-only inner guard, so it
+        # propagates to the outer resilience handler at the end of the method.
+        config = OrgReportConfig(skip_lock=True, cja_per_thread=False)
+        analyzer = _make_analyzer(mock_cja, logger, config=config)
+
+        mock_cja.getMetrics.side_effect = RuntimeError("metrics endpoint exploded")
+
+        dv = {"id": "dv_boom", "name": "Boom DV"}
+        result = analyzer._fetch_data_view_components(dv)
+
+        assert result.data_view_id == "dv_boom"
+        assert result.data_view_name == "Boom DV"
+        assert result.error is not None
+        assert "metrics endpoint exploded" in result.error
+        assert result.fetch_duration is not None
 
 
 # ===================================================================

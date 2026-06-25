@@ -1067,3 +1067,58 @@ class TestComparatorEmptyInventory:
         assert len(result.calc_metrics_diffs) == 0
         assert result.segments_diffs is not None
         assert len(result.segments_diffs) == 0
+
+
+# ==================== git.py remaining-line coverage ====================
+
+
+class TestGitRemainingLineCoverage:
+    """Cover the last uncovered branches in cja_auto_sdr.diff.git."""
+
+    def test_save_git_friendly_snapshot_with_quality_issues(self, tmp_path):
+        """Lines 150-154: quality_issues block tallies severity counts in metadata."""
+        snap = _make_snapshot()
+        quality_issues = [
+            {"Severity": "CRITICAL"},
+            {"Severity": "CRITICAL"},
+            {"Severity": "LOW"},
+            {},  # missing Severity -> defaults to UNKNOWN
+        ]
+
+        saved = save_git_friendly_snapshot(snap, tmp_path, quality_issues=quality_issues)
+
+        with open(saved["metadata"]) as f:
+            metadata = json.load(f)
+
+        assert metadata["quality"]["total_issues"] == 4
+        assert metadata["quality"]["by_severity"]["CRITICAL"] == 2
+        assert metadata["quality"]["by_severity"]["LOW"] == 1
+        assert metadata["quality"]["by_severity"]["UNKNOWN"] == 1
+
+    def test_commit_message_dimensions_modified(self):
+        """Line 203: dimensions_modified > 0 appears in commit message."""
+        summary = DiffSummary(metrics_added=0, dimensions_modified=5)
+        diff_result = DiffResult(
+            summary=summary,
+            metadata_diff=MagicMock(),
+            metric_diffs=[],
+            dimension_diffs=[],
+        )
+
+        msg = generate_git_commit_message(
+            data_view_id="dv_mod",
+            data_view_name="Modified DV",
+            metrics_count=4,
+            dimensions_count=9,
+            diff_result=diff_result,
+        )
+
+        assert "~ 5 dimensions modified" in msg
+
+    def test_init_snapshot_repo_already_a_git_repository(self, tmp_path):
+        """Line 330: short-circuits when the directory is already a Git repo."""
+        with patch("cja_auto_sdr.diff.git.is_git_repository", return_value=True):
+            ok, msg = git_init_snapshot_repo(tmp_path)
+
+        assert ok is True
+        assert msg == "Already a Git repository"

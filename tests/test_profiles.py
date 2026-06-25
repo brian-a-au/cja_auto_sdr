@@ -180,6 +180,16 @@ class TestLoadProfileConfigJson:
         assert result is not None
         assert result["scopes"] == "openid,AdobeID"
 
+    def test_returns_none_on_oserror(self, tmp_path):
+        """OSError while opening an existing config.json returns None."""
+        config_file = tmp_path / "config.json"
+        config_file.write_text('{"org_id": "test@AdobeOrg"}')
+
+        with patch("cja_auto_sdr.core.profiles.open", side_effect=OSError("read denied")):
+            result = load_profile_config_json(tmp_path)
+
+        assert result is None
+
 
 class TestLoadProfileDotenv:
     """Test loading credentials from .env file"""
@@ -707,6 +717,17 @@ class TestReadProfileOrgId:
         """Returns None when config.json is a JSON array instead of object"""
         (tmp_path / "config.json").write_text('[{"org_id": "test@AdobeOrg"}]')
         assert _read_profile_org_id(tmp_path) is None
+
+    def test_handles_plain_valueerror_from_json_load(self, tmp_path):
+        """A bare ValueError (not JSONDecodeError) from json.load is swallowed."""
+        (tmp_path / "config.json").write_text('{"org_id": "test@AdobeOrg"}')
+
+        # json.load can raise ValueError subtypes other than JSONDecodeError;
+        # the dedicated ValueError branch must keep _read_profile_org_id quiet.
+        with patch("cja_auto_sdr.core.profiles.json.load", side_effect=ValueError("bad value")):
+            result = _read_profile_org_id(tmp_path)
+
+        assert result is None
 
 
 class TestListProfilesOrgId:

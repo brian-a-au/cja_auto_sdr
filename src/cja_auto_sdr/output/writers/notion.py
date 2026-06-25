@@ -195,7 +195,7 @@ def _section_blocks(section_name: str, df: pd.DataFrame) -> list[dict]:
             blocks.append(table)
     # If every chunk degenerated (shouldn't happen given the column guard
     # above), drop the orphan heading so we don't render a bare section title.
-    if len(blocks) == 1:
+    if len(blocks) == 1:  # pragma: no cover - unreachable: the column guard above ensures every chunk renders a table
         return []
     return blocks
 

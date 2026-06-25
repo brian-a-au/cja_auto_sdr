@@ -828,3 +828,152 @@ def test_dispatch_snapshot_cli_modes_prune_stdout_forces_json_output() -> None:
     generator_mod._emit_json_output.assert_called_once()
     generator_mod._emit_output.assert_not_called()
     assert run_state["output_format"] == "json"
+
+
+# ---------------------------------------------------------------------------
+# Diff-family run_state advisory-rollup propagation (cli.py L293/556/718)
+# ---------------------------------------------------------------------------
+
+
+def _diff_dispatch_args(**overrides: Any) -> argparse.Namespace:
+    """Namespace covering attributes read by the diff/snapshot CLI dispatchers."""
+    defaults: dict[str, Any] = {
+        "config_file": "config.json",
+        "output_dir": ".",
+        "format": "console",
+        "output": None,
+        "metrics_only": False,
+        "dimensions_only": False,
+        "inventory_only": False,
+        "include_derived_inventory": False,
+        "include_calculated_metrics": False,
+        "include_segments_inventory": False,
+        "changes_only": False,
+        "summary": False,
+        "extended_fields": False,
+        "side_by_side": False,
+        "no_color": False,
+        "quiet_diff": False,
+        "reverse_diff": False,
+        "warn_threshold": None,
+        "group_by_field": False,
+        "group_by_field_limit": 10,
+        "diff_output": None,
+        "format_pr_comment": False,
+        "auto_snapshot": False,
+        "auto_prune": False,
+        "snapshot_dir": "./snapshots",
+        "keep_last": 0,
+        "keep_since": None,
+        "profile": None,
+        "name_match": "exact",
+        "list_snapshots": False,
+        "prune_snapshots": False,
+        "snapshot": None,
+        "compare_snapshots": None,
+        "diff_snapshot": None,
+    }
+    defaults.update(overrides)
+    return argparse.Namespace(**defaults)
+
+
+def _handler_populating_rollup(*_args: Any, **kwargs: Any) -> tuple[bool, bool, None]:
+    """Diff handler stub that records an advisory rollup like the real handler."""
+    runtime_details = kwargs["runtime_details"]
+    runtime_details["advisory_rollup"] = {"severity": "INFO", "count": 0}
+    return True, False, None
+
+
+def test_dispatch_diff_records_advisory_rollup_in_run_state() -> None:
+    """cli.py L293: diff branch copies advisory_rollup into run_state details."""
+    args = _diff_dispatch_args()
+    run_state: dict[str, Any] = {}
+
+    with (
+        patch("cja_auto_sdr.diff.cli._generator_module") as mock_generator_module,
+        pytest.raises(SystemExit) as exc_info,
+    ):
+        generator_mod = mock_generator_module.return_value
+        generator_mod.resolve_data_view_names.side_effect = [
+            (["dv_source"], []),
+            (["dv_target"], []),
+        ]
+        generator_mod.handle_diff_command.side_effect = _handler_populating_rollup
+
+        from cja_auto_sdr.diff.cli import dispatch_cross_data_view_diff_cli_mode
+
+        dispatch_cross_data_view_diff_cli_mode(
+            args,
+            data_view_inputs=["dv_source", "dv_target"],
+            ignore_fields=None,
+            labels=None,
+            show_only=None,
+            keep_last_specified=False,
+            keep_since_specified=False,
+            run_state=run_state,
+        )
+
+    assert exc_info.value.code == 0
+    assert run_state["details"]["advisories"] == {"severity": "INFO", "count": 0}
+
+
+def test_dispatch_compare_snapshots_records_advisory_rollup_in_run_state() -> None:
+    """cli.py L556: compare-snapshots branch copies advisory_rollup into run_state."""
+    args = _diff_dispatch_args(compare_snapshots=["source.json", "target.json"])
+    run_state: dict[str, Any] = {}
+
+    with (
+        patch("cja_auto_sdr.diff.cli._generator_module") as mock_generator_module,
+        pytest.raises(SystemExit) as exc_info,
+    ):
+        generator_mod = mock_generator_module.return_value
+        generator_mod.handle_compare_snapshots_command.side_effect = _handler_populating_rollup
+
+        from cja_auto_sdr.diff.cli import dispatch_snapshot_cli_modes
+
+        dispatch_snapshot_cli_modes(
+            args,
+            data_view_inputs=[],
+            output_to_stdout=False,
+            ignore_fields=None,
+            labels=None,
+            show_only=None,
+            keep_last_specified=False,
+            keep_since_specified=False,
+            run_state=run_state,
+        )
+
+    assert exc_info.value.code == 0
+    assert run_state["details"]["advisories"] == {"severity": "INFO", "count": 0}
+
+
+def test_dispatch_diff_snapshot_records_advisory_rollup_in_run_state() -> None:
+    """cli.py L718: diff-snapshot branch copies advisory_rollup into run_state."""
+    args = _diff_dispatch_args(diff_snapshot="baseline.json")
+    run_state: dict[str, Any] = {}
+
+    with (
+        patch("cja_auto_sdr.diff.cli._generator_module") as mock_generator_module,
+        pytest.raises(SystemExit) as exc_info,
+    ):
+        generator_mod = mock_generator_module.return_value
+        generator_mod.resolve_data_view_names.return_value = (["dv_target"], [])
+        generator_mod.handle_diff_snapshot_command.side_effect = _handler_populating_rollup
+
+        from cja_auto_sdr.diff.cli import dispatch_snapshot_cli_modes
+
+        dispatch_snapshot_cli_modes(
+            args,
+            data_view_inputs=["dv_target"],
+            output_to_stdout=False,
+            ignore_fields=None,
+            labels=None,
+            show_only=None,
+            keep_last_specified=False,
+            keep_since_specified=False,
+            run_state=run_state,
+        )
+
+    assert exc_info.value.code == 0
+    assert run_state["details"]["advisories"] == {"severity": "INFO", "count": 0}
+    assert run_state["resolved_data_views"] == ["dv_target"]

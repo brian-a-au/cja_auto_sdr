@@ -249,6 +249,29 @@ class TestWriteJsonAtomicCompatible:
         assert mode & 0o600 == 0o600  # owner rw at minimum
 
     @pytest.mark.skipif(_SKIP_PERMISSION_SEMANTICS, reason="requires POSIX non-root permission semantics")
+    def test_new_file_explicit_file_mode_via_atomic_replace(self, tmp_path):
+        # New (non-existent) target in a writable dir takes the atomic-replace
+        # path; an explicit file_mode chmods the staged temp before replace.
+        out = tmp_path / "new-secret.json"
+
+        write_json_atomic_compatible(out, {"secret": True}, file_mode=0o600)
+
+        assert json.loads(out.read_text(encoding="utf-8")) == {"secret": True}
+        assert stat.S_IMODE(out.stat().st_mode) == 0o600
+
+    def test_new_file_falls_back_to_direct_write_without_atomic_replace(self, tmp_path):
+        # When the destination directory cannot accept temp-file creation and
+        # replace, a new target is written directly instead.
+        out = tmp_path / "fallback.json"
+
+        with patch.object(json_io, "_directory_supports_atomic_replace", return_value=False):
+            result = write_json_atomic_compatible(out, {"fallback": True})
+
+        assert result == out
+        assert json.loads(out.read_text(encoding="utf-8")) == {"fallback": True}
+        assert list(tmp_path.glob(".*tmp")) == []
+
+    @pytest.mark.skipif(_SKIP_PERMISSION_SEMANTICS, reason="requires POSIX non-root permission semantics")
     def test_read_only_existing_file_matches_open_permissions(self, tmp_path):
         out = tmp_path / "readonly.json"
         out.write_text("{}", encoding="utf-8")
