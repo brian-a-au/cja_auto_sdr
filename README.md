@@ -13,7 +13,9 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Last Commit](https://img.shields.io/github/last-commit/brian-a-au/cja_auto_sdr)](https://github.com/brian-a-au/cja_auto_sdr/commits/main)
 
-A production-ready Python tool that automates the creation of Solution Design Reference (SDR) documents from your Adobe Customer Journey Analytics (CJA) implementation.
+A production-ready Python CLI that automates the creation of Solution Design Reference (SDR) documentation from your Adobe Customer Journey Analytics (CJA) implementation. Read-only against CJA.
+
+Counterpart to [`aa_auto_sdr`](https://github.com/brian-a-au/aa_auto_sdr); shares UX conventions, does not share code.
 
 ## What It Is
 
@@ -22,8 +24,6 @@ A **Solution Design Reference** is the essential documentation that bridges your
 **The Problem:** Manually documenting CJA implementations is time-consuming, error-prone, and quickly becomes outdated. Teams waste hours exporting data, formatting spreadsheets, and cross-referencing configurations—only to repeat the process when things change.
 
 **The Solution:** This tool connects directly to the CJA API, extracts your complete Data View configuration, validates data quality, and generates professionally formatted documentation in seconds. It also tracks changes between Data Views over time with built-in diff comparison and snapshot capabilities.
-
-> **Origin:** This project evolved from a [Jupyter notebook proof-of-concept](https://github.com/pitchmuc/CJA_Summit_2025/blob/main/notebooks/06.%20CJA%20Data%20View%20Solution%20Design%20Reference%20Generator.ipynb) into a production-ready CLI. The notebook remains excellent for learning; this tool is for teams needing automation, change tracking, and enterprise-grade reliability.
 
 ### How It Works
 
