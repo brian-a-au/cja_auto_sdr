@@ -7,6 +7,16 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.11.1] - 2026-06-25
+
+### Coverage
+
+- **Unit-slice coverage lifted from 98% → 99%** (98.43% → 99.14%): 149 previously-uncovered statements are now exercised, leaving the 7K-line `generator.py` monolith as the only module below 100%. No production behavior changed — this is test-only hardening plus two defensive-branch annotations.
+- The largest single gain was **`cli/commands/watch.py` (78% → 100%)**. Its real signal-handler closure, `_sleep_with_stop`, `_NullCja`, and `_resolve_cja_client` paths were only exercised by the `@slow` subprocess tests in `test_watch_signals.py`, which the unit slice excludes; in-process tests now cover them.
+- Other modules brought to **100%**: `output/writers/notion.py`, `output/notion_database.py`, `output/notion_org_publisher.py`, `output/notion_registry.py`, `pipeline/watch.py`, `api/client.py`, `api/cache.py`, `api/quality.py`, `cli/agent_output.py`, `cli/commands/discovery.py`, `cli/commands/stats.py`, `cli/interactive.py`, `core/discovery_payloads.py`, `core/exceptions.py`, `core/json_io.py`, `core/profiles.py`, `diff/cli.py`, `diff/commands.py`, `diff/git.py`, `org/analyzer.py`, `org/models.py`, `org/snapshot_utils.py`, `org/writers/compat.py`, and `org/writers/trending.py`.
+- Test count: **8,258 → 8,355** (+97), all added to existing test files (no new files).
+- Two genuinely-unreachable defensive branches were marked `# pragma: no cover` with justifications instead of contorting tests to reach them: the orphan-heading guard in `output/writers/notion.py` `_section_blocks` (the upstream column guard ensures every chunk renders a table) and the blank-id `continue` in `org/trending.py` (history-ineligible snapshots are rejected before that loop runs).
+
 ## [3.11.0] - 2026-06-22
 
 ### Added

@@ -3234,6 +3234,64 @@ class TestShowStatsKeyboardInterrupt:
         assert "cancelled" in captured.out.lower()
 
 
+class TestCoerceNameResolutionResult:
+    """_coerce_name_resolution_result normalization (stats.py)."""
+
+    def test_two_tuple_gets_fresh_diagnostics(self) -> None:
+        """A legacy 2-tuple is extended with a fresh diagnostics object."""
+        from cja_auto_sdr.cli.commands.stats import _coerce_name_resolution_result
+        from cja_auto_sdr.generator import NameResolutionDiagnostics
+
+        result = _coerce_name_resolution_result((["dv_1"], {"name": ["dv_1"]}))
+        resolved_ids, name_map, diagnostics = result
+        assert resolved_ids == ["dv_1"]
+        assert name_map == {"name": ["dv_1"]}
+        assert isinstance(diagnostics, NameResolutionDiagnostics)
+
+    def test_three_tuple_with_valid_diagnostics_passthrough(self) -> None:
+        """A 3-tuple whose third element is a NameResolutionDiagnostics is kept."""
+        from cja_auto_sdr.cli.commands.stats import _coerce_name_resolution_result
+        from cja_auto_sdr.generator import NameResolutionDiagnostics
+
+        diag = NameResolutionDiagnostics(error_type="not_found", error_message="nope")
+        result = _coerce_name_resolution_result((["dv_1"], {}, diag))
+        resolved_ids, name_map, diagnostics = result
+        assert resolved_ids == ["dv_1"]
+        assert name_map == {}
+        assert diagnostics is diag
+
+    def test_three_tuple_with_invalid_diagnostics_gets_fresh(self) -> None:
+        """Line 55: a 3-tuple whose third element is *not* a
+        NameResolutionDiagnostics is replaced with a fresh one."""
+        from cja_auto_sdr.cli.commands.stats import _coerce_name_resolution_result
+        from cja_auto_sdr.generator import NameResolutionDiagnostics
+
+        result = _coerce_name_resolution_result((["dv_1"], {"n": ["dv_1"]}, "not-a-diagnostics"))
+        resolved_ids, name_map, diagnostics = result
+        assert resolved_ids == ["dv_1"]
+        assert name_map == {"n": ["dv_1"]}
+        assert isinstance(diagnostics, NameResolutionDiagnostics)
+
+
+class TestResolveDataViewNamesSystemError:
+    """resolve_data_view_names re-raises SystemError (stats.py line 273)."""
+
+    def test_system_error_is_reraised(self) -> None:
+        from cja_auto_sdr.cli.commands.stats import resolve_data_view_names
+
+        with patch("cja_auto_sdr.cli.commands.stats._generator_module") as mock_gen:
+            gen = mock_gen.return_value
+            # Keep the recoverable-exception handler from catching SystemError so
+            # it falls through to the generic ``except Exception`` block, where
+            # SystemError is re-raised (line 272-273).
+            gen.RECOVERABLE_CONFIG_API_EXCEPTIONS = (ValueError,)
+            gen.NameResolutionDiagnostics = MagicMock()
+            gen.configure_cjapy.side_effect = SystemError("interpreter boom")
+
+            with pytest.raises(SystemError, match="interpreter boom"):
+                resolve_data_view_names(["My DV"])
+
+
 # ---------------------------------------------------------------------------
 # Coverage gap tests (moved from test_small_gap_coverage.py)
 # ---------------------------------------------------------------------------

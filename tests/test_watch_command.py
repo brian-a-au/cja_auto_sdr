@@ -316,3 +316,128 @@ def test_run_watch_suppresses_in_memory_note_in_quiet_mode(MockRunner, capsys):
 
     captured = capsys.readouterr()
     assert "snapshots in memory" not in captured.err
+
+
+# ---------------------------------------------------------------------------
+# Internal helpers — installed signal handler, _sleep_with_stop, _NullCja,
+# _resolve_cja_client. These are mocked away in the loop-level tests above, so
+# the unit slice never exercised their bodies (the real behavior was only
+# covered by the @slow subprocess tests in test_watch_signals.py).
+# ---------------------------------------------------------------------------
+
+
+def test_installed_signal_handler_records_reason_and_sets_stop_flag():
+    """The handler installed by _install_signal_handlers maps the signal to a
+    reason string and sets the module stop flag (both SIGINT and SIGTERM)."""
+    from cja_auto_sdr.cli.commands import watch as watch_mod
+
+    watch_mod._install_signal_handlers()
+
+    sigint_handler = _signal.getsignal(_signal.SIGINT)
+    sigint_handler(_signal.SIGINT, None)
+    assert watch_mod._stop_requested.is_set()
+    assert watch_mod._stop_reason_holder["reason"] == "sigint"
+
+    watch_mod._stop_requested.clear()
+    watch_mod._stop_reason_holder.clear()
+
+    sigterm_handler = _signal.getsignal(_signal.SIGTERM)
+    sigterm_handler(_signal.SIGTERM, None)
+    assert watch_mod._stop_requested.is_set()
+    assert watch_mod._stop_reason_holder["reason"] == "sigterm"
+    # reset_watch_module_state (autouse) restores the previous handlers + state.
+
+
+def test_sleep_with_stop_returns_when_deadline_already_passed():
+    """A zero-second interval takes the remaining<=0 early-return path."""
+    from cja_auto_sdr.cli.commands.watch import _sleep_with_stop
+
+    _stop_requested.clear()
+    _sleep_with_stop(0)  # returns immediately, no hang
+
+
+def test_sleep_with_stop_wakes_immediately_when_stop_event_is_set():
+    """A positive interval enters the wait branch and unblocks as soon as the
+    stop event fires, rather than sleeping the full duration."""
+    import threading
+
+    from cja_auto_sdr.cli.commands.watch import _sleep_with_stop
+
+    _stop_requested.clear()
+    timer = threading.Timer(0.02, _stop_requested.set)
+    timer.start()
+    try:
+        _sleep_with_stop(2)  # would block ~2s if the wake-on-stop path were broken
+    finally:
+        timer.cancel()
+        _stop_requested.clear()
+
+
+def test_null_cja_getdataview_raises_connection_error():
+    """The test-mode stub fails fast so snapshot fetch errors without real creds."""
+    from cja_auto_sdr.cli.commands.watch import _NullCja
+
+    with pytest.raises(ConnectionError, match="test mode"):
+        _NullCja().getDataView("dv_x")
+
+
+def test_resolve_cja_client_returns_null_cja_in_test_mode(monkeypatch):
+    """With the test-mode env var set, _resolve_cja_client short-circuits to _NullCja."""
+    from cja_auto_sdr.cli.commands import watch as watch_mod
+
+    monkeypatch.setenv("CJA_AUTO_SDR_WATCH_TEST_MODE", "1")
+    client = watch_mod._resolve_cja_client(MagicMock())
+    assert isinstance(client, watch_mod._NullCja)
+
+
+def test_resolve_cja_client_configures_and_returns_real_client(monkeypatch):
+    """Without test mode, _resolve_cja_client configures credentials then returns
+    generator.cjapy.CJA()."""
+    from cja_auto_sdr.cli.commands import watch as watch_mod
+
+    monkeypatch.delenv("CJA_AUTO_SDR_WATCH_TEST_MODE", raising=False)
+    args = MagicMock()
+    args.profile = "prod"
+    args.config_file = "cfg.json"
+
+    with (
+        patch("cja_auto_sdr.api.client.configure_cjapy", return_value=(True, "env", {})) as mock_cfg,
+        patch("cja_auto_sdr.generator.cjapy") as mock_cjapy,
+    ):
+        result = watch_mod._resolve_cja_client(args)
+
+    mock_cfg.assert_called_once()
+    assert mock_cfg.call_args.kwargs["profile"] == "prod"
+    assert mock_cfg.call_args.kwargs["config_file"] == "cfg.json"
+    assert result is mock_cjapy.CJA.return_value
+
+
+def test_resolve_cja_client_raises_when_configuration_fails(monkeypatch):
+    """A failed configure_cjapy surfaces as a RuntimeError."""
+    from cja_auto_sdr.cli.commands import watch as watch_mod
+
+    monkeypatch.delenv("CJA_AUTO_SDR_WATCH_TEST_MODE", raising=False)
+    args = MagicMock()
+    args.profile = None
+    args.config_file = "config.json"
+
+    with patch("cja_auto_sdr.api.client.configure_cjapy", return_value=(False, None, None)):
+        with pytest.raises(RuntimeError, match="Failed to configure CJA credentials"):
+            watch_mod._resolve_cja_client(args)
+
+
+@patch("cja_auto_sdr.cli.commands.watch._resolve_cja_client", side_effect=RuntimeError("cred boom"))
+def test_run_watch_returns_1_when_credential_resolution_fails(mock_resolve, capsys):
+    """When cja is None and credential resolution raises RuntimeError, run_watch
+    prints the error to stderr and returns exit code 1."""
+    args = MagicMock()
+    args.watch_data_views = ["dv_abc"]
+    args.watch_interval = "1h"
+    args.watch_threshold = 1
+
+    exit_code = run_watch(args, cja=None)
+
+    assert exit_code == 1
+    captured = capsys.readouterr()
+    assert "ERROR: cred boom" in captured.err
+    mock_resolve.assert_called_once()

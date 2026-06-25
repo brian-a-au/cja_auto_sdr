@@ -749,3 +749,68 @@ def test_shared_cache_evict_lru_falls_back_after_stale_access_metadata() -> None
         assert cache.get_statistics()["evictions"] == 1
     finally:
         cache.shutdown()
+
+
+class _LenIterMismatchCache:
+    """A mapping whose ``len()`` reports entries but whose iteration yields none.
+
+    Real ``Manager().dict()`` / ``dict`` keep ``__len__`` and ``__iter__`` in
+    agreement, so the defensive ``fallback_key is None`` guards can only be hit
+    by simulating metadata that disagrees with itself.
+    """
+
+    def __init__(self, reported_len: int) -> None:
+        self._reported_len = reported_len
+
+    def __len__(self) -> int:
+        return self._reported_len
+
+    def __bool__(self) -> bool:
+        return self._reported_len > 0
+
+    def __iter__(self):
+        return iter(())
+
+    def pop(self, key, default=None):
+        return default
+
+
+def test_shared_cache_capacity_fallback_breaks_when_iteration_empty() -> None:
+    """Defensive guard: the last-resort loop stops if iteration yields no key."""
+    cache = SharedValidationCache(max_size=1, ttl_seconds=3600)
+
+    try:
+        with (
+            patch.object(cache, "_prune_expired_entries"),
+            patch.object(cache, "_reconcile_access_times"),
+            patch.object(cache, "_evict_lru", return_value=False),
+        ):
+            # len() says full (>= max_size) but iteration is empty -> fallback_key is None.
+            cache._cache = _LenIterMismatchCache(reported_len=cache.max_size)
+            with cache._lock:
+                cache._ensure_capacity_for_new_entry(now=2.0)
+
+        # No eviction recorded because the loop broke immediately on an empty iterator.
+        assert cache.get_statistics()["evictions"] == 0
+    finally:
+        cache.shutdown()
+
+
+def test_shared_cache_evict_lru_returns_false_when_fallback_iteration_empty() -> None:
+    """Defensive guard: eviction reports failure when no concrete key can be found."""
+    cache = SharedValidationCache(max_size=1, ttl_seconds=3600)
+
+    try:
+        # Access metadata points at a key that is not in the (truthy but empty-on-iter) cache.
+        cache._access_times["ghost"] = 0.0
+        cache._cache = _LenIterMismatchCache(reported_len=1)
+
+        with cache._lock:
+            removed = cache._evict_lru(now=2.0, access_times_reconciled=True)
+
+        assert removed is False
+        # Stale access metadata for the missing key was cleaned up on the way out.
+        assert "ghost" not in cache._access_times
+        assert cache.get_statistics()["evictions"] == 0
+    finally:
+        cache.shutdown()

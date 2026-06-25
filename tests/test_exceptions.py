@@ -393,3 +393,21 @@ class TestMemoryLimitExceeded:
 
     def test_inherits_cjasdr_error(self):
         assert issubclass(MemoryLimitExceeded, CJASDRError)
+
+
+class TestApiConnectionHintStatusFromMessage:
+    """Tests for _api_connection_hint_status_from_message keyword fallbacks."""
+
+    def test_unauthorized_keyword_without_numeric_status_returns_401(self):
+        from cja_auto_sdr.core.exceptions import _api_connection_hint_status_from_message
+
+        # Marker present ("unauthorized") but no 3-digit code, so coercion yields
+        # nothing and the "unauthorized" keyword fallback returns 401.
+        assert _api_connection_hint_status_from_message("Request unauthorized") == 401
+
+    def test_forbidden_keyword_without_numeric_status_returns_403(self):
+        from cja_auto_sdr.core.exceptions import _api_connection_hint_status_from_message
+
+        # Marker present ("forbidden") but no coercible 401/403 status, so the
+        # "forbidden" keyword fallback returns 403.
+        assert _api_connection_hint_status_from_message("Access forbidden") == 403

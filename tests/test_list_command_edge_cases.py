@@ -21,6 +21,7 @@ from cja_auto_sdr.cli.commands.discovery import (
     _build_dimension_display_row,
     _build_metric_display_row,
     _fetch_component_payload,
+    _is_missing_sort_value,
     _normalize_component_records_or_raise,
     _normalize_optional_component_int,
     _resolve_dataview_name,
@@ -769,3 +770,58 @@ class TestNormalizeOptionalComponentIntDiscovery:
 
     def test_none_returns_default(self) -> None:
         assert _normalize_optional_component_int(None) == 0
+
+    def test_blank_string_after_missing_guard_returns_default(self) -> None:
+        """Line 717: defensive blank-string branch.
+
+        The leading ``_is_missing_discovery_value`` guard (treat_blank_string=True)
+        normally short-circuits any blank string, so the inner ``if not stripped``
+        check is unreachable through real input.  We patch the guard to report a
+        blank string as *present* so the string branch runs and the
+        ``stripped == ''`` fallback returns the default.
+        """
+        from cja_auto_sdr.cli.commands import discovery as _disc_mod
+
+        with patch.object(_disc_mod, "_is_missing_discovery_value", return_value=False):
+            assert _normalize_optional_component_int("   ") == 0
+            assert _normalize_optional_component_int("   ", default=-9) == -9
+
+
+# ---------------------------------------------------------------------------
+# _is_missing_sort_value: pd.isna error path (discovery.py lines 185-186)
+# ---------------------------------------------------------------------------
+
+
+class TestIsMissingSortValueDiscovery:
+    """Exercise _is_missing_sort_value through the canonical discovery module."""
+
+    def test_none_is_missing(self) -> None:
+        assert _is_missing_sort_value(None) is True
+
+    def test_blank_string_is_missing(self) -> None:
+        assert _is_missing_sort_value("") is True
+        assert _is_missing_sort_value("   ") is True
+
+    def test_nan_is_missing(self) -> None:
+        assert _is_missing_sort_value(float("nan")) is True
+
+    def test_concrete_value_is_not_missing(self) -> None:
+        assert _is_missing_sort_value("hello") is False
+        assert _is_missing_sort_value(42) is False
+
+    def test_pd_isna_typeerror_returns_false(self) -> None:
+        """Lines 185-186: a value whose pd.isna raises TypeError is treated as
+        present (not missing)."""
+
+        class Unisnable:
+            def __array__(self, *args, **kwargs):
+                raise TypeError("cannot coerce to array")
+
+        assert _is_missing_sort_value(Unisnable()) is False
+
+    def test_pd_isna_valueerror_returns_false(self) -> None:
+        """Lines 185-186: a value whose pd.isna raises ValueError (ambiguous
+        truth value of an array) is treated as present (not missing)."""
+        import numpy as np
+
+        assert _is_missing_sort_value(np.array([1, 2, 3])) is False

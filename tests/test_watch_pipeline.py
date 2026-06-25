@@ -126,6 +126,25 @@ def test_fetch_failure_emits_error_event_and_continues():
     assert events[0].data_view_id == "dv_abc"
 
 
+def test_diff_failure_emits_error_event_and_continues(fake_snapshot):
+    """A comparator.compare() exception on a non-baseline cycle yields an
+    ErrorEvent with stage='diff' and does not abort the run."""
+    snapshot_manager = MagicMock()
+    snapshot_manager.create_snapshot.return_value = fake_snapshot
+    comparator = MagicMock()
+    comparator.compare.side_effect = ValueError("diff exploded")
+    runner = WatchCycleRunner(snapshot_manager=snapshot_manager, comparator=comparator, threshold=1)
+
+    list(runner.run_cycle(cja=MagicMock(), data_view_ids=["dv_abc"], cycle=1))  # baseline
+    events = list(runner.run_cycle(cja=MagicMock(), data_view_ids=["dv_abc"], cycle=2))
+
+    assert len(events) == 1
+    assert isinstance(events[0], ErrorEvent)
+    assert events[0].stage == "diff"
+    assert events[0].error_class == "ValueError"
+    assert events[0].data_view_id == "dv_abc"
+
+
 def test_one_failure_does_not_block_other_data_views(fake_snapshot):
     snapshot_manager = MagicMock()
     snapshot_manager.create_snapshot.side_effect = [

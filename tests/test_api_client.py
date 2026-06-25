@@ -26,6 +26,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import cja_auto_sdr.api.client as _client_module
 from cja_auto_sdr.api.client import (
     _bootstrap_dotenv,
+    _cleanup_stale_temp_configs,
     _config_from_env,
     _describe_unexpected_probe_payload,
     _normalize_dataview_listing_payload,
@@ -135,6 +136,10 @@ class TestDataviewListingPayloadHelpers:
             {"id": "dv_1"},
             {"id": "dv_2"},
         ]
+
+    def test_normalize_dataview_listing_payload_treats_none_as_empty(self):
+        """A None payload (no data views returned) normalizes to an empty list, not None."""
+        assert _normalize_dataview_listing_payload(None) == []
 
     def test_normalize_dataview_listing_payload_rejects_error_dict(self):
         assert _normalize_dataview_listing_payload({"statusCode": 500, "message": "backend timeout"}) is None
@@ -310,6 +315,48 @@ class TestConfigFromEnvCleanup:
 
         assert not recent_file.exists()
         assert mock_cjapy.configure.call_count == 3
+
+    @patch("cja_auto_sdr.api.client.tempfile.gettempdir")
+    def test_cleanup_returns_immediately_when_glob_raises_oserror(self, mock_gettempdir, mock_logger, tmp_path):
+        """A failed temp-directory scan logs and reschedules an immediate recheck (0.0)."""
+        mock_gettempdir.return_value = str(tmp_path)
+
+        with patch("cja_auto_sdr.api.client.Path.glob", side_effect=OSError("scan failed")):
+            next_scan_in = _cleanup_stale_temp_configs(mock_logger)
+
+        assert next_scan_in == 0.0
+        calls = [str(c) for c in mock_logger.debug.call_args_list]
+        assert any("Failed to scan temp directory for stale config files" in c for c in calls)
+
+    @patch("cja_auto_sdr.api.client.tempfile.gettempdir")
+    def test_cleanup_skips_candidate_when_stat_raises_oserror(self, mock_gettempdir, mock_logger, tmp_path):
+        """A candidate whose stat() fails is skipped without aborting the scan."""
+        mock_gettempdir.return_value = str(tmp_path)
+        candidate = tmp_path / "cja_env_config_stat_fail.json"
+        candidate.write_text("{}", encoding="utf-8")
+
+        with patch("cja_auto_sdr.api.client.Path.stat", side_effect=OSError("stat failed")):
+            next_scan_in = _cleanup_stale_temp_configs(mock_logger)
+
+        # No file removed (stat failed), and the candidate is left in place.
+        assert candidate.exists()
+        # Falls through to the default full-interval schedule.
+        assert next_scan_in == _client_module._LEGACY_TEMP_CONFIG_MAX_AGE_SECONDS
+
+    @patch("cja_auto_sdr.api.client.tempfile.gettempdir")
+    def test_cleanup_reschedules_immediate_when_unlink_raises_oserror(self, mock_gettempdir, mock_logger, tmp_path):
+        """A stale file that cannot be unlinked triggers an immediate recheck (retry path)."""
+        mock_gettempdir.return_value = str(tmp_path)
+        stale_file = tmp_path / "cja_env_config_unlink_fail.json"
+        stale_file.write_text("{}", encoding="utf-8")
+        os.utime(stale_file, (time.time() - 7200, time.time() - 7200))
+
+        with patch("cja_auto_sdr.api.client.Path.unlink", side_effect=OSError("unlink failed")):
+            next_scan_in = _cleanup_stale_temp_configs(mock_logger)
+
+        # File still present because unlink failed, and retry is scheduled immediately.
+        assert stale_file.exists()
+        assert next_scan_in == 0.0
 
 
 # ==================== configure_cjapy default logger (lines 96-97) ====================

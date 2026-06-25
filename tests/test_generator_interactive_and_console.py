@@ -114,6 +114,22 @@ def test_interactive_wizard_config_failure(_mock_config: Mock):
     assert generator.interactive_wizard(config_file="bad.json") is None
 
 
+@patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "mock", None))
+@patch("cja_auto_sdr.generator.cjapy")
+def test_interactive_wizard_quit_at_yes_no_prompt(mock_cjapy: Mock, _mock_config: Mock):
+    """cli/interactive.py line 291: entering 'q' at a yes/no prompt returns None,
+    cancelling the wizard from the Segments-inventory question."""
+    mock_cja = Mock()
+    mock_cja.getDataViews.return_value = _mock_data_views()
+    mock_cjapy.CJA.return_value = mock_cja
+
+    # Select DV (1), accept default format (""), then quit at the first
+    # prompt_yes_no ("Include Segments inventory?") with 'q'.
+    user_inputs = ["1", "", "q"]
+    with patch("builtins.input", side_effect=user_inputs):
+        assert generator.interactive_wizard(profile="dev") is None
+
+
 def test_write_org_report_console_renders_all_major_sections(capsys, rich_org_report_result):
     result = rich_org_report_result
     generator.write_org_report_console(result, result.parameters, quiet=False)

@@ -938,6 +938,27 @@ def test_derived_history_assessment_similarity_analysis_mode_complete():
     )
 
 
+def test_derived_history_assessment_mode_complete_but_data_views_incomplete():
+    """L442: mode='complete' (no explicit complete flag) with incomplete DVs is ineligible."""
+    # similarity_analysis_complete is absent so the mode branch handles it; the
+    # DV coverage is incomplete (analyzed < total), forcing _incomplete_data_views().
+    payload = {
+        "summary": {
+            "data_views_total": 3,
+            "data_views_analyzed": 2,
+            "similarity_analysis_mode": "complete",
+        },
+        "data_views": [
+            {"id": "dv1", "error": None},
+            {"id": "dv2", "error": None},
+            {"id": "dv3", "error": "timeout"},
+        ],
+    }
+
+    assert org_report_snapshot_history_eligible(payload) is False
+    assert org_report_snapshot_history_exclusion_reason(payload) == "incomplete_data_views"
+
+
 # ---------------------------------------------------------------------------
 # L344: _derived — org_stats_only=True
 # ---------------------------------------------------------------------------

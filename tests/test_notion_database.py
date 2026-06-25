@@ -468,6 +468,54 @@ def test_repair_raises_when_no_data_source() -> None:
         repair_database_schema(client, database_id="db1")
 
 
+def test_repair_records_wrong_typed_title_as_conflict() -> None:
+    """A "Name" property present but not of type title is a conflict, never re-added."""
+    from cja_auto_sdr.output.notion_database import repair_database_schema
+
+    existing = {"Name": {"type": "rich_text"}}
+    cap: dict = {}
+    client = _fake_repair_client(existing, capture=cap)
+
+    result = repair_database_schema(client, database_id="db1")
+
+    assert ("Name", "title", "rich_text") in result.conflicts
+    assert "Name" not in cap.get("properties", {})  # title is never added or changed
+
+
+def test_derive_data_quality_unknown_without_severity_column() -> None:
+    """A non-empty DQ frame lacking a Severity column is reported as unknown."""
+    df = pd.DataFrame([{"Message": "no severity column here"}])
+    assert derive_data_quality_status(df) == "unknown"
+
+
+def test_derive_data_quality_healthy_on_low_severity() -> None:
+    """Severities that are neither degraded nor partial fall through to healthy."""
+    df = pd.DataFrame([{"Severity": "LOW", "Message": "x"}])
+    assert derive_data_quality_status(df) == "healthy"
+
+
+def test_iso_date_value_falls_back_to_date_only_match() -> None:
+    """A value that is not ISO-parseable and lacks a time component matches the
+    date-only regex and yields a date-only Notion start value."""
+    assert _iso_date_value("2026-06-19 PDT") == {"start": "2026-06-19"}
+
+
+def test_ensure_database_existing_without_data_source_raises() -> None:
+    """A configured database with no data source is a hard error."""
+    client = MagicMock()
+    client.databases.retrieve.return_value = {"id": "db1", "data_sources": []}
+    with pytest.raises(ValueError, match="no data source"):
+        ensure_database(client, parent_page_id="parent", database_id="db1", create_if_missing=False)
+
+
+def test_ensure_database_created_without_data_source_raises() -> None:
+    """If Notion returns a created database with no data source, ensure_database raises."""
+    client = MagicMock()
+    client.databases.create.return_value = {"id": "db-new", "data_sources": []}
+    with pytest.raises(ValueError, match="did not return a data source"):
+        ensure_database(client, parent_page_id="parent", database_id=None, create_if_missing=True)
+
+
 def test_repair_flags_absent_canonical_title_as_conflict() -> None:
     """A renamed/absent title ('Name' not in live) is reported as a conflict, not silently skipped."""
     from cja_auto_sdr.output.notion_database import DATABASE_SCHEMA, _schema_property_type, repair_database_schema

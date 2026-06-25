@@ -1687,3 +1687,121 @@ class TestMainCompareWithPrevMode:
         assert exc_info.value.code == 1
         captured = capsys.readouterr()
         assert "No previous snapshots found" in captured.err
+
+
+# ==================== diff/commands.py remaining-line coverage ====================
+
+
+class TestDiffCommandsRemainingCoverage:
+    """Cover the last uncovered branches in cja_auto_sdr.diff.commands."""
+
+    def test_populate_advisory_rollup_swallows_builder_failure(self, caplog):
+        """Lines 51-52: builder exceptions are logged and swallowed, never raised."""
+        import logging as _logging
+
+        from cja_auto_sdr.diff.commands import _populate_diff_advisory_rollup
+
+        runtime_details: dict = {}
+        diff_result = _make_diff_result()
+
+        with (
+            patch(
+                "cja_auto_sdr.core.advisory_builders.build_diff_advisories",
+                side_effect=RuntimeError("boom"),
+            ),
+            caplog.at_level(_logging.DEBUG, logger="diff"),
+        ):
+            # Must not raise even though the builder blows up.
+            _populate_diff_advisory_rollup(runtime_details, diff_result, changes_only=False)
+
+        assert "advisory_rollup" not in runtime_details
+        assert "Advisory rollup computation failed" in caplog.text
+
+    @patch("cja_auto_sdr.generator.configure_cjapy")
+    def test_snapshot_command_keyboard_interrupt_propagates(self, mock_configure, tmp_path):
+        """Line 131: KeyboardInterrupt is re-raised, not swallowed as a handler error."""
+        mock_configure.side_effect = KeyboardInterrupt()
+
+        with pytest.raises(KeyboardInterrupt):
+            handle_snapshot_command(
+                data_view_id="dv_123",
+                snapshot_file=str(tmp_path / "snap.json"),
+                quiet=True,
+            )
+
+    @patch("cja_auto_sdr.generator.configure_cjapy")
+    def test_diff_command_system_exit_propagates(self, mock_configure):
+        """Line 381: SystemExit is re-raised from handle_diff_command."""
+        from cja_auto_sdr.diff.commands import handle_diff_command
+
+        mock_configure.side_effect = SystemExit(3)
+
+        with pytest.raises(SystemExit) as exc_info:
+            handle_diff_command(
+                source_id="dv_src",
+                target_id="dv_tgt",
+                quiet=True,
+                quiet_diff=True,
+            )
+
+        assert exc_info.value.code == 3
+
+    @patch("cja_auto_sdr.generator.configure_cjapy")
+    def test_diff_snapshot_command_keyboard_interrupt_propagates(self, mock_configure, tmp_path):
+        """Line 710: KeyboardInterrupt is re-raised from handle_diff_snapshot_command."""
+        snap_file = str(tmp_path / "baseline.json")
+        _write_snapshot_file(snap_file)
+        mock_configure.side_effect = KeyboardInterrupt()
+
+        with pytest.raises(KeyboardInterrupt):
+            handle_diff_snapshot_command(
+                data_view_id="dv_123",
+                snapshot_file=snap_file,
+                quiet=True,
+                quiet_diff=True,
+            )
+
+    def test_compare_snapshots_command_keyboard_interrupt_propagates(self, tmp_path):
+        """Line 887: KeyboardInterrupt is re-raised from handle_compare_snapshots_command."""
+        src_file = str(tmp_path / "source.json")
+        tgt_file = str(tmp_path / "target.json")
+        _write_snapshot_file(src_file)
+        _write_snapshot_file(tgt_file)
+
+        mock_manager = MagicMock()
+        mock_manager.load_snapshot.side_effect = KeyboardInterrupt()
+        with (
+            patch("cja_auto_sdr.generator.SnapshotManager", return_value=mock_manager),
+            pytest.raises(KeyboardInterrupt),
+        ):
+            handle_compare_snapshots_command(
+                source_file=src_file,
+                target_file=tgt_file,
+                quiet=True,
+                quiet_diff=True,
+            )
+
+    def test_compare_snapshots_command_cjasdrerror_returns_failure(self, tmp_path, capsys):
+        """Lines 889-891: CJASDRError is caught and returns a controlled failure tuple."""
+        from cja_auto_sdr.core.exceptions import CJASDRError
+
+        src_file = str(tmp_path / "source.json")
+        tgt_file = str(tmp_path / "target.json")
+        _write_snapshot_file(src_file)
+        _write_snapshot_file(tgt_file)
+
+        mock_manager = MagicMock()
+        mock_manager.load_snapshot.side_effect = CJASDRError("snapshot subsystem failed")
+        with patch("cja_auto_sdr.generator.SnapshotManager", return_value=mock_manager):
+            success, has_changes, exit_code = handle_compare_snapshots_command(
+                source_file=src_file,
+                target_file=tgt_file,
+                quiet=True,
+                quiet_diff=True,
+            )
+
+        assert success is False
+        assert has_changes is False
+        assert exit_code is None
+        captured = capsys.readouterr()
+        assert "Failed to compare snapshots" in captured.err

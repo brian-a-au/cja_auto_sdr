@@ -148,3 +148,66 @@ def test_store_page_id_concurrent_workers_preserve_all_entries(tmp_path):
     assert len(data) == n
     for i in range(n):
         assert data[f"dv_{i:03d}"] == {"page_id": f"page-{i:03d}", "database_row_id": None, "orphaned_page_ids": []}
+
+
+def test_coerce_entry_non_str_non_dict_returns_default():
+    """A registry value that is neither a string (v1) nor a dict (v2) coerces to default."""
+    from cja_auto_sdr.output.notion_registry import _coerce_entry, _default_entry
+
+    assert _coerce_entry(12345) == _default_entry()
+    assert _coerce_entry(None) == _default_entry()
+
+
+def test_load_registry_non_dict_top_level_returns_empty(tmp_path):
+    """A registry file whose JSON top-level is not an object loads as an empty registry."""
+    path = tmp_path / REGISTRY_FILENAME
+    path.write_text("[1, 2, 3]", encoding="utf-8")
+    assert load_registry(path) == {}
+
+
+def test_remove_orphaned_page_ids_absent_data_view_is_noop(tmp_path):
+    """Removing orphans for a data view absent from the registry returns without writing."""
+    from cja_auto_sdr.output.notion_registry import remove_orphaned_page_ids
+
+    path = tmp_path / REGISTRY_FILENAME
+    remove_orphaned_page_ids(path, "dv_absent", ["page-x"])  # entry is None -> early return
+    assert load_registry(path) == {}
+
+
+def test_exclusive_registry_lock_msvcrt_retries_on_oserror(tmp_path, monkeypatch):
+    """Windows path: msvcrt.locking raising OSError (lock contended) retries until it succeeds."""
+    import builtins
+
+    from cja_auto_sdr.output import notion_registry as nr_mod
+
+    state = {"lock_attempts": 0}
+
+    def fake_locking(fd, mode, nbytes):
+        # mode 1 == LK_LOCK (acquire). First acquire attempt is contended.
+        if mode == 1:
+            state["lock_attempts"] += 1
+            if state["lock_attempts"] == 1:
+                raise OSError("lock held by another process")
+
+    fake_msvcrt = type(
+        "FakeMsvcrt",
+        (),
+        {"LK_LOCK": 1, "LK_UNLCK": 0, "locking": staticmethod(fake_locking)},
+    )()
+    real_import = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        if name == "fcntl":
+            raise ImportError("simulated: no fcntl on Windows")
+        if name == "msvcrt":
+            return fake_msvcrt
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+
+    reg_path = tmp_path / REGISTRY_FILENAME
+    nr_mod.store_page_id(reg_path, "dv_retry", "page-retry")
+
+    assert state["lock_attempts"] == 2  # one OSError, then a successful retry
+    data = json.loads(reg_path.read_text())
+    assert data["dv_retry"]["page_id"] == "page-retry"

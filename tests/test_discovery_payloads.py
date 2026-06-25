@@ -566,3 +566,15 @@ def test_discovery_lookup_helpers_cover_remaining_edge_paths() -> None:
     assert _unknown_placeholder_diagnostic_key({"lookup_failure_reason": "timeout"}) == "lookup_failure_reason"
     assert _unknown_placeholder_diagnostic_key({"lookup_debug": "detail"}) == "lookup_debug"
     assert _unknown_lookup_placeholder_reason("dv1", {"id": "dv_other", "name": "Unknown"}) is None
+
+
+def test_assess_expected_lookup_id_treats_whitespace_only_bytes_id_as_missing() -> None:
+    # Whitespace-only bytes survive is_missing_value (only str inputs get
+    # blank-string handling) and coerce to a blank string, which strips empty.
+    assert _assess_expected_lookup_id({"id": b"   "}, expected_data_view_id="dv1") == (None, "missing_expected_id")
+
+
+def test_unknown_placeholder_diagnostic_key_skips_blank_lookup_prefixed_value() -> None:
+    # A lookup_-prefixed key whose value lacks substance is skipped by the final
+    # diagnostic scan, leaving no diagnostic key to report.
+    assert _unknown_placeholder_diagnostic_key({"lookup_extra": ""}) is None

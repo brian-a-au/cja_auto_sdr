@@ -308,6 +308,78 @@ def test_bootstrap_requires_parent_page():
         patch.stopall()
 
 
+def test_ensure_database_unexpected_error_reraises():
+    """A non-API, non-ValueError error from ensure_database propagates unchanged."""
+    patches = _apply_base_patches()
+    try:
+        from cja_auto_sdr.output.notion_org_publisher import publish_org_report_catalog_to_notion
+
+        patches["cja_auto_sdr.output.notion_org_publisher.ensure_database"].side_effect = RuntimeError("disk full")
+
+        org_report = _make_org_report([])
+        with pytest.raises(RuntimeError, match="disk full"):
+            publish_org_report_catalog_to_notion(
+                org_report,
+                output_dir="/tmp/test_out",
+                logger=MagicMock(),
+                database_id="db-123",
+                create_database=False,
+            )
+    finally:
+        patch.stopall()
+
+
+def test_row_failure_non_api_error_reraises_when_not_continue_on_error():
+    """A non-API upsert failure with continue_on_error=False propagates unchanged."""
+    patches = _apply_base_patches()
+    try:
+        from cja_auto_sdr.output.notion_org_publisher import publish_org_report_catalog_to_notion
+
+        patches["cja_auto_sdr.output.notion_org_publisher.upsert_database_row"].side_effect = RuntimeError("boom")
+
+        org_report = _make_org_report([_make_summary("dv_001", "DV One")])
+        with pytest.raises(RuntimeError, match="boom"):
+            publish_org_report_catalog_to_notion(
+                org_report,
+                output_dir="/tmp/test_out",
+                logger=MagicMock(),
+                database_id="db-123",
+                create_database=False,
+            )
+    finally:
+        patch.stopall()
+
+
+def test_row_failure_api_error_raises_notion_api_error_when_not_continue_on_error():
+    """A Notion API upsert failure with continue_on_error=False → NotionAPIError."""
+    patches = _apply_base_patches()
+    try:
+        from cja_auto_sdr.output.notion_org_publisher import publish_org_report_catalog_to_notion
+        from cja_auto_sdr.output.writers.notion import NotionAPIError
+
+        class FakeAPIResponseError(Exception):
+            def __init__(self):
+                super().__init__("conflict_error")
+                self.code = "conflict_error"
+
+        FakeAPIResponseError.__name__ = "APIResponseError"
+        FakeAPIResponseError.__qualname__ = "APIResponseError"
+
+        patches["cja_auto_sdr.output.notion_org_publisher.upsert_database_row"].side_effect = FakeAPIResponseError()
+
+        org_report = _make_org_report([_make_summary("dv_001", "DV One")])
+        with pytest.raises(NotionAPIError):
+            publish_org_report_catalog_to_notion(
+                org_report,
+                output_dir="/tmp/test_out",
+                logger=MagicMock(),
+                database_id="db-123",
+                create_database=False,
+            )
+    finally:
+        patch.stopall()
+
+
 def test_adapter_forwards_continue_on_error():
     """write_org_report_notion must forward continue_on_error to the publisher."""
     from cja_auto_sdr.org.writers.notion import write_org_report_notion

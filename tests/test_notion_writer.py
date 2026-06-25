@@ -1165,3 +1165,222 @@ def test_repair_notion_database_resolves_db_id_from_env(monkeypatch):
 
     fc.databases.retrieve.assert_called_once()
     assert fc.databases.retrieve.call_args.kwargs["database_id"] == "db-from-env"
+
+
+# ---------------------------------------------------------------------------
+# Coverage hardening (v3.11.1): error-mapping helpers, pagination/delete edge
+# cases, prune/repair error branches, and the dotenv-absent fallbacks.
+# ---------------------------------------------------------------------------
+
+
+def test_build_sdr_blocks_includes_dq_section_when_present():
+    """A non-empty Data Quality frame renders the DQ heading plus per-row callouts."""
+    data_dict = {
+        "Data Quality": pd.DataFrame([{"Severity": "WARN", "Message": "check this"}]),
+        "Metrics": pd.DataFrame({"Name": ["m1"], "Type": ["metric"]}),
+    }
+    metadata = {"Data View Name": "Test", "Data View ID": "dv_001"}
+    blocks = build_sdr_blocks(data_dict, metadata)
+    headings = [b["heading_2"]["rich_text"][0]["text"]["content"] for b in blocks if b["type"] == "heading_2"]
+    assert any("Data Quality" in h for h in headings)
+    assert any(b["type"] == "callout" for b in blocks)
+
+
+def test_extract_api_error_code_stringifies_non_str_code():
+    """A non-string, non-None ``code`` (e.g. an enum/int) is coerced via str()."""
+    from cja_auto_sdr.output.writers import notion as _notion_mod
+
+    class FakeErr(Exception):
+        code = 123
+
+    assert _notion_mod._extract_api_error_code(FakeErr()) == "123"
+
+
+def test_extract_api_error_code_returns_none_when_code_absent():
+    """No ``code`` attribute (or an explicit None) yields None."""
+    from cja_auto_sdr.output.writers import notion as _notion_mod
+
+    class FakeErr(Exception):
+        code = None
+
+    assert _notion_mod._extract_api_error_code(FakeErr()) is None
+    assert _notion_mod._extract_api_error_code(Exception("plain")) is None
+
+
+def test_extract_retry_after_seconds_parses_numeric_header():
+    from cja_auto_sdr.output.writers import notion as _notion_mod
+
+    class FakeErr(Exception):
+        headers = {"Retry-After": "2.5"}
+
+    assert _notion_mod._extract_retry_after_seconds(FakeErr()) == 2.5
+
+
+def test_extract_retry_after_seconds_returns_none_for_unparseable_header():
+    from cja_auto_sdr.output.writers import notion as _notion_mod
+
+    class FakeErr(Exception):
+        headers = {"Retry-After": "soon-ish"}
+
+    assert _notion_mod._extract_retry_after_seconds(FakeErr()) is None
+
+
+def test_friendly_notion_error_message_for_validation_error():
+    from cja_auto_sdr.output.writers import notion as _notion_mod
+
+    class FakeErr(Exception):
+        code = "validation_error"
+
+    msg = _notion_mod._friendly_notion_error_message(FakeErr("bad payload"))
+    assert "rejected the payload" in msg
+
+
+def test_friendly_notion_error_message_falls_back_for_unknown_code():
+    from cja_auto_sdr.output.writers import notion as _notion_mod
+
+    class FakeErr(Exception):
+        code = "some_unknown_code"
+
+    msg = _notion_mod._friendly_notion_error_message(FakeErr("boom"))
+    assert "some_unknown_code" in msg
+
+
+def test_list_all_child_block_ids_breaks_when_next_cursor_missing():
+    """has_more=True but a missing next_cursor must break, not loop forever."""
+    from cja_auto_sdr.output.writers.notion import _list_all_child_block_ids
+
+    client = MagicMock()
+    client.blocks.children.list.return_value = {
+        "results": [{"id": "b1"}],
+        "has_more": True,
+        "next_cursor": None,
+    }
+    ids = _list_all_child_block_ids(client, "page-x")
+    assert ids == ["b1"]
+    client.blocks.children.list.assert_called_once()
+
+
+def test_clear_page_blocks_single_block_uses_direct_delete():
+    """A single child block is deleted directly without spinning up a thread pool."""
+    from cja_auto_sdr.output.writers.notion import _clear_page_blocks
+
+    client = MagicMock()
+    client.blocks.children.list.return_value = {"results": [{"id": "only-block"}], "has_more": False}
+    _clear_page_blocks(client, "page-x")
+    client.blocks.delete.assert_called_once_with(block_id="only-block")
+
+
+def test_resolve_notion_credentials_handles_missing_dotenv(monkeypatch):
+    """When python-dotenv is unavailable, resolution falls back to the raw env."""
+    monkeypatch.setitem(sys.modules, "dotenv", None)  # `from dotenv import load_dotenv` -> ImportError
+    monkeypatch.setenv("NOTION_TOKEN", "tok")
+    monkeypatch.setenv("NOTION_PARENT_PAGE_ID", "pid")
+    from cja_auto_sdr.output.writers.notion import resolve_notion_credentials
+
+    token, parent = resolve_notion_credentials()
+    assert token == "tok"
+    assert parent == "pid"
+
+
+def test_prune_orphans_api_error_other_than_not_found_raises(tmp_path, monkeypatch):
+    """A non-404 API error while archiving an orphan surfaces as NotionAPIError."""
+    from cja_auto_sdr.output.notion_registry import add_orphaned_page_id, get_registry_path
+    from cja_auto_sdr.output.writers.notion import NotionAPIError, prune_notion_orphans
+
+    monkeypatch.setenv("NOTION_TOKEN", "tok")
+    reg = get_registry_path(tmp_path)
+    add_orphaned_page_id(reg, "dv1", "orphan-1")
+
+    class _Forbidden(Exception):
+        code = "restricted_resource"
+
+    _Forbidden.__name__ = "APIResponseError"
+
+    fake_cls = MagicMock()
+    fake_cls.return_value.pages.update.side_effect = _Forbidden()
+    with patch("cja_auto_sdr.output.writers.notion._require_notion_client", return_value=fake_cls):
+        with pytest.raises(NotionAPIError):
+            prune_notion_orphans(tmp_path, MagicMock())
+
+
+def test_prune_orphans_non_api_error_reraises(tmp_path, monkeypatch):
+    """A non-API error while archiving an orphan propagates unchanged."""
+    from cja_auto_sdr.output.notion_registry import add_orphaned_page_id, get_registry_path
+    from cja_auto_sdr.output.writers.notion import prune_notion_orphans
+
+    monkeypatch.setenv("NOTION_TOKEN", "tok")
+    reg = get_registry_path(tmp_path)
+    add_orphaned_page_id(reg, "dv1", "orphan-1")
+
+    fake_cls = MagicMock()
+    fake_cls.return_value.pages.update.side_effect = RuntimeError("disk error")
+    with patch("cja_auto_sdr.output.writers.notion._require_notion_client", return_value=fake_cls):
+        with pytest.raises(RuntimeError, match="disk error"):
+            prune_notion_orphans(tmp_path, MagicMock())
+
+
+def test_repair_notion_database_handles_missing_dotenv(monkeypatch):
+    """repair_notion_database tolerates python-dotenv being absent."""
+    monkeypatch.setitem(sys.modules, "dotenv", None)  # force ImportError on the dotenv import
+    monkeypatch.setenv("NOTION_TOKEN", "tok")
+    from cja_auto_sdr.output.writers.notion import repair_notion_database
+
+    fake_cls = MagicMock()
+    fc = fake_cls.return_value
+    fc.databases.retrieve.return_value = {"id": "db1", "data_sources": [{"id": "ds1"}]}
+    fc.data_sources.retrieve.return_value = {"properties": {"Name": {"type": "title"}}}
+    fc.data_sources.update.return_value = {"id": "ds1"}
+    with patch("cja_auto_sdr.output.writers.notion._require_notion_client", return_value=fake_cls):
+        result = repair_notion_database("db1", MagicMock())
+    assert result.applied is True
+
+
+def test_repair_notion_database_reraises_non_api_error(monkeypatch):
+    """A non-API error from repair_database_schema propagates unchanged."""
+    from cja_auto_sdr.output.writers.notion import repair_notion_database
+
+    monkeypatch.setenv("NOTION_TOKEN", "tok")
+    fake_cls = MagicMock()
+    fake_cls.return_value.databases.retrieve.side_effect = RuntimeError("kaboom")
+    with patch("cja_auto_sdr.output.writers.notion._require_notion_client", return_value=fake_cls):
+        with pytest.raises(RuntimeError, match="kaboom"):
+            repair_notion_database("db1", MagicMock())
+
+
+def test_repair_notion_database_warns_on_missing_title(monkeypatch):
+    """A registry whose title column was renamed yields a 'missing' conflict warning."""
+    from cja_auto_sdr.output.notion_database import DATABASE_SCHEMA, _schema_property_type
+    from cja_auto_sdr.output.writers.notion import repair_notion_database
+
+    monkeypatch.setenv("NOTION_TOKEN", "tok")
+    # Full schema except the canonical title "Name" is absent -> ("Name", "title", "missing").
+    live = {n: {"type": _schema_property_type(e)} for n, e in DATABASE_SCHEMA.items() if n != "Name"}
+    fake_cls = MagicMock()
+    fc = fake_cls.return_value
+    fc.databases.retrieve.return_value = {"id": "db1", "data_sources": [{"id": "ds1"}]}
+    fc.data_sources.retrieve.return_value = {"properties": live}
+    logger = MagicMock()
+    with patch("cja_auto_sdr.output.writers.notion._require_notion_client", return_value=fake_cls):
+        result = repair_notion_database("db1", logger)
+    assert ("Name", "title", "missing") in result.conflicts
+    warn_msgs = " ".join(str(c.args[0]) for c in logger.warning.call_args_list)
+    assert "absent" in warn_msgs
+
+
+def test_repair_notion_database_logs_up_to_date_when_clean(monkeypatch):
+    """A schema that needs nothing logs the up-to-date confirmation."""
+    from cja_auto_sdr.output.notion_database import DATABASE_SCHEMA, _schema_property_type
+    from cja_auto_sdr.output.writers.notion import repair_notion_database
+
+    monkeypatch.setenv("NOTION_TOKEN", "tok")
+    live = {n: {"type": _schema_property_type(e)} for n, e in DATABASE_SCHEMA.items()}
+    fake_cls = MagicMock()
+    fc = fake_cls.return_value
+    fc.databases.retrieve.return_value = {"id": "db1", "data_sources": [{"id": "ds1"}]}
+    fc.data_sources.retrieve.return_value = {"properties": live}
+    logger = MagicMock()
+    with patch("cja_auto_sdr.output.writers.notion._require_notion_client", return_value=fake_cls):
+        result = repair_notion_database("db1", logger)
+    assert result.to_add == [] and result.conflicts == []
+    info_msgs = " ".join(str(c.args[0]) for c in logger.info.call_args_list)
+    assert "up to date" in info_msgs

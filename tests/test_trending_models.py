@@ -758,6 +758,11 @@ def test_org_model_helpers_cover_manual_snapshot_fallbacks() -> None:
     assert _snapshot_count_declares_zero(False) is False
     assert _snapshot_count_declares_zero("0") is True
 
+    # L851: no explicit reported total and no declared headline total -> 0 fallback.
+    undeclared_total_snapshot = SimpleNamespace(data_view_count=None)
+    assert _snapshot_declares_data_view_total(undeclared_total_snapshot) is False
+    assert _snapshot_reported_data_view_total(undeclared_total_snapshot) == 0
+
     incomplete_snapshot = TrendingSnapshot(
         timestamp="2026-03-19T00:00:00Z",
         data_view_count=3,

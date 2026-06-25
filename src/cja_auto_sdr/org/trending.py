@@ -226,7 +226,9 @@ def _extract_snapshot_from_json(
     for dv in successful_data_views:
         dv_id = org_report_data_view_row_id(dv)
         if not dv_id:
-            continue
+            # Defensive: a blank-id row would force missing_id_rows>0, which makes the
+            # snapshot history-ineligible upstream, so this loop never sees one here.
+            continue  # pragma: no cover
         metrics = _mapping_int(dv, "metrics_count", "metric_count") or 0
         dims = _mapping_int(dv, "dimensions_count", "dimension_count") or 0
         dv_component_counts[dv_id] = metrics + dims
