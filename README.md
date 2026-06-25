@@ -11,7 +11,6 @@
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Last Commit](https://img.shields.io/github/last-commit/brian-a-au/cja_auto_sdr)](https://github.com/brian-a-au/cja_auto_sdr/commits/main)
 
 A production-ready Python CLI that automates the creation of Solution Design Reference (SDR) documentation from your Adobe Customer Journey Analytics (CJA) implementation. Read-only against CJA.
 
