@@ -10,12 +10,17 @@ def test_emit_diagnostic_skips_formatting_when_disabled():
     logger = _logging.getLogger("diag-test")
     logger.setLevel(_logging.ERROR)  # INFO diagnostics disabled
 
-    class Boom:
-        def __repr__(self):  # would blow up if formatted
-            raise AssertionError("must not format when disabled")
+    class Probe:
+        called = False
+
+        def __repr__(self):  # records whether formatting touched this value
+            type(self).called = True
+            return "probe"
 
     # field value passed as a keyword arg (collected into **fields); must return without formatting it.
-    emit_diagnostic(logger, "x", "test", level=_logging.INFO, k=Boom())
+    emit_diagnostic(logger, "x", "test", level=_logging.INFO, k=Probe())
+
+    assert not Probe.called, "formatting must be skipped entirely when the level is disabled"
 
 
 def test_emit_diagnostic_emits_when_enabled(caplog):
