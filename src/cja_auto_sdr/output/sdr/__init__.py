@@ -862,6 +862,59 @@ def write_html_output(
         raise
 
 
+def escape_markdown(text: Any) -> str:
+    """Escape special markdown characters in table cells"""
+    if pd.isna(text) or text is None:
+        return ""
+    text = str(text)
+    # Escape pipe characters that would break tables
+    text = text.replace("|", "\\|")
+    # Escape backticks
+    text = text.replace("`", "\\`")
+    # Replace newlines with spaces in table cells
+    text = text.replace("\n", " ")
+    text = text.replace("\r", " ")
+    return text.strip()
+
+
+def df_to_markdown_table(df: pd.DataFrame, sheet_name: str) -> str:
+    """Convert DataFrame to markdown table format.
+
+    Escaping is column-vectorized via `str.replace()` rather than a per-cell
+    `apply(axis=1)` call, for better performance on large DataFrames.
+    """
+    if df.empty:
+        return f"\n*No {sheet_name.lower()} found.*\n"
+
+    # Header row
+    headers = [escape_markdown(col) for col in df.columns]
+    header_row = "| " + " | ".join(headers) + " |"
+
+    # Separator row with left alignment
+    separator_row = "| " + " | ".join(["---"] * len(headers)) + " |"
+
+    # Data rows - column-wise vectorized escaping instead of per-row apply()
+    # `astype(object)` first: pandas nullable extension dtypes (Int64, Float64,
+    # boolean, category) reject writing the "" fill value in-place via `.where()`
+    # and raise TypeError, so upcast to plain object dtype before filling blanks.
+    # NA sentinels (pd.NA / np.nan / NaT) survive the object cast, so `.notna()`
+    # on the object-cast frame still agrees with `.notna()` on the original.
+    df_obj = df.astype(object)
+    df_esc = df_obj.where(df_obj.notna(), "").astype(str)
+    for col in df_esc.columns:
+        df_esc[col] = (
+            df_esc[col]
+            .str.replace("|", "\\|", regex=False)
+            .str.replace("`", "\\`", regex=False)
+            .str.replace("\n", " ", regex=False)
+            .str.replace("\r", " ", regex=False)
+            .str.strip()
+        )
+    data_rows = ["| " + " | ".join(row) + " |" for row in df_esc.itertuples(index=False)]
+
+    return "\n".join([header_row, separator_row, *data_rows])
+
+
 def write_markdown_output(
     data_dict: dict[str, pd.DataFrame],
     metadata_dict: dict[str, Any],
@@ -891,51 +944,6 @@ def write_markdown_output(
     """
     try:
         logger.info("Generating Markdown output...")
-
-        def escape_markdown(text: str) -> str:
-            """Escape special markdown characters in table cells"""
-            if pd.isna(text) or text is None:
-                return ""
-            text = str(text)
-            # Escape pipe characters that would break tables
-            text = text.replace("|", "\\|")
-            # Escape backticks
-            text = text.replace("`", "\\`")
-            # Replace newlines with spaces in table cells
-            text = text.replace("\n", " ")
-            text = text.replace("\r", " ")
-            return text.strip()
-
-        def df_to_markdown_table(df: pd.DataFrame, sheet_name: str) -> str:
-            """Convert DataFrame to markdown table format.
-
-            Escaping is column-vectorized via `str.replace()` rather than a per-cell
-            `apply(axis=1)` call, for better performance on large DataFrames.
-            """
-            if df.empty:
-                return f"\n*No {sheet_name.lower()} found.*\n"
-
-            # Header row
-            headers = [escape_markdown(col) for col in df.columns]
-            header_row = "| " + " | ".join(headers) + " |"
-
-            # Separator row with left alignment
-            separator_row = "| " + " | ".join(["---"] * len(headers)) + " |"
-
-            # Data rows - column-wise vectorized escaping instead of per-row apply()
-            df_esc = df.where(df.notna(), "").astype(str)
-            for col in df_esc.columns:
-                df_esc[col] = (
-                    df_esc[col]
-                    .str.replace("|", "\\|", regex=False)
-                    .str.replace("`", "\\`", regex=False)
-                    .str.replace("\n", " ", regex=False)
-                    .str.replace("\r", " ", regex=False)
-                    .str.strip()
-                )
-            data_rows = ["| " + " | ".join(row) + " |" for row in df_esc.itertuples(index=False)]
-
-            return "\n".join([header_row, separator_row, *data_rows])
 
         md_parts = []
 
