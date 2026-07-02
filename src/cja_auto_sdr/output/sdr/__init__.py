@@ -330,16 +330,19 @@ def apply_excel_formatting(
             column_width_caps = {}
             default_cap = 100
 
+        # String form of the frame computed once and reused for column widths,
+        # row heights, and Severity values below (avoids re-converting per column/row).
+        df_str = df.astype(str)
+
         # Set column widths with appropriate caps (vectorized)
         for idx, col in enumerate(df.columns):
             col_lower = col.lower()
             max_cap = column_width_caps.get(col_lower, default_cap)
-            series = df[col]
-            if len(series) > 0:
-                content_max = int(series.astype(str).str.split("\n").str[0].str.len().max())
+            if len(df) > 0:
+                content_max = int(df_str[col].str.split("\n").str[0].str.len().max())
             else:
                 content_max = 0
-            max_len = min(max(content_max, len(str(series.name))) + 2, max_cap)
+            max_len = min(max(content_max, len(str(col))) + 2, max_cap)
             worksheet.set_column(idx, idx, max_len)
 
         # Apply row formatting (offset by summary rows)
@@ -351,15 +354,24 @@ def apply_excel_formatting(
         is_data_quality_sheet = sheet_name == "Data Quality" and severity_col_idx >= 0
         is_component_sheet = sheet_name in ("Metrics", "Dimensions") and name_col_idx >= 0
 
+        # Row line counts computed once (vectorized) instead of per-row string scans
+        if len(df) > 0:
+            row_line_counts = df_str.apply(lambda s: s.str.count("\n")).max(axis=1).astype(int).tolist()
+        else:
+            row_line_counts = []
+        severity_values = df_str["Severity"].tolist() if is_data_quality_sheet else None
+        # name_values comes from the original df (not df_str) since xlsxwriter writes
+        # row_data["name"] verbatim, which may be a non-str object.
+        name_values = df["name"].tolist() if is_component_sheet else None
+
         for idx in range(len(df)):
-            row_data = df.iloc[idx]
-            max_lines = max((str(val).count("\n") for val in row_data), default=0) + 1
+            max_lines = row_line_counts[idx] + 1
             row_height = min(max_lines * 15, 400)
             excel_row = data_start_row + idx
 
             # Apply severity-based formatting for Data Quality sheet
             if is_data_quality_sheet:
-                severity = str(row_data["Severity"])
+                severity = severity_values[idx]
                 row_format, bold_format = severity_formats.get(severity, (low_format, low_bold))
 
                 # Set row height and default format
@@ -375,7 +387,7 @@ def apply_excel_formatting(
                 # Apply bold Name column for Metrics/Dimensions sheets
                 if is_component_sheet:
                     name_format = name_bold_grey if idx % 2 == 0 else name_bold_white
-                    worksheet.write(excel_row, name_col_idx, row_data["name"], name_format)
+                    worksheet.write(excel_row, name_col_idx, name_values[idx], name_format)
 
         # Add autofilter to data table (offset by summary rows)
         worksheet.autofilter(summary_rows, 0, summary_rows + len(df), len(df.columns) - 1)
