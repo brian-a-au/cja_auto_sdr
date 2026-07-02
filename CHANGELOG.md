@@ -7,6 +7,18 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.11.2] - 2026-07-02
+
+### Performance
+
+- Removed redundant CPU/I/O across hot paths with **no behavior change** (identical output, exit codes, API-call semantics, and CLI surface):
+  - **Org similarity engine:** hoisted repeated `metric_ids | dimension_ids` unions out of the O(n²) pairwise-Jaccard and similarity-matrix loops; compute union arithmetically instead of allocating a merged set per pair. Indexed data-view names once in the isolated-components recommendation.
+  - **Org writers:** O(1) bucket lookup in the components CSV (was up to six per-component list scans); single-pass counting for the "Isolated by Data View" Excel sheet (drops millions of throwaway `ComponentInfo` allocations at org scale).
+  - **SDR / diff rendering:** convert each frame to strings once for Excel column widths and row heights; vectorized SDR markdown cell escaping; diff Excel colors rows with a single `write_row` instead of per-cell `df.iloc` indexing.
+  - **Snapshot handling:** a process-local `(path, mtime, size)` parse cache so trending + prune and diff retention stop re-reading and re-parsing the same snapshot files within a run.
+  - **Micro-fixes:** type fast-path before `pd.isna` in diff field normalization; `isEnabledFor` guard in `emit_diagnostic` so suppressed diagnostics skip message/JSON formatting.
+- No new CLI flags, no public API changes. `generator.py` untouched. New characterization tests lock old-vs-new output equality.
+
 ## [3.11.1] - 2026-06-25
 
 ### Coverage
