@@ -248,7 +248,7 @@ class TestWriteMarkdownOutputErrors:
         mock_write.assert_called_once()
 
     def test_generic_exception(self, tmp_path: Path) -> None:
-        with patch.object(pd.DataFrame, "apply", side_effect=RuntimeError("boom")):
+        with patch.object(pd.DataFrame, "astype", side_effect=RuntimeError("boom")):
             with pytest.raises(RuntimeError):
                 write_markdown_output(_sample_data(), _sample_metadata(), "test", str(tmp_path), logger)
 
@@ -501,7 +501,7 @@ def test_output_writer_branches_cover_remaining_value_and_attribute_errors(
         )
 
     with (
-        patch.object(pd.DataFrame, "apply", side_effect=TypeError("bad markdown")),
+        patch.object(pd.DataFrame, "astype", side_effect=TypeError("bad markdown")),
         pytest.raises(TypeError, match="bad markdown"),
     ):
         write_markdown_output(data, {"Generated At": "2026-03-19"}, "md", str(tmp_path), logger)

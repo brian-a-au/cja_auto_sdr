@@ -909,8 +909,8 @@ def write_markdown_output(
         def df_to_markdown_table(df: pd.DataFrame, sheet_name: str) -> str:
             """Convert DataFrame to markdown table format.
 
-            Uses vectorized operations instead of iterrows() for better performance
-            on large DataFrames (20-40% faster for datasets with 100+ rows).
+            Escaping is column-vectorized via `str.replace()` rather than a per-cell
+            `apply(axis=1)` call, for better performance on large DataFrames.
             """
             if df.empty:
                 return f"\n*No {sheet_name.lower()} found.*\n"
@@ -922,13 +922,18 @@ def write_markdown_output(
             # Separator row with left alignment
             separator_row = "| " + " | ".join(["---"] * len(headers)) + " |"
 
-            # Data rows - vectorized approach using apply() instead of iterrows()
-            # This avoids the overhead of creating Series objects for each row
-            def format_row(row: pd.Series) -> str:
-                cells = [escape_markdown(row[col]) for col in df.columns]
-                return "| " + " | ".join(cells) + " |"
-
-            data_rows = df.apply(format_row, axis=1).tolist()
+            # Data rows - column-wise vectorized escaping instead of per-row apply()
+            df_esc = df.where(df.notna(), "").astype(str)
+            for col in df_esc.columns:
+                df_esc[col] = (
+                    df_esc[col]
+                    .str.replace("|", "\\|", regex=False)
+                    .str.replace("`", "\\`", regex=False)
+                    .str.replace("\n", " ", regex=False)
+                    .str.replace("\r", " ", regex=False)
+                    .str.strip()
+                )
+            data_rows = ["| " + " | ".join(row) + " |" for row in df_esc.itertuples(index=False)]
 
             return "\n".join([header_row, separator_row, *data_rows])
 
