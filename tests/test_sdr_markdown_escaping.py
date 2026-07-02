@@ -22,8 +22,14 @@ def test_vectorized_escaping_matches_reference():
         {
             "a": ["plain", "has|pipe", "back`tick", "line\nbreak", "  spaced  "],
             "b": [1, 2.5, np.nan, None, "carriage\rreturn"],
+            "c": [1.0, 2.5, np.nan, 100.0, 7.0],
         }
     )
+    # Column "b" mixes in a string, so pandas infers object dtype at construction time
+    # and never hits the numeric path. Column "c" must be genuinely float64 so that
+    # `df.where(df.notna(), "")` exercises the numeric -> object upcast before `.astype(str)`.
+    # Pin the dtype so construction-time inference can't silently regress this coverage.
+    assert df["c"].dtype == "float64"
     ref_rows = [[_escape_markdown_ref(df.iloc[i][c]) for c in df.columns] for i in range(len(df))]
 
     df_esc = df.where(df.notna(), "").astype(str)
