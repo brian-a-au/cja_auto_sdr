@@ -156,17 +156,18 @@ def write_org_report_csv(
     dv_df.to_csv(dv_path, index=False, encoding="utf-8")
 
     # 3. Components CSV
+    dist = result.distribution
+    bucket_by_id: dict[str, str] = {}
+    for cid in (*dist.limited_metrics, *dist.limited_dimensions):
+        bucket_by_id[cid] = "Limited"
+    for cid in (*dist.common_metrics, *dist.common_dimensions):
+        bucket_by_id[cid] = "Common"
+    for cid in (*dist.core_metrics, *dist.core_dimensions):
+        bucket_by_id[cid] = "Core"
+
     comp_data = []
     for comp_id, info in result.component_index.items():
-        # Determine distribution bucket
-        if comp_id in result.distribution.core_metrics or comp_id in result.distribution.core_dimensions:
-            bucket = "Core"
-        elif comp_id in result.distribution.common_metrics or comp_id in result.distribution.common_dimensions:
-            bucket = "Common"
-        elif comp_id in result.distribution.limited_metrics or comp_id in result.distribution.limited_dimensions:
-            bucket = "Limited"
-        else:
-            bucket = "Isolated"
+        bucket = bucket_by_id.get(comp_id, "Isolated")
 
         coverage_pct = (
             (info.presence_count / result.successful_data_views * 100) if result.successful_data_views > 0 else 0
