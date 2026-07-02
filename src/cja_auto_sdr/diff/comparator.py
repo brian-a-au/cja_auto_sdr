@@ -392,11 +392,14 @@ class DataViewComparator:
     def _normalize_value(self, value: Any, field_name: str | None = None) -> Any:
         if value is None:
             return ""
-        try:
-            if pd.isna(value):
-                return ""
-        except TypeError, ValueError:
-            pass
+        # str/dict/list/tuple can never be pandas-NA; skip the expensive pd.isna (which
+        # raises for containers) and fall through to normal handling.
+        if not isinstance(value, (str, dict, list, tuple)):
+            try:
+                if pd.isna(value):
+                    return ""
+            except TypeError, ValueError:
+                pass
         if isinstance(value, str):
             return value.strip()
         if isinstance(value, dict):
