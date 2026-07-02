@@ -175,8 +175,8 @@ def write_diff_excel_output(
                     else:
                         fmt = normal_format
 
-                    for col_idx in range(len(df.columns)):
-                        worksheet.write(row_idx, col_idx, df.iloc[row_idx - 1, col_idx], fmt)
+                    row_values = [rows[row_idx - 1][k] for k in ("Status", "ID", "Name", "Details")]
+                    worksheet.write_row(row_idx, 0, row_values, fmt)
 
             write_diff_sheet(diff_result.metric_diffs, "Metrics Diff")
             write_diff_sheet(diff_result.dimension_diffs, "Dimensions Diff")
@@ -219,8 +219,8 @@ def write_diff_excel_output(
                     else:
                         fmt = normal_format
 
-                    for col_idx in range(len(df.columns)):
-                        worksheet.write(row_idx, col_idx, df.iloc[row_idx - 1, col_idx], fmt)
+                    row_values = [rows[row_idx - 1][k] for k in ("Status", "ID", "Name", "Details")]
+                    worksheet.write_row(row_idx, 0, row_values, fmt)
 
             # Write inventory diff sheets if present
             if diff_result.calc_metrics_diffs is not None:
