@@ -1433,10 +1433,13 @@ class OrgComponentAnalyzer:
                     isolated_by_dv[dv_id] = []
                 isolated_by_dv[dv_id].append(comp_id)
 
+        # Build name lookup for isolated-components recommendation
+        name_by_id = {s.data_view_id: s.data_view_name for s in summaries}
+
         # Recommendation: Data views with many isolated components
         for dv_id, isolated in isolated_by_dv.items():
             if len(isolated) > self.config.isolated_review_threshold:
-                dv_name = next((s.data_view_name for s in summaries if s.data_view_id == dv_id), "Unknown")
+                dv_name = name_by_id.get(dv_id, "Unknown")
                 recommendations.append(
                     {
                         "type": "review_isolated",
