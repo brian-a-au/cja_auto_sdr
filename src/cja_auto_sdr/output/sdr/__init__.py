@@ -339,7 +339,9 @@ def apply_excel_formatting(
             col_lower = col.lower()
             max_cap = column_width_caps.get(col_lower, default_cap)
             if len(df) > 0:
-                content_max = int(df_str[col].str.split("\n").str[0].str.len().max())
+                # Only the first line matters for width; n=1 avoids splitting
+                # the remainder of multi-line cells.
+                content_max = int(df_str[col].str.split("\n", n=1).str[0].str.len().max())
             else:
                 content_max = 0
             max_len = min(max(content_max, len(str(col))) + 2, max_cap)
