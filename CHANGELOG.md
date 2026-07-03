@@ -7,6 +7,17 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.11.3] - 2026-07-02
+
+### Performance
+
+- Removed remaining redundant CPU work in per-component paths with **no behavior change** (identical output, exit codes, API-call semantics, and CLI surface):
+  - **Derived-field inventory:** `build()` iterates `to_dict("records")` instead of `iterrows()`, dropping the per-row pandas Series construction; scales with metrics + dimensions count per data view.
+  - **SDR generation:** the JSON-formatting pass skips non-object dtype columns — `format_json_cell` can only rewrite dict/list cells, which only exist in object columns, so numeric/bool columns no longer pay a per-cell Python call.
+  - **Data quality:** the vectorized null-value check reuses a single `isna()` mask for both counts and item-name lookups instead of re-scanning each flagged column.
+  - **SDR Excel:** column-width computation bounds the first-line split (`str.split("\n", n=1)`), avoiding full split-list materialization for multi-line cells.
+- No new CLI flags, no public API changes. New characterization tests pin issue payloads, inventory extraction over mixed-dtype/NA frames, JSON container formatting with numeric passthrough, and first-line width equivalence.
+
 ## [3.11.2] - 2026-07-02
 
 ### Performance
