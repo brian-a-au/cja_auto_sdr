@@ -428,6 +428,25 @@ class TestRowHeightVectorization:
         assert new == ref
 
 
+class TestColumnWidthFirstLineVectorization:
+    """Characterization test: bounded first-line split (``n=1``) matches the
+    unbounded ``str.split("\\n")`` reference for column-width computation.
+    """
+
+    def test_first_line_widths_match_reference(self):
+        df = pd.DataFrame(
+            {
+                "name": ["short", "first line\na second line that is much longer than the first", ""],
+                "value": [1, None, "x\ny\nz"],
+            },
+        )
+        df_str = df.astype(str)
+        for col in df_str.columns:
+            ref = int(df_str[col].str.split("\n").str[0].str.len().max())
+            new = int(df_str[col].str.split("\n", n=1).str[0].str.len().max())
+            assert new == ref
+
+
 class TestApplyExcelFormattingRowHeight:
     """Tests for row height calculations"""
 

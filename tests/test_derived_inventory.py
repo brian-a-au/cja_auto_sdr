@@ -1573,3 +1573,58 @@ class TestNewLogicSummaryHandlers:
 
         field = inventory.fields[0]
         assert "profile" in field.logic_summary.lower() or "loyaltyTier" in field.logic_summary
+
+
+# ==================== ROW ITERATION EQUIVALENCE ====================
+
+
+class TestBuildRowIterationEquivalence:
+    """Characterization tests pinning build() outputs for mixed-dtype frames.
+
+    Guards row-iteration refactors (iterrows vs records): NA definitions are
+    skipped silently, non-derived rows are ignored, NA descriptions coerce to
+    empty string, and pure-numeric columns must not affect extraction.
+    """
+
+    def test_build_pins_field_values_with_mixed_dtypes_and_na(self, sample_derived_field_definition):
+        metrics_df = pd.DataFrame(
+            {
+                "id": ["metrics/one", "metrics/two", "metrics/three"],
+                "name": ["One", "Two", "Three"],
+                "description": ["First metric", None, "Third metric"],
+                "sourceFieldType": ["derived", "derived", "standard"],
+                "type": ["int", "decimal", "int"],
+                "fieldDefinition": [sample_derived_field_definition, pd.NA, pd.NA],
+                "sortOrder": [1, 2, 3],
+            },
+        )
+
+        builder = DerivedFieldInventoryBuilder()
+        inventory = builder.build(metrics_df, pd.DataFrame(), "dv_pin", "Pin View")
+
+        # Only the first row survives: NA definition and non-derived rows skip.
+        assert inventory.metrics_count == 1
+        assert inventory.dimensions_count == 0
+        field = inventory.fields[0]
+        assert field.component_id == "metrics/one"
+        assert field.component_name == "One"
+        assert field.component_type == "Metric"
+        assert field.description == "First metric"
+        assert field.definition_json == sample_derived_field_definition
+
+    def test_build_coerces_na_description_to_empty_string(self, sample_math_only_field):
+        metrics_df = pd.DataFrame(
+            {
+                "id": ["metrics/profit"],
+                "name": ["Profit"],
+                "description": [pd.NA],
+                "sourceFieldType": ["derived"],
+                "fieldDefinition": [sample_math_only_field],
+            },
+        )
+
+        builder = DerivedFieldInventoryBuilder()
+        inventory = builder.build(metrics_df, pd.DataFrame(), "dv_pin", "Pin View")
+
+        assert inventory.metrics_count == 1
+        assert inventory.fields[0].description == ""

@@ -7,7 +7,9 @@ Validates that the pipeline handles gracefully:
 - Empty or corrupted responses during processing
 """
 
+import json
 import logging
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pandas as pd
@@ -357,6 +359,53 @@ class TestMalformedDataFrameSchemas:
         )
         # Should not crash — JSON formatting handles dicts/lists via format_json_cell
         assert result.success is True
+
+    @_apply
+    def test_json_output_pins_container_formatting_and_numeric_passthrough(
+        self,
+        mock_fetcher_class,
+        mock_init_cja,
+        mock_setup_logging,
+        malformed_config,
+        output_dir,
+    ):
+        """Pin format_json_cell behavior: dict/list cells become indented JSON
+        strings while pure-numeric columns pass through byte-identical.
+        Guards refactors of the per-column JSON-formatting pass."""
+        _setup_mocks(
+            mock_setup_logging,
+            mock_init_cja,
+            mock_fetcher_class,
+            pd.DataFrame(
+                {
+                    "id": ["m1", "m2"],
+                    "name": ["M1", "M2"],
+                    "type": ["int", "int"],
+                    "title": ["M1", "M2"],
+                    "description": [{"nested": "dict"}, ["a", "list"]],
+                    "sortOrder": [7, 9],
+                },
+            ),
+            pd.DataFrame([{"id": "d1", "name": "D1", "type": "string", "title": "D1", "description": "d"}]),
+            {"id": "dv_test", "name": "Test DV", "owner": {"name": "Owner"}},
+        )
+
+        result = process_single_dataview(
+            data_view_id="dv_test",
+            config_file=malformed_config,
+            output_dir=output_dir,
+            output_format="json",
+            quiet=True,
+        )
+        assert result.success is True
+
+        json_files = list(Path(output_dir).glob("CJA_DataView_*.json"))
+        assert len(json_files) == 1
+        payload = json.loads(json_files[0].read_text(encoding="utf-8"))
+        metrics = payload["metrics"]
+        assert metrics[0]["description"] == json.dumps({"nested": "dict"}, indent=2)
+        assert metrics[1]["description"] == json.dumps(["a", "list"], indent=2)
+        assert [m["sortOrder"] for m in metrics] == [7, 9]
 
 
 # ===================================================================
