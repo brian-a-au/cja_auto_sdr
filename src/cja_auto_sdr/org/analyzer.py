@@ -1177,14 +1177,16 @@ class OrgComponentAnalyzer:
             Tuple of (valid_summaries, pairwise_similarities dict)
         """
         valid = [s for s in summaries if s.error is None and s.all_component_ids]
+        component_sets = [s.all_component_ids for s in valid]  # each property evaluated once
         pairwise: dict[tuple, float] = {}
 
         for i in range(len(valid)):
-            set_i = valid[i].all_component_ids
+            set_i = component_sets[i]
+            len_i = len(set_i)
             for j in range(i + 1, len(valid)):
-                set_j = valid[j].all_component_ids
+                set_j = component_sets[j]
                 intersection = len(set_i & set_j)
-                union = len(set_i | set_j)
+                union = len_i + len(set_j) - intersection  # no `set_i | set_j` allocation
                 pairwise[(i, j)] = intersection / union if union > 0 else 0.0
 
         return valid, pairwise
@@ -1217,16 +1219,17 @@ class OrgComponentAnalyzer:
 
         pairs = []
         min_similarity_threshold = effective_governance_overlap_threshold(self.config.overlap_threshold)
+        component_sets = [s.all_component_ids for s in valid_summaries]  # each property evaluated once
 
         for (i, j), similarity in pairwise.items():
             if similarity >= min_similarity_threshold:
                 dv1 = valid_summaries[i]
                 dv2 = valid_summaries[j]
-                set1 = dv1.all_component_ids
-                set2 = dv2.all_component_ids
+                set1 = component_sets[i]
+                set2 = component_sets[j]
 
                 intersection = len(set1 & set2)
-                union = len(set1 | set2)
+                union = len(set1) + len(set2) - intersection  # no `set1 | set2` allocation
 
                 # Compute drift details if enabled
                 only_in_dv1 = []
@@ -1430,10 +1433,13 @@ class OrgComponentAnalyzer:
                     isolated_by_dv[dv_id] = []
                 isolated_by_dv[dv_id].append(comp_id)
 
+        # Build name lookup for isolated-components recommendation
+        name_by_id = {s.data_view_id: s.data_view_name for s in summaries}
+
         # Recommendation: Data views with many isolated components
         for dv_id, isolated in isolated_by_dv.items():
             if len(isolated) > self.config.isolated_review_threshold:
-                dv_name = next((s.data_view_name for s in summaries if s.data_view_id == dv_id), "Unknown")
+                dv_name = name_by_id.get(dv_id, "Unknown")
                 recommendations.append(
                     {
                         "type": "review_isolated",

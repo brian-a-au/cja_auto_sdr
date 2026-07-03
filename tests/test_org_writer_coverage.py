@@ -21,6 +21,7 @@ import logging
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pandas as pd
 import pytest
 
 from cja_auto_sdr.generator import (
@@ -1363,6 +1364,95 @@ class TestWriteOrgReportExcel:
 
         returned = write_org_report_excel(result, out_path, str(tmp_path), logger)
         assert Path(returned).exists()
+
+    def test_isolated_by_dv_sheet_unchanged(self, tmp_path, rich_org_report_result):
+        """Characterization test for the 'Isolated by DV' sheet (B2 single-pass refactor).
+
+        dv_001 has no isolated components (excluded by the ``if m or d`` rule), dv_002
+        errored (skipped), and dv_003 owns the sole isolated metric and dimension. This
+        baseline was captured from the unrefactored per-DV list-comprehension code.
+        """
+        logger = logging.getLogger("test_isolated_by_dv")
+        out_path = tmp_path / "isolated.xlsx"
+
+        returned = write_org_report_excel(rich_org_report_result, out_path, str(tmp_path), logger)
+        df = pd.read_excel(returned, sheet_name="Isolated by DV")
+
+        expected = pd.DataFrame(
+            [
+                {
+                    "Data View ID": "dv_003",
+                    "Data View Name": "Tertiary Data View",
+                    "Isolated Metrics": 1,
+                    "Isolated Dimensions": 1,
+                    "Total Isolated": 2,
+                },
+            ],
+        )
+        pd.testing.assert_frame_equal(df.reset_index(drop=True), expected.reset_index(drop=True))
+
+    def test_isolated_by_dv_sheet_preserves_order_and_skips_errors(self, tmp_path):
+        """Multi-row characterization: errored DV skipped, tied totals keep summary order,
+        and an isolated component spanning two data views (the defensive membership loop)
+        is counted once per data view. Baseline captured from the unrefactored code.
+        """
+        config = OrgReportConfig()
+        summaries = [
+            DataViewSummary(data_view_id="dv_a", data_view_name="DV A", metric_count=1, dimension_count=1),
+            DataViewSummary(data_view_id="dv_err", data_view_name="DV Err", error="boom", status="error"),
+            DataViewSummary(data_view_id="dv_b", data_view_name="DV B", metric_count=1, dimension_count=0),
+            DataViewSummary(data_view_id="dv_c", data_view_name="DV C", metric_count=1, dimension_count=0),
+            DataViewSummary(data_view_id="dv_d", data_view_name="DV D", metric_count=0, dimension_count=0),
+        ]
+        distribution = ComponentDistribution(isolated_metrics=["m1", "m2"], isolated_dimensions=["d1"])
+        component_index = {
+            "m1": ComponentInfo(component_id="m1", component_type="metric", data_views={"dv_a", "dv_b"}),
+            "m2": ComponentInfo(component_id="m2", component_type="metric", data_views={"dv_c"}),
+            "d1": ComponentInfo(component_id="d1", component_type="dimension", data_views={"dv_a"}),
+        }
+        result = OrgReportResult(
+            timestamp="2026-01-01T00:00:00+00:00",
+            org_id="test_org",
+            parameters=config,
+            data_view_summaries=summaries,
+            component_index=component_index,
+            distribution=distribution,
+            similarity_pairs=None,
+            recommendations=[],
+            duration=1.0,
+        )
+        logger = logging.getLogger("test_isolated_by_dv_multi")
+        out_path = tmp_path / "isolated_multi.xlsx"
+
+        returned = write_org_report_excel(result, out_path, str(tmp_path), logger)
+        df = pd.read_excel(returned, sheet_name="Isolated by DV")
+
+        expected = pd.DataFrame(
+            [
+                {
+                    "Data View ID": "dv_a",
+                    "Data View Name": "DV A",
+                    "Isolated Metrics": 1,
+                    "Isolated Dimensions": 1,
+                    "Total Isolated": 2,
+                },
+                {
+                    "Data View ID": "dv_b",
+                    "Data View Name": "DV B",
+                    "Isolated Metrics": 1,
+                    "Isolated Dimensions": 0,
+                    "Total Isolated": 1,
+                },
+                {
+                    "Data View ID": "dv_c",
+                    "Data View Name": "DV C",
+                    "Isolated Metrics": 1,
+                    "Isolated Dimensions": 0,
+                    "Total Isolated": 1,
+                },
+            ],
+        )
+        pd.testing.assert_frame_equal(df.reset_index(drop=True), expected.reset_index(drop=True))
 
 
 # ===================================================================

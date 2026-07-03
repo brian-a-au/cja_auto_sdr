@@ -17,7 +17,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from cja_auto_sdr.core.json_io import write_json_atomic
+from cja_auto_sdr.core.json_io import load_json_cached, write_json_atomic
 from cja_auto_sdr.core.locks.manager import LockManager, normalize_lock_stale_threshold_seconds
 from cja_auto_sdr.org.models import DataViewSummary
 from cja_auto_sdr.org.snapshot_utils import (
@@ -297,8 +297,7 @@ class OrgReportCache:
         """Load one persisted org-report snapshot and return summarized metadata."""
         path = Path(snapshot_file)
         try:
-            with open(path, encoding="utf-8") as f:
-                payload = json.load(f)
+            payload = load_json_cached(path)
         except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
             self.logger.warning("Skipping org-report snapshot %s: %s", path, exc)
             return None

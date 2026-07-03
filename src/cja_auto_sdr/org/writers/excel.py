@@ -6,6 +6,7 @@ Renders OrgReportResult as a multi-sheet .xlsx workbook.
 from __future__ import annotations
 
 import logging
+from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -13,7 +14,6 @@ import pandas as pd
 
 from cja_auto_sdr.core.constants import effective_governance_overlap_threshold
 from cja_auto_sdr.org.models import (
-    ComponentInfo,
     OrgReportResult,
     OrgReportTrending,
 )
@@ -272,28 +272,33 @@ def write_org_report_excel(
             worksheet.set_column("D:E", 15)
 
         # Sheet 4: Isolated by Data View
+        isolated_metric_counts: Counter[str] = Counter()
+        isolated_dim_counts: Counter[str] = Counter()
+        for c in result.distribution.isolated_metrics:
+            info = result.component_index.get(c)
+            if info is not None:
+                for dv_id in info.data_views:
+                    isolated_metric_counts[dv_id] += 1
+        for c in result.distribution.isolated_dimensions:
+            info = result.component_index.get(c)
+            if info is not None:
+                for dv_id in info.data_views:
+                    isolated_dim_counts[dv_id] += 1
+
         isolated_data = []
         for dv in result.data_view_summaries:
             if dv.error is not None:
                 continue
-            isolated_metrics = [
-                c
-                for c in result.distribution.isolated_metrics
-                if dv.data_view_id in result.component_index.get(c, ComponentInfo("", "")).data_views
-            ]
-            isolated_dims = [
-                c
-                for c in result.distribution.isolated_dimensions
-                if dv.data_view_id in result.component_index.get(c, ComponentInfo("", "")).data_views
-            ]
-            if isolated_metrics or isolated_dims:
+            m = isolated_metric_counts.get(dv.data_view_id, 0)
+            d = isolated_dim_counts.get(dv.data_view_id, 0)
+            if m or d:
                 isolated_data.append(
                     {
                         "Data View ID": dv.data_view_id,
                         "Data View Name": dv.data_view_name,
-                        "Isolated Metrics": len(isolated_metrics),
-                        "Isolated Dimensions": len(isolated_dims),
-                        "Total Isolated": len(isolated_metrics) + len(isolated_dims),
+                        "Isolated Metrics": m,
+                        "Isolated Dimensions": d,
+                        "Total Isolated": m + d,
                     },
                 )
 

@@ -408,6 +408,26 @@ class TestApplyExcelFormattingColumnWidths:
         assert output_file.exists()
 
 
+class TestRowHeightVectorization:
+    """Characterization test: vectorized row-height computation matches the
+    original per-row ``str(val).count("\\n")`` scan.
+    """
+
+    def test_row_heights_match_reference(self):
+        df = pd.DataFrame(
+            {
+                "name": ["a", "b\nb2", "c"],
+                "value": [1, 2, "x\ny\nz"],
+            },
+        )
+        # Reference: current per-row logic
+        ref = [max((str(v).count("\n") for v in df.iloc[i]), default=0) + 1 for i in range(len(df))]
+        # New: vectorized
+        df_str = df.astype(str)
+        new = (df_str.apply(lambda s: s.str.count("\n")).max(axis=1) + 1).astype(int).tolist()
+        assert new == ref
+
+
 class TestApplyExcelFormattingRowHeight:
     """Tests for row height calculations"""
 

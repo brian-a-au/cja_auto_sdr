@@ -330,16 +330,19 @@ def apply_excel_formatting(
             column_width_caps = {}
             default_cap = 100
 
+        # String form of the frame computed once and reused for column widths,
+        # row heights, and Severity values below (avoids re-converting per column/row).
+        df_str = df.astype(str)
+
         # Set column widths with appropriate caps (vectorized)
         for idx, col in enumerate(df.columns):
             col_lower = col.lower()
             max_cap = column_width_caps.get(col_lower, default_cap)
-            series = df[col]
-            if len(series) > 0:
-                content_max = int(series.astype(str).str.split("\n").str[0].str.len().max())
+            if len(df) > 0:
+                content_max = int(df_str[col].str.split("\n").str[0].str.len().max())
             else:
                 content_max = 0
-            max_len = min(max(content_max, len(str(series.name))) + 2, max_cap)
+            max_len = min(max(content_max, len(str(col))) + 2, max_cap)
             worksheet.set_column(idx, idx, max_len)
 
         # Apply row formatting (offset by summary rows)
@@ -351,15 +354,24 @@ def apply_excel_formatting(
         is_data_quality_sheet = sheet_name == "Data Quality" and severity_col_idx >= 0
         is_component_sheet = sheet_name in ("Metrics", "Dimensions") and name_col_idx >= 0
 
+        # Row line counts computed once (vectorized) instead of per-row string scans
+        if len(df) > 0:
+            row_line_counts = df_str.apply(lambda s: s.str.count("\n")).max(axis=1).astype(int).tolist()
+        else:
+            row_line_counts = []
+        severity_values = df_str["Severity"].tolist() if is_data_quality_sheet else None
+        # name_values comes from the original df (not df_str) since xlsxwriter writes
+        # row_data["name"] verbatim, which may be a non-str object.
+        name_values = df["name"].tolist() if is_component_sheet else None
+
         for idx in range(len(df)):
-            row_data = df.iloc[idx]
-            max_lines = max((str(val).count("\n") for val in row_data), default=0) + 1
+            max_lines = row_line_counts[idx] + 1
             row_height = min(max_lines * 15, 400)
             excel_row = data_start_row + idx
 
             # Apply severity-based formatting for Data Quality sheet
             if is_data_quality_sheet:
-                severity = str(row_data["Severity"])
+                severity = severity_values[idx]
                 row_format, bold_format = severity_formats.get(severity, (low_format, low_bold))
 
                 # Set row height and default format
@@ -375,7 +387,7 @@ def apply_excel_formatting(
                 # Apply bold Name column for Metrics/Dimensions sheets
                 if is_component_sheet:
                     name_format = name_bold_grey if idx % 2 == 0 else name_bold_white
-                    worksheet.write(excel_row, name_col_idx, row_data["name"], name_format)
+                    worksheet.write(excel_row, name_col_idx, name_values[idx], name_format)
 
         # Add autofilter to data table (offset by summary rows)
         worksheet.autofilter(summary_rows, 0, summary_rows + len(df), len(df.columns) - 1)
@@ -850,6 +862,59 @@ def write_html_output(
         raise
 
 
+def escape_markdown(text: Any) -> str:
+    """Escape special markdown characters in table cells"""
+    if pd.isna(text) or text is None:
+        return ""
+    text = str(text)
+    # Escape pipe characters that would break tables
+    text = text.replace("|", "\\|")
+    # Escape backticks
+    text = text.replace("`", "\\`")
+    # Replace newlines with spaces in table cells
+    text = text.replace("\n", " ")
+    text = text.replace("\r", " ")
+    return text.strip()
+
+
+def df_to_markdown_table(df: pd.DataFrame, sheet_name: str) -> str:
+    """Convert DataFrame to markdown table format.
+
+    Escaping is column-vectorized via `str.replace()` rather than a per-cell
+    `apply(axis=1)` call, for better performance on large DataFrames.
+    """
+    if df.empty:
+        return f"\n*No {sheet_name.lower()} found.*\n"
+
+    # Header row
+    headers = [escape_markdown(col) for col in df.columns]
+    header_row = "| " + " | ".join(headers) + " |"
+
+    # Separator row with left alignment
+    separator_row = "| " + " | ".join(["---"] * len(headers)) + " |"
+
+    # Data rows - column-wise vectorized escaping instead of per-row apply()
+    # `astype(object)` first: pandas nullable extension dtypes (Int64, Float64,
+    # boolean, category) reject writing the "" fill value in-place via `.where()`
+    # and raise TypeError, so upcast to plain object dtype before filling blanks.
+    # NA sentinels (pd.NA / np.nan / NaT) survive the object cast, so `.notna()`
+    # on the object-cast frame still agrees with `.notna()` on the original.
+    df_obj = df.astype(object)
+    df_esc = df_obj.where(df_obj.notna(), "").astype(str)
+    for col in df_esc.columns:
+        df_esc[col] = (
+            df_esc[col]
+            .str.replace("|", "\\|", regex=False)
+            .str.replace("`", "\\`", regex=False)
+            .str.replace("\n", " ", regex=False)
+            .str.replace("\r", " ", regex=False)
+            .str.strip()
+        )
+    data_rows = ["| " + " | ".join(row) + " |" for row in df_esc.itertuples(index=False)]
+
+    return "\n".join([header_row, separator_row, *data_rows])
+
+
 def write_markdown_output(
     data_dict: dict[str, pd.DataFrame],
     metadata_dict: dict[str, Any],
@@ -879,46 +944,6 @@ def write_markdown_output(
     """
     try:
         logger.info("Generating Markdown output...")
-
-        def escape_markdown(text: str) -> str:
-            """Escape special markdown characters in table cells"""
-            if pd.isna(text) or text is None:
-                return ""
-            text = str(text)
-            # Escape pipe characters that would break tables
-            text = text.replace("|", "\\|")
-            # Escape backticks
-            text = text.replace("`", "\\`")
-            # Replace newlines with spaces in table cells
-            text = text.replace("\n", " ")
-            text = text.replace("\r", " ")
-            return text.strip()
-
-        def df_to_markdown_table(df: pd.DataFrame, sheet_name: str) -> str:
-            """Convert DataFrame to markdown table format.
-
-            Uses vectorized operations instead of iterrows() for better performance
-            on large DataFrames (20-40% faster for datasets with 100+ rows).
-            """
-            if df.empty:
-                return f"\n*No {sheet_name.lower()} found.*\n"
-
-            # Header row
-            headers = [escape_markdown(col) for col in df.columns]
-            header_row = "| " + " | ".join(headers) + " |"
-
-            # Separator row with left alignment
-            separator_row = "| " + " | ".join(["---"] * len(headers)) + " |"
-
-            # Data rows - vectorized approach using apply() instead of iterrows()
-            # This avoids the overhead of creating Series objects for each row
-            def format_row(row: pd.Series) -> str:
-                cells = [escape_markdown(row[col]) for col in df.columns]
-                return "| " + " | ".join(cells) + " |"
-
-            data_rows = df.apply(format_row, axis=1).tolist()
-
-            return "\n".join([header_row, separator_row, *data_rows])
 
         md_parts = []
 

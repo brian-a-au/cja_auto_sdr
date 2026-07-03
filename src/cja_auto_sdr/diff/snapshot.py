@@ -15,7 +15,7 @@ from cja_auto_sdr.core.discovery_payloads import (
 )
 from cja_auto_sdr.core.error_policies import RECOVERABLE_OPTIONAL_ENRICHMENT_EXCEPTIONS
 from cja_auto_sdr.core.exceptions import attach_api_connection_hint_context
-from cja_auto_sdr.core.json_io import write_json_atomic
+from cja_auto_sdr.core.json_io import load_json_cached, write_json_atomic
 from cja_auto_sdr.diff.models import DataViewSnapshot
 
 _SNAPSHOT_FAILURE_STAGE_ATTR = "_cja_snapshot_failure_stage"
@@ -302,8 +302,7 @@ class SnapshotManager:
             if filename.endswith(".json"):
                 filepath = os.path.join(directory, filename)
                 try:
-                    with open(filepath, encoding="utf-8") as f:
-                        data = json.load(f)
+                    data = load_json_cached(filepath)
                     if "snapshot_version" in data:
                         snapshots.append(
                             {

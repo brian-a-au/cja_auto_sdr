@@ -476,6 +476,8 @@ def emit_diagnostic(
     The call respects the effective log level and ``--quiet`` behaviour for the
     requested *level*. INFO remains the default diagnostic severity.
     """
+    if not logger.isEnabledFor(level):
+        return
     extra: dict[str, object] = {"event": event, "event_category": category, **fields}
 
     # Build human-readable text representation.

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import errno
+import functools
 import json
 import os
 import uuid
@@ -346,3 +347,33 @@ def write_text_atomic_compatible(
         direct_write=direct_write,
         stage_write=lambda tmp_path: _stage_text_write(tmp_path, content, encoding=encoding),
     )
+
+
+# ---------------------------------------------------------------------------
+# Process-local parse cache (v3.11.2)
+# ---------------------------------------------------------------------------
+# Memoizes JSON parses keyed by (path, mtime, size) so repeated reads of the
+# same on-disk snapshot within a process (e.g. org-report trending window
+# scans and cache-prune metadata loads) skip redundant I/O + json.loads work.
+# Callers MUST treat the returned object as read-only: it is shared across
+# every caller that hits the same cache key.
+# ---------------------------------------------------------------------------
+
+
+@functools.lru_cache(maxsize=256)
+def _load_json_cached_by_stat(path: str, mtime_ns: int, size: int) -> dict:  # noqa: ARG001 — cache key components
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def load_json_cached(path) -> dict:
+    """Parse a JSON file, memoized by (path, mtime, size).
+
+    The returned object is shared across callers and MUST NOT be mutated.
+    """
+    st = os.stat(path)
+    return _load_json_cached_by_stat(str(path), st.st_mtime_ns, st.st_size)
+
+
+# expose cache_clear for tests
+load_json_cached.cache_clear = _load_json_cached_by_stat.cache_clear

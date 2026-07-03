@@ -8,6 +8,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
+from cja_auto_sdr.core.json_io import load_json_cached
 from cja_auto_sdr.org.models import (
     OrgReportTrending,
     TrendingDelta,
@@ -362,8 +363,7 @@ def _load_snapshot_from_file(json_file: Path) -> TrendingSnapshot | None:
     Returns None if the file is unreadable, malformed, or not an org-report.
     """
     try:
-        with open(json_file, encoding="utf-8") as f:
-            data = json.load(f)
+        data = load_json_cached(json_file)
     except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
         logger.warning("Skipping %s: %s", json_file, exc)
         return None
