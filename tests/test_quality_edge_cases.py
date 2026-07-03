@@ -283,3 +283,44 @@ class TestParallelExecution:
         assert len(df) == 2
         truncation_logged = any("Limiting data quality issues" in str(call) for call in mock_logger.info.call_args_list)
         assert not truncation_logged
+
+
+# ==================== Null Value Payload Pinning ====================
+
+
+class TestNullValuePayloadPinning:
+    """Characterization tests pinning exact null-value issue payloads.
+
+    Guards refactors of the vectorized null check (check 4): item names,
+    field ordering, and details strings must stay byte-identical when
+    multiple critical fields carry nulls in different rows.
+    """
+
+    def test_multiple_critical_fields_pin_item_names_and_details(self):
+        checker = DataQualityChecker(logger=logging.getLogger("test"), quiet=True)
+        df = pd.DataFrame(
+            {
+                "id": ["m1", None, "m3"],
+                "name": ["Alpha", "Beta", "Gamma"],
+                "type": [None, "metric", None],
+            },
+        )
+
+        checker.check_all_quality_issues_optimized(df, "Metrics", ["id", "name"], ["id", "type"])
+
+        null_issues = [i for i in checker.issues if i["Category"] == "Null Values"]
+        assert [(i["Item Name"], i["Issue"], i["Details"]) for i in null_issues] == [
+            ("Beta", 'Null values in "id" field', "1 item(s) missing id. Items: Beta"),
+            ("Alpha, Gamma", 'Null values in "type" field', "2 item(s) missing type. Items: Alpha, Gamma"),
+        ]
+
+    def test_null_items_without_name_column_pin_empty_item_list(self):
+        checker = DataQualityChecker(logger=logging.getLogger("test"), quiet=True)
+        df = pd.DataFrame({"id": ["m1", None], "type": ["metric", "metric"]})
+
+        checker.check_all_quality_issues_optimized(df, "Metrics", ["id"], ["id"])
+
+        null_issues = [i for i in checker.issues if i["Category"] == "Null Values"]
+        assert [(i["Item Name"], i["Details"]) for i in null_issues] == [
+            ("", "1 item(s) missing id. Items: "),
+        ]

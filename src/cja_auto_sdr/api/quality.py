@@ -296,9 +296,13 @@ class DataQualityChecker:
             # Check 4: Vectorized null value checks
             available_critical_fields = [f for f in critical_fields if f in df.columns]
             if available_critical_fields:
-                null_counts = df[available_critical_fields].isna().sum()
+                # Reuse one isna() mask for counts and item-name lookups instead
+                # of re-scanning each flagged column.
+                null_mask = df[available_critical_fields].isna()
+                null_counts = null_mask.sum()
+                has_name_column = "name" in df.columns
                 for field, null_count in null_counts[null_counts > 0].items():
-                    null_items = df[df[field].isna()]["name"].tolist() if "name" in df.columns else []
+                    null_items = df.loc[null_mask[field], "name"].tolist() if has_name_column else []
                     _record_issue(
                         severity="MEDIUM",
                         category="Null Values",

@@ -3856,16 +3856,21 @@ def process_single_dataview(
             # Apply JSON formatting to all dataframes
             logger.info("Applying JSON formatting to dataframes...")
 
+            # Only object-dtype columns can hold dict/list cells; skipping the
+            # rest avoids a per-cell Python call over purely numeric columns.
             for col in lookup_df.columns:
-                lookup_df[col] = lookup_df[col].map(format_json_cell)
+                if lookup_df[col].dtype == object:
+                    lookup_df[col] = lookup_df[col].map(format_json_cell)
 
             if not metrics.empty:
                 for col in metrics.columns:
-                    metrics[col] = metrics[col].map(format_json_cell)
+                    if metrics[col].dtype == object:
+                        metrics[col] = metrics[col].map(format_json_cell)
 
             if not dimensions.empty:
                 for col in dimensions.columns:
-                    dimensions[col] = dimensions[col].map(format_json_cell)
+                    if dimensions[col].dtype == object:
+                        dimensions[col] = dimensions[col].map(format_json_cell)
 
             logger.info("JSON formatting applied successfully")
         except (KeyError, TypeError, ValueError) as e:

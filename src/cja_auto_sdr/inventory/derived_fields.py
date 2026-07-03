@@ -324,17 +324,17 @@ class DerivedFieldInventoryBuilder:
         # Track processing statistics
         stats = BatchProcessingStats(logger=self.logger)
 
-        # Process metrics
+        # Process metrics (records iteration avoids per-row Series construction)
         if metrics_df is not None and not metrics_df.empty:
-            for _, row in metrics_df.iterrows():
+            for row in metrics_df.to_dict("records"):
                 summary = self._process_row(row, "Metric", stats)
                 if summary:
                     inventory.fields.append(summary)
                     stats.record_success()
 
-        # Process dimensions
+        # Process dimensions (records iteration avoids per-row Series construction)
         if dimensions_df is not None and not dimensions_df.empty:
-            for _, row in dimensions_df.iterrows():
+            for row in dimensions_df.to_dict("records"):
                 summary = self._process_row(row, "Dimension", stats)
                 if summary:
                     inventory.fields.append(summary)
@@ -352,11 +352,11 @@ class DerivedFieldInventoryBuilder:
 
     def _process_row(
         self,
-        row: pd.Series,
+        row: dict[str, Any] | pd.Series,
         component_type: str,
         stats: BatchProcessingStats | None = None,
     ) -> DerivedFieldSummary | None:
-        """Process a single row and return a DerivedFieldSummary if it's a derived field."""
+        """Process a single row (records dict or Series) and return a DerivedFieldSummary if it's a derived field."""
         # Check if this is a derived field
         source_type = self._normalize_source_type(row.get("sourceFieldType", ""))
 
