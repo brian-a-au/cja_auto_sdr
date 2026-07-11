@@ -137,14 +137,6 @@ def _is_missing_metadata_stale(lock_path: Path, stale_threshold_seconds: int) ->
     return age_seconds >= reclaim_after_seconds
 
 
-def _write_info_fd(fd: int, info: LockInfo) -> None:
-    payload = (json.dumps(info.to_dict(), sort_keys=True) + "\n").encode("utf-8")
-    os.lseek(fd, 0, os.SEEK_SET)
-    os.ftruncate(fd, 0)
-    _write_all(fd, payload)
-    os.fsync(fd)
-
-
 class AcquireStatus(StrEnum):
     """Explicit lock acquisition outcomes used by backend internals."""
 

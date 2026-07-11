@@ -6478,31 +6478,6 @@ def _execute_sdr_processing_modes(
     )
 
 
-def _resolve_inventory_mode_configuration(args: argparse.Namespace, *, argv: list[str]) -> list[str]:
-    from cja_auto_sdr.cli.execution import resolve_inventory_mode_configuration as _impl
-
-    return _impl(args, argv=argv)
-
-
-def _dispatch_inventory_summary_mode(
-    args: argparse.Namespace,
-    *,
-    data_views: list[str],
-    effective_log_level: str,
-    inventory_order: list[str],
-    run_state: dict[str, Any] | None = None,
-) -> None:
-    from cja_auto_sdr.cli.execution import dispatch_inventory_summary_mode as _impl
-
-    _impl(
-        args,
-        data_views=data_views,
-        effective_log_level=effective_log_level,
-        inventory_order=inventory_order,
-        run_state=run_state,
-    )
-
-
 def _prepare_sdr_execution_context(
     args: argparse.Namespace,
     *,

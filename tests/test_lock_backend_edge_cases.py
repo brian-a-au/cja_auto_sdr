@@ -730,30 +730,7 @@ class TestIsLockInfoStale:
 
 
 # ---------------------------------------------------------------------------
-# 15. _write_info_fd() (standalone helper)
-# ---------------------------------------------------------------------------
-
-
-class TestWriteInfoFd:
-    def test_write_info_fd_writes_json(self, tmp_path: Path) -> None:
-        from cja_auto_sdr.core.locks.backends import _write_info_fd
-
-        f = tmp_path / "fd_test"
-        fd = os.open(str(f), os.O_CREAT | os.O_RDWR, 0o600)
-        try:
-            info = _build_lock_info("fd-write-test")
-            _write_info_fd(fd, info)
-            # Read it back
-            os.lseek(fd, 0, os.SEEK_SET)
-            content = os.read(fd, 4096)
-            data = json.loads(content.decode("utf-8"))
-            assert data["lock_id"] == "fd-write-test"
-        finally:
-            os.close(fd)
-
-
-# ---------------------------------------------------------------------------
-# 16. Backend write_info() / write_failure_tombstone() with closed handle
+# 15. Backend write_info() / write_failure_tombstone() with closed handle
 # ---------------------------------------------------------------------------
 
 

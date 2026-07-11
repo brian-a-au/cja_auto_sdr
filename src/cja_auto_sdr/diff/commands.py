@@ -538,8 +538,14 @@ def handle_diff_snapshot_command(
             )
             print(file=sys.stderr)
             print(f"Snapshot '{snapshot_file}' contains:", file=sys.stderr)
-            print(f"  {'✓' if True else '✗'} Metrics ({len(source_snapshot.metrics)} items)", file=sys.stderr)
-            print(f"  {'✓' if True else '✗'} Dimensions ({len(source_snapshot.dimensions)} items)", file=sys.stderr)
+            print(
+                f"  {'✓' if source_snapshot.metrics else '✗'} Metrics ({len(source_snapshot.metrics)} items)",
+                file=sys.stderr,
+            )
+            print(
+                f"  {'✓' if source_snapshot.dimensions else '✗'} Dimensions ({len(source_snapshot.dimensions)} items)",
+                file=sys.stderr,
+            )
             print(
                 f"  {'✓' if inv_summary['calculated_metrics']['present'] else '✗'} Calculated Metrics Inventory ({inv_summary['calculated_metrics']['count']} items)",
                 file=sys.stderr,

@@ -175,7 +175,7 @@ tests/
 └── README.md                        # This file
 ```
 
-**Total: 8,377 comprehensive tests**
+**Total: 8,378 comprehensive tests**
 
 ### Test Count Breakdown
 
@@ -184,16 +184,16 @@ tests/
 
 | Category | Tests | Files | Notes |
 |----------|-------|-------|-------|
-| `unit` | 8,271 | 157 | Default primary category for files without explicit integration/e2e/smoke scope |
+| `unit` | 8,272 | 157 | Default primary category for files without explicit integration/e2e/smoke scope |
 | `integration` | 73 | 3 | Cross-module integration suites |
 | `e2e` | 23 | 2 | End-to-end suites with a mocked external boundary |
 | `smoke` | 10 | 1 | Lightweight command-mode coverage |
 | `slow` | 0 | 0 | Overlay marker; these tests are also counted in a primary category |
-| **Primary Total** | **8,377** | **163** | **unit + integration + e2e + smoke** |
+| **Primary Total** | **8,378** | **163** | **unit + integration + e2e + smoke** |
 
 | CI Slice | Tests | Files | Selector |
 |----------|-------|-------|----------|
-| `test-unit` | 8,271 | 157 | `-m "unit and not slow"` |
+| `test-unit` | 8,272 | 157 | `-m "unit and not slow"` |
 | `test-integration` | 96 | 5 | `-m "integration or e2e or slow"` |
 | `smoke-test` | 10 | 1 | `-m smoke` |
 
@@ -265,7 +265,7 @@ tests/
 | `test_config_dataclasses.py` | 89 | Config dataclasses and constants functions |
 | `test_lock_manager.py` | 68 | Lock manager acquire/release/heartbeat lifecycle |
 | `test_lazy_forwarding.py` | 73 | Lazy-forwarding infrastructure and make_getattr() |
-| `test_lock_backend_edge_cases.py` | 165 | Lock backend metadata I/O, stale detection, legacy parsing |
+| `test_lock_backend_edge_cases.py` | 164 | Lock backend metadata I/O, stale detection, legacy parsing |
 | `test_derived_fields_coverage.py` | 161 | Derived field complexity scoring, logic summary, predicates |
 | `test_org_analyzer_coverage.py` | 166 | Org analyzer governance, naming audit, sampling, memory, drift, clustering |
 | `test_org_analyzer_metadata_enrichment.py` | 3 | Org analyzer metadata enrichment payload handling |
@@ -277,7 +277,7 @@ tests/
 | `test_diff_inventory_output.py` | 96 | Inventory diff output across all formats (console, JSON, HTML, Excel, MD, CSV) |
 | `test_cli_command_handlers.py` | 160 | CLI dispatch for --stats, --org-report, --list-snapshots, discovery inspection, diff config unpacking |
 | `test_profile_management.py` | 54 | Interactive profile creation, import, test, show |
-| `test_snapshot_commands.py` | 71 | Snapshot creation, comparison, name resolution |
+| `test_snapshot_commands.py` | 72 | Snapshot creation, comparison, name resolution |
 | `test_config_and_resolution.py` | 115 | Config status, validation, stats, name resolution |
 | `test_derived_fields_edge_cases.py` | 34 | Derived fields edge cases and coverage |
 | `test_diff_command_coverage.py` | 46 | Diff command edge cases and coverage |
@@ -360,13 +360,13 @@ tests/
 | `test_cli_notion_repair.py` | 14 | CLI flag wiring for --notion-repair-database and --notion-print-database-schema |
 | `test_org_analyzer_similarity.py` | 1 | Org similarity-engine union-hoisting characterization test |
 | `test_org_writers_csv.py` | 1 | Org components-CSV bucket-lookup characterization test |
-| `test_sdr_markdown_escaping.py` | 3 | SDR markdown vectorized cell-escaping characterization test |
+| `test_sdr_markdown_escaping.py` | 4 | SDR markdown vectorized cell-escaping characterization test |
 | `test_diff_excel.py` | 3 | Diff Excel row-coloring characterization tests |
 | `test_org_snapshot_parse_cache.py` | 1 | Org snapshot JSON parse-cache characterization test |
 | `test_diff_snapshot_retention.py` | 1 | Diff snapshot-retention parse-cache characterization test |
 | `test_diff_comparator_normalize.py` | 1 | Diff field-normalization type-fast-path characterization test |
 | `test_logging_diagnostics.py` | 2 | emit_diagnostic isEnabledFor guard characterization tests |
-| **Total** | **8,377** | **Collected via pytest --collect-only** |
+| **Total** | **8,378** | **Collected via pytest --collect-only** |
 
 ## Running Tests
 
@@ -824,7 +824,7 @@ the `tests/README.md` inventory tree or count table.
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (8,377 tests total)
+- [x] Comprehensive test coverage (8,378 tests total)
 - [x] Org-wide analysis tests (test_org_report.py) - 211 tests (including large org scaling, output path aliases, memory warnings, smart cache invalidation)
 - [x] Org-wide analysis integration tests (test_org_report_integration.py) - 17 tests (end-to-end flows, caching, filtering, governance thresholds)
 - [x] Profile management tests (test_profiles.py) - 80 tests

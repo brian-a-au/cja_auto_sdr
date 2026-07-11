@@ -17,8 +17,8 @@ CJA SDR Generator — a CLI tool for generating Solution Design Reference (SDR) 
 - Package manager: **uv**
 - Build system: **hatchling** (dynamic version from `src/cja_auto_sdr/core/version.py`)
 - Entry points: `cja_auto_sdr` and `cja-auto-sdr` (both via `__main__:main`)
-- Current version: v3.11.3
-- Tests: **8,377** across 163 files at **95% coverage gate**
+- Current version: v3.11.4
+- Tests: **8,378** across 163 files at **95% coverage gate**
 - Dependencies: cjapy, numpy, pandas, xlsxwriter, tqdm
 - Optional deps: scipy (clustering), python-dotenv (env), argcomplete (completion)
 
@@ -123,7 +123,10 @@ src/cja_auto_sdr/
 │   ├── registry.py          # Format registry
 │   ├── run_summary.py       # Run summary output helpers
 │   ├── excel.py             # Shared Excel formatting utilities
-│   ├── writers/             # Format writers (csv, excel, json, html, markdown)
+│   ├── notion_registry.py   # Notion page registry (tracks published pages)
+│   ├── notion_database.py   # Notion database integration helpers
+│   ├── notion_org_publisher.py # Org-report Notion publisher
+│   ├── writers/             # Format writers (csv, excel, json, html, markdown, notion)
 │   ├── sdr/                 # SDR document generators
 │   ├── diff/                # Diff renderers (console, grouped, csv, json, html, excel, markdown, pr_comment)
 │   └── inventory/           # Inventory summary display
@@ -157,6 +160,7 @@ src/cja_auto_sdr/
 | Org-wide | `--org-report` | Analyze all data views in organization |
 | Diff | `--diff <source> <target>` | Compare snapshots |
 | Trending | `--trending-window N` | Drift detection over time window |
+| Watch | `--watch <dv_ids...> --interval N` | Continuous monitoring loop |
 | Discovery | `--list-dataviews` etc. | List available resources |
 | Config | `--config`, `--show-config` | Profile/config management |
 | Stats | `--stats` | Diagnostics and statistics |

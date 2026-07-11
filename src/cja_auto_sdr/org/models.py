@@ -723,7 +723,6 @@ class _TrendingSnapshotDataViewAssessment:
     has_data_view_ids: bool
     ambiguous_identifiers: bool
     reported_total: int
-    reported_total_declares_zero: bool
     effective_total: int
     complete_data_view_ids: bool
 
@@ -942,7 +941,6 @@ def _snapshot_data_view_assessment(snapshot: TrendingSnapshot) -> _TrendingSnaps
         has_data_view_ids=bool(normalized_ids) or snapshot.has_data_view_ids,
         ambiguous_identifiers=ambiguous_identifiers,
         reported_total=_snapshot_reported_data_view_total(snapshot),
-        reported_total_declares_zero=_snapshot_declares_zero_data_views(snapshot),
         effective_total=effective_total,
         complete_data_view_ids=bool(complete_data_view_ids),
     )
