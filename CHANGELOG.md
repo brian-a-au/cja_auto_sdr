@@ -7,6 +7,22 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.11.4] - 2026-07-11
+
+### Fixed
+
+- **Diff:** the snapshot missing-inventory error listing now reflects actual metric/dimension presence instead of printing unconditional checkmarks (the `✗` branch was unreachable).
+- **SDR markdown:** `escape_markdown` guards `pd.isna` against list-like input (which returns an array and raised `ValueError` on truth-testing), matching its sibling formatters.
+- **Tests:** multi-process lock contention tests raise their child ready-wait deadlines from 3s to 15s, eliminating an observed spawn-start flake under parallel (xdist) load; happy-path duration is unchanged.
+
+### Removed
+
+- Dead code with zero callers, verified by repo-wide reference search and coverage: the unreferenced inventory-mode delegator shims in `generator.py`, the orphaned `_write_info_fd` lock helper (production uses `_write_info_path`), and the write-only `reported_total_declares_zero` trending-assessment field.
+
+### Documentation
+
+- CLAUDE.md source layout now lists the Notion output modules and the watch mode.
+
 ## [3.11.3] - 2026-07-02
 
 ### Performance
