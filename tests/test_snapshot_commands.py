@@ -798,6 +798,24 @@ class TestHandleDiffSnapshotCommand:
         captured = capsys.readouterr()
         assert "Invalid snapshot file" in captured.err
 
+    def test_missing_inventory_error_marks_empty_core_sections(self, tmp_path, capsys):
+        """The 'snapshot contains' listing must reflect actual metric/dimension presence."""
+        snap_file = str(tmp_path / "baseline.json")
+        _write_snapshot_file(snap_file, _make_snapshot(metrics=[], dimensions=[]))
+
+        success, _has_changes, _exit_code = handle_diff_snapshot_command(
+            data_view_id="dv_test",
+            snapshot_file=snap_file,
+            quiet=True,
+            include_calc_metrics=True,
+        )
+
+        assert success is False
+        captured = capsys.readouterr()
+        assert "Cannot perform inventory diff" in captured.err
+        assert "✗ Metrics (0 items)" in captured.err
+        assert "✗ Dimensions (0 items)" in captured.err
+
     @patch("cja_auto_sdr.generator.cjapy")
     @patch("cja_auto_sdr.generator.configure_cjapy")
     def test_diff_snapshot_with_banner(self, mock_configure, mock_cjapy, tmp_path, capsys):

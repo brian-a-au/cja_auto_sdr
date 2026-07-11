@@ -12,7 +12,7 @@ write the string "" into a typed extension array).
 import numpy as np
 import pandas as pd
 
-from cja_auto_sdr.output.sdr import df_to_markdown_table
+from cja_auto_sdr.output.sdr import df_to_markdown_table, escape_markdown
 
 
 def _escape_markdown_ref(text):
@@ -115,3 +115,13 @@ def test_df_to_markdown_table_handles_nullable_extension_dtypes():
 
     result = df_to_markdown_table(df, "Nullable Types")
     assert result == expected
+
+
+def test_escape_markdown_handles_list_values():
+    """List-like cells must render as their escaped str() form, not raise.
+
+    `pd.isna` returns an ndarray for list input, and truth-testing that array
+    raises ValueError. Every sibling formatter guards this; escape_markdown
+    must too.
+    """
+    assert escape_markdown(["a|b", "c"]) == "['a\\|b', 'c']"

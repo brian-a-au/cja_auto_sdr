@@ -236,7 +236,9 @@ class TestOrgReportLock:
             )
             proc.start()
 
-            deadline = time.time() + 3
+            # Generous ready-wait: spawn-start under xdist CPU saturation can take
+            # several seconds; polling exits as soon as the child signals.
+            deadline = time.time() + 15
             while _read_signal(ready_file) is None and time.time() < deadline:
                 time.sleep(0.02)
 
@@ -264,7 +266,9 @@ class TestOrgReportLock:
             )
             proc.start()
 
-            deadline = time.time() + 5
+            # Generous ready-wait: spawn-start under xdist CPU saturation can take
+            # several seconds; polling exits as soon as the child signals.
+            deadline = time.time() + 15
             while _read_signal(ready_file) is None and time.time() < deadline:
                 time.sleep(0.02)
 
@@ -286,7 +290,9 @@ class TestOrgReportLock:
             )
             proc.start()
 
-            deadline = time.time() + 3
+            # Generous ready-wait: spawn-start under xdist CPU saturation can take
+            # several seconds; polling exits as soon as the child signals.
+            deadline = time.time() + 15
             while _read_signal(ready_file) is None and time.time() < deadline:
                 time.sleep(0.02)
 
@@ -313,7 +319,9 @@ class TestOrgReportLock:
             )
             proc.start()
 
-            deadline = time.time() + 3
+            # Generous ready-wait: spawn-start under xdist CPU saturation can take
+            # several seconds; polling exits as soon as the child signals.
+            deadline = time.time() + 15
             while _read_signal(ready_file) is None and time.time() < deadline:
                 time.sleep(0.02)
 

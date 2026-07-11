@@ -866,8 +866,14 @@ def write_html_output(
 
 def escape_markdown(text: Any) -> str:
     """Escape special markdown characters in table cells"""
-    if pd.isna(text) or text is None:
+    if text is None:
         return ""
+    try:
+        if pd.isna(text):
+            return ""
+    except TypeError, ValueError:
+        # pd.isna returns an array for list-like input; truth-testing it raises.
+        pass
     text = str(text)
     # Escape pipe characters that would break tables
     text = text.replace("|", "\\|")
