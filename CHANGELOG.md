@@ -7,6 +7,12 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.11.6] - 2026-07-13
+
+### Fixed
+
+- **PyPI project page:** the README banner image no longer stretches on PyPI. The `<img>` carried a fixed `height` attribute, which PyPI's description CSS kept while capping the width to the container, distorting the aspect ratio. Dropping the fixed height (keeping `width`) lets it scale proportionally, and the placeholder `alt` text is now descriptive. Since the PyPI long description is frozen at upload time per release, this fix ships as a new version.
+
 ## [3.11.5] - 2026-07-13
 
 ### Added
