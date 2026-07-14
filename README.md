@@ -1,6 +1,6 @@
 # Adobe Customer Journey Analytics SDR Generator
 
-<img width="1024" height="572" alt="image" src="https://github.com/user-attachments/assets/54a43474-3fc6-4379-909c-452c19cdeac2" />
+<img width="1024" alt="Adobe Customer Journey Analytics SDR Generator" src="https://github.com/user-attachments/assets/54a43474-3fc6-4379-909c-452c19cdeac2" />
 
 [![PyPI](https://img.shields.io/pypi/v/cja-auto-sdr)](https://pypi.org/project/cja-auto-sdr/)
 [![Tests](https://github.com/brian-a-au/cja_auto_sdr/actions/workflows/tests.yml/badge.svg)](https://github.com/brian-a-au/cja_auto_sdr/actions/workflows/tests.yml)
