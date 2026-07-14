@@ -2,6 +2,7 @@
 
 <img width="1024" height="572" alt="image" src="https://github.com/user-attachments/assets/54a43474-3fc6-4379-909c-452c19cdeac2" />
 
+[![PyPI](https://img.shields.io/pypi/v/cja-auto-sdr.svg)](https://pypi.org/project/cja-auto-sdr/)
 [![Tests](https://github.com/brian-a-au/cja_auto_sdr/actions/workflows/tests.yml/badge.svg)](https://github.com/brian-a-au/cja_auto_sdr/actions/workflows/tests.yml)
 [![Lint](https://github.com/brian-a-au/cja_auto_sdr/actions/workflows/lint.yml/badge.svg)](https://github.com/brian-a-au/cja_auto_sdr/actions/workflows/lint.yml)
 [![Version Sync](https://github.com/brian-a-au/cja_auto_sdr/actions/workflows/version-sync.yml/badge.svg)](https://github.com/brian-a-au/cja_auto_sdr/actions/workflows/version-sync.yml)
@@ -97,6 +98,27 @@ A **Solution Design Reference** is the essential documentation that bridges your
 - **DevOps Engineers** automating CJA audits in CI/CD pipelines
 
 ## Quick Start
+
+### Install from PyPI (recommended)
+
+The tool is published on [PyPI](https://pypi.org/project/cja-auto-sdr/), so most users can install it with a single command — no clone required:
+
+```bash
+pip install cja-auto-sdr
+
+# or install it as an isolated CLI tool with uv:
+uv tool install cja-auto-sdr
+```
+
+Optional features ship as extras:
+
+```bash
+pip install "cja-auto-sdr[full]"   # clustering + env + shell completion + notion
+```
+
+This puts the `cja-auto-sdr` (and `cja_auto_sdr`) command on your PATH. Verify with `cja-auto-sdr --version`, then skip ahead to [Configure Credentials](#3-configure-credentials).
+
+To set up a development checkout from source instead, follow the numbered steps below.
 
 ### 1. Clone the Repository
 
