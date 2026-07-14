@@ -238,11 +238,23 @@ All of these files must be updated (validated by `scripts/check_version_sync.py`
 
 ### Release Process
 
+> **Full runbook (source of truth):** [`RELEASING.md`](RELEASING.md).
+
 ```bash
 # After updating all version files:
 git tag v<version>
-gh release create v<version> --latest
+gh release create v<version> --latest   # release.yml then builds + publishes to PyPI over OIDC
 ```
+
+---
+
+## Releasing
+
+Releasing publishes `cja-auto-sdr` to PyPI. The full runbook is [`RELEASING.md`](RELEASING.md).
+
+- **Trigger:** publishing a GitHub Release fires `.github/workflows/release.yml`, which builds and uploads to PyPI via **Trusted Publishing (OIDC)** — no API tokens.
+- **Human-initiated:** only a maintainer publishing a Release triggers a publish; agent and unattended runs never publish (see [AGENTS.md](AGENTS.md#releasing)).
+- **Docs/CI-only changes need no release** — merge to `main` with no version bump, tag, or publish.
 
 ---
 

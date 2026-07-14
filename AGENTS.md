@@ -274,8 +274,13 @@ Prefer exact data view IDs (`dv_...`) over names for unattended automation. Name
 
 ---
 
+## Releasing
+
+Releasing `cja-auto-sdr` to PyPI is **human-initiated**: it happens only when a maintainer publishes a GitHub Release, which fires `.github/workflows/release.yml` to build and upload over Trusted Publishing (OIDC). Agent and unattended runs — `--agent-mode`, scheduled jobs, CI — never publish; they have no path to trigger a release. See [`RELEASING.md`](RELEASING.md) for the runbook.
+
 ## See Also
 
+- [`RELEASING.md`](RELEASING.md) — release runbook and PyPI publishing
 - [`docs/AGENT_AUTOMATION.md`](docs/AGENT_AUTOMATION.md) — scheduling patterns, agent framework integration, notifications, security
 - [`scripts/orchestrator.py`](scripts/orchestrator.py) — multi-org orchestration script
 - [`docs/CLI_REFERENCE.md`](docs/CLI_REFERENCE.md) — full human-facing CLI documentation
