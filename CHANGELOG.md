@@ -7,6 +7,12 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.11.7] - 2026-07-13
+
+### Security
+
+- **Dependency audit:** raised the version floors on two transitive dependencies flagged by `uv audit`. `idna` now requires `>=3.15` (fixes CVE-2026-45409 / GHSA-65pc-fj4g-8rjx — specially crafted input to `idna.encode()` could bypass the earlier CVE-2024-3651 fix) and `urllib3` now requires `>=2.7.0` (fixes CVE-2026-44431 / GHSA-qccp-gfcp-xxvc — sensitive headers forwarded across origins in proxied low-level redirects — and CVE-2026-44432 / GHSA-mf9v-mfxr-j63j — decompression-bomb safeguards bypassed in parts of the streaming API). Both arrive transitively (via `cjapy` → `requests` and `notion-client` → `httpx`); promoting them to direct dependencies with a secure minimum enforces the fix in the lockfile and for anyone installing from PyPI. The lockfile now resolves `idna 3.18` and `urllib3 2.7.0`, and `uv audit` reports no known vulnerabilities. (The remaining `pathlib is archived` adverse status is a hard dependency declared by `cjapy` upstream and is not a vulnerability.)
+
 ## [3.11.6] - 2026-07-13
 
 ### Fixed

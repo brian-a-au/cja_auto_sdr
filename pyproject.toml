@@ -20,6 +20,11 @@ dependencies = [
     "pandas>=2.3.3,<3",
     "xlsxwriter>=3.2.9",
     "tqdm>=4.66.0",
+    # Security floors for transitive dependencies (pulled via cjapy->requests and
+    # notion-client->httpx). Promoted to direct deps so the secure minimum is enforced
+    # in our lockfile and propagated to PyPI installers. Remove once upstream raises floors.
+    "idna>=3.15",       # CVE-2026-45409 — idna.encode() bypass (GHSA-65pc-fj4g-8rjx)
+    "urllib3>=2.7.0",   # CVE-2026-44431/44432 — cross-origin header leak + decompression bomb
 ]
 
 [project.urls]
