@@ -190,6 +190,7 @@ uv run pytest tests/ --collect-only -q  # Get accurate test count
 | `version-sync.yml` | `scripts/check_version_sync.py` — single source of truth for version consistency |
 | `patch-release-gate.yml` | Release validation (version, changelog, docs, tag ref, test counts) |
 | `test-counts.yml` | Validates README test count inventory is current |
+| `release.yml` | Publishes to PyPI via Trusted Publishing (OIDC) on GitHub release; `pypi` environment, no API tokens |
 
 ### Test Organization
 

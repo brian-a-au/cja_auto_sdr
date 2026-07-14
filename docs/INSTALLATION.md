@@ -40,7 +40,37 @@ uv --version
 
 ## Project Setup
 
-### Option 1: Clone from Git (Recommended)
+### Install from PyPI (Recommended for most users)
+
+The package is published on [PyPI](https://pypi.org/project/cja-auto-sdr/). If you just want to run the tool (not modify it), install it directly — no git clone or `uv sync` needed:
+
+```bash
+# Standard install
+pip install cja-auto-sdr
+
+# Or install as an isolated CLI tool (keeps its own venv)
+uv tool install cja-auto-sdr
+```
+
+To include optional features, install the matching extras:
+
+```bash
+pip install "cja-auto-sdr[clustering]"   # scipy-based clustering
+pip install "cja-auto-sdr[env]"          # .env credential loading
+pip install "cja-auto-sdr[completion]"   # shell completion
+pip install "cja-auto-sdr[notion]"       # Notion publishing
+pip install "cja-auto-sdr[full]"         # everything above
+```
+
+Verify the install:
+
+```bash
+cja-auto-sdr --version
+```
+
+Then continue to [Configuration](#next-steps) to set up your Adobe credentials. The Git-based options below are for contributors who want an editable source checkout.
+
+### Option 1: Clone from Git (for development)
 
 **Step 1: Choose an installation location**
 
