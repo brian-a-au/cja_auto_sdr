@@ -7,6 +7,16 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.11.5] - 2026-07-13
+
+### Added
+
+- **PyPI distribution:** the tool is now published to [PyPI](https://pypi.org/project/cja-auto-sdr/) — install with `pip install cja-auto-sdr` (or `uv tool install cja-auto-sdr`), with optional extras (`clustering`, `env`, `completion`, `notion`, `full`). Releases publish automatically via a new `release.yml` GitHub Actions workflow using PyPI Trusted Publishing (OIDC) — no stored API tokens. The workflow builds the sdist and wheel, validates metadata with `twine check`, verifies the tag matches the built version, and uploads on GitHub release publish.
+
+### Documentation
+
+- README and `docs/INSTALLATION.md` now document PyPI install as the recommended path, and the README carries a PyPI version badge. `release.yml` is listed in the CLAUDE.md CI workflow table.
+
 ## [3.11.4] - 2026-07-11
 
 ### Fixed
