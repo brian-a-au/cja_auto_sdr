@@ -1,0 +1,13 @@
+# Keeps GitHub Actions pins current. setup-uv v8+ no longer publishes
+# floating major tags (supply-chain hardening), so workflows pin exact
+# versions and rely on this config to surface updates.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns:
+          - "*"
