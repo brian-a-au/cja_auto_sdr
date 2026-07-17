@@ -41,11 +41,12 @@ jobs:
         python-version: ["3.14"]
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v7
+      - uses: astral-sh/setup-uv@v8.3.2
         with:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
           cache-dependency-glob: uv.lock
+          prune-cache: false
       - name: Sync dependencies
         run: uv sync --dev
       - name: Run focused release-gate contract tests
@@ -59,11 +60,12 @@ jobs:
         python-version: ["3.14"]
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v7
+      - uses: astral-sh/setup-uv@v8.3.2
         with:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
           cache-dependency-glob: uv.lock
+          prune-cache: false
       - name: Sync dependencies
         run: uv sync --dev --extra clustering
       - name: Run unit tests with coverage (95% gate applies to this slice)
@@ -126,11 +128,12 @@ jobs:
         python-version: ["3.14"]
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v7
+      - uses: astral-sh/setup-uv@v8.3.2
         with:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
           cache-dependency-glob: uv.lock
+          prune-cache: false
       - name: Sync dependencies
         run: uv sync --dev --extra clustering
       - name: Run integration, end-to-end, and slow test slices
@@ -153,11 +156,12 @@ jobs:
         python-version: ["3.14"]
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v7
+      - uses: astral-sh/setup-uv@v8.3.2
         with:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
           cache-dependency-glob: uv.lock
+          prune-cache: false
       - name: Sync dependencies
         run: uv sync --dev
       - name: Run run-summary JSON contract tests
@@ -174,11 +178,12 @@ jobs:
         python-version: ["3.14"]
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v7
+      - uses: astral-sh/setup-uv@v8.3.2
         with:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
           cache-dependency-glob: uv.lock
+          prune-cache: false
       - name: Sync dependencies
         run: uv sync --dev
       - name: Smoke test - version, help, exit-codes
@@ -198,11 +203,12 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v7
+      - uses: astral-sh/setup-uv@v8.3.2
         with:
           python-version: "3.14"
           enable-cache: true
           cache-dependency-glob: uv.lock
+          prune-cache: false
       - name: Build wheel
         run: |
           rm -f dist/*.whl dist/*.tar.gz
@@ -232,11 +238,12 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v7
+      - uses: astral-sh/setup-uv@v8.3.2
         with:
           python-version: "3.14"
           enable-cache: true
           cache-dependency-glob: uv.lock
+          prune-cache: false
       - name: Clean build artifacts
         run: rm -f dist/*.whl dist/*.tar.gz
       - name: Build package

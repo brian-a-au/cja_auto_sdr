@@ -25,11 +25,12 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v7
+      - uses: astral-sh/setup-uv@v8.3.2
         with:
           python-version: "3.14"
           enable-cache: true
           cache-dependency-glob: uv.lock
+          prune-cache: false
       - name: Build sdist and wheel
         run: |
           rm -f dist/*.whl dist/*.tar.gz
