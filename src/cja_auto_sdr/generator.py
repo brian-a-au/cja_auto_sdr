@@ -1853,8 +1853,10 @@ _PUSH_TO_NOTION_INCOMPATIBLE_FLAGS: tuple[tuple[str, str, str | None], ...] = (
     (
         "data_views",
         "positional data view arguments",
-        "--push-to-notion is incompatible with positional data view arguments "
-        "(it publishes a saved JSON artifact, not a fresh generation)",
+        (
+            "--push-to-notion is incompatible with positional data view arguments "
+            "(it publishes a saved JSON artifact, not a fresh generation)"
+        ),
     ),
 )
 

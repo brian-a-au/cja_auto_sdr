@@ -173,34 +173,50 @@ def render_category_summary_markdown(
         [
             "| Category | Tests | Files | Notes |",
             "|----------|-------|-------|-------|",
-            "| `unit` | "
-            f"{summary['primary']['unit'].tests:,} | {summary['primary']['unit'].files} | "
-            "Default primary category for files without explicit integration/e2e/smoke scope |",
-            "| `integration` | "
-            f"{summary['primary']['integration'].tests:,} | {summary['primary']['integration'].files} | "
-            "Cross-module integration suites |",
-            "| `e2e` | "
-            f"{summary['primary']['e2e'].tests:,} | {summary['primary']['e2e'].files} | "
-            "End-to-end suites with a mocked external boundary |",
-            "| `smoke` | "
-            f"{summary['primary']['smoke'].tests:,} | {summary['primary']['smoke'].files} | "
-            "Lightweight command-mode coverage |",
-            "| `slow` | "
-            f"{summary['markers']['slow'].tests:,} | {summary['markers']['slow'].files} | "
-            "Overlay marker; these tests are also counted in a primary category |",
+            (
+                "| `unit` | "
+                f"{summary['primary']['unit'].tests:,} | {summary['primary']['unit'].files} | "
+                "Default primary category for files without explicit integration/e2e/smoke scope |"
+            ),
+            (
+                "| `integration` | "
+                f"{summary['primary']['integration'].tests:,} | {summary['primary']['integration'].files} | "
+                "Cross-module integration suites |"
+            ),
+            (
+                "| `e2e` | "
+                f"{summary['primary']['e2e'].tests:,} | {summary['primary']['e2e'].files} | "
+                "End-to-end suites with a mocked external boundary |"
+            ),
+            (
+                "| `smoke` | "
+                f"{summary['primary']['smoke'].tests:,} | {summary['primary']['smoke'].files} | "
+                "Lightweight command-mode coverage |"
+            ),
+            (
+                "| `slow` | "
+                f"{summary['markers']['slow'].tests:,} | {summary['markers']['slow'].files} | "
+                "Overlay marker; these tests are also counted in a primary category |"
+            ),
             f"| **Primary Total** | **{total:,}** | **{sum(stats.files for stats in summary['primary'].values())}** | **unit + integration + e2e + smoke** |",
             "",
             "| CI Slice | Tests | Files | Selector |",
             "|----------|-------|-------|----------|",
-            "| `test-unit` | "
-            f"{summary['ci_slices']['test-unit'].tests:,} | {summary['ci_slices']['test-unit'].files} | "
-            '`-m "unit and not slow"` |',
-            "| `test-integration` | "
-            f"{summary['ci_slices']['test-integration'].tests:,} | {summary['ci_slices']['test-integration'].files} | "
-            '`-m "integration or e2e or slow"` |',
-            "| `smoke-test` | "
-            f"{summary['ci_slices']['smoke-test'].tests:,} | {summary['ci_slices']['smoke-test'].files} | "
-            "`-m smoke` |",
+            (
+                "| `test-unit` | "
+                f"{summary['ci_slices']['test-unit'].tests:,} | {summary['ci_slices']['test-unit'].files} | "
+                '`-m "unit and not slow"` |'
+            ),
+            (
+                "| `test-integration` | "
+                f"{summary['ci_slices']['test-integration'].tests:,} | {summary['ci_slices']['test-integration'].files} | "
+                '`-m "integration or e2e or slow"` |'
+            ),
+            (
+                "| `smoke-test` | "
+                f"{summary['ci_slices']['smoke-test'].tests:,} | {summary['ci_slices']['smoke-test'].files} | "
+                "`-m smoke` |"
+            ),
             "",
             "> Coverage note: the `--cov-fail-under=95` gate currently runs only in the `test-unit` CI slice.",
         ],
