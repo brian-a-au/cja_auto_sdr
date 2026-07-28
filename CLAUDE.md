@@ -187,6 +187,7 @@ uv run pytest tests/ --collect-only -q  # Get accurate test count
 |----------|---------|
 | `tests.yml` | Unit tests (95% coverage gate, `-n auto` xdist), integration/e2e/slow tests, run-summary contracts, cross-platform smoke tests, package build |
 | `lint.yml` | Ruff check + format, actionlint, shellcheck |
+| `dependency-review.yml` | Blocks pull requests that introduce moderate-or-higher vulnerable dependencies |
 | `version-sync.yml` | `scripts/check_version_sync.py` — single source of truth for version consistency |
 | `patch-release-gate.yml` | Release validation (version, changelog, docs, tag ref, test counts) |
 | `test-counts.yml` | Validates README test count inventory is current |
