@@ -1,4 +1,4 @@
-name: Version Sync
+name: version-sync
 
 on:
   pull_request:
