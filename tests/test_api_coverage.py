@@ -224,7 +224,7 @@ class TestCheckDuplicatesException:
         logger.setLevel(logging.ERROR)
         checker = DataQualityChecker(logger=logger)
         df = _sample_df()
-        with patch.object(df["name"], "value_counts", side_effect=TypeError("mock error")):
+        with patch.object(pd.Series, "value_counts", side_effect=TypeError("mock error")):
             with caplog.at_level(logging.ERROR, logger="test_dup_exc"):
                 checker.check_duplicates(df, "Metrics")
         assert "checking duplicates" in caplog.text

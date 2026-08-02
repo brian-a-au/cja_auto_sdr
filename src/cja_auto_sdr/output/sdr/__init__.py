@@ -332,7 +332,9 @@ def apply_excel_formatting(
 
         # String form of the frame computed once and reused for column widths,
         # row heights, and Severity values below (avoids re-converting per column/row).
-        df_str = df.astype(str)
+        # Use pandas' nullable string dtype so missing values become empty
+        # strings instead of floating NaN values that reject the .str accessor.
+        df_str = df.astype("string").fillna("")
 
         # Set column widths with appropriate caps (vectorized)
         for idx, col in enumerate(df.columns):
@@ -543,8 +545,10 @@ def write_json_output(
 
         # Convert DataFrames to JSON-serializable format
         for sheet_name, df in data_dict.items():
-            # Convert DataFrame to list of dictionaries
-            records = df.to_dict(orient="records")
+            # Normalize pandas missing scalars before converting to records.
+            # Pandas 3 preserves nullable string columns as NaN in to_dict(),
+            # which would otherwise leak non-standard NaN values into JSON.
+            records = df.astype(object).where(df.notna(), None).to_dict(orient="records")
 
             # Map to appropriate section
             if sheet_name == "Data Quality":
