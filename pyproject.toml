@@ -17,7 +17,7 @@ classifiers = [
 dependencies = [
     "cjapy>=0.3.1",
     "numpy>=2.2.0,!=2.4.0",
-    "pandas>=2.3.3,<3",
+    "pandas>=2.3.3,<4",
     "xlsxwriter>=3.2.9",
     "tqdm>=4.66.0",
     # Security floors for transitive dependencies (pulled via cjapy->requests and
