@@ -48,3 +48,5 @@ jobs:
           fi
       - name: Verify test counts are up to date
         run: uv run python scripts/update_test_counts.py --check
+      - name: Verify PyPI README links
+        run: uv run python scripts/check_pypi_readme_links.py README.md

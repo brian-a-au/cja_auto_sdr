@@ -7,6 +7,17 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.11.8] - 2026-08-03
+
+### Fixed
+
+- **PyPI README links:** replaced repository-relative documentation, test, license, and changelog targets with absolute GitHub URLs so all links work from the PyPI project page as well as GitHub.
+- **Source distribution documentation:** root-anchored the intended top-level README, license, and project metadata include patterns so Hatch no longer collects unrelated nested README files without their linked content.
+
+### CI
+
+- **Release validation:** added a standard-library-only check that inspects the long description embedded in built wheels and source distributions and rejects unsupported relative links before publication. The patch-release and focused PR gates cover the same contract.
+
 ## [3.11.7] - 2026-07-13
 
 ### Security

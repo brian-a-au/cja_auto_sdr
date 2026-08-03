@@ -7,11 +7,11 @@
 [![Lint](https://github.com/brian-a-au/cja_auto_sdr/actions/workflows/lint.yml/badge.svg)](https://github.com/brian-a-au/cja_auto_sdr/actions/workflows/lint.yml)
 [![Version Sync](https://github.com/brian-a-au/cja_auto_sdr/actions/workflows/version-sync.yml/badge.svg)](https://github.com/brian-a-au/cja_auto_sdr/actions/workflows/version-sync.yml)
 [![Python 3.14+](https://img.shields.io/badge/python-3.14%2B-blue.svg)](https://www.python.org/downloads/)
-[![Coverage](https://img.shields.io/badge/coverage-99%25-brightgreen.svg)](tests/)
-[![Tests](https://img.shields.io/badge/tests-8378-brightgreen.svg)](tests/)
+[![Coverage](https://img.shields.io/badge/coverage-99%25-brightgreen.svg)](https://github.com/brian-a-au/cja_auto_sdr/tree/main/tests)
+[![Tests](https://img.shields.io/badge/tests-8388-brightgreen.svg)](https://github.com/brian-a-au/cja_auto_sdr/tree/main/tests)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/brian-a-au/cja_auto_sdr/blob/main/LICENSE)
 
 A production-ready Python CLI that automates the creation of Solution Design Reference (SDR) documentation from your Adobe Customer Journey Analytics (CJA) implementation. Read-only against CJA.
 
@@ -159,7 +159,7 @@ python -m venv .venv
 pip install -e .
 ```
 
-> **Windows Users:** If you encounter issues with `uv run` or NumPy import errors on Windows, we recommend using Python directly. See the [Windows-Specific Issues](docs/TROUBLESHOOTING.md#windows-specific-issues) section in the troubleshooting guide for detailed solutions.
+> **Windows Users:** If you encounter issues with `uv run` or NumPy import errors on Windows, we recommend using Python directly. See the [Windows-Specific Issues](https://github.com/brian-a-au/cja_auto_sdr/blob/main/docs/TROUBLESHOOTING.md#windows-specific-issues) section in the troubleshooting guide for detailed solutions.
 
 <!-- separator between blockquotes -->
 
@@ -172,9 +172,9 @@ pip install -e .
 
 ### 3. Configure Credentials
 
-Get your credentials from [Adobe Developer Console](https://developer.adobe.com/console/) (see [QUICKSTART_GUIDE](docs/QUICKSTART_GUIDE.md) for detailed steps).
+Get your credentials from [Adobe Developer Console](https://developer.adobe.com/console/) (see [QUICKSTART_GUIDE](https://github.com/brian-a-au/cja_auto_sdr/blob/main/docs/QUICKSTART_GUIDE.md) for detailed steps).
 
-> ⚠ **Important:** Your Adobe Developer Console project must have **both** the CJA API **and** the AEP (Experience Platform) API added. The AEP API associates your service account with an Experience Platform product profile, which is required for CJA API authentication. See the [Quickstart Guide](docs/QUICKSTART_GUIDE.md#15-add-the-adobe-experience-platform-aep-api) for setup instructions.
+> ⚠ **Important:** Your Adobe Developer Console project must have **both** the CJA API **and** the AEP (Experience Platform) API added. The AEP API associates your service account with an Experience Platform product profile, which is required for CJA API authentication. See the [Quickstart Guide](https://github.com/brian-a-au/cja_auto_sdr/blob/main/docs/QUICKSTART_GUIDE.md#15-add-the-adobe-experience-platform-aep-api) for setup instructions.
 
 #### Option A: Configuration File (Quickest)
 
@@ -376,29 +376,29 @@ cja_auto_sdr "Production Analytics"
 
 | Guide | Description |
 | ----- | ----------- |
-| [Quick Reference](docs/QUICK_REFERENCE.md) | Single-page command cheat sheet |
-| [Extended Quick Start](docs/QUICKSTART_GUIDE.md) | Complete walkthrough from zero to first SDR |
-| [Installation Guide](docs/INSTALLATION.md) | Detailed setup instructions, authentication options |
-| [Configuration Guide](docs/CONFIGURATION.md) | config.json, environment variables, Profile management |
-| [Notion Setup](docs/NOTION_SETUP.md) | Step-by-step Notion integration setup and overview |
-| [CLI Reference](docs/CLI_REFERENCE.md) | Complete command-line options and examples |
-| [Shell Completion](docs/SHELL_COMPLETION.md) | Enable tab-completion for bash/zsh |
-| [Data Quality](docs/DATA_QUALITY.md) | Validation checks, severity levels, understanding issues |
-| [Inventory Overview](docs/INVENTORY_OVERVIEW.md) | Unified guide to all component inventories |
-| [Derived Field Inventory](docs/DERIVED_FIELDS_INVENTORY.md) | Derived field analysis, complexity scores, logic summaries |
-| [Segments Inventory](docs/SEGMENTS_INVENTORY.md) | Segment filters, container types, definition summaries |
-| [Calculated Metrics Inventory](docs/CALCULATED_METRICS_INVENTORY.md) | Calculated metric formulas, complexity, references |
-| [Performance](docs/PERFORMANCE.md) | Optimization options, caching, batch processing |
-| [Troubleshooting](docs/TROUBLESHOOTING.md) | Common errors and solutions |
-| [Use Cases & Best Practices](docs/USE_CASES.md) | Automation, scheduling, workflows |
-| [Output Formats](docs/OUTPUT_FORMATS.md) | Format specifications and examples |
-| [Batch Processing](docs/BATCH_PROCESSING_GUIDE.md) | Multi-Data View processing guide |
-| [Data View Names](docs/DATA_VIEW_NAMES.md) | Using Data View names instead of IDs |
-| [Data View Comparison](docs/DIFF_COMPARISON.md) | Compare Data Views, snapshots, CI/CD integration |
-| [Git Integration](docs/GIT_INTEGRATION.md) | Version-controlled snapshots, audit trails, team collaboration |
-| [Org-Wide Analysis](docs/ORG_WIDE_ANALYSIS.md) | Cross-data view component analysis, similarity detection, governance |
-| [Agent Automation](docs/AGENT_AUTOMATION.md) | CI/CD pipelines, AI agent integration, scheduling patterns |
-| [Testing](tests/README.md) | Running and writing tests |
+| [Quick Reference](https://github.com/brian-a-au/cja_auto_sdr/blob/main/docs/QUICK_REFERENCE.md) | Single-page command cheat sheet |
+| [Extended Quick Start](https://github.com/brian-a-au/cja_auto_sdr/blob/main/docs/QUICKSTART_GUIDE.md) | Complete walkthrough from zero to first SDR |
+| [Installation Guide](https://github.com/brian-a-au/cja_auto_sdr/blob/main/docs/INSTALLATION.md) | Detailed setup instructions, authentication options |
+| [Configuration Guide](https://github.com/brian-a-au/cja_auto_sdr/blob/main/docs/CONFIGURATION.md) | config.json, environment variables, Profile management |
+| [Notion Setup](https://github.com/brian-a-au/cja_auto_sdr/blob/main/docs/NOTION_SETUP.md) | Step-by-step Notion integration setup and overview |
+| [CLI Reference](https://github.com/brian-a-au/cja_auto_sdr/blob/main/docs/CLI_REFERENCE.md) | Complete command-line options and examples |
+| [Shell Completion](https://github.com/brian-a-au/cja_auto_sdr/blob/main/docs/SHELL_COMPLETION.md) | Enable tab-completion for bash/zsh |
+| [Data Quality](https://github.com/brian-a-au/cja_auto_sdr/blob/main/docs/DATA_QUALITY.md) | Validation checks, severity levels, understanding issues |
+| [Inventory Overview](https://github.com/brian-a-au/cja_auto_sdr/blob/main/docs/INVENTORY_OVERVIEW.md) | Unified guide to all component inventories |
+| [Derived Field Inventory](https://github.com/brian-a-au/cja_auto_sdr/blob/main/docs/DERIVED_FIELDS_INVENTORY.md) | Derived field analysis, complexity scores, logic summaries |
+| [Segments Inventory](https://github.com/brian-a-au/cja_auto_sdr/blob/main/docs/SEGMENTS_INVENTORY.md) | Segment filters, container types, definition summaries |
+| [Calculated Metrics Inventory](https://github.com/brian-a-au/cja_auto_sdr/blob/main/docs/CALCULATED_METRICS_INVENTORY.md) | Calculated metric formulas, complexity, references |
+| [Performance](https://github.com/brian-a-au/cja_auto_sdr/blob/main/docs/PERFORMANCE.md) | Optimization options, caching, batch processing |
+| [Troubleshooting](https://github.com/brian-a-au/cja_auto_sdr/blob/main/docs/TROUBLESHOOTING.md) | Common errors and solutions |
+| [Use Cases & Best Practices](https://github.com/brian-a-au/cja_auto_sdr/blob/main/docs/USE_CASES.md) | Automation, scheduling, workflows |
+| [Output Formats](https://github.com/brian-a-au/cja_auto_sdr/blob/main/docs/OUTPUT_FORMATS.md) | Format specifications and examples |
+| [Batch Processing](https://github.com/brian-a-au/cja_auto_sdr/blob/main/docs/BATCH_PROCESSING_GUIDE.md) | Multi-Data View processing guide |
+| [Data View Names](https://github.com/brian-a-au/cja_auto_sdr/blob/main/docs/DATA_VIEW_NAMES.md) | Using Data View names instead of IDs |
+| [Data View Comparison](https://github.com/brian-a-au/cja_auto_sdr/blob/main/docs/DIFF_COMPARISON.md) | Compare Data Views, snapshots, CI/CD integration |
+| [Git Integration](https://github.com/brian-a-au/cja_auto_sdr/blob/main/docs/GIT_INTEGRATION.md) | Version-controlled snapshots, audit trails, team collaboration |
+| [Org-Wide Analysis](https://github.com/brian-a-au/cja_auto_sdr/blob/main/docs/ORG_WIDE_ANALYSIS.md) | Cross-data view component analysis, similarity detection, governance |
+| [Agent Automation](https://github.com/brian-a-au/cja_auto_sdr/blob/main/docs/AGENT_AUTOMATION.md) | CI/CD pipelines, AI agent integration, scheduling patterns |
+| [Testing](https://github.com/brian-a-au/cja_auto_sdr/blob/main/tests/README.md) | Running and writing tests |
 
 ## Requirements
 
@@ -503,7 +503,7 @@ cja_auto_sdr/
 │   └── ...                    # Additional guides
 ├── examples/                  # Automation and GitHub Actions examples
 ├── scripts/                   # Utility scripts
-├── tests/                     # Test suite (8,378+ tests)
+├── tests/                     # Test suite (8,388+ tests)
 │   ├── category_rules.py      # File-based test-category rules
 │   ├── conftest.py            # Pytest fixtures and auto-marking
 │   ├── README.md              # Test inventory and execution guide
@@ -534,4 +534,4 @@ cja_auto_sdr/
 - [CJA API Documentation](https://developer.adobe.com/cja-apis/docs/)
 - [cjapy Library](https://github.com/pitchmuc/cjapy)
 - [uv Package Manager](https://github.com/astral-sh/uv)
-- [Changelog](CHANGELOG.md)
+- [Changelog](https://github.com/brian-a-au/cja_auto_sdr/blob/main/CHANGELOG.md)
