@@ -70,9 +70,9 @@ packages = ["src/cja_auto_sdr"]
 [tool.hatch.build.targets.sdist]
 include = [
     "/src",
-    "pyproject.toml",
-    "README.md",
-    "LICENSE",
+    "/pyproject.toml",
+    "/README.md",
+    "/LICENSE",
 ]
 
 [dependency-groups]

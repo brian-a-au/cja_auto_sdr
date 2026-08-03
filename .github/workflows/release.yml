@@ -37,6 +37,8 @@ jobs:
           uv build
       - name: Validate distribution metadata
         run: uvx twine check dist/*
+      - name: Validate PyPI README links
+        run: uv run python scripts/check_pypi_readme_links.py dist/*
       - name: Verify tag matches built version
         run: |
           tag="${GITHUB_REF_NAME#v}"

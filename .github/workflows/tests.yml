@@ -27,8 +27,13 @@ jobs:
         with:
           filters: |
             release_gate_related:
+              - "README.md"
+              - "pyproject.toml"
+              - "scripts/check_pypi_readme_links.py"
               - "scripts/check_version_sync.py"
+              - "tests/test_check_pypi_readme_links.py"
               - ".github/workflows/patch-release-gate.yml"
+              - ".github/workflows/release.yml"
               - ".github/workflows/tests.yml"
 
   release-gate-focused-tests:
@@ -50,7 +55,11 @@ jobs:
       - name: Sync dependencies
         run: uv sync --dev
       - name: Run focused release-gate contract tests
-        run: uv run pytest -q tests/test_check_version_sync.py tests/test_cli_color_policy_e2e.py
+        run: >
+          uv run pytest -q
+          tests/test_check_version_sync.py
+          tests/test_check_pypi_readme_links.py
+          tests/test_cli_color_policy_e2e.py
 
   test-unit:
     runs-on: ubuntu-latest

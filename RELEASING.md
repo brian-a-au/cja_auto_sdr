@@ -6,7 +6,7 @@ How to cut a release of `cja-auto-sdr` and publish it to [PyPI](https://pypi.org
 
 ## How publishing works
 
-`.github/workflows/release.yml` runs on the `release: published` event. It builds the sdist and wheel with `uv build`, validates metadata with `twine check`, verifies the release tag matches the built version, then uploads to PyPI using **Trusted Publishing (OIDC)**. There are no stored API tokens: GitHub Actions mints a short-lived OIDC token that PyPI verifies against the registered publisher (owner `brian-a-au`, repo `cja_auto_sdr`, workflow `release.yml`, environment `pypi`).
+`.github/workflows/release.yml` runs on the `release: published` event. It builds the sdist and wheel with `uv build`, validates metadata with `twine check`, rejects repository-relative links in the built PyPI README, verifies the release tag matches the built version, then uploads to PyPI using **Trusted Publishing (OIDC)**. There are no stored API tokens: GitHub Actions mints a short-lived OIDC token that PyPI verifies against the registered publisher (owner `brian-a-au`, repo `cja_auto_sdr`, workflow `release.yml`, environment `pypi`).
 
 ## Runbook
 
@@ -17,6 +17,9 @@ Update `src/cja_auto_sdr/core/version.py` and add a `CHANGELOG.md` entry, then s
 ```bash
 uv run python scripts/check_version_sync.py
 uv run python scripts/update_test_counts.py --check
+uv build
+uvx twine check dist/*
+uv run python scripts/check_pypi_readme_links.py dist/*
 ```
 
 ### 2. Merge to `main`
