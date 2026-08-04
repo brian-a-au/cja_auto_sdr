@@ -15,7 +15,7 @@
 
 A production-ready Python CLI that automates the creation of Solution Design Reference (SDR) documentation from your Adobe Customer Journey Analytics (CJA) implementation. Read-only against CJA.
 
-[`cja_auto_sdr`](https://github.com/brian-a-au/cja_auto_sdr) and [`aa_auto_sdr`](https://github.com/brian-a-au/aa_auto_sdr) are counterpart SDR generators for Customer Journey Analytics and Adobe Analytics, respectively. They share UX conventions, not code.
+Counterpart to [`aa_auto_sdr`](https://github.com/brian-a-au/aa_auto_sdr); shares UX conventions, does not share code.
 
 Companion projects: [`sdr-visualizer`](https://github.com/brian-a-au/sdr-visualizer) turns generated JSON snapshots into self-contained visual catalogs, while [`sdr-grader`](https://github.com/brian-a-au/sdr-grader) provides deterministic, rule-based quality grading.
 
