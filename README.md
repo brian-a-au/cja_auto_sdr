@@ -17,6 +17,8 @@ A production-ready Python CLI that automates the creation of Solution Design Ref
 
 Counterpart to [`aa_auto_sdr`](https://github.com/brian-a-au/aa_auto_sdr); shares UX conventions, does not share code.
 
+Companion projects: [`sdr-visualizer`](https://github.com/brian-a-au/sdr-visualizer) turns generated JSON snapshots into self-contained visual catalogs, while [`sdr-grader`](https://github.com/brian-a-au/sdr-grader) provides deterministic, rule-based quality grading.
+
 ## What It Is
 
 A **Solution Design Reference** is the essential documentation that bridges your business requirements and your analytics implementation. It catalogs every metric and dimension in your CJA Data View, serving as the single source of truth for what data you're collecting and how it's configured.
@@ -534,4 +536,4 @@ cja_auto_sdr/
 - [CJA API Documentation](https://developer.adobe.com/cja-apis/docs/)
 - [cjapy Library](https://github.com/pitchmuc/cjapy)
 - [uv Package Manager](https://github.com/astral-sh/uv)
-- [Changelog](https://github.com/brian-a-au/cja_auto_sdr/blob/main/CHANGELOG.md)
+- [Counterpart project: `aa_auto_sdr`](https://github.com/brian-a-au/aa_auto_sdr) — Adobe Analytics equivalent
