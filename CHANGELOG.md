@@ -7,6 +7,16 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.12.0] - 2026-08-30
+
+### Added
+
+- **Dataset discovery metadata:** `--list-datasets --format json` now retains allowlisted, normalized CJA Connection dataset metadata under the additive `connectionMetadata` object. It covers the CJA dataset role, schema, identity, lookup relationships, streaming/backfill/last-ingested state, and data-source type while preserving explicit `null`, `false`, and empty values. Metadata remains scoped to each dataset-to-Connection relationship; CSV/table columns and the permission-degraded ID-only fallback are unchanged.
+
+### Documentation
+
+- Documented the complete dataset discovery JSON field mapping and clarified that CJA role, XDM schema behavior, AEP Profile enablement, and reporting readiness are separate concepts.
+
 ## [3.11.8] - 2026-08-03
 
 ### Fixed

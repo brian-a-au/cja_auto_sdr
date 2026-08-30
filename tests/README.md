@@ -28,6 +28,7 @@ tests/
 ├── test_discovery_payloads.py       # Discovery payload classification tests
 ├── test_discovery_component_consistency.py  # Discovery component consistency tests
 ├── test_discovery_extraction.py     # Discovery module extraction and backwards-compat tests
+├── test_discovery_dataset_metadata.py # Connection-scoped dataset discovery metadata contracts
 ├── test_dry_run.py                  # Dry-run mode tests
 ├── test_diagnostic_events.py        # Structured diagnostic event vocabulary and redaction tests
 ├── test_early_exit.py               # Early exit optimization tests
@@ -176,7 +177,7 @@ tests/
 └── README.md                        # This file
 ```
 
-**Total: 8,388 comprehensive tests**
+**Total: 8,407 comprehensive tests**
 
 ### Test Count Breakdown
 
@@ -185,16 +186,16 @@ tests/
 
 | Category | Tests | Files | Notes |
 |----------|-------|-------|-------|
-| `unit` | 8,282 | 158 | Default primary category for files without explicit integration/e2e/smoke scope |
+| `unit` | 8,301 | 159 | Default primary category for files without explicit integration/e2e/smoke scope |
 | `integration` | 73 | 3 | Cross-module integration suites |
 | `e2e` | 23 | 2 | End-to-end suites with a mocked external boundary |
 | `smoke` | 10 | 1 | Lightweight command-mode coverage |
 | `slow` | 0 | 0 | Overlay marker; these tests are also counted in a primary category |
-| **Primary Total** | **8,388** | **164** | **unit + integration + e2e + smoke** |
+| **Primary Total** | **8,407** | **165** | **unit + integration + e2e + smoke** |
 
 | CI Slice | Tests | Files | Selector |
 |----------|-------|-------|----------|
-| `test-unit` | 8,282 | 158 | `-m "unit and not slow"` |
+| `test-unit` | 8,301 | 159 | `-m "unit and not slow"` |
 | `test-integration` | 96 | 5 | `-m "integration or e2e or slow"` |
 | `smoke-test` | 10 | 1 | `-m smoke` |
 
@@ -248,6 +249,7 @@ tests/
 | `test_discovery_payloads.py` | 63 | Discovery payload classification (error detection, component extraction) |
 | `test_discovery_component_consistency.py` | 7 | Discovery component retrieval consistency |
 | `test_discovery_extraction.py` | 46 | Discovery module extraction and backwards-compat contracts |
+| `test_discovery_dataset_metadata.py` | 19 | Connection-scoped dataset discovery metadata contracts |
 | `test_diagnostic_events.py` | 23 | Structured diagnostic event vocabulary, logger adapters, and redaction |
 | `test_output_content_validation.py` | 29 | Output format content validation (CSV, JSON, HTML, Excel, Markdown roundtrip) |
 | `test_output_extraction_contracts.py` | 347 | Extraction contracts for output.diff and output.inventory |
@@ -368,7 +370,7 @@ tests/
 | `test_diff_snapshot_retention.py` | 1 | Diff snapshot-retention parse-cache characterization test |
 | `test_diff_comparator_normalize.py` | 1 | Diff field-normalization type-fast-path characterization test |
 | `test_logging_diagnostics.py` | 2 | emit_diagnostic isEnabledFor guard characterization tests |
-| **Total** | **8,388** | **Collected via pytest --collect-only** |
+| **Total** | **8,407** | **Collected via pytest --collect-only** |
 
 ## Running Tests
 
@@ -826,7 +828,7 @@ the `tests/README.md` inventory tree or count table.
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (8,388 tests total)
+- [x] Comprehensive test coverage (8,407 tests total)
 - [x] Org-wide analysis tests (test_org_report.py) - 211 tests (including large org scaling, output path aliases, memory warnings, smart cache invalidation)
 - [x] Org-wide analysis integration tests (test_org_report_integration.py) - 17 tests (end-to-end flows, caching, filtering, governance thresholds)
 - [x] Profile management tests (test_profiles.py) - 80 tests

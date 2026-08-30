@@ -886,6 +886,92 @@ cja_auto_sdr dv_12345 --dry-run
 >
 > **Discovery Filters:** `--list-dataviews`, `--list-connections`, and `--list-datasets` support `--filter`, `--exclude`, `--limit`, and `--sort` for filtering, limiting, and ordering results.
 
+#### Dataset discovery JSON metadata
+
+`--list-datasets --format json` adds connection-scoped metadata to a dataset when the CJA Connections API reports it. The existing `id` and `name` fields are unchanged. Optional metadata is grouped under `connectionMetadata`:
+
+```json
+{
+  "dataViews": [
+    {
+      "id": "dv_example",
+      "name": "Example Data View",
+      "connection": {
+        "id": "dg_example",
+        "name": "Example Connection"
+      },
+      "datasets": [
+        {
+          "id": "dataset_example",
+          "name": "Web Events",
+          "connectionMetadata": {
+            "role": "event",
+            "schema": {
+              "id": "schema_example",
+              "name": "Web Event Schema",
+              "ref": {
+                "id": "https://ns.adobe.com/example/schemas/example",
+                "contentType": "application/vnd.adobe.xed-full+json;version=1"
+              }
+            },
+            "identity": {
+              "timestampId": "timestamp",
+              "visitorId": "identityMap",
+              "namespace": "ECID",
+              "usePrimaryIdNamespace": false,
+              "identityMap": true,
+              "namespaceColumn": "identityMap"
+            },
+            "lookup": {
+              "keyField": "accountId",
+              "parentFields": ["accountId"],
+              "parentDatasetId": "parent_dataset_example",
+              "parentDatasetType": "event"
+            },
+            "ingestion": {
+              "streaming": true,
+              "backfillSummary": {
+                "total": 2,
+                "failed": 0,
+                "inProgress": 0,
+                "completed": 2,
+                "invalid": false
+              },
+              "lastIngestedTime": "2026-08-29T12:34:56Z",
+              "streamingEnabledAt": "2026-01-02T03:04:05Z"
+            },
+            "dataSource": {
+              "id": "webData",
+              "type": "Web Data",
+              "description": "Browser event data"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "count": 1
+}
+```
+
+The normalized field mapping is:
+
+| JSON field | CJA Connections field |
+|---|---|
+| `connectionMetadata.role` | `type` |
+| `connectionMetadata.schema.id`, `.name`, `.ref` | `schemaInfo.schemaId`, `.schemaName`, `.schemaRef` |
+| `connectionMetadata.identity.timestampId`, `.visitorId` | `timestampId`, `visitorId` |
+| `connectionMetadata.identity.namespace`, `.usePrimaryIdNamespace`, `.identityMap`, `.namespaceColumn` | `identityNamespace`, `usePrimaryIdNamespace`, `identityMap`, `identityNamespaceCol` |
+| `connectionMetadata.lookup.keyField`, `.parentFields`, `.parentDatasetId`, `.parentDatasetType` | `lookupKeyField`, `lookupParentFields`, `lookupParentDataSetId`, `lookupParentDataSetType` |
+| `connectionMetadata.ingestion.streaming`, `.backfillSummary`, `.lastIngestedTime`, `.streamingEnabledAt` | `streaming`, `backfillSummary`, `lastIngestedTime`, `streamingEnabledAt` |
+| `connectionMetadata.dataSource` | `dataSourceType` (`id`, `type`, and `description`) |
+
+Only fields reported by Adobe are included. A missing field is omitted; an explicit JSON `null`, `false`, empty string, empty list, or empty object remains distinct. Values with an unexpected type are omitted rather than copied through. Consumers must ignore unknown future keys in discovery JSON. CSV and table output retain their existing columns and do not render `connectionMetadata`.
+
+Dataset role is configuration on the dataset-to-Connection relationship. The same AEP dataset can therefore have different `connectionMetadata` in different Connections; consumers must not merge it globally by dataset ID. `role` is not inferred, and it does not describe XDM record/time-series behavior or AEP Real-Time Customer Profile enablement. Ingestion timestamps, streaming flags, and backfill summaries are status observations, not proof of end-to-end CJA reporting readiness.
+
+If Connection administration details are unavailable, the existing product-admin warning and ID-only fallback remain in effect; datasets and `connectionMetadata` are unavailable in that response.
+
 ### Discovery Inspection Commands
 
 ```bash
