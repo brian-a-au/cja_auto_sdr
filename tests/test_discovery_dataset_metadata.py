@@ -454,9 +454,7 @@ def test_mismatched_connection_detail_cannot_cross_contaminate_shared_dataset_id
     assert isinstance(output, str)
     by_id = {data_view["id"]: data_view for data_view in json.loads(output)["dataViews"]}
     assert "schema" not in by_id["dv_1"]["datasets"][0]["connectionMetadata"]
-    assert by_id["dv_2"]["datasets"][0]["connectionMetadata"]["schema"] == {
-        "id": "right_schema"
-    }
+    assert by_id["dv_2"]["datasets"][0]["connectionMetadata"]["schema"] == {"id": "right_schema"}
 
 
 def test_enriched_json_projects_exactly_to_the_legacy_contract() -> None:
@@ -484,9 +482,7 @@ def test_enriched_json_projects_exactly_to_the_legacy_contract() -> None:
         "dataViews": [
             {
                 **data_view,
-                "datasets": [
-                    {"id": dataset["id"], "name": dataset["name"]} for dataset in data_view["datasets"]
-                ],
+                "datasets": [{"id": dataset["id"], "name": dataset["name"]} for dataset in data_view["datasets"]],
             }
             for data_view in payload["dataViews"]
         ],
@@ -529,9 +525,7 @@ def test_schema_hydration_is_limited_to_connections_in_final_json_rows() -> None
     assert isinstance(output, str)
     payload = json.loads(output)
     assert [data_view["id"] for data_view in payload["dataViews"]] == ["dv_alpha"]
-    assert payload["dataViews"][0]["datasets"][0]["connectionMetadata"]["schema"] == {
-        "id": "schema_alpha"
-    }
+    assert payload["dataViews"][0]["datasets"][0]["connectionMetadata"]["schema"] == {"id": "schema_alpha"}
     cja.getConnection.assert_called_once_with(connectionId="alpha", expansion="dataSets,schemaInfo")
 
 
@@ -559,9 +553,7 @@ def test_schema_hydration_skips_connections_that_cannot_gain_schema() -> None:
 
     payload = json.loads(output)
     by_id = {data_view["id"]: data_view for data_view in payload["dataViews"]}
-    assert by_id["dv_complete"]["datasets"][0]["connectionMetadata"]["schema"] == {
-        "id": "schema_complete"
-    }
+    assert by_id["dv_complete"]["datasets"][0]["connectionMetadata"]["schema"] == {"id": "schema_complete"}
     cja.getConnection.assert_not_called()
 
 

@@ -1105,10 +1105,9 @@ def _merge_dataset_schema_info(
     if not isinstance(connection_detail, dict):
         return raw_datasets
     reported_connection_id = connection_detail.get("id", connection_detail.get("idWithoutPrefix"))
-    if (
-        isinstance(reported_connection_id, str)
-        and reported_connection_id.removeprefix("dg_") != expected_connection_id.removeprefix("dg_")
-    ):
+    if isinstance(reported_connection_id, str) and reported_connection_id.removeprefix(
+        "dg_"
+    ) != expected_connection_id.removeprefix("dg_"):
         return raw_datasets
     detail_datasets = connection_detail.get("dataSets", connection_detail.get("datasets", []))
     if not isinstance(detail_datasets, list):
@@ -1850,8 +1849,7 @@ def _fetch_datasets(
                 if merged_datasets is raw_datasets:
                     continue
                 conn_map[connection_id]["json_datasets"] = [
-                    _extract_dataset_info(dataset, include_connection_metadata=True)
-                    for dataset in merged_datasets
+                    _extract_dataset_info(dataset, include_connection_metadata=True) for dataset in merged_datasets
                 ]
 
         if not is_machine_readable and sys.stdout.isatty():
