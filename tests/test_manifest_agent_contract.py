@@ -126,6 +126,13 @@ class TestDiscoveryManifestContract:
         desc = self.manifest["parameters"]["properties"]["agent_mode"]["description"]
         assert "json" in desc.lower(), "discovery agent_mode description must mention JSON"
 
+    def test_dataset_metadata_contract_is_agent_discoverable(self):
+        """Agents must be told that dataset metadata is additive and Connection-scoped."""
+        desc = self.manifest["description"]
+        assert "connectionMetadata" in desc
+        assert "dataset-to-Connection relationship" in desc
+        assert "ignore unknown future keys" in desc
+
 
 # ---------------------------------------------------------------------------
 # Cross-manifest consistency

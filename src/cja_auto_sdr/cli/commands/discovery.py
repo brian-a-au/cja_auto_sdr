@@ -16,6 +16,7 @@ import sys
 import textwrap
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from numbers import Integral
 from typing import Any
 
 import pandas as pd
@@ -59,6 +60,7 @@ from cja_auto_sdr.core.discovery_payloads import (
 from cja_auto_sdr.core.discovery_payloads import (
     count_component_items_or_na as _count_component_items_or_na_from_assessment,
 )
+from cja_auto_sdr.core.error_policies import RECOVERABLE_OPTIONAL_ENRICHMENT_EXCEPTIONS
 
 # ---------------------------------------------------------------------------
 # Exception classes
@@ -833,7 +835,202 @@ def _build_calculated_metric_display_row(item: dict[str, Any]) -> dict[str, Any]
 # ---------------------------------------------------------------------------
 
 
-def _extract_dataset_info(dataset: Any) -> dict:
+_DATASET_METADATA_MISSING = object()
+_DATASET_DISCOVERY_BASE_EXPANSION = "name,ownerFullName,dataSets"
+_DATASET_DISCOVERY_CONNECTION_EXPANSION = (
+    f"{_DATASET_DISCOVERY_BASE_EXPANSION},dataSetLastIngested,backfillsSummaryDataSets"
+)
+_DATASET_DISCOVERY_SCHEMA_EXPANSION = "dataSets,schemaInfo"
+
+
+def _normalize_dataset_metadata_text(value: Any) -> str | object | None:
+    """Normalize an optional API text field without collapsing null or empty."""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    return _DATASET_METADATA_MISSING
+
+
+def _normalize_dataset_metadata_bool(value: Any) -> bool | object | None:
+    """Normalize an optional API boolean without coercing truthy values."""
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    return _DATASET_METADATA_MISSING
+
+
+def _normalize_dataset_metadata_int(value: Any) -> int | object | None:
+    """Normalize an optional API integer without accepting booleans or floats."""
+    if value is None:
+        return None
+    if isinstance(value, Integral) and not isinstance(value, bool):
+        return int(value)
+    return _DATASET_METADATA_MISSING
+
+
+def _normalize_lookup_parent_fields(value: Any) -> str | list[str | None] | object | None:
+    """Accept the documented string form and observed list-shaped parent fields."""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        if all(item is None or isinstance(item, str) for item in value):
+            return list(value)
+        return _DATASET_METADATA_MISSING
+    return _DATASET_METADATA_MISSING
+
+
+def _normalized_dataset_metadata_field(
+    record: dict[str, Any],
+    source_key: str,
+    normalizer: Callable[[Any], Any],
+) -> Any:
+    """Return a normalized allowlisted field or the internal missing sentinel."""
+    if source_key not in record:
+        return _DATASET_METADATA_MISSING
+    return normalizer(record[source_key])
+
+
+def _normalize_allowlisted_object(
+    value: Any,
+    fields: tuple[tuple[str, str, Callable[[Any], Any]], ...],
+) -> dict[str, Any] | object | None:
+    """Normalize a nested Adobe object through an explicit field allowlist."""
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        return _DATASET_METADATA_MISSING
+
+    normalized: dict[str, Any] = {}
+    for source_key, output_key, normalizer in fields:
+        field_value = _normalized_dataset_metadata_field(value, source_key, normalizer)
+        if field_value is not _DATASET_METADATA_MISSING:
+            normalized[output_key] = field_value
+    if normalized or not value:
+        return normalized
+    return _DATASET_METADATA_MISSING
+
+
+_SCHEMA_REF_FIELDS = (
+    ("id", "id", _normalize_dataset_metadata_text),
+    ("contentType", "contentType", _normalize_dataset_metadata_text),
+)
+_SCHEMA_FIELDS = (
+    ("schemaId", "id", _normalize_dataset_metadata_text),
+    ("schemaName", "name", _normalize_dataset_metadata_text),
+    (
+        "schemaRef",
+        "ref",
+        lambda value: _normalize_allowlisted_object(value, _SCHEMA_REF_FIELDS),
+    ),
+)
+_BACKFILL_SUMMARY_FIELDS = (
+    ("total", "total", _normalize_dataset_metadata_int),
+    ("failed", "failed", _normalize_dataset_metadata_int),
+    ("inProgress", "inProgress", _normalize_dataset_metadata_int),
+    ("completed", "completed", _normalize_dataset_metadata_int),
+    ("invalid", "invalid", _normalize_dataset_metadata_bool),
+)
+_DATA_SOURCE_FIELDS = (
+    ("id", "id", _normalize_dataset_metadata_text),
+    ("type", "type", _normalize_dataset_metadata_text),
+    ("description", "description", _normalize_dataset_metadata_text),
+)
+
+
+def _normalize_schema_info(value: Any) -> dict[str, Any] | object | None:
+    """Normalize the allowlisted schemaInfo object."""
+    return _normalize_allowlisted_object(value, _SCHEMA_FIELDS)
+
+
+def _normalize_backfill_summary(value: Any) -> dict[str, Any] | object | None:
+    """Normalize the allowlisted backfillSummary object."""
+    return _normalize_allowlisted_object(value, _BACKFILL_SUMMARY_FIELDS)
+
+
+def _normalize_data_source_type(value: Any) -> dict[str, Any] | object | None:
+    """Normalize the allowlisted dataSourceType object."""
+    return _normalize_allowlisted_object(value, _DATA_SOURCE_FIELDS)
+
+
+_IDENTITY_FIELDS = (
+    ("timestampId", "timestampId", _normalize_dataset_metadata_text),
+    ("visitorId", "visitorId", _normalize_dataset_metadata_text),
+    ("identityNamespace", "namespace", _normalize_dataset_metadata_text),
+    ("usePrimaryIdNamespace", "usePrimaryIdNamespace", _normalize_dataset_metadata_bool),
+    ("identityMap", "identityMap", _normalize_dataset_metadata_bool),
+    ("identityNamespaceCol", "namespaceColumn", _normalize_dataset_metadata_text),
+)
+_LOOKUP_FIELDS = (
+    ("lookupKeyField", "keyField", _normalize_dataset_metadata_text),
+    ("lookupParentFields", "parentFields", _normalize_lookup_parent_fields),
+    ("lookupParentDataSetId", "parentDatasetId", _normalize_dataset_metadata_text),
+    ("lookupParentDataSetType", "parentDatasetType", _normalize_dataset_metadata_text),
+)
+_INGESTION_FIELDS = (
+    ("streaming", "streaming", _normalize_dataset_metadata_bool),
+    ("backfillSummary", "backfillSummary", _normalize_backfill_summary),
+    ("lastIngestedTime", "lastIngestedTime", _normalize_dataset_metadata_text),
+    ("streamingEnabledAt", "streamingEnabledAt", _normalize_dataset_metadata_text),
+)
+
+
+def _build_dataset_metadata_group(
+    dataset: dict[str, Any],
+    fields: tuple[tuple[str, str, Callable[[Any], Any]], ...],
+) -> dict[str, Any]:
+    """Build one metadata group, omitting absent and malformed source fields."""
+    group: dict[str, Any] = {}
+    for source_key, output_key, normalizer in fields:
+        field_value = _normalized_dataset_metadata_field(dataset, source_key, normalizer)
+        if field_value is not _DATASET_METADATA_MISSING:
+            group[output_key] = field_value
+    return group
+
+
+def _extract_dataset_connection_metadata(dataset: dict[str, Any]) -> dict[str, Any]:
+    """Extract allowlisted connection-scoped dataset metadata for JSON discovery."""
+    metadata: dict[str, Any] = {}
+
+    role = _normalized_dataset_metadata_field(dataset, "type", _normalize_dataset_metadata_text)
+    if role is not _DATASET_METADATA_MISSING:
+        metadata["role"] = role
+
+    schema = _normalized_dataset_metadata_field(
+        dataset,
+        "schemaInfo",
+        _normalize_schema_info,
+    )
+    if schema is not _DATASET_METADATA_MISSING:
+        metadata["schema"] = schema
+
+    identity = _build_dataset_metadata_group(dataset, _IDENTITY_FIELDS)
+    if identity:
+        metadata["identity"] = identity
+
+    lookup = _build_dataset_metadata_group(dataset, _LOOKUP_FIELDS)
+    if lookup:
+        metadata["lookup"] = lookup
+
+    ingestion = _build_dataset_metadata_group(dataset, _INGESTION_FIELDS)
+    if ingestion:
+        metadata["ingestion"] = ingestion
+
+    data_source = _normalized_dataset_metadata_field(
+        dataset,
+        "dataSourceType",
+        _normalize_data_source_type,
+    )
+    if data_source is not _DATASET_METADATA_MISSING:
+        metadata["dataSource"] = data_source
+
+    return metadata
+
+
+def _extract_dataset_info(dataset: Any, *, include_connection_metadata: bool = False) -> dict:
     """
     Resilient parser for dataset objects from connection API responses.
 
@@ -844,7 +1041,8 @@ def _extract_dataset_info(dataset: Any) -> dict:
         dataset: A dataset object (dict or other) from the dataSets array
 
     Returns:
-        Dict with 'id' and 'name' keys (values may be 'N/A' if not found)
+        Dict with 'id' and 'name' keys (values may be 'N/A' if not found),
+        plus optional normalized connection metadata when requested.
     """
     if not isinstance(dataset, dict):
         # Preserve previous fallback semantics for scalar falsey values while
@@ -880,7 +1078,68 @@ def _extract_dataset_info(dataset: Any) -> dict:
         treat_null_like_strings=True,
     )
 
-    return {"id": ds_id, "name": ds_name}
+    result: dict[str, Any] = {"id": ds_id, "name": ds_name}
+    if include_connection_metadata:
+        connection_metadata = _extract_dataset_connection_metadata(dataset)
+        if connection_metadata:
+            result["connectionMetadata"] = connection_metadata
+    return result
+
+
+def _dataset_needs_schema_hydration(dataset: Any) -> bool:
+    """Return whether a dataset can gain valid schemaInfo from a detail response."""
+    if not isinstance(dataset, dict) or _extract_dataset_info(dataset)["id"] == "N/A":
+        return False
+    if "schemaInfo" not in dataset:
+        return True
+    return _normalize_schema_info(dataset["schemaInfo"]) is _DATASET_METADATA_MISSING
+
+
+def _merge_dataset_schema_info(
+    raw_datasets: list[Any],
+    connection_detail: Any,
+    *,
+    expected_connection_id: str,
+) -> list[Any]:
+    """Merge schemaInfo from a by-ID Connection response without replacing base fields."""
+    if not isinstance(connection_detail, dict):
+        return raw_datasets
+    reported_connection_id = connection_detail.get("id", connection_detail.get("idWithoutPrefix"))
+    if isinstance(reported_connection_id, str) and reported_connection_id.removeprefix(
+        "dg_"
+    ) != expected_connection_id.removeprefix("dg_"):
+        return raw_datasets
+    detail_datasets = connection_detail.get("dataSets", connection_detail.get("datasets", []))
+    if not isinstance(detail_datasets, list):
+        return raw_datasets
+
+    schema_by_dataset_id: dict[str, Any] = {}
+    for detail_dataset in detail_datasets:
+        if not isinstance(detail_dataset, dict) or "schemaInfo" not in detail_dataset:
+            continue
+        schema_info = detail_dataset["schemaInfo"]
+        if _normalize_schema_info(schema_info) is _DATASET_METADATA_MISSING:
+            continue
+        dataset_id = _extract_dataset_info(detail_dataset)["id"]
+        if dataset_id != "N/A" and dataset_id not in schema_by_dataset_id:
+            schema_by_dataset_id[dataset_id] = schema_info
+
+    if not schema_by_dataset_id:
+        return raw_datasets
+
+    merged_datasets: list[Any] = []
+    changed = False
+    for raw_dataset in raw_datasets:
+        if not _dataset_needs_schema_hydration(raw_dataset):
+            merged_datasets.append(raw_dataset)
+            continue
+        dataset_id = _extract_dataset_info(raw_dataset)["id"]
+        if dataset_id not in schema_by_dataset_id:
+            merged_datasets.append(raw_dataset)
+            continue
+        merged_datasets.append({**raw_dataset, "schemaInfo": schema_by_dataset_id[dataset_id]})
+        changed = True
+    return merged_datasets if changed else raw_datasets
 
 
 def _extract_connections_list(raw_connections: Any) -> list:
@@ -1454,8 +1713,15 @@ def _fetch_datasets(
         from cja_auto_sdr.generator import _format_as_csv
 
         # Step 1: Fetch all connections and build lookup map
-        raw_connections = cja.getConnections(output="raw", expansion="name,ownerFullName,dataSets")
+        include_connection_metadata = output_format == "json"
+        connection_expansion = (
+            _DATASET_DISCOVERY_CONNECTION_EXPANSION
+            if include_connection_metadata
+            else _DATASET_DISCOVERY_BASE_EXPANSION
+        )
+        raw_connections = cja.getConnections(output="raw", expansion=connection_expansion)
         conn_map: dict = {}  # connection_id -> {name, datasets}
+        raw_datasets_by_connection: dict[str, list[Any]] = {}
         for conn in _extract_connections_list(raw_connections):
             if not isinstance(conn, dict):
                 continue
@@ -1464,10 +1730,18 @@ def _fetch_datasets(
             raw_datasets = conn.get("dataSets", conn.get("datasets", []))
             if not isinstance(raw_datasets, list):
                 raw_datasets = []
-            conn_map[conn_id] = {
+            datasets = [
+                _extract_dataset_info(ds, include_connection_metadata=include_connection_metadata)
+                for ds in raw_datasets
+            ]
+            conn_info = {
                 "name": conn_name,
-                "datasets": [_extract_dataset_info(ds) for ds in raw_datasets],
+                "datasets": [{"id": ds["id"], "name": ds["name"]} for ds in datasets],
             }
+            if include_connection_metadata:
+                conn_info["json_datasets"] = datasets
+                raw_datasets_by_connection[conn_id] = raw_datasets
+            conn_map[conn_id] = conn_info
 
         # Step 2: Fetch all data views
         available_dvs = cja.getDataViews()
@@ -1540,6 +1814,44 @@ def _fetch_datasets(
             default_sort_field="name",
         )
 
+        # schemaInfo is supported by Adobe only on GET /connections/{id}, not
+        # GET /connections. Hydrate only Connections retained in the final JSON
+        # rows, treating this optional detail as best effort.
+        if include_connection_metadata and conn_map:
+            connection_ids_to_hydrate: list[str] = []
+            for entry in display_data:
+                connection = entry.get("connection")
+                if not isinstance(connection, dict):
+                    continue
+                connection_id = connection.get("id")
+                raw_datasets = raw_datasets_by_connection.get(connection_id, [])
+                if (
+                    isinstance(connection_id, str)
+                    and connection_id in conn_map
+                    and any(_dataset_needs_schema_hydration(dataset) for dataset in raw_datasets)
+                ):
+                    connection_ids_to_hydrate.append(connection_id)
+
+            for connection_id in dict.fromkeys(connection_ids_to_hydrate):
+                try:
+                    connection_detail = cja.getConnection(
+                        connectionId=connection_id.removeprefix("dg_"),
+                        expansion=_DATASET_DISCOVERY_SCHEMA_EXPANSION,
+                    )
+                except RECOVERABLE_OPTIONAL_ENRICHMENT_EXCEPTIONS:  # Intentional best-effort boundary
+                    continue
+                raw_datasets = raw_datasets_by_connection[connection_id]
+                merged_datasets = _merge_dataset_schema_info(
+                    raw_datasets,
+                    connection_detail,
+                    expected_connection_id=connection_id,
+                )
+                if merged_datasets is raw_datasets:
+                    continue
+                conn_map[connection_id]["json_datasets"] = [
+                    _extract_dataset_info(dataset, include_connection_metadata=True) for dataset in merged_datasets
+                ]
+
         if not is_machine_readable and sys.stdout.isatty():
             # Clear progress line with ANSI erase-line escape
             print("\033[2K", end="\r")
@@ -1549,7 +1861,20 @@ def _fetch_datasets(
             "requires product-admin privileges). Showing connection IDs only."
         )
 
-        result_payload: dict = {"dataViews": display_data, "count": len(display_data)}
+        result_data = display_data
+        if output_format == "json":
+            result_data = [
+                {
+                    **entry,
+                    "datasets": conn_map.get(entry["connection"]["id"], {}).get(
+                        "json_datasets",
+                        entry["datasets"],
+                    ),
+                }
+                for entry in display_data
+            ]
+
+        result_payload: dict = {"dataViews": result_data, "count": len(result_data)}
         if _no_conn_details:
             result_payload["warning"] = _CONN_PERM_WARNING.replace("\n", " ")
 

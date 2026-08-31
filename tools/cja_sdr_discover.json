@@ -1,6 +1,6 @@
 {
   "name": "cja_sdr_discover",
-  "description": "Discover and inspect Adobe CJA resources: list data views, connections, datasets, or inspect a specific data view's metrics, dimensions, segments, and calculated metrics. Use this tool before cja_sdr_generate to find valid data_view_id values.",
+  "description": "Discover and inspect Adobe CJA resources: list data views, connections, datasets, or inspect a specific data view's metrics, dimensions, segments, and calculated metrics. JSON list_datasets results can add datasets[].connectionMetadata with CJA role, schema, identity, lookup, ingestion, and data-source details scoped to that dataset-to-Connection relationship; do not merge it globally by dataset ID, and ignore unknown future keys. Use this tool before cja_sdr_generate to find valid data_view_id values.",
   "parameters": {
     "type": "object",
     "properties": {
