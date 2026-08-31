@@ -968,6 +968,8 @@ The normalized field mapping is:
 
 Only fields reported by Adobe are included. A missing field is omitted; an explicit JSON `null`, `false`, empty string, empty list, or empty object remains distinct. Values with an unexpected type are omitted rather than copied through. Consumers must ignore unknown future keys in discovery JSON. CSV and table output retain their existing columns and do not render `connectionMetadata`.
 
+The JSON discovery path retrieves Connection and ingestion metadata with the GET-all expansions `name,ownerFullName,dataSets,dataSetLastIngested,backfillsSummaryDataSets`. Adobe exposes `schemaInfo` only on GET-by-ID, so the tool makes one best-effort `dataSets,schemaInfo` detail request for each Connection referenced by the discovered Data Views. If an individual detail request fails or returns a partial response, the Connection and its GET-all metadata remain in the output while unavailable schema fields are omitted. This does not trigger the product-admin fallback.
+
 Dataset role is configuration on the dataset-to-Connection relationship. The same AEP dataset can therefore have different `connectionMetadata` in different Connections; consumers must not merge it globally by dataset ID. `role` is not inferred, and it does not describe XDM record/time-series behavior or AEP Real-Time Customer Profile enablement. Ingestion timestamps, streaming flags, and backfill summaries are status observations, not proof of end-to-end CJA reporting readiness.
 
 If Connection administration details are unavailable, the existing product-admin warning and ID-only fallback remain in effect; datasets and `connectionMetadata` are unavailable in that response.

@@ -60,6 +60,7 @@ from cja_auto_sdr.core.discovery_payloads import (
 from cja_auto_sdr.core.discovery_payloads import (
     count_component_items_or_na as _count_component_items_or_na_from_assessment,
 )
+from cja_auto_sdr.core.error_policies import RECOVERABLE_OPTIONAL_ENRICHMENT_EXCEPTIONS
 
 # ---------------------------------------------------------------------------
 # Exception classes
@@ -837,8 +838,9 @@ def _build_calculated_metric_display_row(item: dict[str, Any]) -> dict[str, Any]
 _DATASET_METADATA_MISSING = object()
 _DATASET_DISCOVERY_BASE_EXPANSION = "name,ownerFullName,dataSets"
 _DATASET_DISCOVERY_CONNECTION_EXPANSION = (
-    f"{_DATASET_DISCOVERY_BASE_EXPANSION},schemaInfo,dataSetLastIngested,backfillsSummaryDataSets"
+    f"{_DATASET_DISCOVERY_BASE_EXPANSION},dataSetLastIngested,backfillsSummaryDataSets"
 )
+_DATASET_DISCOVERY_SCHEMA_EXPANSION = "dataSets,schemaInfo"
 
 
 def _normalize_dataset_metadata_text(value: Any) -> str | object | None:
@@ -1082,6 +1084,63 @@ def _extract_dataset_info(dataset: Any, *, include_connection_metadata: bool = F
         if connection_metadata:
             result["connectionMetadata"] = connection_metadata
     return result
+
+
+def _dataset_needs_schema_hydration(dataset: Any) -> bool:
+    """Return whether a dataset can gain valid schemaInfo from a detail response."""
+    if not isinstance(dataset, dict) or _extract_dataset_info(dataset)["id"] == "N/A":
+        return False
+    if "schemaInfo" not in dataset:
+        return True
+    return _normalize_schema_info(dataset["schemaInfo"]) is _DATASET_METADATA_MISSING
+
+
+def _merge_dataset_schema_info(
+    raw_datasets: list[Any],
+    connection_detail: Any,
+    *,
+    expected_connection_id: str,
+) -> list[Any]:
+    """Merge schemaInfo from a by-ID Connection response without replacing base fields."""
+    if not isinstance(connection_detail, dict):
+        return raw_datasets
+    reported_connection_id = connection_detail.get("id", connection_detail.get("idWithoutPrefix"))
+    if (
+        isinstance(reported_connection_id, str)
+        and reported_connection_id.removeprefix("dg_") != expected_connection_id.removeprefix("dg_")
+    ):
+        return raw_datasets
+    detail_datasets = connection_detail.get("dataSets", connection_detail.get("datasets", []))
+    if not isinstance(detail_datasets, list):
+        return raw_datasets
+
+    schema_by_dataset_id: dict[str, Any] = {}
+    for detail_dataset in detail_datasets:
+        if not isinstance(detail_dataset, dict) or "schemaInfo" not in detail_dataset:
+            continue
+        schema_info = detail_dataset["schemaInfo"]
+        if _normalize_schema_info(schema_info) is _DATASET_METADATA_MISSING:
+            continue
+        dataset_id = _extract_dataset_info(detail_dataset)["id"]
+        if dataset_id != "N/A" and dataset_id not in schema_by_dataset_id:
+            schema_by_dataset_id[dataset_id] = schema_info
+
+    if not schema_by_dataset_id:
+        return raw_datasets
+
+    merged_datasets: list[Any] = []
+    changed = False
+    for raw_dataset in raw_datasets:
+        if not _dataset_needs_schema_hydration(raw_dataset):
+            merged_datasets.append(raw_dataset)
+            continue
+        dataset_id = _extract_dataset_info(raw_dataset)["id"]
+        if dataset_id not in schema_by_dataset_id:
+            merged_datasets.append(raw_dataset)
+            continue
+        merged_datasets.append({**raw_dataset, "schemaInfo": schema_by_dataset_id[dataset_id]})
+        changed = True
+    return merged_datasets if changed else raw_datasets
 
 
 def _extract_connections_list(raw_connections: Any) -> list:
@@ -1663,6 +1722,7 @@ def _fetch_datasets(
         )
         raw_connections = cja.getConnections(output="raw", expansion=connection_expansion)
         conn_map: dict = {}  # connection_id -> {name, datasets}
+        raw_datasets_by_connection: dict[str, list[Any]] = {}
         for conn in _extract_connections_list(raw_connections):
             if not isinstance(conn, dict):
                 continue
@@ -1681,6 +1741,7 @@ def _fetch_datasets(
             }
             if include_connection_metadata:
                 conn_info["json_datasets"] = datasets
+                raw_datasets_by_connection[conn_id] = raw_datasets
             conn_map[conn_id] = conn_info
 
         # Step 2: Fetch all data views
@@ -1753,6 +1814,45 @@ def _fetch_datasets(
             searchable_fields=["id", "name", "connection", "datasets"],
             default_sort_field="name",
         )
+
+        # schemaInfo is supported by Adobe only on GET /connections/{id}, not
+        # GET /connections. Hydrate only Connections retained in the final JSON
+        # rows, treating this optional detail as best effort.
+        if include_connection_metadata and conn_map:
+            connection_ids_to_hydrate: list[str] = []
+            for entry in display_data:
+                connection = entry.get("connection")
+                if not isinstance(connection, dict):
+                    continue
+                connection_id = connection.get("id")
+                raw_datasets = raw_datasets_by_connection.get(connection_id, [])
+                if (
+                    isinstance(connection_id, str)
+                    and connection_id in conn_map
+                    and any(_dataset_needs_schema_hydration(dataset) for dataset in raw_datasets)
+                ):
+                    connection_ids_to_hydrate.append(connection_id)
+
+            for connection_id in dict.fromkeys(connection_ids_to_hydrate):
+                try:
+                    connection_detail = cja.getConnection(
+                        connectionId=connection_id.removeprefix("dg_"),
+                        expansion=_DATASET_DISCOVERY_SCHEMA_EXPANSION,
+                    )
+                except RECOVERABLE_OPTIONAL_ENRICHMENT_EXCEPTIONS:  # Intentional best-effort boundary
+                    continue
+                raw_datasets = raw_datasets_by_connection[connection_id]
+                merged_datasets = _merge_dataset_schema_info(
+                    raw_datasets,
+                    connection_detail,
+                    expected_connection_id=connection_id,
+                )
+                if merged_datasets is raw_datasets:
+                    continue
+                conn_map[connection_id]["json_datasets"] = [
+                    _extract_dataset_info(dataset, include_connection_metadata=True)
+                    for dataset in merged_datasets
+                ]
 
         if not is_machine_readable and sys.stdout.isatty():
             # Clear progress line with ANSI erase-line escape

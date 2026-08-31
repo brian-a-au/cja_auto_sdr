@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Dataset discovery metadata:** `--list-datasets --format json` now retains allowlisted, normalized CJA Connection dataset metadata under the additive `connectionMetadata` object. It covers the CJA dataset role, schema, identity, lookup relationships, streaming/backfill/last-ingested state, and data-source type while preserving explicit `null`, `false`, and empty values. Metadata remains scoped to each dataset-to-Connection relationship; CSV/table columns and the permission-degraded ID-only fallback are unchanged.
+- **Dataset discovery metadata:** `--list-datasets --format json` now retains allowlisted, normalized CJA Connection dataset metadata under the additive `connectionMetadata` object. It covers the CJA dataset role, schema, identity, lookup relationships, streaming/backfill/last-ingested state, and data-source type while preserving explicit `null`, `false`, and empty values. Metadata remains scoped to each dataset-to-Connection relationship; CSV/table columns and the permission-degraded ID-only fallback are unchanged. GET-all uses Adobe's supported ingestion/backfill expansions, while schema metadata is retrieved best-effort from the Connection-by-ID endpoint only for Connections referenced by discovered Data Views.
 
 ### Documentation
 

@@ -238,12 +238,335 @@ def test_repeated_dataset_ids_keep_connection_scoped_metadata_separate() -> None
     }
     cja.getConnections.assert_called_once_with(
         output="raw",
-        expansion=("name,ownerFullName,dataSets,schemaInfo,dataSetLastIngested,backfillsSummaryDataSets"),
+        expansion=("name,ownerFullName,dataSets,dataSetLastIngested,backfillsSummaryDataSets"),
     )
 
 
-def test_permission_degraded_dataset_discovery_remains_id_only() -> None:
+def test_json_hydrates_schema_by_id_only_for_referenced_connections() -> None:
+    cja = MagicMock()
+    cja.getConnections.return_value = [
+        {
+            "id": "dg_used",
+            "name": "Used Connection",
+            "dataSets": [
+                {
+                    "dataSetId": "ds_used",
+                    "name": "Used Dataset",
+                    "type": "event",
+                    "lastIngestedTime": "2026-08-29T12:34:56Z",
+                    "backfillSummary": {"total": 1, "failed": 0, "completed": 1},
+                }
+            ],
+        },
+        {
+            "id": "dg_unused",
+            "name": "Unused Connection",
+            "dataSets": [{"dataSetId": "ds_unused", "name": "Unused Dataset", "type": "lookup"}],
+        },
+    ]
+    cja.getDataViews.return_value = [
+        {"id": "dv_1", "name": "First View", "parentDataGroupId": "dg_used"},
+        {"id": "dv_2", "name": "Second View", "parentDataGroupId": "dg_used"},
+    ]
+    cja.getConnection.return_value = {
+        "id": "dg_used",
+        "dataSets": [
+            {
+                "dataSetId": "ds_used",
+                "schemaInfo": {"schemaId": "schema_1", "schemaName": "Used Schema"},
+            }
+        ],
+    }
+
+    output = _fetch_datasets("json")(cja, True)
+
+    assert isinstance(output, str)
+    payload = json.loads(output)
+    for data_view in payload["dataViews"]:
+        assert data_view["datasets"] == [
+            {
+                "id": "ds_used",
+                "name": "Used Dataset",
+                "connectionMetadata": {
+                    "role": "event",
+                    "schema": {"id": "schema_1", "name": "Used Schema"},
+                    "ingestion": {
+                        "backfillSummary": {"total": 1, "failed": 0, "completed": 1},
+                        "lastIngestedTime": "2026-08-29T12:34:56Z",
+                    },
+                },
+            }
+        ]
+    cja.getConnections.assert_called_once_with(
+        output="raw",
+        expansion="name,ownerFullName,dataSets,dataSetLastIngested,backfillsSummaryDataSets",
+    )
+    cja.getConnection.assert_called_once_with(
+        connectionId="used",
+        expansion="dataSets,schemaInfo",
+    )
+
+
+def test_schema_detail_failure_preserves_collection_metadata_without_permission_warning() -> None:
+    cja = MagicMock()
+    cja.getConnections.return_value = [
+        {
+            "id": "dg_1",
+            "name": "Connection",
+            "dataSets": [
+                {
+                    "dataSetId": "ds_1",
+                    "name": "Dataset",
+                    "type": "profile",
+                    "lastIngestedTime": "2026-08-29T12:34:56Z",
+                }
+            ],
+        }
+    ]
+    cja.getDataViews.return_value = [{"id": "dv_1", "name": "View", "parentDataGroupId": "dg_1"}]
+    cja.getConnection.side_effect = RuntimeError("detail endpoint unavailable")
+
+    output = _fetch_datasets("json")(cja, True)
+
+    assert isinstance(output, str)
+    payload = json.loads(output)
+    assert "warning" not in payload
+    assert payload["dataViews"][0]["datasets"] == [
+        {
+            "id": "ds_1",
+            "name": "Dataset",
+            "connectionMetadata": {
+                "role": "profile",
+                "ingestion": {"lastIngestedTime": "2026-08-29T12:34:56Z"},
+            },
+        }
+    ]
+    cja.getConnection.assert_called_once_with(connectionId="1", expansion="dataSets,schemaInfo")
+
+
+def test_partial_schema_detail_response_preserves_collection_metadata() -> None:
+    cja = MagicMock()
+    cja.getConnections.return_value = [
+        {
+            "id": "dg_1",
+            "name": "Connection",
+            "dataSets": [
+                {
+                    "dataSetId": "ds_1",
+                    "name": "Dataset",
+                    "type": "event",
+                    "streaming": False,
+                }
+            ],
+        }
+    ]
+    cja.getDataViews.return_value = [{"id": "dv_1", "name": "View", "parentDataGroupId": "dg_1"}]
+    cja.getConnection.return_value = {"id": "dg_1", "dataSets": "partial"}
+
+    output = _fetch_datasets("json")(cja, True)
+
+    assert isinstance(output, str)
+    payload = json.loads(output)
+    assert "warning" not in payload
+    assert payload["dataViews"][0]["datasets"] == [
+        {
+            "id": "ds_1",
+            "name": "Dataset",
+            "connectionMetadata": {
+                "role": "event",
+                "ingestion": {"streaming": False},
+            },
+        }
+    ]
+
+
+def test_schema_detail_hydrates_matching_subset_without_changing_other_datasets() -> None:
+    cja = MagicMock()
+    cja.getConnections.return_value = [
+        {
+            "id": "dg_1",
+            "name": "Connection",
+            "dataSets": [
+                {"dataSetId": "ds_1", "name": "First", "type": "event"},
+                {"dataSetId": "ds_2", "name": "Second", "type": "lookup", "lookupKeyField": "id"},
+            ],
+        }
+    ]
+    cja.getDataViews.return_value = [{"id": "dv_1", "name": "View", "parentDataGroupId": "dg_1"}]
+    cja.getConnection.return_value = {
+        "id": "dg_1",
+        "dataSets": [{"dataSetId": "ds_2", "schemaInfo": {"schemaId": "schema_2"}}],
+    }
+
+    output = _fetch_datasets("json")(cja, True)
+
+    assert isinstance(output, str)
+    datasets = json.loads(output)["dataViews"][0]["datasets"]
+    assert datasets == [
+        {
+            "id": "ds_1",
+            "name": "First",
+            "connectionMetadata": {"role": "event"},
+        },
+        {
+            "id": "ds_2",
+            "name": "Second",
+            "connectionMetadata": {
+                "role": "lookup",
+                "schema": {"id": "schema_2"},
+                "lookup": {"keyField": "id"},
+            },
+        },
+    ]
+
+
+def test_mismatched_connection_detail_cannot_cross_contaminate_shared_dataset_id() -> None:
+    cja = MagicMock()
+    cja.getConnections.return_value = [
+        {
+            "id": "dg_1",
+            "name": "First Connection",
+            "dataSets": [{"dataSetId": "ds_shared", "name": "Shared", "type": "event"}],
+        },
+        {
+            "id": "dg_2",
+            "name": "Second Connection",
+            "dataSets": [{"dataSetId": "ds_shared", "name": "Shared", "type": "lookup"}],
+        },
+    ]
+    cja.getDataViews.return_value = [
+        {"id": "dv_1", "name": "First View", "parentDataGroupId": "dg_1"},
+        {"id": "dv_2", "name": "Second View", "parentDataGroupId": "dg_2"},
+    ]
+    cja.getConnection.side_effect = [
+        {
+            "id": "dg_2",
+            "dataSets": [{"dataSetId": "ds_shared", "schemaInfo": {"schemaId": "wrong_schema"}}],
+        },
+        {
+            "id": "dg_2",
+            "dataSets": [{"dataSetId": "ds_shared", "schemaInfo": {"schemaId": "right_schema"}}],
+        },
+    ]
+
+    output = _fetch_datasets("json")(cja, True)
+
+    assert isinstance(output, str)
+    by_id = {data_view["id"]: data_view for data_view in json.loads(output)["dataViews"]}
+    assert "schema" not in by_id["dv_1"]["datasets"][0]["connectionMetadata"]
+    assert by_id["dv_2"]["datasets"][0]["connectionMetadata"]["schema"] == {
+        "id": "right_schema"
+    }
+
+
+def test_enriched_json_projects_exactly_to_the_legacy_contract() -> None:
     output, _ = _run_dataset_fetch(
+        connections=[
+            {
+                "id": "conn_1",
+                "name": "Connection",
+                "dataSets": [
+                    {
+                        "dataSetId": "ds_1",
+                        "name": "Dataset",
+                        "type": "summary",
+                        "streaming": False,
+                    }
+                ],
+            }
+        ],
+        data_views=[{"id": "dv_1", "name": "View", "parentDataGroupId": "conn_1"}],
+    )
+
+    payload = json.loads(output)
+    legacy_projection = {
+        **payload,
+        "dataViews": [
+            {
+                **data_view,
+                "datasets": [
+                    {"id": dataset["id"], "name": dataset["name"]} for dataset in data_view["datasets"]
+                ],
+            }
+            for data_view in payload["dataViews"]
+        ],
+    }
+
+    assert legacy_projection == {
+        "dataViews": [
+            {
+                "id": "dv_1",
+                "name": "View",
+                "connection": {"id": "conn_1", "name": "Connection"},
+                "datasets": [{"id": "ds_1", "name": "Dataset"}],
+            }
+        ],
+        "count": 1,
+    }
+
+
+def test_schema_hydration_is_limited_to_connections_in_final_json_rows() -> None:
+    cja = MagicMock()
+    cja.getConnections.return_value = [
+        {
+            "id": f"dg_{suffix}",
+            "name": f"{suffix.title()} Connection",
+            "dataSets": [{"dataSetId": f"ds_{suffix}", "name": f"{suffix.title()} Dataset"}],
+        }
+        for suffix in ("alpha", "beta", "gamma")
+    ]
+    cja.getDataViews.return_value = [
+        {"id": f"dv_{suffix}", "name": f"{suffix.title()} View", "parentDataGroupId": f"dg_{suffix}"}
+        for suffix in ("gamma", "beta", "alpha")
+    ]
+    cja.getConnection.return_value = {
+        "id": "dg_alpha",
+        "dataSets": [{"dataSetId": "ds_alpha", "schemaInfo": {"schemaId": "schema_alpha"}}],
+    }
+
+    output = _fetch_datasets("json", limit=1, sort_expression="name")(cja, True)
+
+    assert isinstance(output, str)
+    payload = json.loads(output)
+    assert [data_view["id"] for data_view in payload["dataViews"]] == ["dv_alpha"]
+    assert payload["dataViews"][0]["datasets"][0]["connectionMetadata"]["schema"] == {
+        "id": "schema_alpha"
+    }
+    cja.getConnection.assert_called_once_with(connectionId="alpha", expansion="dataSets,schemaInfo")
+
+
+def test_schema_hydration_skips_connections_that_cannot_gain_schema() -> None:
+    output, cja = _run_dataset_fetch(
+        connections=[
+            {"id": "dg_empty", "name": "Empty", "dataSets": []},
+            {
+                "id": "dg_complete",
+                "name": "Complete",
+                "dataSets": [
+                    {
+                        "dataSetId": "ds_complete",
+                        "name": "Complete Dataset",
+                        "schemaInfo": {"schemaId": "schema_complete"},
+                    }
+                ],
+            },
+        ],
+        data_views=[
+            {"id": "dv_empty", "name": "Empty View", "parentDataGroupId": "dg_empty"},
+            {"id": "dv_complete", "name": "Complete View", "parentDataGroupId": "dg_complete"},
+        ],
+    )
+
+    payload = json.loads(output)
+    by_id = {data_view["id"]: data_view for data_view in payload["dataViews"]}
+    assert by_id["dv_complete"]["datasets"][0]["connectionMetadata"]["schema"] == {
+        "id": "schema_complete"
+    }
+    cja.getConnection.assert_not_called()
+
+
+def test_permission_degraded_dataset_discovery_remains_id_only() -> None:
+    output, cja = _run_dataset_fetch(
         connections=[],
         data_views=[{"id": "dv_1", "name": "View", "parentDataGroupId": "conn_hidden"}],
     )
@@ -258,6 +581,7 @@ def test_permission_degraded_dataset_discovery_remains_id_only() -> None:
         }
     ]
     assert "product-admin privileges" in payload["warning"]
+    cja.getConnection.assert_not_called()
 
 
 @pytest.mark.parametrize("output_format", ["csv", "table"])
@@ -292,6 +616,7 @@ def test_tabular_output_ignores_enriched_metadata(output_format: str) -> None:
         assert "schema_1" not in output
         assert "streaming" not in output
     cja.getConnections.assert_called_once_with(output="raw", expansion="name,ownerFullName,dataSets")
+    cja.getConnection.assert_not_called()
 
 
 def test_filtering_and_sorting_still_use_enriched_dataset_rows() -> None:
