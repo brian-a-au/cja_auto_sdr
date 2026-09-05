@@ -1138,8 +1138,15 @@ class OrgComponentAnalyzer:
         Returns:
             Tuple of (valid_summaries, pairwise_similarities dict)
         """
-        valid = [s for s in summaries if s.error is None and s.all_component_ids]
-        component_sets = [s.all_component_ids for s in valid]  # each property evaluated once
+        valid = []
+        component_sets = []
+        for summary in summaries:
+            if summary.error is not None:
+                continue
+            component_ids = summary.all_component_ids
+            if component_ids:
+                valid.append(summary)
+                component_sets.append(component_ids)
         pairwise: dict[tuple, float] = {}
 
         for i in range(len(valid)):
