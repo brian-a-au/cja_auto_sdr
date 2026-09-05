@@ -32,7 +32,7 @@ Before starting, ensure you have:
 - [ ] **Terminal/Command Line** - Basic familiarity with running commands ([terminal basics guide](https://developer.mozilla.org/en-US/docs/Learn/Tools_and_testing/Understanding_client-side_tools/Command_line))
 - [ ] **20 minutes** - Most time is spent on Adobe Developer Console setup
 
-> **Can't install uv?** You can use pip instead — you'll need Python 3.14+ installed manually ([download Python](https://www.python.org/downloads/)). See the [pip-based installation instructions](INSTALLATION.md#option-4-legacy-pip-with-virtual-environment) for the alternative workflow.
+> **Can't install uv?** You can install from PyPI with pip instead — you'll need Python 3.14+ installed manually ([download Python](https://www.python.org/downloads/)). See [Install from PyPI](#install-from-pypi-recommended) below.
 
 ---
 
@@ -133,7 +133,43 @@ $ uv --version
 uv 0.x.x
 ```
 
+### Install from PyPI (Recommended)
+
+Install the published [cja-auto-sdr package from PyPI](https://pypi.org/project/cja-auto-sdr/) into an isolated tool environment:
+
+```bash
+uv tool install --python 3.14 cja-auto-sdr
+cja_auto_sdr --version
+```
+
+If uv reports that its executable directory is missing from your `PATH`, run `uv tool update-shell` and restart your terminal.
+
+**Alternative: pip with Python 3.14+**
+
+Create and activate a virtual environment first:
+
+```bash
+python -m venv .venv
+# macOS/Linux
+source .venv/bin/activate
+# Windows PowerShell (use this activation command instead)
+.venv\Scripts\Activate.ps1
+```
+
+Then install and verify:
+
+```bash
+python -m pip install cja-auto-sdr
+cja_auto_sdr --version
+```
+
+Both installation methods provide the equivalent commands `cja_auto_sdr` and `cja-auto-sdr`. For optional features, see the [installation guide](INSTALLATION.md#install-from-pypi-recommended-for-most-users).
+
+**Continue to [Step 3: Configure Authentication](#step-3-configure-authentication).** You can skip the repository setup in Steps 2.2–2.4. Work in a directory where you want to store your configuration and reports, and replace `uv run cja_auto_sdr` with `cja_auto_sdr` in the remaining examples. For pip installations, keep the virtual environment activated.
+
 ### 2.2 Clone the Repository
+
+Use this source installation workflow if you want to work with the repository's code or examples.
 
 Choose where you want to install the tool (e.g., your home directory, a projects folder, etc.):
 
@@ -193,18 +229,19 @@ $ uv run cja_auto_sdr -V
 cja_auto_sdr 3.12.1
 ```
 
-> **Important:** All commands in this guide assume you're in the `cja_auto_sdr` directory. If you see "command not found", make sure you're in the right directory and have run `uv sync`.
+> **Source installations:** Run `uv run` commands from the `cja_auto_sdr` repository directory after running `uv sync`. PyPI installations use `cja_auto_sdr` directly from your chosen working directory.
 
 ### Running Commands
 
-You have two equivalent options:
+Choose the command that matches your installation:
 
 | Method | Command | Notes |
 |--------|---------|-------|
-| **uv run** (recommended) | `uv run cja_auto_sdr ...` | No venv activation needed; works immediately on macOS/Linux |
+| **PyPI (uv tool or pip)** | `cja_auto_sdr ...` | No repository needed; pip users must activate their venv |
+| **Source with uv run** | `uv run cja_auto_sdr ...` | Run from the repository; no venv activation needed |
 | **Activated venv** | `cja_auto_sdr ...` | After activating: `source .venv/bin/activate` (Unix) or `.venv\Scripts\activate` (Windows) |
 
-This guide uses `uv run` for all examples. Windows users who encounter issues with `uv run` should activate the venv and use `cja_auto_sdr` directly instead (see [Windows troubleshooting](#windows-uv-run-command-doesnt-work)).
+The remaining examples use `uv run` for source installations; PyPI users should omit that prefix. Windows source users who encounter issues with `uv run` should activate the venv and use `cja_auto_sdr` directly instead (see [Windows troubleshooting](#windows-uv-run-command-doesnt-work)).
 
 **Alternative: Manual activation**
 
@@ -233,10 +270,13 @@ You have two options for configuring credentials:
 Create a `config.json` file in your current working directory (default path), or use `--config-file` to point to a different location:
 
 ```bash
-# Copy the example template (recommended)
+# PyPI installation: generate a template
+cja_auto_sdr --sample-config
+
+# Source installation: copy the repository's example template
 cp config.json.example config.json
 
-# Or generate a template
+# Or generate a template from the source installation
 uv run cja_auto_sdr --sample-config
 ```
 
@@ -262,7 +302,7 @@ Replace the placeholder values with the credentials from Step 1.8:
 }
 ```
 
-> **Security:** The `config.json` file is already in `.gitignore`—it won't be committed to version control.
+> **Security:** The repository's `.gitignore` excludes `config.json`. If you work in another Git repository after installing from PyPI, add `config.json` and `.env` to that repository's `.gitignore` to keep credentials out of version control.
 
 ### Option B: Environment Variables (Recommended for CI/CD)
 
@@ -275,9 +315,16 @@ SECRET=YOUR_CLIENT_SECRET
 SCOPES=your_scopes_from_developer_console
 ```
 
-To enable `.env` file loading:
+To enable `.env` file loading, install the `env` extra using the method you chose in Step 2:
 
 ```bash
+# PyPI installation with uv tool
+uv tool install --python 3.14 "cja-auto-sdr[env]"
+
+# PyPI installation with pip (in your activated venv)
+python -m pip install "cja-auto-sdr[env]"
+
+# Source installation
 uv add python-dotenv
 ```
 
