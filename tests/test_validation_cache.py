@@ -15,7 +15,7 @@ import os
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pandas as pd
 import pytest
@@ -663,21 +663,3 @@ class TestValidationCache:
 
         with pytest.raises(ValueError, match="ttl_seconds must be > 0"):
             ValidationCache(max_size=10, ttl_seconds=0)
-
-
-# ---------------------------------------------------------------------------
-# Coverage gap tests (moved from test_small_gap_coverage.py)
-# ---------------------------------------------------------------------------
-
-
-def test_validation_cache_capacity_clear_fallback_warns_and_clears_cache() -> None:
-    logger = MagicMock()
-    cache = ValidationCache(max_size=1, ttl_seconds=3600, logger=logger)
-    cache._cache["existing"] = ([{"issue": "old"}], 1.0)
-
-    with patch.object(cache, "_evict_lru", side_effect=lambda debug_enabled=False: None):
-        with cache._lock:
-            cache._ensure_capacity_for_new_entry(now=2.0)
-
-    logger.warning.assert_called_once()
-    assert not cache._cache

@@ -216,27 +216,6 @@ class TestParallelValidation:
         assert all(issue["Severity"] == "CRITICAL" for issue in checker.issues)
         assert all(issue["Category"] == "Empty Data" for issue in checker.issues)
 
-    def test_parallel_error_handling(self):
-        """Verify graceful error handling in parallel mode"""
-        logger = logging.getLogger("test")
-        checker = DataQualityChecker(logger)
-
-        # Create valid metrics but malformed dimensions
-        valid_metrics = pd.DataFrame([{"id": "m1", "name": "Metric 1", "type": "calculated"}])
-        valid_dimensions = pd.DataFrame([{"id": "d1", "name": "Dimension 1", "type": "string"}])
-
-        # Should complete without crashing
-        checker.check_all_parallel(
-            metrics_df=valid_metrics,
-            dimensions_df=valid_dimensions,
-            metrics_required_fields=["id", "name", "type"],
-            dimensions_required_fields=["id", "name", "type"],
-            critical_fields=["id", "name", "description"],
-        )
-
-        # Should have collected issues from both validations
-        assert len(checker.issues) >= 0  # May have issues for missing descriptions
-
     def test_parallel_result_consistency(self, sample_metrics_df, sample_dimensions_df):
         """Verify parallel validation results are consistent across multiple runs"""
         logger = logging.getLogger("test")

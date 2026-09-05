@@ -227,16 +227,9 @@ class ValidationCache:
         # when the cache is already at capacity.
         self._prune_expired_entries(now, debug_enabled)
 
-        # Defensive bound in case a future change causes eviction to stop shrinking.
-        max_eviction_attempts = len(self._cache) + 1
-        for _ in range(max_eviction_attempts):
-            if len(self._cache) < self.max_size:
-                return
+        # The lock protects this OrderedDict, and each eviction removes one entry.
+        while len(self._cache) >= self.max_size:
             self._evict_lru(debug_enabled)
-
-        if len(self._cache) >= self.max_size:
-            self.logger.warning("Cache capacity maintenance could not evict entries; clearing cache defensively")
-            self._cache.clear()
 
     def _prune_expired_entries(self, now: float, debug_enabled: bool = False) -> int:
         """Remove expired entries before capacity-based eviction (must be called within lock)."""

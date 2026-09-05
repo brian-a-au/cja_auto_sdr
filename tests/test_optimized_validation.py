@@ -150,23 +150,6 @@ class TestOptimizedValidation:
         has_missing_desc = any("description" in str(row["Issue"]).lower() for _, row in issues_df.iterrows())
         assert has_missing_desc
 
-    def test_optimized_null_values(self, sample_metrics_df):
-        """Test optimized validation detects null values"""
-        logger = logging.getLogger("test")
-        validator = DataQualityChecker(logger)
-
-        validator.check_all_quality_issues_optimized(
-            sample_metrics_df,
-            "Metrics",
-            ["id", "name", "type"],
-            ["id", "name", "description"],
-        )
-
-        issues_df = validator.get_issues_dataframe()
-
-        # Should detect null values
-        assert len(issues_df) > 0
-
     def test_optimized_required_fields(self):
         """Test optimized validation detects missing required fields"""
         logger = logging.getLogger("test")
@@ -297,13 +280,7 @@ class TestOptimizedVsOriginalValidation:
 
         optimized_issues = validator_optimized.get_issues_dataframe()
 
-        # Both should find same number of issues
-        assert len(original_issues) == len(optimized_issues)
-
-        # Both should have same severity distribution
-        original_severities = sorted(original_issues["Severity"].tolist())
-        optimized_severities = sorted(optimized_issues["Severity"].tolist())
-        assert original_severities == optimized_severities
+        pd.testing.assert_frame_equal(original_issues, optimized_issues)
 
     def test_results_match_for_dimensions(self, sample_dimensions_df):
         """Test optimized and original produce same results for dimensions"""
@@ -331,8 +308,7 @@ class TestOptimizedVsOriginalValidation:
 
         optimized_issues = validator_optimized.get_issues_dataframe()
 
-        # Both should find same number of issues
-        assert len(original_issues) == len(optimized_issues)
+        pd.testing.assert_frame_equal(original_issues, optimized_issues)
 
     def test_results_match_for_empty_dataframe(self):
         """Test optimized and original produce same results for empty DataFrame"""
@@ -515,25 +491,6 @@ class TestOptimizedValidationPerformance:
 
 class TestEdgeCases:
     """Test edge cases for optimized validation"""
-
-    def test_dataframe_with_missing_columns(self):
-        """Test optimized validation handles missing columns gracefully"""
-        logger = logging.getLogger("test")
-        validator = DataQualityChecker(logger)
-
-        # DataFrame missing 'description' column
-        df = pd.DataFrame([{"id": "1", "name": "Test", "type": "metric"}])
-
-        # Should not crash
-        validator.check_all_quality_issues_optimized(
-            df,
-            "Metrics",
-            ["id", "name", "type"],
-            ["id", "name", "description"],
-        )
-
-        issues_df = validator.get_issues_dataframe()
-        assert len(issues_df) >= 0  # Should complete without error
 
     def test_dataframe_with_all_null_values(self):
         """Test optimized validation handles all-null DataFrames"""

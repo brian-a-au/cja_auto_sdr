@@ -1,9 +1,12 @@
 """Tests for Git integration functionality."""
 
 import json
+import os
 import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from cja_auto_sdr.generator import (
     DataViewSnapshot,
@@ -14,6 +17,15 @@ from cja_auto_sdr.generator import (
     is_git_repository,
     save_git_friendly_snapshot,
 )
+
+
+@pytest.fixture(autouse=True)
+def disable_test_commit_signing(monkeypatch):
+    """Temporary test repositories must not invoke a developer's signing agent."""
+    index = int(os.environ.get("GIT_CONFIG_COUNT", "0"))
+    monkeypatch.setenv("GIT_CONFIG_COUNT", str(index + 1))
+    monkeypatch.setenv(f"GIT_CONFIG_KEY_{index}", "commit.gpgsign")
+    monkeypatch.setenv(f"GIT_CONFIG_VALUE_{index}", "false")
 
 
 class TestIsGitRepository:

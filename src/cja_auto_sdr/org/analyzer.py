@@ -22,11 +22,7 @@ from typing import TYPE_CHECKING, Any
 import pandas as pd
 from tqdm import tqdm
 
-from cja_auto_sdr.api.client import (
-    _describe_unexpected_probe_payload,
-    _normalize_dataview_listing_payload,
-    _normalize_dataview_listing_payload_or_raise,
-)
+from cja_auto_sdr.api.client import _normalize_dataview_listing_payload_or_raise
 from cja_auto_sdr.core.constants import (
     DEFAULT_ORG_REPORT_WORKERS,
     GOVERNANCE_MAX_OVERLAP_THRESHOLD,
@@ -311,9 +307,6 @@ class OrgComponentAnalyzer:
                 )
                 try:
                     self._assert_lock_healthy()
-                    quick_check_result = self._quick_check_empty_org()
-                    if quick_check_result is not None:
-                        return quick_check_result
                     # Run the analysis while holding the lock
                     return self._run_analysis_impl()
                 except LockOwnershipLostError:
@@ -352,37 +345,6 @@ class OrgComponentAnalyzer:
         """
         normalized = " ".join(str(error).split())
         return normalized or type(error).__name__
-
-    def _quick_check_empty_org(self) -> OrgReportResult | None:
-        """Return an empty-org result if no data views exist, otherwise None."""
-        # This provides better UX - users learn about empty results before long work begins
-        try:
-            quick_check = self.cja.getDataViews()
-            normalized_quick_check = _normalize_dataview_listing_payload(quick_check)
-            if normalized_quick_check is None:
-                self.logger.warning(
-                    "Ignoring unexpected getDataViews() payload during org-report quick check: %s",
-                    _describe_unexpected_probe_payload(quick_check),
-                )
-                return None
-            if not normalized_quick_check:
-                self.logger.warning("No data views found in organization; returning empty org report")
-                return OrgReportResult(
-                    timestamp=datetime.now(UTC).isoformat(),
-                    org_id=self.org_id,
-                    parameters=self.config,
-                    data_view_summaries=[],
-                    component_index={},
-                    distribution=ComponentDistribution(),
-                    similarity_pairs=None,
-                    recommendations=[],
-                    duration=0.0,
-                    is_sampled=False,
-                    total_available_data_views=0,
-                )
-        except Exception as e:  # Intentional: quick-check is diagnostic and must not block normal analysis flow.
-            self.logger.debug("Quick empty-org check skipped: %s", e)
-        return None
 
     def _run_analysis_impl(self) -> OrgReportResult:
         """Internal implementation of org-wide analysis (called within lock)."""
@@ -1292,7 +1254,6 @@ class OrgComponentAnalyzer:
         try:
             import numpy as np
             from scipy.cluster.hierarchy import fcluster, linkage
-            from scipy.spatial.distance import squareform
         except ImportError:
             self.logger.warning(
                 "scipy not available - skipping clustering. Install with: uv pip install 'cja-auto-sdr[clustering]'",
@@ -1310,15 +1271,13 @@ class OrgComponentAnalyzer:
 
         n = len(valid_summaries)
 
-        # Build distance matrix from precomputed pairwise Jaccard similarities
-        dist_matrix = np.zeros((n, n))
-        for (i, j), jaccard in pairwise.items():
-            distance = 1 - jaccard
-            dist_matrix[i, j] = distance
-            dist_matrix[j, i] = distance
-
-        # Convert to condensed form for scipy
-        condensed_dist = squareform(dist_matrix)
+        # SciPy consumes the upper triangle in row order. Build it directly
+        # instead of allocating and then copying an n-by-n distance matrix.
+        condensed_dist = np.fromiter(
+            (1 - pairwise[(i, j)] for i in range(n) for j in range(i + 1, n)),
+            dtype=float,
+            count=n * (n - 1) // 2,
+        )
 
         # Perform hierarchical clustering
         try:
@@ -1350,7 +1309,10 @@ class OrgComponentAnalyzer:
                 for i in range(len(member_indices)):
                     for j in range(i + 1, len(member_indices)):
                         idx_i, idx_j = member_indices[i], member_indices[j]
-                        similarities.append(1 - dist_matrix[idx_i, idx_j])
+                        # Preserve the distance round trip used by the old matrix
+                        # so four-decimal rounding stays stable at float boundaries.
+                        distance = 1 - pairwise[(idx_i, idx_j)]
+                        similarities.append(1 - distance)
                 cohesion = sum(similarities) / len(similarities) if similarities else 0.0
 
             # Infer cluster name from common prefix

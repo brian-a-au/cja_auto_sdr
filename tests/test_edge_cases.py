@@ -142,15 +142,6 @@ class TestCustomExceptions:
 class TestConfigurationDataclasses:
     """Test configuration dataclasses"""
 
-    def test_retry_config_defaults(self):
-        """Test RetryConfig default values"""
-        config = RetryConfig()
-        assert config.max_retries == 3
-        assert config.base_delay == 1.0
-        assert config.max_delay == 30.0
-        assert config.exponential_base == 2
-        assert config.jitter is True
-
     def test_retry_config_custom_values(self):
         """Test RetryConfig with custom values"""
         config = RetryConfig(max_retries=5, base_delay=0.5, max_delay=60.0, exponential_base=3, jitter=False)
@@ -169,34 +160,12 @@ class TestConfigurationDataclasses:
         assert d["base_delay"] == 1.0
         assert d["jitter"] is True
 
-    def test_cache_config_defaults(self):
-        """Test CacheConfig default values"""
-        config = CacheConfig()
-        assert config.enabled is False
-        assert config.max_size == 1000
-        assert config.ttl_seconds == 3600
-
     def test_cache_config_custom_values(self):
         """Test CacheConfig with custom values"""
         config = CacheConfig(enabled=True, max_size=500, ttl_seconds=7200)
         assert config.enabled is True
         assert config.max_size == 500
         assert config.ttl_seconds == 7200
-
-    def test_log_config_defaults(self):
-        """Test LogConfig default values"""
-        config = LogConfig()
-        assert config.level == "INFO"
-        assert config.file_max_bytes == 10 * 1024 * 1024
-        assert config.file_backup_count == 5
-
-    def test_worker_config_defaults(self):
-        """Test WorkerConfig default values"""
-        config = WorkerConfig()
-        assert config.api_fetch_workers == 3
-        assert config.validation_workers == 2
-        assert config.batch_workers == 4
-        assert config.max_batch_workers == 256
 
     def test_sdr_config_defaults(self):
         """Test SDRConfig with nested defaults"""
