@@ -7,6 +7,16 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.12.2] - 2026-09-04
+
+### Performance
+
+- **Org similarity analysis:** reuse each successful data view's combined metric/dimension set within the pairwise Jaccard calculation instead of constructing it twice. Synthetic benchmarks measured 6.5–25.5% less time in this helper, with no end-to-end latency claim. Filtering, ordering, similarity values, and error behavior are preserved.
+
+### Tests
+
+- Add regression coverage for component-set reuse, empty and failed views, overlapping IDs, ordering, mutation between calls, and invalid component data. Retain a reproducible before/after benchmark and measurement documentation.
+
 ## [3.12.1] - 2026-09-04
 
 ### Changed
