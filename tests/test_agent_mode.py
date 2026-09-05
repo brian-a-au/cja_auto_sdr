@@ -174,12 +174,6 @@ class TestAgentModeConstraints:
 class TestAgentModeDiffStdout:
     """Verify --agent-mode diff stdout JSON behavior."""
 
-    def test_agent_mode_diff_sets_json_stdout(self):
-        """--agent-mode with --diff should set json format and stdout output."""
-        args = parse_arguments(["--diff", "dv_a", "dv_b", "--agent-mode"])
-        assert args.format == "json"
-        assert args.output == "-"
-
     def test_diff_stdout_detection_logic_honors_dash_alias(self):
         """The diff dispatch helper should treat '-' as stdout for JSON output."""
         args = parse_arguments(["--diff", "dv_a", "dv_b", "--agent-mode"])

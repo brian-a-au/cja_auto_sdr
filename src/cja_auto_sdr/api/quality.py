@@ -123,16 +123,18 @@ class DataQualityChecker:
 
             for field in critical_fields:
                 if field in df.columns:
-                    null_count = df[field].isna().sum()
+                    null_mask = df[field].isna()
+                    null_count = null_mask.sum()
                     if null_count > 0:
-                        null_items = df[df[field].isna()]["name"].tolist() if "name" in df.columns else []
+                        null_items = df.loc[null_mask, "name"].tolist() if "name" in df.columns else []
+                        item_names = ", ".join(str(x) for x in null_items)
                         self.add_issue(
                             severity="MEDIUM",
                             category="Null Values",
                             item_type=item_type,
-                            item_name=", ".join(str(x) for x in null_items),
+                            item_name=item_names,
                             description=f'Null values in "{field}" field',
-                            details=f"{null_count} item(s) missing {field}. Items: {', '.join(str(x) for x in null_items)}",
+                            details=f"{null_count} item(s) missing {field}. Items: {item_names}",
                         )
         except (KeyError, TypeError, AttributeError, ValueError) as e:
             self.logger.error(_format_error_msg("checking null values", item_type, e))
@@ -148,11 +150,10 @@ class DataQualityChecker:
                 self.logger.info("'description' column not found in %s", item_type)
                 return
 
-            missing_desc = df[df["description"].isna() | (df["description"] == "")]
-
-            missing_desc_count = len(missing_desc)
+            missing_desc = df["description"].isna() | (df["description"] == "")
+            missing_desc_count = missing_desc.sum()
             if missing_desc_count > 0:
-                item_names = missing_desc["name"].tolist() if "name" in missing_desc.columns else []
+                item_names = df.loc[missing_desc, "name"].tolist() if "name" in df.columns else []
                 self.add_issue(
                     severity="LOW",
                     category="Missing Descriptions",
@@ -190,8 +191,7 @@ class DataQualityChecker:
                 self.logger.warning("'id' column not found in %s", item_type)
                 return
 
-            missing_ids = df[df["id"].isna() | (df["id"] == "")]
-            missing_ids_count = len(missing_ids)
+            missing_ids_count = (df["id"].isna() | (df["id"] == "")).sum()
             if missing_ids_count > 0:
                 self.add_issue(
                     severity="HIGH",
@@ -212,15 +212,10 @@ class DataQualityChecker:
         critical_fields: list[str],
     ):
         """
-        Optimized single-pass validation combining all checks
+        Combine vectorized checks, exiting early for empty data or missing required fields.
 
-        PERFORMANCE OPTIMIZATIONS:
-        - 40-55% faster than sequential individual checks
-        - Reduces DataFrame scans from 6 to 1
-        - Uses vectorized pandas operations
-        - Early exit on critical errors (5-10% additional improvement)
-        - Validation caching (50-90% improvement on cache hits)
-        - Better CPU cache utilization
+        Optional caching reuses validation results. Masks and column selection
+        avoid materializing full rows when only counts or names are needed.
         """
         try:
             # Check cache first (before any processing)
@@ -303,36 +298,38 @@ class DataQualityChecker:
                 has_name_column = "name" in df.columns
                 for field, null_count in null_counts[null_counts > 0].items():
                     null_items = df.loc[null_mask[field], "name"].tolist() if has_name_column else []
+                    item_names = ", ".join(str(x) for x in null_items)
                     _record_issue(
                         severity="MEDIUM",
                         category="Null Values",
-                        item_name=", ".join(str(x) for x in null_items),
+                        item_name=item_names,
                         description=f'Null values in "{field}" field',
-                        details=f"{null_count} item(s) missing {field}. Items: {', '.join(str(x) for x in null_items)}",
+                        details=f"{null_count} item(s) missing {field}. Items: {item_names}",
                     )
 
             # Check 5: Vectorized missing descriptions check
             if "description" in df.columns:
-                missing_desc = df[df["description"].isna() | (df["description"] == "")]
-                if len(missing_desc) > 0:
-                    item_names = missing_desc["name"].tolist() if "name" in missing_desc.columns else []
+                missing_desc = df["description"].isna() | (df["description"] == "")
+                missing_desc_count = missing_desc.sum()
+                if missing_desc_count > 0:
+                    item_names = df.loc[missing_desc, "name"].tolist() if "name" in df.columns else []
                     _record_issue(
                         severity="LOW",
                         category="Missing Descriptions",
-                        item_name=f"{len(missing_desc)} items",
-                        description=f"{len(missing_desc)} items without descriptions",
+                        item_name=f"{missing_desc_count} items",
+                        description=f"{missing_desc_count} items without descriptions",
                         details=f"Items: {', '.join(str(x) for x in item_names)}",
                     )
 
             # Check 6: Vectorized ID validity check
             if "id" in df.columns:
-                missing_ids = df[df["id"].isna() | (df["id"] == "")]
-                if len(missing_ids) > 0:
+                missing_ids_count = (df["id"].isna() | (df["id"] == "")).sum()
+                if missing_ids_count > 0:
                     _record_issue(
                         severity="HIGH",
                         category="Invalid IDs",
-                        item_name=f"{len(missing_ids)} items",
-                        description=f"{len(missing_ids)} items with missing or invalid IDs",
+                        item_name=f"{missing_ids_count} items",
+                        description=f"{missing_ids_count} items with missing or invalid IDs",
                         details="Items without valid IDs may cause issues in reporting",
                     )
 

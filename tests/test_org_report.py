@@ -739,34 +739,6 @@ class TestAnalyzerLockIntegration:
         assert analyzer.lock_runtime_state.contention is False
         assert analyzer.lock_runtime_state.backend is None
 
-    def test_quick_check_empty_org_returns_empty_result(self):
-        """Test that quick check returns empty OrgReportResult when no data views exist"""
-        import logging
-
-        mock_cja = Mock()
-        mock_cja.getDataViews.return_value = []
-        logger = logging.getLogger("test_quick_check_empty")
-
-        analyzer = OrgComponentAnalyzer(mock_cja, OrgReportConfig(skip_lock=True), logger)
-
-        result = analyzer._quick_check_empty_org()
-        assert result is not None
-        assert result.total_available_data_views == 0
-        assert result.data_view_summaries == []
-
-    def test_quick_check_non_empty_org_returns_none(self):
-        """Test that quick check returns None when data views exist"""
-        import logging
-
-        mock_cja = Mock()
-        mock_cja.getDataViews.return_value = [{"id": "dv_1", "name": "DV 1"}]
-        logger = logging.getLogger("test_quick_check_non_empty")
-
-        analyzer = OrgComponentAnalyzer(mock_cja, OrgReportConfig(skip_lock=True), logger)
-
-        result = analyzer._quick_check_empty_org()
-        assert result is None
-
     def test_analyzer_aborts_when_lock_ownership_is_lost_mid_run(self):
         """Analyzer must fail closed if lock ownership is lost during execution."""
         import logging
@@ -788,12 +760,10 @@ class TestAnalyzerLockIntegration:
             MockLock.return_value = mock_lock_instance
 
             analyzer = OrgComponentAnalyzer(mock_cja, config, logger, org_id="test_org@AdobeOrg")
-            analyzer._quick_check_empty_org = Mock(return_value=None)
 
             with pytest.raises(LockOwnershipLostError):
                 analyzer.run_analysis()
 
-            analyzer._quick_check_empty_org.assert_called_once()
             mock_cja.getDataViews.assert_not_called()
             assert analyzer.lock_runtime_state.observed is True
             assert analyzer.lock_runtime_state.acquired is True

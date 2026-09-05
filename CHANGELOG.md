@@ -7,6 +7,19 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.12.1] - 2026-09-04
+
+### Changed
+
+- **Data quality validation:** avoid copying full DataFrame rows when only counts or names are needed, reuse null masks, and format issue names once. Existing issue payloads and severity ordering are preserved.
+- **Org analysis:** remove the redundant preliminary data-view listing from locked runs; the normal listing path handles empty and filtered organizations. Build clustering distances directly in SciPy's condensed format instead of allocating a square matrix, preserving cluster membership and cohesion rounding.
+- **Validation cache:** simplify local LRU capacity maintenance by removing an unreachable fallback for non-shrinking eviction.
+
+### Tests
+
+- Consolidate duplicate and ineffective tests, strengthen complete quality-output comparisons, and verify that locked org analysis lists data views only once.
+- Isolate temporary Git repository tests from inherited commit-signing configuration so they do not depend on a developer's signing agent.
+
 ## [3.12.0] - 2026-08-30
 
 ### Added

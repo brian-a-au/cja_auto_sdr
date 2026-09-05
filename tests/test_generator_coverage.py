@@ -240,23 +240,9 @@ class TestInferRunStatus:
     def test_exit_zero_ignores_state(self):
         assert _infer_run_status(0, {"quality_gate_failed": True}) == "success"
 
-    def test_quality_gate_exit_two_is_policy_exit(self):
-        run_state = {"quality_gate_failed": True}
-        assert _infer_run_status(2, run_state) == "policy_exit"
-
     def test_quality_gate_exit_one_is_error(self):
         run_state = {"quality_gate_failed": True}
         assert _infer_run_status(1, run_state) == "error"
-
-    def test_org_threshold_exit_two_is_policy_exit(self):
-        run_state = {
-            "mode": RunMode.ORG_REPORT,
-            "details": {
-                "thresholds_exceeded": True,
-                "fail_on_threshold": True,
-            },
-        }
-        assert _infer_run_status(2, run_state) == "policy_exit"
 
     def test_org_threshold_missing_fail_on_is_error(self):
         run_state = {
@@ -276,13 +262,6 @@ class TestInferRunStatus:
             "details": {"operation_success": True},
         }
         assert _infer_run_status(exit_code, run_state) == "policy_exit"
-
-    def test_diff_mode_operation_failed_is_error(self):
-        run_state = {
-            "mode": RunMode.DIFF,
-            "details": {"operation_success": False},
-        }
-        assert _infer_run_status(2, run_state) == "error"
 
     def test_unknown_exit_code_is_error(self):
         assert _infer_run_status(1, {}) == "error"

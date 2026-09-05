@@ -1313,41 +1313,6 @@ class TestExceptionHandlers:
         f2.cancel.assert_called_once()
         f3.cancel.assert_called_once()
 
-    def test_quick_check_empty_org_exception_path(self, mock_cja, logger, caplog):
-        """_quick_check_empty_org should return None when API raises."""
-        mock_cja.getDataViews.side_effect = ConnectionError("network down")
-        analyzer = _make_analyzer(mock_cja, logger)
-        with caplog.at_level(logging.DEBUG):
-            result = analyzer._quick_check_empty_org()
-        assert result is None
-        assert "Quick empty-org check skipped" in caplog.text
-
-    def test_quick_check_empty_org_returns_result_when_empty(self, mock_cja, logger):
-        """_quick_check_empty_org should return OrgReportResult when no DVs."""
-        mock_cja.getDataViews.return_value = []
-        analyzer = _make_analyzer(mock_cja, logger)
-        result = analyzer._quick_check_empty_org()
-        assert result is not None
-        assert result.data_view_summaries == []
-        assert result.total_available_data_views == 0
-
-    def test_quick_check_empty_org_returns_none_when_dvs_exist(self, mock_cja, logger):
-        """_quick_check_empty_org returns None when data views exist."""
-        mock_cja.getDataViews.return_value = [{"id": "dv1", "name": "DV 1"}]
-        analyzer = _make_analyzer(mock_cja, logger)
-        result = analyzer._quick_check_empty_org()
-        assert result is None
-
-    def test_quick_check_empty_org_ignores_error_payload(self, mock_cja, logger, caplog):
-        """Error-shaped getDataViews payloads must not be mistaken for an empty org."""
-        mock_cja.getDataViews.return_value = {"statusCode": 503, "message": "backend timeout"}
-        analyzer = _make_analyzer(mock_cja, logger)
-        with caplog.at_level(logging.WARNING):
-            result = analyzer._quick_check_empty_org()
-        assert result is None
-        assert "unexpected getDataViews() payload" in caplog.text
-        assert "statusCode=503" in caplog.text
-
     def test_list_and_filter_data_views_raises_on_error_payload(self, mock_cja, logger):
         """Main org-report listing path must fail on error-shaped getDataViews payloads."""
         mock_cja.getDataViews.return_value = {"statusCode": 500, "message": "backend timeout"}
@@ -2526,18 +2491,19 @@ class TestFetchDataViewComponentsMetadata:
 
 
 # ===================================================================
-# 26. run_analysis with lock: quick_check_empty_org returns early (line 123)
+# 26. run_analysis with lock: empty and filtered-out listings
 # ===================================================================
 
 
-class TestRunAnalysisLockedQuickCheckExit:
-    """Line 123: quick_check_empty_org returns non-None inside lock path."""
+class TestRunAnalysisLockedEmptyOrg:
+    """Empty or filtered-out listings return before fetching components."""
 
-    def test_quick_check_exits_early_with_lock(self, mock_cja, logger):
-        """skip_lock=False + empty org -> returns quick_check_result."""
+    @pytest.mark.parametrize("listing", [[], [{"id": "dv1", "name": "Production"}]])
+    def test_empty_org_exits_early_with_lock(self, mock_cja, logger, listing):
+        """The normal listing path handles empty organizations without a probe."""
         from unittest.mock import MagicMock, patch
 
-        config = OrgReportConfig(skip_lock=False, cja_per_thread=False)
+        config = OrgReportConfig(skip_lock=False, cja_per_thread=False, filter_pattern="^Sandbox$")
         analyzer = _make_analyzer(mock_cja, logger, config=config)
 
         mock_lock = MagicMock()
@@ -2545,14 +2511,15 @@ class TestRunAnalysisLockedQuickCheckExit:
         mock_lock.__enter__ = MagicMock(return_value=mock_lock)
         mock_lock.__exit__ = MagicMock(return_value=False)
 
-        empty_result = MagicMock()
-        with (
-            patch("cja_auto_sdr.org.analyzer.OrgReportLock", return_value=mock_lock),
-            patch.object(analyzer, "_assert_lock_healthy"),
-            patch.object(analyzer, "_quick_check_empty_org", return_value=empty_result),
-        ):
+        mock_cja.getDataViews.return_value = listing
+        with patch("cja_auto_sdr.org.analyzer.OrgReportLock", return_value=mock_lock):
             result = analyzer.run_analysis()
-        assert result is empty_result
+        assert result.data_view_summaries == []
+        assert result.total_available_data_views == 0
+        mock_cja.getDataViews.assert_called_once_with()
+        mock_cja.getMetrics.assert_not_called()
+        mock_cja.getDimensions.assert_not_called()
+        mock_lock.__exit__.assert_called_once()
 
 
 # ===================================================================
@@ -3066,10 +3033,6 @@ def _install_fake_scipy(
 ) -> dict[str, object]:
     captured: dict[str, object] = {}
 
-    def squareform(matrix):
-        captured["matrix"] = matrix.copy()
-        return "condensed"
-
     def linkage(condensed_dist, method):
         captured["condensed_dist"] = condensed_dist
         captured["method"] = method
@@ -3086,23 +3049,16 @@ def _install_fake_scipy(
     scipy_module = types.ModuleType("scipy")
     cluster_module = types.ModuleType("scipy.cluster")
     hierarchy_module = types.ModuleType("scipy.cluster.hierarchy")
-    spatial_module = types.ModuleType("scipy.spatial")
-    distance_module = types.ModuleType("scipy.spatial.distance")
 
     hierarchy_module.linkage = linkage
     hierarchy_module.fcluster = fcluster
-    distance_module.squareform = squareform
 
     cluster_module.hierarchy = hierarchy_module
-    spatial_module.distance = distance_module
     scipy_module.cluster = cluster_module
-    scipy_module.spatial = spatial_module
 
     monkeypatch.setitem(sys.modules, "scipy", scipy_module)
     monkeypatch.setitem(sys.modules, "scipy.cluster", cluster_module)
     monkeypatch.setitem(sys.modules, "scipy.cluster.hierarchy", hierarchy_module)
-    monkeypatch.setitem(sys.modules, "scipy.spatial", spatial_module)
-    monkeypatch.setitem(sys.modules, "scipy.spatial.distance", distance_module)
 
     return captured
 
@@ -3135,9 +3091,7 @@ def test_compute_clusters_with_fake_scipy_covers_cluster_building(
     assert clusters[0].cluster_name == "Prod"
     assert clusters[0].cohesion_score == 0.9
     assert captured["method"] == "average"
-    matrix = captured["matrix"]
-    assert float(matrix[0, 1]) == pytest.approx(0.1)
-    assert float(matrix[1, 2]) == pytest.approx(0.8)
+    assert captured["condensed_dist"] == pytest.approx([0.1, 0.9, 0.8])
     assert captured["criterion"] == "distance"
 
 
