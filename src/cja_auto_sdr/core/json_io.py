@@ -352,7 +352,7 @@ def write_text_atomic_compatible(
 # ---------------------------------------------------------------------------
 # Process-local parse cache (v3.11.2)
 # ---------------------------------------------------------------------------
-# Memoizes JSON parses keyed by (path, mtime, size) so repeated reads of the
+# Memoizes JSON parses keyed by (path, device, inode, mtime, size) so repeated reads of the
 # same on-disk snapshot within a process (e.g. org-report trending window
 # scans and cache-prune metadata loads) skip redundant I/O + json.loads work.
 # Callers MUST treat the returned object as read-only: it is shared across
@@ -361,18 +361,25 @@ def write_text_atomic_compatible(
 
 
 @functools.lru_cache(maxsize=256)
-def _load_json_cached_by_stat(path: str, mtime_ns: int, size: int) -> dict:  # noqa: ARG001 — cache key components
+def _load_json_cached_by_stat(
+    path: str,
+    _device: int,
+    _inode: int,
+    _mtime_ns: int,
+    _size: int,
+) -> dict:
     with open(path, encoding="utf-8") as f:
         return json.load(f)
 
 
 def load_json_cached(path) -> dict:
-    """Parse a JSON file, memoized by (path, mtime, size).
+    """Parse a JSON file, memoized by path, file identity, mtime, and size.
 
     The returned object is shared across callers and MUST NOT be mutated.
     """
     st = os.stat(path)
-    return _load_json_cached_by_stat(str(path), st.st_mtime_ns, st.st_size)
+    # Timestamp-preserving replacements can keep both mtime and size unchanged.
+    return _load_json_cached_by_stat(str(path), st.st_dev, st.st_ino, st.st_mtime_ns, st.st_size)
 
 
 # expose cache_clear for tests
