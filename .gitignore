@@ -64,3 +64,6 @@ scripts/smoke_test_production.py
 # Superpowers plans/specs (local only)
 docs/superpowers/
 docs/plans
+
+# Local audit reports
+/docs/audits/

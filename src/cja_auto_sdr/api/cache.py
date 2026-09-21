@@ -18,6 +18,22 @@ from cja_auto_sdr.core.constants import CACHE_KEY_HASH_LENGTH
 _ERROR_KEY_COUNTER = itertools.count()
 
 
+def _validation_cache_key(
+    df: pd.DataFrame,
+    item_type: str,
+    required_fields: list[str],
+    critical_fields: list[str],
+) -> str:
+    """Hash validation inputs without losing schema or output-significant ordering."""
+    row_hashes = pd.util.hash_pandas_object(df, index=False)
+    df_hash = hashlib.md5(row_hashes.to_numpy().tobytes(), usedforsecurity=False).hexdigest()
+    # Pandas row hashes omit column names. Validation depends on those names,
+    # and issue details/order depend on row and configured field order.
+    config_str = repr((list(df.columns), [str(dtype) for dtype in df.dtypes], required_fields, critical_fields))
+    config_hash = hashlib.md5(config_str.encode(), usedforsecurity=False).hexdigest()[:CACHE_KEY_HASH_LENGTH]
+    return f"{item_type}:{df_hash}:{config_hash}"
+
+
 def _unique_error_key() -> str:
     """Return a unique cache key that forces a miss on key-generation failure."""
     return (
@@ -115,18 +131,7 @@ class ValidationCache:
             Cache key string in format: "{item_type}:{df_hash}:{config_hash}"
         """
         try:
-            # Hash DataFrame content using pandas built-in function
-            # This is much faster than manual iteration (1-2ms vs 10-50ms for 1000 rows)
-
-            # Hash DataFrame structure and content
-            df_hash = pd.util.hash_pandas_object(df, index=False).sum()
-
-            # Hash configuration (required_fields + critical_fields)
-            config_str = f"{sorted(required_fields)}:{sorted(critical_fields)}"
-            config_hash = hashlib.md5(config_str.encode(), usedforsecurity=False).hexdigest()[:CACHE_KEY_HASH_LENGTH]
-
-            # Combine into cache key
-            return f"{item_type}:{df_hash}:{config_hash}"
+            return _validation_cache_key(df, item_type, required_fields, critical_fields)
 
         except (TypeError, KeyError, ValueError) as e:
             self.logger.warning("Error generating cache key: %s. Cache disabled for this call.", e)
@@ -394,15 +399,7 @@ class SharedValidationCache:
         Same algorithm as ValidationCache for compatibility.
         """
         try:
-            # Hash DataFrame structure and content
-            df_hash = pd.util.hash_pandas_object(df, index=False).sum()
-
-            # Hash configuration (required_fields + critical_fields)
-            config_str = f"{sorted(required_fields)}:{sorted(critical_fields)}"
-            config_hash = hashlib.md5(config_str.encode(), usedforsecurity=False).hexdigest()[:CACHE_KEY_HASH_LENGTH]
-
-            # Combine into cache key
-            return f"{item_type}:{df_hash}:{config_hash}"
+            return _validation_cache_key(df, item_type, required_fields, critical_fields)
 
         except (TypeError, KeyError, ValueError) as e:
             self.logger.warning("Error generating cache key: %s. Cache disabled for this call.", e)

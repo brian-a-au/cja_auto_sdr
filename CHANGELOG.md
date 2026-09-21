@@ -7,6 +7,17 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.12.3] - 2026-09-20
+
+### Fixed
+
+- **Validation cache correctness:** include column names, dtypes, and row/configuration order in cache keys for both local and shared caches. A renamed required column can no longer reuse a clean result that hides a missing-field finding, and cached issue details preserve the current input order.
+- **Snapshot discovery:** skip malformed JSON records with incompatible top-level, component-list, or timestamp types. One malformed file no longer prevents listing valid snapshots or selecting a previous snapshot; malformed files remain untouched by retention.
+
+### Tests
+
+- Add 15 regression cases covering cache identity in both backends and malformed-file isolation during snapshot discovery and retention.
+
 ## [3.12.2] - 2026-09-04
 
 ### Performance

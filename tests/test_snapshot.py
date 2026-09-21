@@ -480,6 +480,30 @@ class TestSaveSnapshot:
 class TestListSnapshotsEdgeCases:
     """Tests for list_snapshots error handling (lines 237-238)."""
 
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            None,
+            42,
+            ["snapshot_version"],
+            {"snapshot_version": "1.0", "metrics": None},
+            {"snapshot_version": "1.0", "dimensions": 42},
+            {"snapshot_version": "1.0", "metrics": "invalid"},
+            {"snapshot_version": "1.0", "created_at": 42},
+        ],
+    )
+    def test_malformed_snapshot_does_not_block_discovery_or_retention(self, manager, tmp_path, payload):
+        _write_snapshot_json(str(tmp_path / "good.json"))
+        bad_path = tmp_path / "bad.json"
+        bad_content = json.dumps(payload)
+        bad_path.write_text(bad_content, encoding="utf-8")
+
+        snapshots = manager.list_snapshots(str(tmp_path))
+        assert [snapshot["filename"] for snapshot in snapshots] == ["good.json"]
+        assert manager.get_most_recent_snapshot(str(tmp_path), "dv_abc") == str(tmp_path / "good.json")
+        assert manager.apply_retention_policy(str(tmp_path), "dv_abc", keep_last=1) == []
+        assert bad_path.read_text(encoding="utf-8") == bad_content
+
     def test_corrupt_json_skipped(self, manager, tmp_path):
         """Line 237-238: json.JSONDecodeError — file is skipped."""
         # Write a valid snapshot
