@@ -303,6 +303,17 @@ class SnapshotManager:
                 filepath = os.path.join(directory, filename)
                 try:
                     data = load_json_cached(filepath)
+                    if not isinstance(data, dict):
+                        continue
+                    # A syntactically valid JSON file may still be an invalid
+                    # snapshot. Do not let it block discovery of healthy files
+                    # or become a candidate for automatic retention deletion.
+                    if not isinstance(data.get("metrics", []), list) or not isinstance(
+                        data.get("dimensions", []), list
+                    ):
+                        continue
+                    if data.get("created_at") is not None and not isinstance(data["created_at"], str):
+                        continue
                     if "snapshot_version" in data:
                         snapshots.append(
                             {

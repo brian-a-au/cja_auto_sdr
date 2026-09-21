@@ -21,8 +21,48 @@ import pandas as pd
 import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from cja_auto_sdr.api.cache import ValidationCache
+from cja_auto_sdr.api.cache import SharedValidationCache, ValidationCache
 from cja_auto_sdr.generator import DataQualityChecker
+
+
+@pytest.mark.parametrize("cache_type", [ValidationCache, SharedValidationCache])
+@pytest.mark.parametrize("change", ["column_name", "row_order", "required_order", "critical_order"])
+def test_cached_validation_matches_uncached_after_input_change(cache_type, change):
+    logger = logging.getLogger("test.cache_identity")
+    cache = cache_type()
+    frame = pd.DataFrame({"id": ["m1", "m2"], "name": ["First", "Second"], "description": ["", ""]})
+    required = ["id", "name"]
+    critical = ["id", "description"]
+    if change == "required_order":
+        required = ["missing_a", "missing_b"]
+    elif change == "critical_order":
+        frame["id"] = None
+        frame["description"] = None
+
+    try:
+        seed = DataQualityChecker(logger, validation_cache=cache)
+        seed.check_all_quality_issues_optimized(frame, "Metrics", required, critical)
+
+        if change == "column_name":
+            frame = frame.rename(columns={"id": "unexpected"})
+        elif change == "row_order":
+            frame = frame.iloc[::-1].reset_index(drop=True)
+        elif change == "required_order":
+            required = required[::-1]
+        else:
+            critical.reverse()
+
+        expected = DataQualityChecker(logger)
+        expected.check_all_quality_issues_optimized(frame, "Metrics", required, critical)
+        actual = DataQualityChecker(logger, validation_cache=cache)
+        actual.check_all_quality_issues_optimized(frame, "Metrics", required, critical)
+
+        assert expected.issues != seed.issues  # The changed input must affect real validation output.
+        assert actual.issues == expected.issues
+        assert cache.get_statistics()["hits"] == 0
+    finally:
+        if isinstance(cache, SharedValidationCache):
+            cache.shutdown()
 
 
 class TestValidationCache:
