@@ -9,9 +9,30 @@ files from disk.
 
 from __future__ import annotations
 
+import os
+
 from cja_auto_sdr.core import json_io
 from cja_auto_sdr.diff.models import DataViewSnapshot
 from cja_auto_sdr.diff.snapshot import SnapshotManager
+
+
+def test_snapshot_discovery_refreshes_identity_after_timestamp_preserving_replacement(tmp_path):
+    mgr = SnapshotManager()
+    path = tmp_path / "snapshot.json"
+    replacement = tmp_path / "replacement.json"
+    snapshot = DataViewSnapshot(data_view_id="dv_old", data_view_name="View")
+    mgr.save_snapshot(snapshot, str(path))
+    assert mgr.get_most_recent_snapshot(str(tmp_path), "dv_old") == str(path)
+    before = path.stat()
+
+    snapshot.data_view_id = "dv_new"
+    mgr.save_snapshot(snapshot, str(replacement))
+    os.utime(replacement, ns=(before.st_atime_ns, before.st_mtime_ns))
+    os.replace(replacement, path)
+    assert path.stat().st_size == before.st_size
+
+    assert mgr.get_most_recent_snapshot(str(tmp_path), "dv_old") is None
+    assert mgr.get_most_recent_snapshot(str(tmp_path), "dv_new") == str(path)
 
 
 def test_list_snapshots_parse_is_cached(tmp_path, monkeypatch):
