@@ -140,7 +140,7 @@ uv run cja_auto_sdr --config-status --config-json --agent-mode
 
 | Command family                                      | `--agent-mode` supported | Notes |
 |-----------------------------------------------------|--------------------------|-------|
-| SDR generation (single)                             | Limited                  | Preset applies, but current generation still writes auto-named artifacts under `--output-dir` |
+| SDR generation (single)                             | ✅                       | Preset streams the SDR JSON to stdout; a `--output <file>` path writes json/html/markdown/excel to that file |
 | Batch SDR generation                                | Limited                  | Preset applies, but per-data-view artifacts still land under `--output-dir` |
 | Discovery / inspection (`--list-*`, `--describe-dataview`) | Yes             | JSON to stdout for machine-readable flows; prefer exact IDs for unattended inspection |
 | Org-report (`--org-report`)                         | Yes                      | JSON to stdout; advisories block included; `--format console --output -` is also valid for human-readable stdout |

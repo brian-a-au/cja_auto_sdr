@@ -541,8 +541,8 @@ cja_auto_sdr --org-report --agent-mode
 # Agent mode with diff
 cja_auto_sdr --diff dv_a dv_b --agent-mode
 
-# Single SDR keeps agent defaults but still writes an auto-named artifact
-cja_auto_sdr dv_12345 --agent-mode --output-dir ./reports
+# Single SDR under the preset streams the SDR JSON to stdout
+cja_auto_sdr dv_12345 --agent-mode | jq '.metrics'
 
 # --- Inventory Diff (same data view over time) ---
 

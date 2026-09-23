@@ -38,13 +38,13 @@ Important caveats:
 
 - It expands to the repo's real CLI contract; it is not an independent execution mode.
 - Explicit manifest parameters still win over the preset.
-- Command-family behavior still follows the underlying CLI implementation. Discovery, diff, and org-report flows honor stdout JSON directly. Single-SDR generation still writes auto-named SDR artifacts under `output_dir`, while standalone `quality_report` mode continues to honor `output`/`output_dir`.
+- Command-family behavior still follows the underlying CLI implementation. Discovery, diff, and org-report flows honor stdout JSON directly. Single-SDR generation honors `output` for the single-file formats (json, html, markdown, excel) and streams JSON to stdout with `output: "-"` and `format: json`; multi-file formats (csv, all) and notion auto-name under `output_dir`. Standalone `quality_report` mode also honors `output`/`output_dir`.
 
 ---
 
 ## stdout vs. File Output
 
-- `cja_sdr_generate`: main SDR artifacts use `output_dir` auto-naming. Standalone `quality_report` mode supports `output: "-"` / `output: "stdout"` for JSON or CSV stdout, a caller-chosen file path in `output`, or an auto-named report under `output_dir`.
+- `cja_sdr_generate`: `output` writes the single-file formats (json, html, markdown, excel) to a caller-chosen file path, or streams JSON to stdout with `output: "-"`/`"stdout"` and `format: json`; multi-file formats (csv, all) and notion auto-name under `output_dir`. Standalone `quality_report` mode supports `output: "-"`/`"stdout"` for JSON or CSV stdout, a caller-chosen file path, or an auto-named report under `output_dir`.
 - `cja_sdr_diff`: use `output: "-"` or `output: "stdout"` for JSON stdout. `diff_output` is only for inline-text output such as `console` or `format_pr_comment: true`; JSON/Markdown/HTML/Excel/CSV file outputs remain auto-named under `output_dir`.
 - `cja_sdr_governance`: use `output: "-"` or `output: "stdout"` for supported stdout flows. For named outputs, JSON/Excel/Markdown/HTML create a single file, CSV creates a directory of multiple files, and console ignores named file paths. Use `output_dir` for auto-named artifacts.
 - Use `run_summary_json` to capture a stable machine-readable completion record at a known path regardless of primary output behavior.
