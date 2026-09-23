@@ -1,6 +1,6 @@
 # Quick Reference Card
 
-Single-page command cheat sheet for CJA SDR Generator v3.13.0.
+Single-page command cheat sheet for CJA SDR Generator v3.12.6.
 
 ## Four Main Modes
 
