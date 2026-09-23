@@ -134,7 +134,6 @@ class ProcessingConfig:
 
     config_file: str = "config.json"
     output_dir: str | Path = "."
-    output_file: str | None = None
     log_level: str = "INFO"
     log_format: str = "text"
     output_format: str = "excel"
@@ -164,6 +163,7 @@ class ProcessingConfig:
     notion_force_new: bool = False
     notion_database_id: str | None = None
     notion_create_database: bool = False
+    output_file: str | None = None
 
 
 @dataclass(frozen=True)

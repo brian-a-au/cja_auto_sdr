@@ -63,7 +63,7 @@ uv run cja_auto_sdr <dv_id> --format json --run-summary-json -
 ```
 
 `--output -` implies `--quiet`, so stdout contains only the payload and stderr contains any log output.
-Single-SDR generation currently writes auto-named artifacts under `--output-dir` rather than streaming the SDR payload to stdout.
+Single-SDR generation streams the SDR JSON to stdout when you pass `--format json --output -`; a `--output <file>` path writes the single-file formats (`json`, `html`, `markdown`, `excel`) to that path. Multi-file formats (`csv`, `all`) and `notion` keep auto-naming under `--output-dir`.
 
 ### Exit codes
 

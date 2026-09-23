@@ -221,7 +221,7 @@ Log levels: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`. Log formats: `text`
 --format json --output - --log-format json
 ```
 
-It applies machine-friendly defaults. Discovery, diff, and org-report flows emit machine-readable JSON on stdout with structured logs on stderr. Single-SDR and batch generation currently still write auto-named artifacts under `--output-dir`.
+It applies machine-friendly defaults. Discovery, diff, and org-report flows emit machine-readable JSON on stdout with structured logs on stderr. Single-SDR generation honors `--output`: a file path writes the single-file formats (`json`, `html`, `markdown`, `excel`) to that path, and `--output -`/`stdout` with `--format json` streams the SDR JSON on stdout with logs on stderr. Multi-file formats (`csv`, `all`) and `notion` keep auto-naming, and batch generation still writes auto-named artifacts under `--output-dir`.
 
 ```bash
 # Direct stdout command families:

@@ -3184,7 +3184,6 @@ def process_single_dataview(
     data_view_id: str,
     config_file: str = "config.json",
     output_dir: str | Path = ".",
-    output_file: str | None = None,
     log_level: str = "INFO",
     log_format: str = "text",
     output_format: str = "excel",
@@ -3214,6 +3213,7 @@ def process_single_dataview(
     notion_force_new: bool = False,
     notion_database_id: str | None = None,
     notion_create_database: bool = False,
+    output_file: str | None = None,
     processing_config: ProcessingConfig | None = None,
 ) -> ProcessingResult:
     """
@@ -3983,6 +3983,7 @@ def process_single_dataview(
         # format. Multi-file (csv, all/aliases) and external (notion) outputs
         # keep auto-naming under output_dir.
         stdout_json_mode = False
+        redirect_output_path: str | None = None
         _single_fmt = formats_to_generate[0] if len(formats_to_generate) == 1 else None
         if output_file:
             if output_file in ("-", "stdout"):
@@ -3997,13 +3998,13 @@ def process_single_dataview(
                         file=sys.stderr,
                     )
             elif _single_fmt in ("excel", "json", "html", "markdown"):
+                # Write the single-file format to the exact path the user gave.
                 _target = Path(output_file)
-                _redirect_dir = str(_target.parent) or "."
-                os.makedirs(_redirect_dir, exist_ok=True)
-                output_dir = _redirect_dir
-                base_filename = _target.stem
+                os.makedirs(str(_target.parent) or ".", exist_ok=True)
                 if _single_fmt == "excel":
                     output_path = _target
+                else:
+                    redirect_output_path = str(_target)
             else:
                 print(
                     f"Warning: --output is not supported with --format {output_format} "
@@ -4106,15 +4107,20 @@ def process_single_dataview(
                             output_dir,
                             logger,
                             inventory_objects,
+                            output_path=redirect_output_path,
                         )
                         output_files.append(json_output)
 
                 elif fmt == "html":
-                    html_output = write_html_output(data_dict, metadata_dict, base_filename, output_dir, logger)
+                    html_output = write_html_output(
+                        data_dict, metadata_dict, base_filename, output_dir, logger, output_path=redirect_output_path
+                    )
                     output_files.append(html_output)
 
                 elif fmt == "markdown":
-                    markdown_output = write_markdown_output(data_dict, metadata_dict, base_filename, output_dir, logger)
+                    markdown_output = write_markdown_output(
+                        data_dict, metadata_dict, base_filename, output_dir, logger, output_path=redirect_output_path
+                    )
                     output_files.append(markdown_output)
 
                 elif fmt == "notion":
@@ -4204,7 +4210,8 @@ def process_single_dataview(
 
             # Display timing summary on stdout if requested
             if show_timings:
-                print(perf_tracker.get_summary())
+                # Keep stdout clean when it carries the streamed JSON payload.
+                print(perf_tracker.get_summary(), file=sys.stderr if stdout_json_mode else sys.stdout)
 
             duration = time.perf_counter() - start_time
 
@@ -7556,7 +7563,10 @@ def _main_impl(run_state: dict[str, Any] | None = None):
     # Show what we're resolving
     names_provided = [dv for dv in data_view_inputs if not is_data_view_id(dv)]
 
-    if names_provided and not args.quiet:
+    # Keep stdout clean when it will carry a streamed JSON payload.
+    _stdout_output = str(getattr(args, "output", None)) in ("-", "stdout")
+
+    if names_provided and not args.quiet and not _stdout_output:
         print()
         print(ConsoleColors.info(f"Resolving {len(names_provided)} data view name(s)..."))
 
@@ -7573,25 +7583,25 @@ def _main_impl(run_state: dict[str, Any] | None = None):
 
     # Check if resolution failed
     if not data_views:
-        print()
+        print(file=sys.stderr)
         print(ConsoleColors.error("ERROR: No valid data views found"), file=sys.stderr)
-        print()
+        print(file=sys.stderr)
         print("Possible issues:", file=sys.stderr)
         print("  - Data view ID(s) or name(s) not found or you don't have access", file=sys.stderr)
         print("  - Data view name is not an EXACT match (names are case-sensitive)", file=sys.stderr)
         print("  - Configuration issue preventing data view lookup", file=sys.stderr)
-        print()
+        print(file=sys.stderr)
         print("Tips for using Data View Names:", file=sys.stderr)
         print("  • Names must match EXACTLY: 'Production Analytics' ≠ 'production analytics'", file=sys.stderr)
         print('  • Use quotes around names: cja_auto_sdr "Production Analytics"', file=sys.stderr)
         print("  • IDs start with 'dv_': cja_auto_sdr dv_12345", file=sys.stderr)
-        print()
+        print(file=sys.stderr)
         print("Try running: cja_auto_sdr --list-dataviews", file=sys.stderr)
         print("  to see all accessible data view IDs and names", file=sys.stderr)
         sys.exit(1)
 
     # Show resolution summary if names were used
-    if name_to_ids_map and not args.quiet:
+    if name_to_ids_map and not args.quiet and not _stdout_output:
         print()
         print(ConsoleColors.success("Data view name resolution:"))
         for name, ids in name_to_ids_map.items():
