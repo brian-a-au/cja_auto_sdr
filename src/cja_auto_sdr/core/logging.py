@@ -655,6 +655,12 @@ def setup_logging(
         # Use RotatingFileHandler to prevent unbounded log growth
         handlers.append(RotatingFileHandler(log_file, maxBytes=LOG_FILE_MAX_BYTES, backupCount=LOG_FILE_BACKUP_COUNT))
 
+    # Validate log format (mirror the log level fallback so an invalid value,
+    # e.g. from the LOG_FORMAT environment variable, does not silently pass through)
+    if log_format.lower() not in ("text", "json"):
+        print(f"Warning: Invalid log format '{log_format}', using text", file=sys.stderr)
+        log_format = "text"
+
     # Select formatter based on log_format
     if log_format.lower() == "json":
         formatter = JSONFormatter()

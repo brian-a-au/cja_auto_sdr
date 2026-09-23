@@ -16,6 +16,7 @@ from unittest.mock import patch
 import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from cja_auto_sdr.core.logging import JSONFormatter
 from cja_auto_sdr.generator import DataQualityChecker, PerformanceTracker, parse_arguments, setup_logging
 
 
@@ -61,6 +62,17 @@ class TestEnvironmentVariable:
             setup_logging("test_dv", batch_mode=False)
             # Check root logger level
             assert logging.root.level == logging.INFO
+
+    def test_log_format_json_uses_json_formatter(self):
+        """Test that log_format='json' installs the JSON formatter"""
+        setup_logging("test_dv", batch_mode=False, log_format="json")
+        assert any(isinstance(h.formatter, JSONFormatter) for h in logging.root.handlers)
+
+    def test_invalid_log_format_falls_back_to_text(self):
+        """Test that an invalid log_format (e.g. from LOG_FORMAT) falls back to text"""
+        setup_logging("test_dv", batch_mode=False, log_format="bogus")
+        assert logging.root.handlers
+        assert not any(isinstance(h.formatter, JSONFormatter) for h in logging.root.handlers)
 
 
 class TestDataQualityLogging:

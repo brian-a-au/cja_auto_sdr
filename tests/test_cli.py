@@ -2002,6 +2002,22 @@ class TestRetryArguments:
                 args = parse_arguments()
                 assert args.max_retries == 2
 
+    def test_log_format_env_var_sets_default(self):
+        """Test that LOG_FORMAT env var sets the --log-format default"""
+        test_args = ["cja_sdr_generator.py", "dv_12345"]
+        with patch.dict(os.environ, {"LOG_FORMAT": "json"}):
+            with patch.object(sys, "argv", test_args):
+                args = parse_arguments()
+                assert args.log_format == "json"
+
+    def test_log_format_cli_overrides_env_var(self):
+        """Test that --log-format overrides the LOG_FORMAT environment variable"""
+        test_args = ["cja_sdr_generator.py", "--log-format", "text", "dv_12345"]
+        with patch.dict(os.environ, {"LOG_FORMAT": "json"}):
+            with patch.object(sys, "argv", test_args):
+                args = parse_arguments()
+                assert args.log_format == "text"
+
     def test_dotenv_bootstrap_applies_env_backed_defaults(self):
         """Parser defaults should honor values loaded from dotenv bootstrap."""
         test_args = ["cja_sdr_generator.py", "dv_12345"]
@@ -2009,6 +2025,7 @@ class TestRetryArguments:
         def _bootstrap_side_effect(_logger):
             os.environ["OUTPUT_DIR"] = "./dotenv-output"
             os.environ["LOG_LEVEL"] = "WARNING"
+            os.environ["LOG_FORMAT"] = "json"
             os.environ["MAX_RETRIES"] = "9"
             os.environ["CJA_PROFILE"] = "dotenv-profile"
 
@@ -2021,6 +2038,7 @@ class TestRetryArguments:
 
         assert args.output_dir == "./dotenv-output"
         assert args.log_level == "WARNING"
+        assert args.log_format == "json"
         assert args.max_retries == 9
         assert args.profile == "dotenv-profile"
         mock_bootstrap.assert_called_once()

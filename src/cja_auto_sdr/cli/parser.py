@@ -331,9 +331,7 @@ Requirements:
         type=str,
         default="auto",
         help=f"Number of parallel workers for batch mode (1-{MAX_BATCH_WORKERS}). "
-        f'Use "auto" (default) for intelligent detection based on CPU cores, '
-        f"data view count, and component complexity. Auto-reduces workers for "
-        f"large data views (>5K components) to prevent memory exhaustion",
+        f'Use "auto" (default) for detection based on CPU cores and data view count',
     )
 
     parser.add_argument(
@@ -367,10 +365,10 @@ Requirements:
     parser.add_argument(
         "--log-format",
         type=str,
-        default="text",
+        default=os.environ.get("LOG_FORMAT", "text"),
         choices=["text", "json"],
-        help='Log output format: "text" (default) for human-readable, '
-        '"json" for structured logging (Splunk, ELK, CloudWatch compatible)',
+        help='Log output format: "text" (default, or LOG_FORMAT environment variable) '
+        'for human-readable, "json" for structured logging (Splunk, ELK, CloudWatch compatible)',
     )
 
     parser.add_argument(
