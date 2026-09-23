@@ -961,7 +961,7 @@ cja_auto_sdr dv_12345 --include-segments --inventory-only
 cja_auto_sdr dv_12345 --include-segments --include-calculated --include-derived --inventory-only
 
 # Output in multiple formats
-cja_auto_sdr dv_12345 --include-segments --inventory-only -f all
+cja_auto_sdr dv_12345 --include-segments --inventory-only --format all
 ```
 
 > **Note:** `--inventory-only` requires at least one `--include-*` flag.
