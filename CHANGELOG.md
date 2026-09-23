@@ -12,11 +12,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **`LOG_FORMAT` environment variable:** the `--log-format` default now reads the `LOG_FORMAT` environment variable, matching `LOG_LEVEL` and the documented behavior. Setting `LOG_FORMAT=json` now takes effect without passing the flag.
+- **Invalid log format handling:** `setup_logging` now validates the log format and falls back to text with a warning for an invalid value (including one supplied through `LOG_FORMAT`), matching the existing log level behavior instead of silently selecting text.
 - **`--workers` help text:** remove the claim that `--workers auto` reduces workers for large data views to prevent memory exhaustion. The worker count is chosen before components are fetched, so that reduction never ran; the help now describes the actual behavior, based on CPU cores and data view count.
 
 ### Tests
 
-- Add coverage for the `LOG_FORMAT` environment variable default and for the CLI flag overriding it.
+- Add coverage for the `LOG_FORMAT` environment variable default, the CLI flag overriding it, and an invalid log format falling back to text.
 
 ## [3.12.4] - 2026-09-20
 
