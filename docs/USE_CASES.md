@@ -417,8 +417,8 @@ cja_auto_sdr dv_12345 --include-all-inventory --inventory-only
 # Output in multiple formats for different stakeholders
 cja_auto_sdr dv_12345 --include-all-inventory --format all
 
-# JSON output for programmatic analysis
-cja_auto_sdr dv_12345 --include-segments --format json --output segments_inventory.json
+# JSON output for programmatic analysis (written to a file under --output-dir)
+cja_auto_sdr dv_12345 --include-segments --inventory-only --format json --output-dir ./inventory
 ```
 
 **Governance Audit Examples:**
@@ -427,13 +427,13 @@ cja_auto_sdr dv_12345 --include-segments --format json --output segments_invento
 # Quick audit summary (v3.1.0)
 cja_auto_sdr dv_12345 --include-all-inventory --inventory-summary
 
-# Find all unapproved segments
-cja_auto_sdr dv_12345 --include-segments --format json | \
-  jq '.segments.segments[] | select(.approved == false) | .segment_name'
+# Find all unapproved segments (inventory JSON is written to a file, not stdout)
+cja_auto_sdr dv_12345 --include-segments --inventory-only --format json --output-dir ./inventory
+jq '.segments.segments[] | select(.approved == false) | .segment_name' ./inventory/*_SDR.json
 
 # List high-complexity calculated metrics (score >= 75)
-cja_auto_sdr dv_12345 --include-calculated --format json | \
-  jq '.calculated_metrics.metrics[] | select(.complexity_score >= 75)'
+cja_auto_sdr dv_12345 --include-calculated --inventory-only --format json --output-dir ./inventory
+jq '.calculated_metrics.metrics[] | select(.complexity_score >= 75)' ./inventory/*_SDR.json
 
 # Export all inventories for external review
 cja_auto_sdr dv_12345 --include-all-inventory --inventory-only --format csv
@@ -453,16 +453,16 @@ Identify complex components that may need refactoring or documentation:
 # Quick complexity check (v3.1.0 - shows high-complexity counts)
 cja_auto_sdr dv_12345 --include-all-inventory --inventory-summary
 
-# Generate complexity report for all component types
-cja_auto_sdr dv_12345 --include-all-inventory --format json --output complexity_report.json
+# Generate complexity report for all component types (written under --output-dir)
+cja_auto_sdr dv_12345 --include-all-inventory --inventory-only --format json --output-dir ./inventory
 
-# Analyze complexity in JSON output
-cat complexity_report.json | jq '
+# Analyze complexity in the generated JSON
+jq '
   .segments.segments
   | sort_by(-.complexity_score)
   | .[0:10]
   | .[] | {name: .segment_name, score: .complexity_score}
-'
+' ./inventory/*_SDR.json
 ```
 
 **v3.1.0 Complexity Warnings:** When SDR generation completes with inventory options enabled, you'll see warnings about high-complexity components (score ≥ 75):
@@ -493,20 +493,17 @@ Track how components reference each other:
 **Best for:** Impact analysis, deprecation planning, component cleanup
 
 ```bash
-# Generate all inventory data for dependency analysis
-cja_auto_sdr dv_12345 --include-all-inventory --format json --output dependencies.json
+# Generate all inventory data for dependency analysis (written under --output-dir)
+cja_auto_sdr dv_12345 --include-all-inventory --inventory-only --format json --output-dir ./inventory
 
 # Find segments using a specific dimension
-cja_auto_sdr dv_12345 --include-segments --format json | \
-  jq '.segments.segments[] | select(.dimension_references | contains(["pageName"]))'
+jq '.segments.segments[] | select(.dimension_references | contains(["pageName"]))' ./inventory/*_SDR.json
 
 # Find calculated metrics referencing a specific metric
-cja_auto_sdr dv_12345 --include-calculated --format json | \
-  jq '.calculated_metrics.metrics[] | select(.metric_references | contains(["revenue"]))'
+jq '.calculated_metrics.metrics[] | select(.metric_references | contains(["revenue"]))' ./inventory/*_SDR.json
 
 # Find all components with segment dependencies
-cja_auto_sdr dv_12345 --include-calculated --format json | \
-  jq '.calculated_metrics.metrics[] | select(.segment_references | length > 0)'
+jq '.calculated_metrics.metrics[] | select(.segment_references | length > 0)' ./inventory/*_SDR.json
 ```
 
 **Dependency Analysis Workflow:**
@@ -517,29 +514,33 @@ cja_auto_sdr dv_12345 --include-calculated --format json | \
 
 COMPONENT=$1
 DATA_VIEW=$2
+OUT=$(mktemp -d)
 
 echo "=== Analyzing dependencies for: $COMPONENT ==="
 
+# Generate inventory JSON once (written to a file under --output-dir, not stdout)
+cja_auto_sdr "$DATA_VIEW" --include-segments --include-calculated --inventory-only \
+  --format json --output-dir "$OUT" >/dev/null 2>&1
+INVENTORY="$OUT"/*_SDR.json
+
 # Check segments
 echo -e "\n--- Segments referencing $COMPONENT ---"
-cja_auto_sdr $DATA_VIEW --include-segments --format json 2>/dev/null | \
-  jq --arg comp "$COMPONENT" '
+jq --arg comp "$COMPONENT" '
     .segments.segments[]
     | select(
         (.dimension_references | contains([$comp])) or
         (.metric_references | contains([$comp]))
       )
     | .segment_name
-  '
+  ' $INVENTORY
 
 # Check calculated metrics
 echo -e "\n--- Calculated Metrics referencing $COMPONENT ---"
-cja_auto_sdr $DATA_VIEW --include-calculated --format json 2>/dev/null | \
-  jq --arg comp "$COMPONENT" '
+jq --arg comp "$COMPONENT" '
     .calculated_metrics.metrics[]
     | select(.metric_references | contains([$comp]))
     | .metric_name
-  '
+  ' $INVENTORY
 ```
 
 ### Org-Wide Governance & Standardization

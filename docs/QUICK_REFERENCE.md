@@ -391,7 +391,7 @@ cja_auto_sdr --list-dataviews  # Uses client-a
 | `--compare-with-prev` | Compare against most recent snapshot in --snapshot-dir |
 | `--list-snapshots` | List snapshots from `--snapshot-dir` (optionally filtered by data view ID) |
 | `--prune-snapshots` | Apply retention policies (`--keep-last`/`--keep-since`) without running diff |
-| `--diff-labels A B` | Custom labels for comparison columns (default: `Source`, `Target`) |
+| `--diff-labels A B` | Custom labels for comparison columns (default: `Source`/`Target` for live diffs; snapshot comparisons use date-based labels) |
 | `--auto-snapshot` | Automatically save snapshots during diff for future comparisons |
 | `--auto-prune` | With `--auto-snapshot`, apply default retention (`--keep-last 20` + `--keep-since 30d`) only when both retention flags are omitted |
 | `--keep-last N` | Retention: keep last N snapshots per data view (`0` keeps all) |

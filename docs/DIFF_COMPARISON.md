@@ -914,7 +914,7 @@ When created with `--include-calculated` and/or `--include-segments`:
       "owner": "Analytics Team",
       "approved": true,
       "complexity_score": 12.0,
-      "container_type": "Person",
+      "container_type": "visitors",
       "definition_summary": "Person where device_type = 'mobile'",
       ...
     }
