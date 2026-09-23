@@ -310,7 +310,7 @@ Drill into individual data view resources. These commands let you inspect a sing
 | `--changes-only` | Only show changed items (hide unchanged) | False |
 | `--summary` | Show summary statistics only | False |
 | `--ignore-fields FIELDS` | Comma-separated fields to ignore in comparison | - |
-| `--diff-labels A B` | Custom labels for the two sides | Data view names |
+| `--diff-labels A B` | Custom labels for the two sides | `Source`, `Target` |
 | `--show-only TYPES` | Filter by change type: added, removed, modified, unchanged (comma-separated) | All types |
 | `--metrics-only` | Only compare metrics (exclude dimensions) | False |
 | `--dimensions-only` | Only compare dimensions (exclude metrics) | False |
@@ -1451,7 +1451,7 @@ cja_auto_sdr dv_12345 --include-segments --include-calculated --inventory-summar
 cja_auto_sdr dv_12345 --include-segments --include-calculated --format all
 
 # JSON output for programmatic analysis
-cja_auto_sdr dv_12345 --include-segments -f json -o segments.json
+cja_auto_sdr dv_12345 --include-segments --format json --output segments.json
 
 # --- Inventory Diff (Snapshot Comparisons) ---
 # Note: Only --include-calculated and --include-segments are supported for diff.
@@ -1652,7 +1652,7 @@ cja_auto_sdr --<TAB><TAB>
 
 # Complete flag values
 cja_auto_sdr --format <TAB><TAB>
-excel  csv  json  html  markdown  all
+console  excel  csv  json  html  markdown  notion  all  reports  data  ci
 
 cja_auto_sdr --log-level <TAB><TAB>
 DEBUG  INFO  WARNING  ERROR  CRITICAL

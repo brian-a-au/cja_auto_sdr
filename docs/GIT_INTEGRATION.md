@@ -60,7 +60,7 @@ sdr-snapshots/
 ├── .git/
 ├── .gitignore
 ├── README.md
-└── ProductionAnalytics_dv_12345/
+└── Production_Analytics_dv_12345/
     ├── metrics.json              # All metrics, sorted by ID
     ├── dimensions.json           # All dimensions, sorted by ID
     ├── metadata.json             # Data view info and quality summary
@@ -273,7 +273,7 @@ When inventory flags are used, additional files are created:
 
 ```
 sdr-snapshots/
-└── ProductionAnalytics_dv_12345/
+└── Production_Analytics_dv_12345/
     ├── metrics.json              # Always present
     ├── dimensions.json           # Always present
     ├── metadata.json             # Always present (includes inventory counts)
@@ -323,7 +323,7 @@ cd sdr-snapshots
 git log --oneline
 
 # View history for specific data view
-git log --oneline -- ProductionAnalytics_dv_12345/
+git log --oneline -- Production_Analytics_dv_12345/
 
 # View commits with stats
 git log --stat
@@ -333,10 +333,10 @@ git log --stat
 
 ```bash
 # Compare last two snapshots
-git diff HEAD~1 HEAD -- ProductionAnalytics_dv_12345/metrics.json
+git diff HEAD~1 HEAD -- Production_Analytics_dv_12345/metrics.json
 
 # Compare specific commits
-git diff abc123 def456 -- ProductionAnalytics_dv_12345/
+git diff abc123 def456 -- Production_Analytics_dv_12345/
 
 # Show what changed in a commit
 git show abc123 --stat
@@ -346,27 +346,27 @@ git show abc123 --stat
 
 ```bash
 # See who changed what
-git blame ProductionAnalytics_dv_12345/metrics.json
+git blame Production_Analytics_dv_12345/metrics.json
 
 # Find when a metric was added
 git log -p --all -S 'cm_revenue' -- '*/metrics.json'
 
 # Show history of a specific file
-git log -p -- ProductionAnalytics_dv_12345/metadata.json
+git log -p -- Production_Analytics_dv_12345/metadata.json
 ```
 
 ### Restore Previous State
 
 ```bash
 # View old version without changing current
-git show HEAD~5:ProductionAnalytics_dv_12345/metrics.json
+git show HEAD~5:Production_Analytics_dv_12345/metrics.json
 
 # Checkout old version to inspect
-git checkout HEAD~5 -- ProductionAnalytics_dv_12345/
+git checkout HEAD~5 -- Production_Analytics_dv_12345/
 git diff  # See what's different
 
 # Restore current version
-git checkout HEAD -- ProductionAnalytics_dv_12345/
+git checkout HEAD -- Production_Analytics_dv_12345/
 ```
 
 ## Team Collaboration

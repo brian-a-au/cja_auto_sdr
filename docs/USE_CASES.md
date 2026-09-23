@@ -415,10 +415,10 @@ cja_auto_sdr dv_12345 --include-all-inventory --inventory-summary
 cja_auto_sdr dv_12345 --include-all-inventory --inventory-only
 
 # Output in multiple formats for different stakeholders
-cja_auto_sdr dv_12345 --include-all-inventory -f all
+cja_auto_sdr dv_12345 --include-all-inventory --format all
 
 # JSON output for programmatic analysis
-cja_auto_sdr dv_12345 --include-segments -f json -o segments_inventory.json
+cja_auto_sdr dv_12345 --include-segments --format json --output segments_inventory.json
 ```
 
 **Governance Audit Examples:**
@@ -428,15 +428,15 @@ cja_auto_sdr dv_12345 --include-segments -f json -o segments_inventory.json
 cja_auto_sdr dv_12345 --include-all-inventory --inventory-summary
 
 # Find all unapproved segments
-cja_auto_sdr dv_12345 --include-segments -f json | \
+cja_auto_sdr dv_12345 --include-segments --format json | \
   jq '.segments.segments[] | select(.approved == false) | .segment_name'
 
 # List high-complexity calculated metrics (score >= 75)
-cja_auto_sdr dv_12345 --include-calculated -f json | \
+cja_auto_sdr dv_12345 --include-calculated --format json | \
   jq '.calculated_metrics.metrics[] | select(.complexity_score >= 75)'
 
 # Export all inventories for external review
-cja_auto_sdr dv_12345 --include-all-inventory --inventory-only -f csv
+cja_auto_sdr dv_12345 --include-all-inventory --inventory-only --format csv
 ```
 
 ### Complexity Analysis & Technical Debt
@@ -454,7 +454,7 @@ Identify complex components that may need refactoring or documentation:
 cja_auto_sdr dv_12345 --include-all-inventory --inventory-summary
 
 # Generate complexity report for all component types
-cja_auto_sdr dv_12345 --include-all-inventory -f json -o complexity_report.json
+cja_auto_sdr dv_12345 --include-all-inventory --format json --output complexity_report.json
 
 # Analyze complexity in JSON output
 cat complexity_report.json | jq '
@@ -494,18 +494,18 @@ Track how components reference each other:
 
 ```bash
 # Generate all inventory data for dependency analysis
-cja_auto_sdr dv_12345 --include-all-inventory -f json -o dependencies.json
+cja_auto_sdr dv_12345 --include-all-inventory --format json --output dependencies.json
 
 # Find segments using a specific dimension
-cja_auto_sdr dv_12345 --include-segments -f json | \
+cja_auto_sdr dv_12345 --include-segments --format json | \
   jq '.segments.segments[] | select(.dimension_references | contains(["pageName"]))'
 
 # Find calculated metrics referencing a specific metric
-cja_auto_sdr dv_12345 --include-calculated -f json | \
+cja_auto_sdr dv_12345 --include-calculated --format json | \
   jq '.calculated_metrics.metrics[] | select(.metric_references | contains(["revenue"]))'
 
 # Find all components with segment dependencies
-cja_auto_sdr dv_12345 --include-calculated -f json | \
+cja_auto_sdr dv_12345 --include-calculated --format json | \
   jq '.calculated_metrics.metrics[] | select(.segment_references | length > 0)'
 ```
 
@@ -522,7 +522,7 @@ echo "=== Analyzing dependencies for: $COMPONENT ==="
 
 # Check segments
 echo -e "\n--- Segments referencing $COMPONENT ---"
-cja_auto_sdr $DATA_VIEW --include-segments -f json 2>/dev/null | \
+cja_auto_sdr $DATA_VIEW --include-segments --format json 2>/dev/null | \
   jq --arg comp "$COMPONENT" '
     .segments.segments[]
     | select(
@@ -534,7 +534,7 @@ cja_auto_sdr $DATA_VIEW --include-segments -f json 2>/dev/null | \
 
 # Check calculated metrics
 echo -e "\n--- Calculated Metrics referencing $COMPONENT ---"
-cja_auto_sdr $DATA_VIEW --include-calculated -f json 2>/dev/null | \
+cja_auto_sdr $DATA_VIEW --include-calculated --format json 2>/dev/null | \
   jq --arg comp "$COMPONENT" '
     .calculated_metrics.metrics[]
     | select(.metric_references | contains([$comp]))
@@ -1037,7 +1037,7 @@ cja_auto_sdr dv_12345 \
 | Analytics Teams | Regular SDR documentation | Weekly automated runs |
 | DevOps Engineers | CI/CD integration, governance gates | `--org-report --fail-on-threshold` in pipelines |
 | Data Governance | Audit trails, component inventory, org-wide governance | Monthly `--org-report` + `--include-all-inventory` |
-| Solution Architects | Complexity analysis, dependency mapping | `--include-all-inventory --inventory-only -f json` |
+| Solution Architects | Complexity analysis, dependency mapping | `--include-all-inventory --inventory-only --format json` |
 | Platform Teams | Org-wide standardization, duplicate detection | `--org-report --cluster --include-names --format excel` |
 | Consultants | Multi-client management | Batch processing per client with profiles |
 | Enterprise | Compliance documentation, cross-DV governance | `--org-report --compare-org-report` for trending |

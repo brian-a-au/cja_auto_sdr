@@ -257,8 +257,8 @@ In JSON format, all modified items appear in the `metric_diffs` and `dimension_d
       "name": "Bounce %",
       "change_type": "modified",
       "changed_fields": {
-        "name": ["Bounce Rate", "Bounce %"],
-        "type": ["decimal", "int"]
+        "name": {"source": "Bounce Rate", "target": "Bounce %"},
+        "type": {"source": "decimal", "target": "int"}
       },
       "source_data": { "...full source component..." },
       "target_data": { "...full target component..." }
@@ -268,8 +268,8 @@ In JSON format, all modified items appear in the `metric_diffs` and `dimension_d
       "name": "CVR",
       "change_type": "modified",
       "changed_fields": {
-        "name": ["Conversion Rate", "CVR"],
-        "description": ["Old description", "New description"]
+        "name": {"source": "Conversion Rate", "target": "CVR"},
+        "description": {"source": "Old description", "target": "New description"}
       },
       "source_data": { "...full source component..." },
       "target_data": { "...full target component..." }
@@ -278,7 +278,7 @@ In JSON format, all modified items appear in the `metric_diffs` and `dimension_d
 }
 ```
 
-The `changed_fields` object maps each changed field to a tuple of `[source_value, target_value]`. When a component has multiple fields changed, all appear in the same `changed_fields` object.
+The `changed_fields` object maps each changed field to an object with `source` and `target` keys (`{"source": source_value, "target": target_value}`). When a component has multiple fields changed, all appear in the same `changed_fields` object.
 
 #### Grouped by Field Output (`--group-by-field`)
 
@@ -395,7 +395,7 @@ Certain modifications are flagged as "breaking changes" in the output:
 | `type` | Data type change may break downstream reports |
 | `schemaPath` | Schema mapping change affects data collection |
 
-These appear with warnings in console/markdown output:
+These are surfaced when grouping by field (`--group-by-field`) and in PR-comment output, and are included in the JSON `advisories` section:
 
 ```
 ⚠️ BREAKING CHANGES DETECTED
@@ -424,9 +424,6 @@ $ cja_auto_sdr --diff "Before Migration" "After Migration" --extended-fields --s
 METRICS CHANGES (5)
   [~] metrics/revenue       attribution: {'model': 'lastTouch'} -> {'model': 'linear'}
   [~] metrics/orders        type: 'int' -> 'decimal', precision: '0' -> '2'
-
-⚠️ BREAKING CHANGES DETECTED
-  - metrics/orders: type changed from 'int' to 'decimal'
 ```
 
 **Example 3: Detailed side-by-side review**
@@ -787,10 +784,10 @@ Total Changes = Added + Removed + Modified
      49       =  17   +   22    +   10
 ```
 
-**4. Change percentage** — Changes relative to source size:
+**4. Change percentage** — Changes relative to the larger of the source and target size:
 ```
-Changed % = (Total Changes / Source) × 100
-  148.5%  = (     49       /   33  ) × 100
+Changed % = (Total Changes / max(Source, Target)) × 100
+  148.5%  = (     49       /      max(33, 28)     ) × 100
 ```
 
 > **Why can Changed % exceed 100%?** When you have both many removals AND many additions, the total changes can exceed the original component count. A 148.5% change rate means the data view underwent significant restructuring—not just edits, but wholesale replacement of components.
@@ -815,7 +812,7 @@ Dimensions                                           120                        
 | Removed | -22 | 22 metrics from source are gone in target |
 | Modified | ~10 | 10 metrics exist in both but have different field values |
 | Unchanged | 1 | Only 1 metric is identical in both data views |
-| Changed | 148.5% | 49 total changes relative to 33 source metrics |
+| Changed | 148.5% | 49 total changes relative to 33, the larger of 33 source and 28 target metrics |
 
 **Validation check:**
 - Target = 33 - 22 + 17 = **28** ✓
@@ -1311,7 +1308,7 @@ SEGMENTS CHANGES (7)
 
 **Excel output:** Adds "Calc Metrics Diff" and "Segments Diff" sheets.
 
-**JSON output:** Includes `calc_metrics_diffs` and `segments_diffs` arrays.
+**JSON output:** Includes `calculated_metrics_diffs` and `segments_diffs` arrays.
 
 ### Inventory Comparison Fields
 

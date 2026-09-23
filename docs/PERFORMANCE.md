@@ -54,7 +54,7 @@ Result:     4x faster (75% time savings)
 ```bash
 # Default (auto-detect based on CPU cores and workload)
 cja_auto_sdr dv_1 dv_2 dv_3
-# Shows: "Auto-detected workers: 4 (based on 8 CPU cores, 3 data views)"
+# Shows: "Auto-detected workers: 3 (based on 8 CPU cores, 3 data views)"
 
 # Conservative (shared API, rate limits)
 cja_auto_sdr --batch dv_* --workers 2

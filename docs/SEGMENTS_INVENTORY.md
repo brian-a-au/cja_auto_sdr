@@ -14,7 +14,7 @@ cja_auto_sdr dv_12345 --include-segments
 cja_auto_sdr dv_12345 --include-segments --include-calculated --include-derived
 
 # Output in multiple formats
-cja_auto_sdr dv_12345 --include-segments -f all
+cja_auto_sdr dv_12345 --include-segments --format all
 
 # Generate ONLY segments inventory (no standard SDR content)
 cja_auto_sdr dv_12345 --include-segments --inventory-only
@@ -43,7 +43,7 @@ The Segments inventory includes the following columns:
 | `approved` | Approval status (Yes/No) |
 | `tags` | Organizational tags |
 | `complexity_score` | Complexity score (0-100) |
-| `container_type` | Container context (Hit/Visit/Person) |
+| `container_type` | Container context as returned by the API, title-cased in tabular output (`Hits`, `Visits`, `Visitors`; custom contexts such as `Containers/Productlistitems` are also possible). The JSON export keeps the raw lowercase value (`hits`, `visits`, `visitors`). |
 | `functions_used` | Functions used in definition |
 | `dimension_references` | Referenced dimensions |
 | `metric_references` | Referenced metrics |
@@ -92,13 +92,15 @@ The definition summary provides a human-readable description of segment logic:
 
 ## Container Types
 
-Segments operate at different scope levels:
+Segments operate at different scope levels. The `container_type` field reports the container context exactly as the CJA 2.0 API returns it. Tabular output (Excel, CSV, HTML, Markdown) title-cases the value, and the JSON export keeps the raw lowercase value. Segments may also use custom containers, which appear with their raw context path (for example `Containers/Productlistitems`).
 
-| Container | Description |
-|-----------|-------------|
-| Hit | Individual page view or event |
-| Visit | Session-level scope |
-| Person (Visitor) | Cross-session, user-level scope |
+| Tabular value | JSON value | Scope |
+|---------------|------------|-------|
+| Hits | hits | Individual page view or event |
+| Visits | visits | Session-level scope |
+| Visitors | visitors | Cross-session, person-level scope |
+
+> **Note:** The friendly `Hit` / `Visit` / `Person` wording is used only in the `definition_summary` field (for example `Person where revenue > 100`), not in `container_type`.
 
 ## Output Formats
 
@@ -131,28 +133,28 @@ The segments inventory is included in all supported output formats:
 ### Governance Audit
 ```bash
 # Find all unapproved segments
-cja_auto_sdr dv_12345 --include-segments -f json | \
+cja_auto_sdr dv_12345 --include-segments --format json | \
   jq '.segments.segments[] | select(.approved == false) | .segment_name'
 ```
 
 ### Complexity Analysis
 ```bash
 # List high-complexity segments (score >= 75)
-cja_auto_sdr dv_12345 --include-segments -f json | \
+cja_auto_sdr dv_12345 --include-segments --format json | \
   jq '.segments.segments[] | select(.complexity_score >= 75)'
 ```
 
 ### Dependency Mapping
 ```bash
 # Find segments using specific dimensions
-cja_auto_sdr dv_12345 --include-segments -f json | \
+cja_auto_sdr dv_12345 --include-segments --format json | \
   jq '.segments.segments[] | select(.dimension_references | contains(["revenue"]))'
 ```
 
 ### Documentation Export
 ```bash
 # Export segment documentation in all formats
-cja_auto_sdr dv_12345 --include-segments -f all
+cja_auto_sdr dv_12345 --include-segments --format all
 ```
 
 ## Function Reference
