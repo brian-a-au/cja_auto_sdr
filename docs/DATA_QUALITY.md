@@ -159,9 +159,9 @@ Details:   5 item(s) missing description. Items: eVar1, eVar5, prop3...
 Severity:  CRITICAL
 Category:  Missing Fields
 Type:      Metrics
-Item Name: metrics_undefined
-Issue:     Missing required field: name
-Details:   Component cannot be properly identified without a name
+Item Name: N/A
+Issue:     Required fields missing from API response
+Details:   Missing fields: name
 ```
 
 ## Limiting Issues Output

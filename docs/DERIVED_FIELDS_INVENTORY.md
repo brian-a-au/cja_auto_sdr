@@ -265,14 +265,14 @@ The inventory translates internal function names to human-readable display names
 | merge              | Merge Fields          |
 | deduplicate        | Deduplicate           |
 | field-def-reference| Component Reference   |
-| typecast           | Type Conversion       |
-| datetime-bucket    | Date Bucketing        |
-| datetime-slice     | Date Component        |
+| typecast           | Typecast              |
+| datetime-bucket    | Date Bucket           |
+| datetime-slice     | Date Slice            |
 | timezone-shift     | Timezone Shift        |
-| find-replace       | Find and Replace      |
-| depth              | Path Depth            |
-| profile            | Profile Attribute     |
-| split              | Split String          |
+| find-replace       | Find & Replace        |
+| depth              | Depth                 |
+| profile            | Profile Field         |
+| split              | Split                 |
 
 ## Snapshot Diff Support
 

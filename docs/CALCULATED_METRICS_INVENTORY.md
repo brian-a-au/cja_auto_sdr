@@ -50,7 +50,7 @@ The calculated metrics inventory includes the following information for each met
 | formula_summary    | Brief description of what the metric calculates          |
 | summary            | Alias for `formula_summary` (for cross-module consistency) |
 | polarity           | Positive, Negative, or Neutral                           |
-| format             | Output format: Decimal, Percent, Currency, Integer, Time |
+| format             | Output format, as the raw lowercase API value: `decimal`, `percent`, `currency`, `integer`, `time` |
 | created            | Creation timestamp                                       |
 | modified           | Last modified timestamp                                  |
 | shared_to          | Number of users/groups the metric is shared with         |

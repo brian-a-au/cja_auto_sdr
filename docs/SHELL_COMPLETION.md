@@ -113,7 +113,7 @@ cja_auto_sdr --for[TAB]
 
 # See available format choices
 cja_auto_sdr --format [TAB][TAB]
-# Shows: excel  csv  json  html  markdown  all  reports  data  ci
+# Shows: console  excel  csv  json  html  markdown  notion  all  reports  data  ci
 
 # Complete long options
 cja_auto_sdr --val[TAB]

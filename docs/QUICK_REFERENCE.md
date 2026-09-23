@@ -2,7 +2,7 @@
 
 Single-page command cheat sheet for CJA SDR Generator v3.12.6.
 
-## Four Main Modes
+## Main Modes
 
 | Mode | Purpose | Output |
 |------|---------|--------|
@@ -334,7 +334,7 @@ cja_auto_sdr --list-dataviews  # Uses client-a
 | `--stats` | Quick statistics only (no full report) | SDR only |
 | `--interactive`, `-i` | Interactively select data views from a numbered list | SDR only |
 | `--config-file PATH` | Use custom config file (default: config.json) | All modes |
-| `--log-level LEVEL` | Set logging: `DEBUG`, `INFO`, `WARNING`, `ERROR` | All modes |
+| `--log-level LEVEL` | Set logging: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL` | All modes |
 | `--log-format FORMAT` | Log output: `text` (default) or `json` (structured) | All modes |
 | `--workers N` | Parallel workers: `auto` (default) or `1-256` | SDR only |
 | `--skip-validation` | Skip data quality checks (faster) | SDR only |
@@ -391,7 +391,7 @@ cja_auto_sdr --list-dataviews  # Uses client-a
 | `--compare-with-prev` | Compare against most recent snapshot in --snapshot-dir |
 | `--list-snapshots` | List snapshots from `--snapshot-dir` (optionally filtered by data view ID) |
 | `--prune-snapshots` | Apply retention policies (`--keep-last`/`--keep-since`) without running diff |
-| `--diff-labels A B` | Custom labels for comparison columns (default: data view names) |
+| `--diff-labels A B` | Custom labels for comparison columns (default: `Source`/`Target` for live diffs; snapshot comparisons use date-based labels) |
 | `--auto-snapshot` | Automatically save snapshots during diff for future comparisons |
 | `--auto-prune` | With `--auto-snapshot`, apply default retention (`--keep-last 20` + `--keep-since 30d`) only when both retention flags are omitted |
 | `--keep-last N` | Retention: keep last N snapshots per data view (`0` keeps all) |
