@@ -311,9 +311,17 @@ def test_inventory_summary_wrapper_resolves_to_output_inventory():
 _OUTPUT_WRITER_SIGNATURES = {
     "write_csv_output": ["data_dict", "base_filename", "output_dir", "logger"],
     "write_excel_output": ["data_dict", "base_filename", "output_dir", "logger"],
-    "write_html_output": ["data_dict", "metadata_dict", "base_filename", "output_dir", "logger"],
-    "write_json_output": ["data_dict", "metadata_dict", "base_filename", "output_dir", "logger", "inventory_objects"],
-    "write_markdown_output": ["data_dict", "metadata_dict", "base_filename", "output_dir", "logger"],
+    "write_html_output": ["data_dict", "metadata_dict", "base_filename", "output_dir", "logger", "output_path"],
+    "write_json_output": [
+        "data_dict",
+        "metadata_dict",
+        "base_filename",
+        "output_dir",
+        "logger",
+        "inventory_objects",
+        "output_path",
+    ],
+    "write_markdown_output": ["data_dict", "metadata_dict", "base_filename", "output_dir", "logger", "output_path"],
 }
 
 _OUTPUT_WRITER_MODULE_CASES = [

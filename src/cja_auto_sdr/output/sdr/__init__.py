@@ -31,6 +31,7 @@ from cja_auto_sdr.core.version import __version__
 __all__ = [
     "ExcelFormatCache",
     "apply_excel_formatting",
+    "build_json_payload",
     "write_csv_output",
     "write_excel_output",
     "write_html_output",
@@ -503,6 +504,77 @@ def write_csv_output(
         raise
 
 
+def build_json_payload(
+    data_dict: dict[str, pd.DataFrame],
+    metadata_dict: dict[str, Any],
+    inventory_objects: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build the hierarchical JSON payload for SDR output.
+
+    Shared by :func:`write_json_output` (file output) and stdout streaming so
+    both paths serialize identical structures.
+
+    Args:
+        data_dict: Dictionary mapping sheet names to DataFrames
+        metadata_dict: Metadata information
+        inventory_objects: Optional dict with 'derived'/'calculated'/'segments'
+            inventory objects for detailed output using ``to_json()``
+
+    Returns:
+        JSON-serializable dictionary
+    """
+    json_data: dict[str, Any] = {
+        "metadata": metadata_dict,
+        "data_view": {},
+        "metrics": [],
+        "dimensions": [],
+        "data_quality": [],
+        "derived_fields": {},
+        "calculated_metrics": {},
+        "segments": {},
+    }
+
+    inventory_objects = inventory_objects or {}
+
+    # Convert DataFrames to JSON-serializable format
+    for sheet_name, df in data_dict.items():
+        # Normalize pandas missing scalars before converting to records.
+        # Pandas 3 preserves nullable string columns as NaN in to_dict(),
+        # which would otherwise leak non-standard NaN values into JSON.
+        records = df.astype(object).where(df.notna(), None).to_dict(orient="records")
+
+        # Map to appropriate section
+        if sheet_name == "Data Quality":
+            json_data["data_quality"] = records
+        elif sheet_name == "Metrics":
+            json_data["metrics"] = records
+        elif sheet_name == "Dimensions":
+            json_data["dimensions"] = records
+        elif sheet_name == "DataView Details":
+            # For single-record sheets, store as object not array
+            json_data["data_view"] = records[0] if records else {}
+        elif sheet_name == "Derived Fields":
+            # Use inventory object's to_json() for detailed output if available
+            if inventory_objects.get("derived"):
+                json_data["derived_fields"] = inventory_objects["derived"].to_json()
+            else:
+                json_data["derived_fields"] = {"fields": records}
+        elif sheet_name == "Calculated Metrics":
+            # Use inventory object's to_json() for detailed output if available
+            if inventory_objects.get("calculated"):
+                json_data["calculated_metrics"] = inventory_objects["calculated"].to_json()
+            else:
+                json_data["calculated_metrics"] = {"metrics": records}
+        elif sheet_name == "Segments":
+            # Use inventory object's to_json() for detailed output if available
+            if inventory_objects.get("segments"):
+                json_data["segments"] = inventory_objects["segments"].to_json()
+            else:
+                json_data["segments"] = {"segments": records}
+
+    return json_data
+
+
 def write_json_output(
     data_dict: dict[str, pd.DataFrame],
     metadata_dict: dict[str, Any],
@@ -510,6 +582,7 @@ def write_json_output(
     output_dir: str | Path,
     logger: logging.Logger,
     inventory_objects: dict[str, Any] | None = None,
+    output_path: str | None = None,
 ) -> str:
     """
     Write data to JSON format with hierarchical structure
@@ -529,58 +602,10 @@ def write_json_output(
     try:
         logger.info("Generating JSON output...")
 
-        # Build JSON structure
-        json_data = {
-            "metadata": metadata_dict,
-            "data_view": {},
-            "metrics": [],
-            "dimensions": [],
-            "data_quality": [],
-            "derived_fields": {},
-            "calculated_metrics": {},
-            "segments": {},
-        }
-
-        inventory_objects = inventory_objects or {}
-
-        # Convert DataFrames to JSON-serializable format
-        for sheet_name, df in data_dict.items():
-            # Normalize pandas missing scalars before converting to records.
-            # Pandas 3 preserves nullable string columns as NaN in to_dict(),
-            # which would otherwise leak non-standard NaN values into JSON.
-            records = df.astype(object).where(df.notna(), None).to_dict(orient="records")
-
-            # Map to appropriate section
-            if sheet_name == "Data Quality":
-                json_data["data_quality"] = records
-            elif sheet_name == "Metrics":
-                json_data["metrics"] = records
-            elif sheet_name == "Dimensions":
-                json_data["dimensions"] = records
-            elif sheet_name == "DataView Details":
-                # For single-record sheets, store as object not array
-                json_data["data_view"] = records[0] if records else {}
-            elif sheet_name == "Derived Fields":
-                # Use inventory object's to_json() for detailed output if available
-                if inventory_objects.get("derived"):
-                    json_data["derived_fields"] = inventory_objects["derived"].to_json()
-                else:
-                    json_data["derived_fields"] = {"fields": records}
-            elif sheet_name == "Calculated Metrics":
-                # Use inventory object's to_json() for detailed output if available
-                if inventory_objects.get("calculated"):
-                    json_data["calculated_metrics"] = inventory_objects["calculated"].to_json()
-                else:
-                    json_data["calculated_metrics"] = {"metrics": records}
-            elif sheet_name == "Segments":
-                # Use inventory object's to_json() for detailed output if available
-                if inventory_objects.get("segments"):
-                    json_data["segments"] = inventory_objects["segments"].to_json()
-                else:
-                    json_data["segments"] = {"segments": records}
+        json_data = build_json_payload(data_dict, metadata_dict, inventory_objects)
 
         # Write JSON file
-        json_file = os.path.join(output_dir, f"{base_filename}.json")
+        json_file = str(output_path) if output_path else os.path.join(output_dir, f"{base_filename}.json")
         write_json_atomic_compatible(json_file, json_data, indent=2, ensure_ascii=False, trailing_newline=False)
 
         logger.info("\u2713 JSON file created: %s", json_file)
@@ -609,6 +634,7 @@ def write_html_output(
     base_filename: str,
     output_dir: str | Path,
     logger: logging.Logger,
+    output_path: str | None = None,
 ) -> str:
     """
     Write data to HTML format with professional styling
@@ -849,7 +875,7 @@ def write_html_output(
         """)
 
         # Write HTML file
-        html_file = os.path.join(output_dir, f"{base_filename}.html")
+        html_file = str(output_path) if output_path else os.path.join(output_dir, f"{base_filename}.html")
         write_text_atomic_compatible(html_file, "\n".join(html_parts))
 
         logger.info("\u2713 HTML file created: %s", html_file)
@@ -933,6 +959,7 @@ def write_markdown_output(
     base_filename: str,
     output_dir: str | Path,
     logger: logging.Logger,
+    output_path: str | None = None,
 ) -> str:
     """
     Write data to Markdown format for GitHub, Confluence, and other platforms
@@ -1025,7 +1052,7 @@ def write_markdown_output(
         md_parts.append("*Generated by CJA Auto SDR Generator*")
 
         # Write to file
-        markdown_file = os.path.join(output_dir, f"{base_filename}.md")
+        markdown_file = str(output_path) if output_path else os.path.join(output_dir, f"{base_filename}.md")
         write_text_atomic_compatible(markdown_file, "\n".join(md_parts))
 
         logger.info("\u2713 Markdown file created: %s", markdown_file)

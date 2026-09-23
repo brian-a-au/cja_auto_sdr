@@ -87,8 +87,11 @@ cja_auto_sdr --batch dv_12345 dv_67890 --format csv --workers 4
 Use `--output` to specify the output file path, or write directly to stdout:
 
 ```bash
-# Write JSON to specific file
+# Write an SDR to a specific file
 cja_auto_sdr dv_12345 --format json --output ./reports/sdr.json
+
+# Stream an SDR as JSON to stdout for piping
+cja_auto_sdr dv_12345 --format json --output - | jq '.metrics'
 
 # Write to stdout (JSON/CSV only) for piping
 cja_auto_sdr --list-dataviews --output -
@@ -103,6 +106,8 @@ cja_auto_sdr dv_12345 --stats --output -
 # CSV stats to file
 cja_auto_sdr dv_12345 --stats --format csv --output stats.csv
 ```
+
+> **`--output` and SDR generation:** For single data view SDR generation, `--output <file>` applies to the single-file formats (`json`, `html`, `markdown`, `excel`) and writes that one file. `--output -`/`stdout` streams the SDR as JSON (use `--format json`); progress and logs go to stderr so stdout stays clean for piping. Multi-file formats (`csv`, `all`) and the external `notion` target ignore `--output` and keep auto-naming, so use `--output-dir` for those.
 
 > **Note:** When using `--output -` or `--output stdout`, the `--quiet` flag is automatically enabled to prevent decorative output from mixing with the data.
 

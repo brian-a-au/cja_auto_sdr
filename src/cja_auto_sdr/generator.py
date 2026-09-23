@@ -2977,6 +2977,7 @@ from cja_auto_sdr.output.inventory import display_inventory_summary
 from cja_auto_sdr.output.sdr import (
     ExcelFormatCache,
     apply_excel_formatting,
+    build_json_payload,
     write_csv_output,
     write_excel_output,
     write_html_output,
@@ -3212,6 +3213,7 @@ def process_single_dataview(
     notion_force_new: bool = False,
     notion_database_id: str | None = None,
     notion_create_database: bool = False,
+    output_file: str | None = None,
     processing_config: ProcessingConfig | None = None,
 ) -> ProcessingResult:
     """
@@ -3250,6 +3252,7 @@ def process_single_dataview(
         processing_config = ProcessingConfig(
             config_file=config_file,
             output_dir=output_dir,
+            output_file=output_file,
             log_level=log_level,
             log_format=log_format,
             output_format=output_format,
@@ -3283,6 +3286,7 @@ def process_single_dataview(
 
     config_file = processing_config.config_file
     output_dir = processing_config.output_dir
+    output_file = processing_config.output_file
     log_level = processing_config.log_level
     log_format = processing_config.log_format
     output_format = processing_config.output_format
@@ -3315,8 +3319,18 @@ def process_single_dataview(
 
     start_time = time.perf_counter()
 
+    # When streaming the SDR JSON to stdout (--output stdout --format json),
+    # keep stdout clean by routing console logs to stderr.
+    stdout_json_output = output_file in ("-", "stdout") and output_format == "json"
+
     # Setup logging for this data view
-    base_logger = setup_logging(data_view_id, batch_mode=False, log_level=log_level, log_format=log_format)
+    base_logger = setup_logging(
+        data_view_id,
+        batch_mode=False,
+        log_level=log_level,
+        log_format=log_format,
+        stream=sys.stderr if stdout_json_output else None,
+    )
     run_mode = "batch_worker" if batch_id else "single"
     logger = with_log_context(base_logger, run_mode=run_mode, data_view_id=data_view_id, batch_id=batch_id)
     perf_tracker = PerformanceTracker(logger)
@@ -3964,9 +3978,54 @@ def process_single_dataview(
         else:
             formats_to_generate = [output_format]
 
+        # Honor an explicit --output target for single data view SDR output.
+        # --output writes a single file, so it only applies to a single-file
+        # format. Multi-file (csv, all/aliases) and external (notion) outputs
+        # keep auto-naming under output_dir.
+        redirect_output_path: str | None = None
+        redirect_makedirs: str | None = None
+        _single_fmt = formats_to_generate[0] if len(formats_to_generate) == 1 else None
+        if output_file:
+            if output_file in ("-", "stdout"):
+                # stdout_json_output (computed above) is the single source of truth
+                # for both JSON streaming and routing logs to stderr. Warn when
+                # stdout was requested for a format that cannot stream.
+                if not stdout_json_output:
+                    # Emit guidance to stderr so it is visible even when stdout is
+                    # piped (console logging is suppressed for non-tty stdout).
+                    print(
+                        f"Warning: --output stdout is only supported with --format json; "
+                        f"writing files under {output_dir} instead.",
+                        file=sys.stderr,
+                    )
+            elif _single_fmt in ("excel", "json", "html", "markdown"):
+                # Write the single-file format to the exact path the user gave. The
+                # parent directory is created inside the output try below so a
+                # permission/path failure is classified like other output failures.
+                _target = Path(output_file)
+                redirect_makedirs = str(_target.parent) or "."
+                if _single_fmt == "excel":
+                    output_path = _target
+                else:
+                    redirect_output_path = str(_target)
+            elif _single_fmt == "notion":
+                print(
+                    "Warning: --output does not apply to --format notion; it publishes directly to a Notion page.",
+                    file=sys.stderr,
+                )
+            else:
+                print(
+                    f"Warning: --output is not supported with --format {output_format} "
+                    f"(it produces multiple files); writing under {output_dir} instead. "
+                    f"Use --output-dir.",
+                    file=sys.stderr,
+                )
+
         output_files = []
 
         try:
+            if redirect_makedirs is not None:
+                os.makedirs(redirect_makedirs, exist_ok=True)
             for fmt in formats_to_generate:
                 if fmt == "excel":
                     logger.info("Generating Excel file...")
@@ -4043,22 +4102,35 @@ def process_single_dataview(
                         "calculated": calculated_inventory_obj,
                         "segments": segments_inventory_obj,
                     }
-                    json_output = write_json_output(
-                        data_dict,
-                        metadata_dict,
-                        base_filename,
-                        output_dir,
-                        logger,
-                        inventory_objects,
-                    )
-                    output_files.append(json_output)
+                    if stdout_json_output:
+                        # Stream the SDR JSON to stdout for piping (no file written).
+                        payload = build_json_payload(data_dict, metadata_dict, inventory_objects)
+                        sys.stdout.write(json.dumps(payload, indent=2, ensure_ascii=False))
+                        sys.stdout.write("\n")
+                        sys.stdout.flush()
+                        output_files.append("<stdout>")
+                    else:
+                        json_output = write_json_output(
+                            data_dict,
+                            metadata_dict,
+                            base_filename,
+                            output_dir,
+                            logger,
+                            inventory_objects,
+                            output_path=redirect_output_path,
+                        )
+                        output_files.append(json_output)
 
                 elif fmt == "html":
-                    html_output = write_html_output(data_dict, metadata_dict, base_filename, output_dir, logger)
+                    html_output = write_html_output(
+                        data_dict, metadata_dict, base_filename, output_dir, logger, output_path=redirect_output_path
+                    )
                     output_files.append(html_output)
 
                 elif fmt == "markdown":
-                    markdown_output = write_markdown_output(data_dict, metadata_dict, base_filename, output_dir, logger)
+                    markdown_output = write_markdown_output(
+                        data_dict, metadata_dict, base_filename, output_dir, logger, output_path=redirect_output_path
+                    )
                     output_files.append(markdown_output)
 
                 elif fmt == "notion":
@@ -4148,7 +4220,8 @@ def process_single_dataview(
 
             # Display timing summary on stdout if requested
             if show_timings:
-                print(perf_tracker.get_summary())
+                # Keep stdout clean when it carries the streamed JSON payload.
+                print(perf_tracker.get_summary(), file=sys.stderr if stdout_json_output else sys.stdout)
 
             duration = time.perf_counter() - start_time
 
@@ -7500,7 +7573,10 @@ def _main_impl(run_state: dict[str, Any] | None = None):
     # Show what we're resolving
     names_provided = [dv for dv in data_view_inputs if not is_data_view_id(dv)]
 
-    if names_provided and not args.quiet:
+    # Keep stdout clean when it will carry a streamed JSON payload.
+    _stdout_output = str(getattr(args, "output", None)) in ("-", "stdout")
+
+    if names_provided and not args.quiet and not _stdout_output:
         print()
         print(ConsoleColors.info(f"Resolving {len(names_provided)} data view name(s)..."))
 
@@ -7517,25 +7593,25 @@ def _main_impl(run_state: dict[str, Any] | None = None):
 
     # Check if resolution failed
     if not data_views:
-        print()
+        print(file=sys.stderr)
         print(ConsoleColors.error("ERROR: No valid data views found"), file=sys.stderr)
-        print()
+        print(file=sys.stderr)
         print("Possible issues:", file=sys.stderr)
         print("  - Data view ID(s) or name(s) not found or you don't have access", file=sys.stderr)
         print("  - Data view name is not an EXACT match (names are case-sensitive)", file=sys.stderr)
         print("  - Configuration issue preventing data view lookup", file=sys.stderr)
-        print()
+        print(file=sys.stderr)
         print("Tips for using Data View Names:", file=sys.stderr)
         print("  • Names must match EXACTLY: 'Production Analytics' ≠ 'production analytics'", file=sys.stderr)
         print('  • Use quotes around names: cja_auto_sdr "Production Analytics"', file=sys.stderr)
         print("  • IDs start with 'dv_': cja_auto_sdr dv_12345", file=sys.stderr)
-        print()
+        print(file=sys.stderr)
         print("Try running: cja_auto_sdr --list-dataviews", file=sys.stderr)
         print("  to see all accessible data view IDs and names", file=sys.stderr)
         sys.exit(1)
 
     # Show resolution summary if names were used
-    if name_to_ids_map and not args.quiet:
+    if name_to_ids_map and not args.quiet and not _stdout_output:
         print()
         print(ConsoleColors.success("Data view name resolution:"))
         for name, ids in name_to_ids_map.items():

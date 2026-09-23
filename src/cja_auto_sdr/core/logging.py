@@ -588,6 +588,7 @@ def setup_logging(
     batch_mode: bool = False,
     log_level: str | None = None,
     log_format: str = "text",
+    stream: object | None = None,
 ) -> logging.Logger:
     """Setup logging to both file and console.
 
@@ -649,8 +650,10 @@ def setup_logging(
         handler.close()
         logging.root.removeHandler(handler)
 
-    # Configure logging handlers
-    handlers = [logging.StreamHandler(sys.stdout)]
+    # Configure logging handlers (route console logs to the given stream, or
+    # stdout by default; stderr is used when the primary stdout stream must stay
+    # clean for machine-readable output such as --output stdout)
+    handlers = [logging.StreamHandler(stream if stream is not None else sys.stdout)]
     if log_file is not None:
         # Use RotatingFileHandler to prevent unbounded log growth
         handlers.append(RotatingFileHandler(log_file, maxBytes=LOG_FILE_MAX_BYTES, backupCount=LOG_FILE_BACKUP_COUNT))

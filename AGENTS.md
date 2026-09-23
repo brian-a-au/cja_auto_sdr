@@ -185,7 +185,7 @@ Use `--explain-exit-code CODE` to get a human-readable explanation of any exit c
 - Use `--format json --output -` for machine-parseable stdout on command families that support direct stdout emission.
 - Machine-readable stdout uses `json` or `csv`; org-report also supports `console` on stdout for human-readable output.
 - `--output -` implies `--quiet` (suppresses banner/progress to stderr).
-- Single-SDR generation currently writes auto-named artifacts under `--output-dir`; use `--run-summary-json` for stable machine-readable completion metadata.
+- Single-SDR generation honors `--output`: a file path for the single-file formats (`json`, `html`, `markdown`, `excel`), or `--output -`/`stdout` with `--format json` to stream the SDR JSON on stdout. Multi-file formats (`csv`, `all`) and `notion` auto-name under `--output-dir`. Use `--run-summary-json` for stable machine-readable completion metadata.
 - For scheduled/agent runs, prefer retry settings such as `--max-retries 5 --retry-max-delay 60` to absorb transient Adobe API rate limits.
 - On failure, stderr receives a JSON error envelope:
   ```json
@@ -221,15 +221,15 @@ Log levels: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`. Log formats: `text`
 --format json --output - --log-format json
 ```
 
-It applies machine-friendly defaults. Discovery, diff, and org-report flows emit machine-readable JSON on stdout with structured logs on stderr. Single-SDR and batch generation currently still write auto-named artifacts under `--output-dir`.
+It applies machine-friendly defaults. Discovery, diff, and org-report flows emit machine-readable JSON on stdout with structured logs on stderr. Single-SDR generation honors `--output`: a file path writes the single-file formats (`json`, `html`, `markdown`, `excel`) to that path, and `--output -`/`stdout` with `--format json` streams the SDR JSON on stdout with logs on stderr. Multi-file formats (`csv`, `all`) and `notion` keep auto-naming, and batch generation still writes auto-named artifacts under `--output-dir`.
 
 ```bash
 # Direct stdout command families:
 uv run cja_auto_sdr --list-dataviews --agent-mode
 uv run cja_auto_sdr --org-report --agent-mode
 
-# Single SDR keeps the preset but still writes auto-named artifacts
-uv run cja_auto_sdr <dv_id> --agent-mode --output-dir /reports
+# Single SDR under the preset streams the SDR JSON to stdout
+uv run cja_auto_sdr <dv_id> --agent-mode | jq '.metrics'
 ```
 
 Config preflight before running unattended:
@@ -243,7 +243,7 @@ uv run cja_auto_sdr --config-status --config-json  # machine-readable config sta
 
 | Command Family | `--agent-mode` | Notes |
 |---|---|---|
-| Single SDR | Limited | Preset applies, but current generation writes auto-named artifacts under `--output-dir` |
+| Single SDR | ✅ | Preset streams the SDR JSON to stdout (`--format json --output -`); a `--output <file>` path writes json/html/markdown/excel to that file |
 | Batch SDR | Limited | Preset applies, but generated artifacts still land under `--output-dir` per data view |
 | Discovery / Inspection | ✅ | JSON on stdout for machine-readable flows; prefer exact IDs for unattended inspection |
 | Org Report | ✅ | JSON on stdout; `--format console --output -` is also supported for human-readable stdout |

@@ -171,9 +171,8 @@ class TestQuickReferenceDoc:
         assert "--list-dataviews --agent-mode" in content
         assert "--org-report --agent-mode" in content
         assert "--diff dv_a dv_b --agent-mode" in content
-        assert "dv_12345 --agent-mode --output-dir ./reports" in content
+        assert "dv_12345 --agent-mode | jq" in content
 
-    def test_agent_mode_single_sdr_caveat_documented(self):
+    def test_agent_mode_single_sdr_streaming_documented(self):
         content = QUICK_REFERENCE_MD.read_text().lower()
-        assert "--output-dir" in content
-        assert "single-sdr generation" in content
+        assert "single-sdr generation streams" in content

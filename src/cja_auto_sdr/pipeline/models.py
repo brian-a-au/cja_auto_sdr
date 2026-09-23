@@ -163,6 +163,7 @@ class ProcessingConfig:
     notion_force_new: bool = False
     notion_database_id: str | None = None
     notion_create_database: bool = False
+    output_file: str | None = None
 
 
 @dataclass(frozen=True)

@@ -1,6 +1,6 @@
 # Quick Reference Card
 
-Single-page command cheat sheet for CJA SDR Generator v3.12.5.
+Single-page command cheat sheet for CJA SDR Generator v3.12.6.
 
 ## Main Modes
 
@@ -345,7 +345,7 @@ cja_auto_sdr --list-dataviews  # Uses client-a
 | `--quality-report FORMAT` | Generate standalone quality issues report (`json` or `csv`) without SDR files (requires validation; incompatible with `--skip-validation`) | SDR only |
 | `--allow-partial` | Opt-in exploratory SDR mode: continue on required component fetch or validation runtime failures (not supported with `--quality-report` or `--fail-on-quality`) | SDR only |
 | `--quality-policy PATH` | Load quality defaults from JSON (`fail_on_quality`, `quality_report`, `max_issues`, `allow_partial`); explicit CLI flags take precedence | SDR only |
-| `--agent-mode` | Agent-friendly preset: `--format json --output - --log-format json`. Stdout behavior still implies `--quiet`. Individual flags override preset values. Command-family runtime behavior still applies, so single-SDR generation may still write auto-named artifacts under `--output-dir`. Incompatible with `--interactive` | All modes |
+| `--agent-mode` | Agent-friendly preset: `--format json --output - --log-format json`. Stdout behavior still implies `--quiet`. Individual flags override preset values. Under this preset, single-SDR generation streams the SDR JSON to stdout. Incompatible with `--interactive` | All modes |
 | `--run-summary-json PATH` | Write machine-readable run summary JSON; use `-` for stdout | All modes |
 | `--explain-exit-code CODE` | Print human-readable explanation for an exit code and exit 0 | All modes |
 | `--lock-stale-threshold SECONDS` | Stale-lease recovery threshold for org-report lock (> 0) | Org-report only |
@@ -541,8 +541,8 @@ cja_auto_sdr --org-report --agent-mode
 # Agent mode with diff
 cja_auto_sdr --diff dv_a dv_b --agent-mode
 
-# Single SDR keeps agent defaults but still writes an auto-named artifact
-cja_auto_sdr dv_12345 --agent-mode --output-dir ./reports
+# Single SDR under the preset streams the SDR JSON to stdout
+cja_auto_sdr dv_12345 --agent-mode | jq '.metrics'
 
 # --- Inventory Diff (same data view over time) ---
 
