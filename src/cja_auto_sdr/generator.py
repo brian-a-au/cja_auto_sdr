@@ -3982,15 +3982,15 @@ def process_single_dataview(
         # --output writes a single file, so it only applies to a single-file
         # format. Multi-file (csv, all/aliases) and external (notion) outputs
         # keep auto-naming under output_dir.
-        stdout_json_mode = False
         redirect_output_path: str | None = None
         redirect_makedirs: str | None = None
         _single_fmt = formats_to_generate[0] if len(formats_to_generate) == 1 else None
         if output_file:
             if output_file in ("-", "stdout"):
-                if _single_fmt == "json":
-                    stdout_json_mode = True
-                else:
+                # stdout_json_output (computed above) is the single source of truth
+                # for both JSON streaming and routing logs to stderr. Warn when
+                # stdout was requested for a format that cannot stream.
+                if not stdout_json_output:
                     # Emit guidance to stderr so it is visible even when stdout is
                     # piped (console logging is suppressed for non-tty stdout).
                     print(
@@ -4102,7 +4102,7 @@ def process_single_dataview(
                         "calculated": calculated_inventory_obj,
                         "segments": segments_inventory_obj,
                     }
-                    if stdout_json_mode:
+                    if stdout_json_output:
                         # Stream the SDR JSON to stdout for piping (no file written).
                         payload = build_json_payload(data_dict, metadata_dict, inventory_objects)
                         sys.stdout.write(json.dumps(payload, indent=2, ensure_ascii=False))
@@ -4221,7 +4221,7 @@ def process_single_dataview(
             # Display timing summary on stdout if requested
             if show_timings:
                 # Keep stdout clean when it carries the streamed JSON payload.
-                print(perf_tracker.get_summary(), file=sys.stderr if stdout_json_mode else sys.stdout)
+                print(perf_tracker.get_summary(), file=sys.stderr if stdout_json_output else sys.stdout)
 
             duration = time.perf_counter() - start_time
 
