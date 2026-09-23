@@ -3984,6 +3984,7 @@ def process_single_dataview(
         # keep auto-naming under output_dir.
         stdout_json_mode = False
         redirect_output_path: str | None = None
+        redirect_makedirs: str | None = None
         _single_fmt = formats_to_generate[0] if len(formats_to_generate) == 1 else None
         if output_file:
             if output_file in ("-", "stdout"):
@@ -3998,24 +3999,33 @@ def process_single_dataview(
                         file=sys.stderr,
                     )
             elif _single_fmt in ("excel", "json", "html", "markdown"):
-                # Write the single-file format to the exact path the user gave.
+                # Write the single-file format to the exact path the user gave. The
+                # parent directory is created inside the output try below so a
+                # permission/path failure is classified like other output failures.
                 _target = Path(output_file)
-                os.makedirs(str(_target.parent) or ".", exist_ok=True)
+                redirect_makedirs = str(_target.parent) or "."
                 if _single_fmt == "excel":
                     output_path = _target
                 else:
                     redirect_output_path = str(_target)
+            elif _single_fmt == "notion":
+                print(
+                    "Warning: --output does not apply to --format notion; it publishes directly to a Notion page.",
+                    file=sys.stderr,
+                )
             else:
                 print(
                     f"Warning: --output is not supported with --format {output_format} "
-                    f"(it writes multiple files or an external target); writing under "
-                    f"{output_dir} instead. Use --output-dir.",
+                    f"(it produces multiple files); writing under {output_dir} instead. "
+                    f"Use --output-dir.",
                     file=sys.stderr,
                 )
 
         output_files = []
 
         try:
+            if redirect_makedirs is not None:
+                os.makedirs(redirect_makedirs, exist_ok=True)
             for fmt in formats_to_generate:
                 if fmt == "excel":
                     logger.info("Generating Excel file...")

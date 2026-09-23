@@ -2541,3 +2541,45 @@ class TestSingleModeOutputTarget:
         assert not (tmp_path / "result.json").exists()
         payload = json.loads(target.read_text(encoding="utf-8"))
         assert len(payload["metrics"]) == 2
+
+    @patch("cja_auto_sdr.generator.os.makedirs", side_effect=PermissionError("denied"))
+    @patch("cja_auto_sdr.generator.setup_logging")
+    @patch("cja_auto_sdr.generator.initialize_cja")
+    @patch("cja_auto_sdr.generator.ParallelAPIFetcher")
+    @patch("cja_auto_sdr.generator.DataQualityChecker")
+    def test_output_file_makedirs_failure_is_classified(
+        self,
+        mock_dq_checker_class,
+        mock_fetcher_class,
+        mock_init_cja,
+        mock_setup_logging,
+        mock_makedirs,
+        mock_config_file,
+        tmp_path,
+        sample_metrics_df,
+        sample_dimensions_df,
+        sample_dataview_info,
+    ):
+        """A --output parent-directory permission failure is classified as an output failure."""
+        self._mocks(
+            mock_setup_logging,
+            mock_init_cja,
+            mock_fetcher_class,
+            mock_dq_checker_class,
+            sample_metrics_df,
+            sample_dimensions_df,
+            sample_dataview_info,
+        )
+        target = tmp_path / "nested" / "out.json"
+
+        result = process_single_dataview(
+            data_view_id="dv_test_12345",
+            config_file=mock_config_file,
+            output_dir=str(tmp_path),
+            output_file=str(target),
+            output_format="json",
+        )
+
+        assert result.success is False
+        assert result.failure_code == "OUTPUT_PERMISSION_DENIED"
+        assert result.failure_reason == "output_permission_denied"
