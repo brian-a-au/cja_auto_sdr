@@ -63,7 +63,7 @@ cja_auto_sdr --batch dv_* --workers 2
 cja_auto_sdr --batch dv_* --workers 8
 ```
 
-> **Note:** The default `--workers auto` intelligently selects worker count based on CPU cores, number of data views, and component complexity. It automatically reduces workers for large data views (>5000 components) to prevent memory exhaustion.
+> **Note:** The default `--workers auto` selects a worker count based on the number of CPU cores and the number of data views (see the auto-detect heuristic above). For large or memory-heavy runs, set `--workers` explicitly to keep memory usage in check.
 
 ### Worker Optimization Guide
 
