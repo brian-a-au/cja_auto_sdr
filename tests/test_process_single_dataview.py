@@ -2349,8 +2349,16 @@ class TestElapsedDurationTimingHardening:
 class TestSingleModeOutputTarget:
     """Honor --output (explicit file path and stdout) for single data view SDR generation."""
 
-    def _mocks(self, mock_setup_logging, mock_init_cja, mock_fetcher_class, mock_dq_checker_class,
-               metrics_df, dimensions_df, dataview_info):
+    def _mocks(
+        self,
+        mock_setup_logging,
+        mock_init_cja,
+        mock_fetcher_class,
+        mock_dq_checker_class,
+        metrics_df,
+        dimensions_df,
+        dataview_info,
+    ):
         mock_setup_logging.return_value = Mock()
         mock_init_cja.return_value = Mock()
         mock_fetcher = Mock()
@@ -2368,12 +2376,27 @@ class TestSingleModeOutputTarget:
     @patch("cja_auto_sdr.generator.ParallelAPIFetcher")
     @patch("cja_auto_sdr.generator.DataQualityChecker")
     def test_output_file_writes_exact_json_path(
-        self, mock_dq_checker_class, mock_fetcher_class, mock_init_cja, mock_setup_logging,
-        mock_config_file, tmp_path, sample_metrics_df, sample_dimensions_df, sample_dataview_info,
+        self,
+        mock_dq_checker_class,
+        mock_fetcher_class,
+        mock_init_cja,
+        mock_setup_logging,
+        mock_config_file,
+        tmp_path,
+        sample_metrics_df,
+        sample_dimensions_df,
+        sample_dataview_info,
     ):
         """--output <file> writes the JSON to exactly that path (creating parent dirs)."""
-        self._mocks(mock_setup_logging, mock_init_cja, mock_fetcher_class, mock_dq_checker_class,
-                    sample_metrics_df, sample_dimensions_df, sample_dataview_info)
+        self._mocks(
+            mock_setup_logging,
+            mock_init_cja,
+            mock_fetcher_class,
+            mock_dq_checker_class,
+            sample_metrics_df,
+            sample_dimensions_df,
+            sample_dataview_info,
+        )
         target = tmp_path / "nested" / "custom.json"
 
         result = process_single_dataview(
@@ -2395,12 +2418,28 @@ class TestSingleModeOutputTarget:
     @patch("cja_auto_sdr.generator.ParallelAPIFetcher")
     @patch("cja_auto_sdr.generator.DataQualityChecker")
     def test_output_stdout_streams_json(
-        self, mock_dq_checker_class, mock_fetcher_class, mock_init_cja, mock_setup_logging,
-        mock_config_file, tmp_path, sample_metrics_df, sample_dimensions_df, sample_dataview_info, capsys,
+        self,
+        mock_dq_checker_class,
+        mock_fetcher_class,
+        mock_init_cja,
+        mock_setup_logging,
+        mock_config_file,
+        tmp_path,
+        sample_metrics_df,
+        sample_dimensions_df,
+        sample_dataview_info,
+        capsys,
     ):
         """--output stdout with --format json streams the payload to stdout and writes no file."""
-        self._mocks(mock_setup_logging, mock_init_cja, mock_fetcher_class, mock_dq_checker_class,
-                    sample_metrics_df, sample_dimensions_df, sample_dataview_info)
+        self._mocks(
+            mock_setup_logging,
+            mock_init_cja,
+            mock_fetcher_class,
+            mock_dq_checker_class,
+            sample_metrics_df,
+            sample_dimensions_df,
+            sample_dataview_info,
+        )
 
         result = process_single_dataview(
             data_view_id="dv_test_12345",
@@ -2423,12 +2462,28 @@ class TestSingleModeOutputTarget:
     @patch("cja_auto_sdr.generator.ParallelAPIFetcher")
     @patch("cja_auto_sdr.generator.DataQualityChecker")
     def test_output_file_ignored_for_csv_with_warning(
-        self, mock_dq_checker_class, mock_fetcher_class, mock_init_cja, mock_setup_logging,
-        mock_config_file, tmp_path, sample_metrics_df, sample_dimensions_df, sample_dataview_info, capsys,
+        self,
+        mock_dq_checker_class,
+        mock_fetcher_class,
+        mock_init_cja,
+        mock_setup_logging,
+        mock_config_file,
+        tmp_path,
+        sample_metrics_df,
+        sample_dimensions_df,
+        sample_dataview_info,
+        capsys,
     ):
         """--output <file> is not honored for multi-file csv; a stderr warning is emitted."""
-        self._mocks(mock_setup_logging, mock_init_cja, mock_fetcher_class, mock_dq_checker_class,
-                    sample_metrics_df, sample_dimensions_df, sample_dataview_info)
+        self._mocks(
+            mock_setup_logging,
+            mock_init_cja,
+            mock_fetcher_class,
+            mock_dq_checker_class,
+            sample_metrics_df,
+            sample_dimensions_df,
+            sample_dataview_info,
+        )
         target = tmp_path / "custom.csv"
 
         result = process_single_dataview(
