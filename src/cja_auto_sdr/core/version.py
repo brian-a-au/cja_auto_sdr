@@ -1,3 +1,3 @@
 """Version information for CJA Auto SDR."""
 
-__version__ = "3.12.4"
+__version__ = "3.13.0"

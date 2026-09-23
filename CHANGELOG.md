@@ -7,6 +7,16 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.13.0] - 2026-09-23
+
+### Added
+
+- **`--output` for single data view SDR generation:** `--output <file>` now writes the SDR to that exact path for the single-file formats (`json`, `html`, `markdown`, `excel`), creating parent directories as needed. `--output -`/`stdout` streams the SDR as JSON (with `--format json`) to stdout for piping, routing progress and logs to stderr so stdout stays clean. Multi-file formats (`csv`, `all`) and the external `notion` target keep auto-naming and emit a stderr notice pointing to `--output-dir`.
+
+### Tests
+
+- Add coverage for `--output` file redirection, JSON streaming to stdout, and the unsupported-format notice.
+
 ## [3.12.4] - 2026-09-20
 
 ### Fixed

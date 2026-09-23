@@ -2977,6 +2977,7 @@ from cja_auto_sdr.output.inventory import display_inventory_summary
 from cja_auto_sdr.output.sdr import (
     ExcelFormatCache,
     apply_excel_formatting,
+    build_json_payload,
     write_csv_output,
     write_excel_output,
     write_html_output,
@@ -3183,6 +3184,7 @@ def process_single_dataview(
     data_view_id: str,
     config_file: str = "config.json",
     output_dir: str | Path = ".",
+    output_file: str | None = None,
     log_level: str = "INFO",
     log_format: str = "text",
     output_format: str = "excel",
@@ -3250,6 +3252,7 @@ def process_single_dataview(
         processing_config = ProcessingConfig(
             config_file=config_file,
             output_dir=output_dir,
+            output_file=output_file,
             log_level=log_level,
             log_format=log_format,
             output_format=output_format,
@@ -3283,6 +3286,7 @@ def process_single_dataview(
 
     config_file = processing_config.config_file
     output_dir = processing_config.output_dir
+    output_file = processing_config.output_file
     log_level = processing_config.log_level
     log_format = processing_config.log_format
     output_format = processing_config.output_format
@@ -3315,8 +3319,18 @@ def process_single_dataview(
 
     start_time = time.perf_counter()
 
+    # When streaming the SDR JSON to stdout (--output stdout --format json),
+    # keep stdout clean by routing console logs to stderr.
+    stdout_json_output = output_file in ("-", "stdout") and output_format == "json"
+
     # Setup logging for this data view
-    base_logger = setup_logging(data_view_id, batch_mode=False, log_level=log_level, log_format=log_format)
+    base_logger = setup_logging(
+        data_view_id,
+        batch_mode=False,
+        log_level=log_level,
+        log_format=log_format,
+        stream=sys.stderr if stdout_json_output else None,
+    )
     run_mode = "batch_worker" if batch_id else "single"
     logger = with_log_context(base_logger, run_mode=run_mode, data_view_id=data_view_id, batch_id=batch_id)
     perf_tracker = PerformanceTracker(logger)
@@ -3964,6 +3978,40 @@ def process_single_dataview(
         else:
             formats_to_generate = [output_format]
 
+        # Honor an explicit --output target for single data view SDR output.
+        # --output writes a single file, so it only applies to a single-file
+        # format. Multi-file (csv, all/aliases) and external (notion) outputs
+        # keep auto-naming under output_dir.
+        stdout_json_mode = False
+        _single_fmt = formats_to_generate[0] if len(formats_to_generate) == 1 else None
+        if output_file:
+            if output_file in ("-", "stdout"):
+                if _single_fmt == "json":
+                    stdout_json_mode = True
+                else:
+                    # Emit guidance to stderr so it is visible even when stdout is
+                    # piped (console logging is suppressed for non-tty stdout).
+                    print(
+                        f"Warning: --output stdout is only supported with --format json; "
+                        f"writing files under {output_dir} instead.",
+                        file=sys.stderr,
+                    )
+            elif _single_fmt in ("excel", "json", "html", "markdown"):
+                _target = Path(output_file)
+                _redirect_dir = str(_target.parent) or "."
+                os.makedirs(_redirect_dir, exist_ok=True)
+                output_dir = _redirect_dir
+                base_filename = _target.stem
+                if _single_fmt == "excel":
+                    output_path = _target
+            else:
+                print(
+                    f"Warning: --output is not supported with --format {output_format} "
+                    f"(it writes multiple files or an external target); writing under "
+                    f"{output_dir} instead. Use --output-dir.",
+                    file=sys.stderr,
+                )
+
         output_files = []
 
         try:
@@ -4043,15 +4091,23 @@ def process_single_dataview(
                         "calculated": calculated_inventory_obj,
                         "segments": segments_inventory_obj,
                     }
-                    json_output = write_json_output(
-                        data_dict,
-                        metadata_dict,
-                        base_filename,
-                        output_dir,
-                        logger,
-                        inventory_objects,
-                    )
-                    output_files.append(json_output)
+                    if stdout_json_mode:
+                        # Stream the SDR JSON to stdout for piping (no file written).
+                        payload = build_json_payload(data_dict, metadata_dict, inventory_objects)
+                        sys.stdout.write(json.dumps(payload, indent=2, ensure_ascii=False))
+                        sys.stdout.write("\n")
+                        sys.stdout.flush()
+                        output_files.append("<stdout>")
+                    else:
+                        json_output = write_json_output(
+                            data_dict,
+                            metadata_dict,
+                            base_filename,
+                            output_dir,
+                            logger,
+                            inventory_objects,
+                        )
+                        output_files.append(json_output)
 
                 elif fmt == "html":
                     html_output = write_html_output(data_dict, metadata_dict, base_filename, output_dir, logger)

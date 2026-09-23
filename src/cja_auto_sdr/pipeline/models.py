@@ -134,6 +134,7 @@ class ProcessingConfig:
 
     config_file: str = "config.json"
     output_dir: str | Path = "."
+    output_file: str | None = None
     log_level: str = "INFO"
     log_format: str = "text"
     output_format: str = "excel"

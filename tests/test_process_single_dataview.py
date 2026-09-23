@@ -2344,3 +2344,102 @@ class TestElapsedDurationTimingHardening:
         duration_lines = [m for m in captured_messages if "Duration:" in m]
         assert len(duration_lines) >= 1
         assert duration_lines[0] == "Duration: 3.75s"
+
+
+class TestSingleModeOutputTarget:
+    """Honor --output (explicit file path and stdout) for single data view SDR generation."""
+
+    def _mocks(self, mock_setup_logging, mock_init_cja, mock_fetcher_class, mock_dq_checker_class,
+               metrics_df, dimensions_df, dataview_info):
+        mock_setup_logging.return_value = Mock()
+        mock_init_cja.return_value = Mock()
+        mock_fetcher = Mock()
+        mock_fetcher.fetch_all_data.return_value = (metrics_df, dimensions_df, dataview_info)
+        mock_fetcher_class.return_value = mock_fetcher
+        mock_dq = Mock()
+        mock_dq.issues = []
+        mock_dq.get_issues_dataframe.return_value = pd.DataFrame(
+            columns=["Severity", "Category", "Type", "Item Name", "Issue", "Details"],
+        )
+        mock_dq_checker_class.return_value = mock_dq
+
+    @patch("cja_auto_sdr.generator.setup_logging")
+    @patch("cja_auto_sdr.generator.initialize_cja")
+    @patch("cja_auto_sdr.generator.ParallelAPIFetcher")
+    @patch("cja_auto_sdr.generator.DataQualityChecker")
+    def test_output_file_writes_exact_json_path(
+        self, mock_dq_checker_class, mock_fetcher_class, mock_init_cja, mock_setup_logging,
+        mock_config_file, tmp_path, sample_metrics_df, sample_dimensions_df, sample_dataview_info,
+    ):
+        """--output <file> writes the JSON to exactly that path (creating parent dirs)."""
+        self._mocks(mock_setup_logging, mock_init_cja, mock_fetcher_class, mock_dq_checker_class,
+                    sample_metrics_df, sample_dimensions_df, sample_dataview_info)
+        target = tmp_path / "nested" / "custom.json"
+
+        result = process_single_dataview(
+            data_view_id="dv_test_12345",
+            config_file=mock_config_file,
+            output_dir=str(tmp_path),
+            output_file=str(target),
+            output_format="json",
+        )
+
+        assert result.success is True
+        assert target.exists()
+        assert result.output_file == str(target)
+        payload = json.loads(target.read_text(encoding="utf-8"))
+        assert len(payload["metrics"]) == 2
+
+    @patch("cja_auto_sdr.generator.setup_logging")
+    @patch("cja_auto_sdr.generator.initialize_cja")
+    @patch("cja_auto_sdr.generator.ParallelAPIFetcher")
+    @patch("cja_auto_sdr.generator.DataQualityChecker")
+    def test_output_stdout_streams_json(
+        self, mock_dq_checker_class, mock_fetcher_class, mock_init_cja, mock_setup_logging,
+        mock_config_file, tmp_path, sample_metrics_df, sample_dimensions_df, sample_dataview_info, capsys,
+    ):
+        """--output stdout with --format json streams the payload to stdout and writes no file."""
+        self._mocks(mock_setup_logging, mock_init_cja, mock_fetcher_class, mock_dq_checker_class,
+                    sample_metrics_df, sample_dimensions_df, sample_dataview_info)
+
+        result = process_single_dataview(
+            data_view_id="dv_test_12345",
+            config_file=mock_config_file,
+            output_dir=str(tmp_path),
+            output_file="-",
+            output_format="json",
+        )
+
+        captured = capsys.readouterr()
+        assert result.success is True
+        payload = json.loads(captured.out)
+        assert "metrics" in payload
+        assert "segments" in payload
+        assert result.output_file == "<stdout>"
+        assert list(tmp_path.glob("CJA_DataView_*")) == []
+
+    @patch("cja_auto_sdr.generator.setup_logging")
+    @patch("cja_auto_sdr.generator.initialize_cja")
+    @patch("cja_auto_sdr.generator.ParallelAPIFetcher")
+    @patch("cja_auto_sdr.generator.DataQualityChecker")
+    def test_output_file_ignored_for_csv_with_warning(
+        self, mock_dq_checker_class, mock_fetcher_class, mock_init_cja, mock_setup_logging,
+        mock_config_file, tmp_path, sample_metrics_df, sample_dimensions_df, sample_dataview_info, capsys,
+    ):
+        """--output <file> is not honored for multi-file csv; a stderr warning is emitted."""
+        self._mocks(mock_setup_logging, mock_init_cja, mock_fetcher_class, mock_dq_checker_class,
+                    sample_metrics_df, sample_dimensions_df, sample_dataview_info)
+        target = tmp_path / "custom.csv"
+
+        result = process_single_dataview(
+            data_view_id="dv_test_12345",
+            config_file=mock_config_file,
+            output_dir=str(tmp_path),
+            output_file=str(target),
+            output_format="csv",
+        )
+
+        captured = capsys.readouterr()
+        assert result.success is True
+        assert "--output is not supported with --format csv" in captured.err
+        assert not target.exists()

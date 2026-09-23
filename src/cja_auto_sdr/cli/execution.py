@@ -701,14 +701,24 @@ def _run_single_mode(
 ) -> dict[str, Any]:
     generator = _generator_module()
 
+    # When streaming the SDR JSON to stdout (--output stdout/- with --format json),
+    # keep stdout clean by routing all human-facing output to stderr.
+    stdout_mode = str(getattr(args, "output", None)) in ("-", "stdout") and sdr_format == "json"
+    report_stream = sys.stderr if stdout_mode else sys.stdout
+
+    def _note(*print_args: Any, **print_kwargs: Any) -> None:
+        print_kwargs.setdefault("file", report_stream)
+        print(*print_args, **print_kwargs)
+
     if not args.quiet:
-        print(generator.ConsoleColors.info(f"Processing data view: {data_views[0]}"))
-        print()
+        _note(generator.ConsoleColors.info(f"Processing data view: {data_views[0]}"))
+        _note()
 
     result = generator.process_single_dataview(
         data_views[0],
         config_file=args.config_file,
         output_dir=args.output_dir,
+        output_file=getattr(args, "output", None),
         log_level=effective_log_level,
         log_format=args.log_format,
         output_format=sdr_format,
@@ -740,40 +750,43 @@ def _run_single_mode(
     processed_results = [result]
 
     total_runtime = time.monotonic() - processing_start_time
-    print()
+    _note()
     if result.success:
         successful_results = [result]
         if quality_report_only:
-            print(generator.ConsoleColors.success(f"SUCCESS: Quality validation completed for {result.data_view_name}"))
-            print(f"  Metrics: {result.metrics_count}, Dimensions: {result.dimensions_count}")
-            print(f"  Data Quality Issues: {result.dq_issues_count}")
+            _note(generator.ConsoleColors.success(f"SUCCESS: Quality validation completed for {result.data_view_name}"))
+            _note(f"  Metrics: {result.metrics_count}, Dimensions: {result.dimensions_count}")
+            _note(f"  Data Quality Issues: {result.dq_issues_count}")
         else:
-            print(generator.ConsoleColors.success(f"SUCCESS: SDR generated for {result.data_view_name}"))
+            _note(generator.ConsoleColors.success(f"SUCCESS: SDR generated for {result.data_view_name}"))
             if len(result.emitted_output_files) > 1:
-                print(f"  Outputs: {len(result.emitted_output_files)} files")
+                _note(f"  Outputs: {len(result.emitted_output_files)} files")
                 for file_path in result.emitted_output_files:
-                    print(f"    - {file_path}")
+                    _note(f"    - {file_path}")
             else:
-                print(f"  Output: {result.output_file}")
-            print(f"  Size: {result.file_size_formatted}")
-            print(f"  Metrics: {result.metrics_count}, Dimensions: {result.dimensions_count}")
+                _note(f"  Output: {result.output_file}")
+            _note(f"  Size: {result.file_size_formatted}")
+            _note(f"  Metrics: {result.metrics_count}, Dimensions: {result.dimensions_count}")
             if result.dq_issues_count > 0:
-                print(generator.ConsoleColors.warning(f"  Data Quality Issues: {result.dq_issues_count}"))
+                _note(generator.ConsoleColors.warning(f"  Data Quality Issues: {result.dq_issues_count}"))
 
-            _print_single_mode_inventory_summary(
-                result,
-                inventory_order=inventory_order,
-                include_segments=getattr(args, "include_segments_inventory", False),
-                include_calculated=getattr(args, "include_calculated_metrics", False),
-                include_derived=getattr(args, "include_derived_inventory", False),
-            )
-            _handle_single_mode_git_commit(args, result)
-            _handle_single_mode_open(args, result)
+            # Skip human-oriented post-actions when streaming to stdout so the
+            # JSON payload on stdout stays clean (there is also no file to open).
+            if not stdout_mode:
+                _print_single_mode_inventory_summary(
+                    result,
+                    inventory_order=inventory_order,
+                    include_segments=getattr(args, "include_segments_inventory", False),
+                    include_calculated=getattr(args, "include_calculated_metrics", False),
+                    include_derived=getattr(args, "include_derived_inventory", False),
+                )
+                _handle_single_mode_git_commit(args, result)
+                _handle_single_mode_open(args, result)
     else:
         successful_results = []
-        print(generator.ConsoleColors.error(f"FAILED: {result.error_message}"))
+        _note(generator.ConsoleColors.error(f"FAILED: {result.error_message}"))
 
-    print(generator.ConsoleColors.bold(f"Total runtime: {total_runtime:.1f}s"))
+    _note(generator.ConsoleColors.bold(f"Total runtime: {total_runtime:.1f}s"))
 
     return {
         "successful_results": successful_results,
