@@ -400,9 +400,9 @@ pandoc CJA_DataView_myview_dv_12345_SDR.md -o report.pdf
 
 ### 6. Notion Format
 
-Publishes the SDR directly to a Notion page and (optionally) upserts a row in a "CJA SDR Registry" database. Requires `NOTION_TOKEN` and `NOTION_PARENT_PAGE_ID` environment variables and the `notion` optional extra (`uv pip install 'cja-auto-sdr[notion]'`).
+Publishes the SDR directly to a Notion page and (optionally) upserts a row in a "CJA SDR Registry" database. Detail-page publishing requires `NOTION_TOKEN` and `NOTION_PARENT_PAGE_ID`; the org-report catalog flow writes to an existing database and requires a token and database ID, but no parent page. Install the `notion` optional extra (`uv pip install 'cja-auto-sdr[notion]'`).
 
-Each run creates or updates a single page under the configured parent. Page IDs are tracked in `.notion_pages.json` in the output directory so re-runs update in place rather than accumulating duplicates.
+Each per-data-view publish creates or updates one page under the configured parent. Page IDs are tracked in `.notion_pages.json` in the output directory so re-runs update in place rather than accumulating duplicates. Org-report catalog mode writes registry rows only and does not create detail pages.
 
 **Usage:**
 ```bash

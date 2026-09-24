@@ -19,7 +19,9 @@ and change tracking.
 
 **Required (capture):**
 - `<dv_id>` — data view ID to snapshot
-- `ORG_ID`, `CLIENT_ID`, `SECRET`, `SCOPES` — API credentials (or `--profile <name>`)
+- `ORG_ID`, `CLIENT_ID`, `SECRET`, `SCOPES` — required API credentials (or use
+  `--profile <name>`). The local validator warns rather than rejects when scopes
+  are missing, but authentication requires them.
 
 **Required (compare):**
 - Either two snapshot JSON file paths, or `--compare-with-prev` for the most recent snapshot of one data view
@@ -35,9 +37,10 @@ and change tracking.
 - Snapshots are stored locally (or in the configured snapshot directory); they
   are not uploaded to CJA or any remote service.
 - `--compare-snapshots` compares snapshot files directly and does not call the API.
-- Git-backed snapshots require a git repository at or above the working directory;
-  configure with `--git-snapshot` if desired.
-- Pruning is irreversible; verify the snapshot list before deleting.
+- Git-friendly snapshots can be committed with `--git-commit`; choose their
+  repository location with `--git-dir` (default: `./sdr-snapshots`).
+- `--prune-snapshots` deletes matching local snapshot files. Back them up or
+  keep them under Git if you may need to restore them.
 - `--compare-with-prev` requires at least one prior snapshot for the target data view.
 
 ## Primary CLI Flows

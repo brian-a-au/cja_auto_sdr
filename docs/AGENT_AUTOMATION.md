@@ -41,7 +41,7 @@ This guide covers how to automate `cja_auto_sdr` in CI/CD pipelines, scheduled j
 ## Prerequisites
 
 - **Service account credentials**: An Adobe IMS OAuth server-to-server service account with CJA read access.
-- **Auth via environment variables**: Automation must supply credentials through env vars (`ORG_ID`, `CLIENT_ID`, `SECRET`, `SCOPES`), not `config.json`. See [Configuration for Automation](#configuration-for-automation).
+- **Auth via environment variables**: Automation must supply credentials through env vars (`ORG_ID`, `CLIENT_ID`, `SECRET`, `SCOPES`), not `config.json`. The local validator warns rather than rejecting when `SCOPES` is missing, but authentication requires it. See [Configuration for Automation](#configuration-for-automation).
 - **Python + uv**: Python 3.14+ and `uv` installed on the runner/agent. Run `uv sync` once after checkout.
 - **Adobe API access**: The service account must have the CJA product profile assigned in Adobe Admin Console.
 

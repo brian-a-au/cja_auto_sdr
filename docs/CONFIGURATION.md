@@ -47,14 +47,16 @@ Choose your configuration method:
 
 ### Minimum Required Configuration
 
-You need these four values for OAuth authentication:
+Authentication requires these four values. The local credential validator only
+warns when scopes are missing, so a successful preflight does not establish that
+the Adobe OAuth configuration is complete:
 
 | Field | Where to Find It |
 |-------|------------------|
 | **Organization ID** | Developer Console → Project → Credentials → Organization ID |
 | **Client ID** | Developer Console → Project → Credentials → Client ID |
 | **Client Secret** | Developer Console → Project → Credentials → Client Secret |
-| **Scopes** | Developer Console → Project → Credentials → Scopes (copy from your project) |
+| **Scopes** | Developer Console → Project → Credentials → Scopes (copy the value configured for your project) |
 
 ---
 
@@ -167,10 +169,10 @@ See [Profile Management](#profile-management) for full documentation
 | `org_id` | **Yes** | string | Adobe Organization ID. Must end with `@AdobeOrg`. |
 | `client_id` | **Yes** | string | OAuth Client ID from Developer Console. Typically 32 characters. |
 | `secret` | **Yes** | string | Client Secret from Developer Console. Keep confidential. |
-| `scopes` | **Yes**† | string | OAuth scopes for API access. Comma or space-separated. |
+| `scopes` | **Yes** | string | OAuth scopes for API access. Comma or space-separated. |
 | `sandbox` | No | string | Reserved for future use. Not currently utilized by cjapy or the CJA API. |
 
-> †**Note on scopes:** While the config validator only warns if scopes are missing, OAuth authentication **will fail** without proper scopes. Always include them.
+> **Note on scopes:** `scopes` is required for authentication. The local credential validator currently warns rather than rejects when it is missing, so treat that warning as an incomplete credential configuration.
 
 ### Example with All Fields
 
@@ -205,10 +207,10 @@ cja_auto_sdr --sample-config
 | `ORG_ID` | `org_id` | **Yes** |
 | `CLIENT_ID` | `client_id` | **Yes** |
 | `SECRET` | `secret` | **Yes** |
-| `SCOPES` | `scopes` | **Yes**† |
+| `SCOPES` | `scopes` | **Yes** |
 | `SANDBOX` | `sandbox` | No |
 
-> †**Note on scopes:** OAuth authentication requires proper scopes. See [OAuth Scopes Explained](#oauth-scopes-explained).
+> **Note on scopes:** `SCOPES` is required for authentication even though the local validator warns instead of rejecting when it is missing. Use the value configured for your Adobe project. See [OAuth Scopes Explained](#oauth-scopes-explained).
 
 ### Additional Environment Variables
 
@@ -227,8 +229,8 @@ These variables are used when publishing SDRs to Notion (`--format notion`, `--p
 | Variable | Description | Required |
 |----------|-------------|----------|
 | `NOTION_TOKEN` | Notion integration token (starts with `ntn_` for newer integrations, or `secret_` for older ones) | **Yes** (for any Notion output) |
-| `NOTION_PARENT_PAGE_ID` | ID of the Notion page under which SDR detail pages are created. Also used as the parent when bootstrapping a new registry database with `--notion-create-database` | **Yes** (for any Notion output) |
-| `NOTION_DATABASE_ID` | ID of an existing "CJA SDR Registry" database. When set, every `--format notion` run upserts the data view's row in the registry with all counts and Data Quality. Unset = no database row written (v3.7.0 behavior preserved). Can also be supplied via `--notion-database-id` | No |
+| `NOTION_PARENT_PAGE_ID` | ID of the Notion page under which SDR detail pages are created. Also used as the parent when bootstrapping a new registry database with `--notion-create-database` | Required for detail-page publishing and database creation; not needed for org-report catalog output to an existing database |
+| `NOTION_DATABASE_ID` | ID of an existing "CJA SDR Registry" database. When set, a per-data-view SDR publish upserts a row with the fetched counts and Data Quality; org-report catalog mode writes only the fields available from its summary. Unset = no row is written by per-data-view `--format notion` runs (v3.7.0 behavior preserved). Can also be supplied via `--notion-database-id` | No |
 | `NOTION_DATABASE_TITLE` | Title for a database created by `--notion-create-database` (default: "CJA SDR Registry"). Overridden by `--notion-database-title`. Applies only when a new database is created; ignored when attaching an existing one | No |
 
 > **Bootstrapping `NOTION_DATABASE_ID`:** Add `--notion-create-database` to your first publish run — `cja_auto_sdr <data_view_id> --format notion --notion-create-database` (it needs a data view and `--format notion`; it is not a standalone command). It creates a new "CJA SDR Registry" database under `NOTION_PARENT_PAGE_ID`, publishes that data view, and prints the new database ID. Copy that value into your environment or `.env` file as `NOTION_DATABASE_ID`, then use it on subsequent runs.
@@ -352,7 +354,7 @@ Invalid: abc123 (too short)
 
 | Rule | Description |
 |------|-------------|
-| Not empty | Must contain scopes from your Adobe Developer Console project |
+| Authentication requirement | Provide the OAuth scope string from your Adobe Developer Console project; the local validator warns if it is missing but does not reject the configuration |
 | Separator | Comma or space-separated |
 
 ### Checking and Validating Configuration

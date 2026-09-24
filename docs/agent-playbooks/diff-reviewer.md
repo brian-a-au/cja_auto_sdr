@@ -22,7 +22,9 @@ live data view, and org-report trending review across cached snapshots.
 
 **Required (compare with previous):**
 - `<dv_id>` — data view ID to compare against its most recent snapshot
-- `ORG_ID`, `CLIENT_ID`, `SECRET`, `SCOPES` — API credentials (or `--profile <name>`)
+- `ORG_ID`, `CLIENT_ID`, `SECRET`, `SCOPES` — required API credentials (or use
+  `--profile <name>`). The local validator warns rather than rejects when scopes
+  are missing, but authentication requires them.
 - An existing snapshot created by `snapshot-manager.md`
 
 **Optional:**
