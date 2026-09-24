@@ -18,7 +18,9 @@ to prevent downstream data issues.
 
 **Required:**
 - One or more exact data view IDs (`<dv_id> [<dv_id> ...]`)
-- `ORG_ID`, `CLIENT_ID`, `SECRET`, `SCOPES` — API credentials (or `--profile <name>`)
+- `ORG_ID`, `CLIENT_ID`, `SECRET`, `SCOPES` — required API credentials (or use
+  `--profile <name>`). The local validator warns rather than rejects when scopes
+  are missing, but authentication requires them.
 
 **Optional:**
 - `--fail-on-quality <SEVERITY>` — exit 2 if any issue at or above the threshold is found

@@ -96,7 +96,9 @@ Both APIs will share the same OAuth credentials (Client ID and Secret).
 
 ### 1.8 Collect Your Credentials
 
-After setup, you'll see your credentials. You need these four values:
+After setup, collect all four credential values. The local tool warns rather
+than rejecting a missing scope, but authentication requires the scopes configured
+for your Adobe project:
 
 | Field | Where to Find It | Example |
 |-------|------------------|---------|

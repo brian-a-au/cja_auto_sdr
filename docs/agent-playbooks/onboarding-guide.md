@@ -17,7 +17,7 @@ snapshot for future diff comparisons.
 ## Inputs
 
 **Required:**
-- `ORG_ID`, `CLIENT_ID`, `SECRET`, `SCOPES` — Adobe IMS credentials
+- `ORG_ID`, `CLIENT_ID`, `SECRET`, `SCOPES` — required Adobe credentials
   (set as environment variables or in a `.env` file)
 
 **Optional:**
@@ -46,8 +46,11 @@ uv run cja_auto_sdr --validate-config
 echo "Exit: $?"
 ```
 
-Exit 0 — credentials valid, API reachable.
-Exit 1 — validation failed; verify `CLIENT_ID` / `SECRET` / `ORG_ID` / `SCOPES`.
+Exit 0 — preflight checks reported success. The local validator only warns when
+`SCOPES` is missing, but OAuth authentication requires it; set the value from
+your Adobe project even if preflight exits 0.
+Exit 1 — validation failed; verify `CLIENT_ID`, `SECRET`, `ORG_ID`, and
+`SCOPES` against your Adobe project.
 
 **2. Discover available data views:**
 
@@ -68,13 +71,14 @@ uv run cja_auto_sdr --describe-dataview <DATA_VIEW_ID>
 
 ```bash
 uv run cja_auto_sdr <DATA_VIEW_ID> --agent-mode \
-  --output-dir /tmp/reports \
+  --format excel \
+  --output /tmp/reports/initial-sdr.xlsx \
   --run-summary-json /tmp/initial-sdr-run-summary.json
 echo "Exit: $?"
 ```
 
-This writes the SDR artifact under `/tmp/reports` and records completion metadata
-in `/tmp/initial-sdr-run-summary.json`.
+This writes the Excel SDR to `/tmp/reports/initial-sdr.xlsx` and records
+completion metadata in `/tmp/initial-sdr-run-summary.json`.
 
 **5. Capture a baseline snapshot for future comparisons:**
 
@@ -97,7 +101,7 @@ use `--profile production` instead of environment variables.
 
 - `--validate-config` exits 0.
 - `--list-dataviews` returns at least one data view.
-- SDR generation exits 0 and writes an auto-named artifact under the requested `--output-dir`.
+- SDR generation exits 0 and writes the requested Excel artifact.
 - Baseline snapshot is recorded (verify with `--list-snapshots`).
 
 ## Follow-Up Actions

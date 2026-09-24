@@ -17,7 +17,7 @@ uv sync
 | `ORG_ID`   | Yes      | Adobe Organization ID  |
 | `CLIENT_ID`| Yes      | OAuth Client ID        |
 | `SECRET`   | Yes      | Client Secret          |
-| `SCOPES`   | Yes      | OAuth scopes (from Adobe Developer Console) |
+| `SCOPES`   | Yes      | OAuth scopes from Adobe Developer Console |
 | `SANDBOX`  | No       | Sandbox name           |
 
 ### Auth: Profile Alternative

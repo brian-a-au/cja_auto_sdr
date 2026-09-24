@@ -105,7 +105,7 @@ cja-auto-sdr [OPTIONS] DATA_VIEW_ID_OR_NAME [...]
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `--batch` | Enable parallel batch processing | Auto-detected |
+| `--batch` | Enable batch processing; multiple data view arguments also trigger batch processing automatically | False |
 | `--workers N` | Number of parallel workers (1-256), or `auto` for automatic detection based on CPU cores and workload complexity | auto |
 | `--continue-on-error` | Continue if a data view fails | False |
 | `--skip-validation` | Skip data quality validation (20-30% faster) | False |
@@ -114,8 +114,8 @@ cja-auto-sdr [OPTIONS] DATA_VIEW_ID_OR_NAME [...]
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `--output-dir PATH` | Output directory for generated files | Current directory |
-| `--output PATH` | Output file path. Use `-` or `stdout` to write to stdout (JSON/CSV only). Implies `--quiet` for stdout | - |
+| `--output-dir PATH` | Output directory for generated files | Current directory (or `OUTPUT_DIR` if set) |
+| `--output PATH` | Output file path. Use `-` or `stdout` to write a command-family-supported format to stdout; SDR generation supports JSON, discovery and stats support JSON/CSV, diff supports JSON, and org-report supports JSON/console. Implies `--quiet` for stdout | - |
 | `--format FORMAT` | Output format (see table below) | excel (SDR), console (diff) |
 | `--stats` | Show quick statistics (metrics/dimensions count) without generating full SDR report | False |
 | `--metrics-only` | Restrict output to metrics (exclude dimensions). Applies to SDR generation and diff comparison | False |
@@ -497,7 +497,7 @@ Cache is stored in `~/.cja_auto_sdr/cache/org_report_cache.json`.
 
 > **First time?** Follow the [Notion Setup Guide](NOTION_SETUP.md) end to end: create the integration, share the parent page, bootstrap the registry database, and run your first publish.
 
-Publish SDRs directly to a Notion page, maintain a registry database of all published data views, or push a previously-generated JSON artifact to Notion without re-calling the CJA API. Requires `NOTION_TOKEN` and `NOTION_PARENT_PAGE_ID` environment variables. Install the extra first:
+Publish SDRs directly to a Notion page, maintain a registry database of published data views, or push a previously generated JSON artifact to Notion without re-calling the CJA API. Install the extra first:
 
 ```bash
 uv pip install 'cja-auto-sdr[notion]'
@@ -514,6 +514,11 @@ uv pip install 'cja-auto-sdr[notion]'
 | `--notion-prune-orphans` | Archive Notion pages that were left behind by `--notion-force-new`. The registry records the superseded page ID each time a new page is forced; this command archives those pages in Notion (moved to Notion trash — recoverable, not permanently deleted) and clears them from the registry. Requires only `NOTION_TOKEN`. Rejected when combined with `--org-report`, `--diff`, `--batch`, `--watch`, or `--push-to-notion`. Combine with `--dry-run` to preview without making changes. **Limitation:** only pages orphaned by `--notion-force-new` from v3.9.0 onward are tracked; pre-existing orphans from earlier runs are not catalogued | - |
 | `--notion-repair-database` | Reconcile an existing "CJA SDR Registry" database with the canonical schema. **Add-only:** adds missing properties and reports any type conflicts — never changes or removes existing properties or data rows. Requires only `NOTION_TOKEN` and a database ID (`--notion-database-id` or `NOTION_DATABASE_ID`). Use when the schema grows across versions instead of recreating the database. Combine with `--dry-run` to preview what would be added without making changes | - |
 | `--notion-print-database-schema` | Print the canonical "CJA SDR Registry" schema (property names and types) and exit. Requires no credentials. Use this to inspect the expected schema before bootstrapping or repairing a database | - |
+
+Detail-page publishing and `--notion-create-database` require `NOTION_TOKEN` and
+`NOTION_PARENT_PAGE_ID`. `--org-report --format notion` writes rows to an existing
+registry database and requires `NOTION_TOKEN` plus a database ID, but does not need
+`NOTION_PARENT_PAGE_ID` because it creates no pages.
 
 ```bash
 # --- Registry Schema & Repair (v3.10.0) ---
@@ -721,7 +726,7 @@ Preset flag for running CJA SDR Generator from AI agents, scripts, and automatio
 >
 > **Override behavior:** All three preset values (`--format json`, `--output -`, `--log-format json`) can be overridden by explicitly passing the corresponding flag. For example, `--list-dataviews --agent-mode --format csv` produces CSV on stdout with JSON logs.
 >
-> **Log stream:** With `--agent-mode`, structured JSON logs are written to stderr. Command families that honor stdout write their payload to stdout; single-SDR generation currently still writes auto-named artifacts under `--output-dir`.
+> **Log stream:** With `--agent-mode`, structured JSON logs are written to stderr. Discovery, diff, org-report, and stats commands support machine-readable stdout according to their command-specific formats. Single-SDR generation streams JSON to stdout with the preset; an explicit `--output <file>` writes supported single-file formats (`json`, `html`, `markdown`, `excel`) to that path. Batch generation and multi-file formats keep their artifacts under `--output-dir`.
 
 ### Environment Variables
 
@@ -1492,8 +1497,8 @@ uv run cja_auto_sdr --org-report --agent-mode
 # Agent mode with diff
 uv run cja_auto_sdr --diff dv_a dv_b --agent-mode
 
-# Single SDR keeps agent defaults but still writes an auto-named artifact
-uv run cja_auto_sdr dv_123 --agent-mode --output-dir ./reports
+# Single SDR with an explicit Excel file path (agent-mode logs remain on stderr)
+uv run cja_auto_sdr dv_123 --agent-mode --format excel --output ./reports/dv_123.xlsx
 
 # Pipe org-report agent output directly to jq
 uv run cja_auto_sdr --org-report --agent-mode | jq '.advisories'
@@ -1504,7 +1509,7 @@ uv run cja_auto_sdr dv_123 --agent-mode --run-summary-json run_summary.json
 
 > **Note:** `--agent-mode` is incompatible with `--interactive`/`-i`. Combining them exits with an error.
 >
-> **Streams:** When the selected command family honors stdout, output goes to stdout and structured JSON logs go to stderr. Single-SDR generation currently still writes auto-named artifacts under `--output-dir`.
+> **Streams:** When the selected command family honors stdout, output goes to stdout and structured JSON logs go to stderr. Single-SDR generation streams JSON to stdout by default; use `--output <file>` for a single-file artifact. Batch and multi-file generation write artifacts under `--output-dir`.
 >
 > **Run-summary constraint:** `--agent-mode` implies stdout output, so `--run-summary-json -` cannot be combined with agent-mode stdout flows such as single-SDR generation.
 
@@ -1583,10 +1588,12 @@ Throughput: 9.7 data views per minute
 | 1 | General error (authentication, data view not found, API/processing/file I/O failures) |
 | 2 | Policy threshold exceeded (diff changes found, quality gate failed, or org governance threshold exceeded) |
 | 3 | Diff warning threshold exceeded (`--warn-threshold`) |
+| 130 | Interrupted by SIGINT (for example, Ctrl+C) |
 
 > **Note:**
 > - Exit code 2 is intentionally used for CI policy failures that are not runtime crashes.
 > - Exit code 1 takes precedence if processing fails (even if a policy threshold is also exceeded).
+> - A process terminated by another signal may be reported by the shell or wrapper as `128 + signal number`; use `--explain-exit-code CODE` to inspect a reported code.
 
 ## Shell Tab-Completion
 

@@ -17,7 +17,9 @@ escalation.
 ## Inputs
 
 **Required:**
-- `ORG_ID`, `CLIENT_ID`, `SECRET`, `SCOPES` — API credentials (env or profile)
+- `ORG_ID`, `CLIENT_ID`, `SECRET`, `SCOPES` — required API credentials (or use
+  a profile). The local validator warns rather than rejects when scopes are
+  missing, but authentication requires them.
 
 **Optional:**
 - `--profile <name>` — named credential profile (overrides env vars)

@@ -328,7 +328,7 @@ cja_auto_sdr --list-dataviews  # Uses client-a
 | `-V, --version` | Show program version and exit | All modes |
 | `--profile NAME`, `-p` | Use named profile from `~/.cja/orgs/` | All modes |
 | `--output-dir PATH` | Save output to specific directory | All modes |
-| `--output PATH` | Output file path; use `-` for stdout (JSON/CSV) | All modes |
+| `--output PATH` | Output file path; `-`/`stdout` streams only formats supported by that command family (SDR JSON, discovery/stats JSON/CSV, diff JSON, org-report JSON/console) | All modes |
 | `--format FORMAT` | Output format (see note below) | All modes |
 | `--open` | Open generated file(s) in default application | SDR only |
 | `--stats` | Quick statistics only (no full report) | SDR only |
@@ -399,7 +399,7 @@ cja_auto_sdr --list-dataviews  # Uses client-a
 | `--warn-threshold PERCENT` | Exit with code 3 if change % exceeds threshold (for CI/CD) |
 | `--no-color` | Disable ANSI color codes in console output (global) |
 | `--format-pr-comment` | Output in GitHub/GitLab PR comment format |
-| `--format notion` | Publish SDR directly to Notion (requires `NOTION_TOKEN` + `NOTION_PARENT_PAGE_ID`) |
+| `--format notion` | Publish SDR directly to Notion (detail pages require `NOTION_TOKEN` + `NOTION_PARENT_PAGE_ID`; org-report catalog output to an existing database requires a token and database ID, but no parent page) |
 | `--push-to-notion JSON_FILE` | Push existing JSON artifact to Notion (no CJA API call) |
 | `--notion-force-new` | Force a new Notion page instead of updating existing; records the superseded page as an orphan |
 | `--notion-database-id ID` | ID of the "CJA SDR Registry" database; upserts a row after publishing. Falls back to `NOTION_DATABASE_ID` env var |
@@ -670,6 +670,7 @@ See [CONFIGURATION.md](CONFIGURATION.md) for detailed setup of `config.json` and
 | 1 | Error (config, API, validation, or processing failure) |
 | 2 | Policy threshold exceeded (diff changes found, `--fail-on-quality`, or `--fail-on-threshold`) |
 | 3 | Diff warning threshold exceeded (`--warn-threshold`) |
+| 130 | Interrupted by SIGINT (for example, Ctrl+C) |
 
 > **CI/CD Tip:** Use exit code 2 gates with `--fail-on-quality` and/or `--fail-on-threshold`.
 > If processing fails, exit code `1` takes precedence over policy exit code `2`.
