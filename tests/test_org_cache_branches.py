@@ -5,6 +5,7 @@ from __future__ import annotations
 import errno
 import json
 import os
+from contextlib import nullcontext
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -101,7 +102,7 @@ def test_get_rejects_when_required_flags_missing(tmp_path: Path, required_flags:
     assert cache.get("dv_flags", required_flags=required_flags) is None
 
 
-def test_get_logs_debug_on_deserialization_failure(tmp_path: Path):
+def test_get_warns_on_malformed_component_ids(tmp_path: Path):
     logger = Mock()
     cache = OrgReportCache(cache_dir=tmp_path, logger=logger)
     cache._cache["dv_broken"] = {
@@ -112,7 +113,148 @@ def test_get_logs_debug_on_deserialization_failure(tmp_path: Path):
     }
 
     assert cache.get("dv_broken") is None
-    logger.debug.assert_called_once()
+    logger.warning.assert_called_once()
+
+
+@pytest.mark.parametrize("payload", [None, 7, [], ["dv_bad"], "secret-cache-content"])
+def test_malformed_cache_root_is_ignored(tmp_path, payload, caplog):
+    (tmp_path / "org_report_cache.json").write_text(json.dumps(payload), encoding="utf-8")
+    cache = OrgReportCache(tmp_path)
+    assert cache.get("dv_bad") is None
+    assert not cache.has_valid_entry("dv_bad")
+    assert cache.get_stats()["entries"] == 0
+    assert "secret-cache-content" not in caplog.text
+    assert caplog.records
+
+
+@pytest.mark.parametrize(
+    "contents",
+    [
+        pytest.param(b'\xff{"dv_bad": 7}', id="utf8"),
+        pytest.param(b'{"dv_bad": ' + b"9" * 5000 + b"}", id="json_integer_limit"),
+    ],
+)
+def test_malformed_cache_decoding_is_ignored(tmp_path, contents, caplog):
+    (tmp_path / "org_report_cache.json").write_bytes(contents)
+    cache = OrgReportCache(tmp_path)
+    assert cache.get("dv_bad") is None
+    assert caplog.records
+
+
+@pytest.mark.parametrize("entry", [None, 7, [], "secret-cache-content"])
+def test_malformed_cache_entry_isolated_from_healthy_entry(tmp_path, entry, caplog):
+    cache = OrgReportCache(tmp_path)
+    cache.put(_summary("dv_good"))
+    payload = json.loads(cache.cache_file.read_text())
+    payload["dv_bad"] = entry
+    cache.cache_file.write_text(json.dumps(payload))
+
+    reloaded = OrgReportCache(tmp_path)
+    assert reloaded.get("dv_bad") is None
+    assert not reloaded.has_valid_entry("dv_bad")
+    assert reloaded.get_cached_modified("dv_bad") is None
+    assert reloaded.get("dv_good").metric_ids == {"metric/1"}
+    assert reloaded.has_valid_entry("dv_good")
+    assert "secret-cache-content" not in caplog.text
+    assert caplog.records
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("data_view_id", "dv_other"),
+        ("data_view_id", None),
+        ("data_view_name", 7),
+        ("status", []),
+        ("metric_ids", "secret-cache-content"),
+        ("dimension_ids", {}),
+        ("metric_ids", [7]),
+        ("dimension_ids", [["dimension/1"]]),
+        ("metric_count", "1"),
+        ("dimension_count", None),
+        ("metric_count", True),
+        ("dimension_count", -1),
+        ("standard_metric_count", 1.5),
+        ("derived_metric_count", "1"),
+        ("standard_dimension_count", False),
+        ("derived_dimension_count", []),
+        ("fetch_duration", "1"),
+        ("fetch_duration", True),
+        ("fetch_duration", -1),
+        ("fetch_duration", float("nan")),
+        ("fetch_duration", float("inf")),
+        pytest.param("fetch_duration", 10**1000, id="duration_overflow"),
+        ("metric_names", []),
+        ("dimension_names", {"dimension/1": 7}),
+        ("error", []),
+        ("owner", {}),
+        ("owner_id", 7),
+        ("created", []),
+        ("modified", {}),
+        ("description", []),
+        ("validation_modified", True),
+        ("has_description", 1),
+        ("include_names", "false"),
+        ("include_metadata", []),
+        ("include_component_types", 1),
+        ("fetched_at", "invalid"),
+        ("fetched_at", "2026-10-06T10:00:00"),
+        ("fetched_at", None),
+    ],
+)
+def test_malformed_cache_field_is_a_miss(tmp_path, field, value, caplog):
+    cache = OrgReportCache(tmp_path)
+    cache.put(_summary("dv_bad"))
+    entries = json.loads(cache.cache_file.read_text())
+    entries["dv_bad"][field] = value
+    cache.cache_file.write_text(json.dumps(entries))
+
+    reloaded = OrgReportCache(tmp_path)
+    assert not reloaded.has_valid_entry("dv_bad")
+    assert reloaded.get("dv_bad") is None
+    assert reloaded.get_cached_modified("dv_bad") is None
+    assert caplog.records
+    assert "secret-cache-content" not in caplog.text
+
+
+def test_cache_legacy_defaults_and_unknown_fields_remain_compatible(tmp_path):
+    entries = {"dv_legacy": {"fetched_at": datetime.now(UTC).isoformat(), "future_field": [7]}}
+    (tmp_path / "org_report_cache.json").write_text(json.dumps(entries))
+    cache = OrgReportCache(tmp_path)
+    summary = cache.get("dv_legacy")
+    assert summary.data_view_id == "dv_legacy"
+    assert summary.data_view_name == "Unknown"
+    assert summary.metric_ids == summary.dimension_ids == set()
+    assert summary.metric_count == summary.dimension_count == 0
+    assert cache.has_valid_entry("dv_legacy")
+
+
+@pytest.mark.parametrize("failure", ["directory_file", "mkdir_permission", "write_permission"])
+def test_cache_save_failure_warns_and_keeps_memory_cache(tmp_path, failure, caplog):
+    cache_dir = tmp_path / "cache"
+    if failure == "directory_file":
+        cache_dir.write_text("occupied")
+    cache = OrgReportCache(cache_dir)
+    with (
+        patch(
+            "cja_auto_sdr.org.cache.Path.mkdir"
+            if failure == "mkdir_permission"
+            else "cja_auto_sdr.org.cache.write_json_atomic",
+            side_effect=PermissionError("unwritable cache"),
+        )
+        if failure != "directory_file"
+        else nullcontext()
+    ):
+        cache.put(_summary("dv_good"))
+    assert cache.get("dv_good").metric_ids == {"metric/1"}
+    assert "Failed to save org report cache" in caplog.text
+
+
+def test_cache_save_does_not_mask_programming_errors(tmp_path):
+    cache = OrgReportCache(tmp_path)
+    with patch("cja_auto_sdr.org.cache.write_json_atomic", side_effect=TypeError("programming error")):
+        with pytest.raises(TypeError, match="programming error"):
+            cache.put(_summary("dv_good"))
 
 
 def test_put_many_empty_skips_save(tmp_path: Path):

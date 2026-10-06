@@ -764,3 +764,71 @@ class TestValidatedCachePersistence:
         ).run_analysis()
         self.assert_component_calls(cache_client, 0)
         assert warm.total_data_views == 3
+
+    @pytest.mark.parametrize("validate_cache", [False, True])
+    @pytest.mark.parametrize("damage", ["scalar", "ids", "count", "identity"])
+    def test_corrupt_cache_selectively_refreshes_and_repairs(self, cache_client, tmp_path, validate_cache, damage):
+        cold = self.run_cached(cache_client, tmp_path)
+        cache_file = tmp_path / "org_report_cache.json"
+        entries = json.loads(cache_file.read_text())
+        if damage == "scalar":
+            entries["dv_00002"] = 7
+        else:
+            field, value = {
+                "ids": ("metric_ids", "characters-are-not-ids"),
+                "count": ("metric_count", "10"),
+                "identity": ("data_view_id", "dv_wrong"),
+            }[damage]
+            entries["dv_00002"][field] = value
+        cache_file.write_text(json.dumps(entries))
+        config = OrgReportConfig(
+            use_cache=True, validate_cache=validate_cache, cja_per_thread=False, quiet=True, skip_lock=True
+        )
+        cache_client.reset_mock()
+        result = OrgComponentAnalyzer(
+            cache_client, config, logging.getLogger("corrupt_cache"), cache=OrgReportCache(tmp_path)
+        ).run_analysis()
+        self.assert_component_calls(cache_client, 1)
+        cache_client.getDataView.assert_not_called()
+        assert cache_client.getMetrics.call_args.args == ("dv_00002",)
+        assert result.total_data_views == 3
+        assert {
+            s.data_view_id: (s.metric_ids, s.dimension_ids, s.metric_count) for s in result.data_view_summaries
+        } == {s.data_view_id: (s.metric_ids, s.dimension_ids, s.metric_count) for s in cold.data_view_summaries}
+        self.run_cached(cache_client, tmp_path)
+        self.assert_component_calls(cache_client, 0)
+
+    @pytest.mark.parametrize("validate_cache", [False, True])
+    def test_corrupt_cache_failed_refresh_remains_error(self, cache_client, tmp_path, validate_cache):
+        self.run_cached(cache_client, tmp_path)
+        cache_file = tmp_path / "org_report_cache.json"
+        entries = json.loads(cache_file.read_text())
+        entries["dv_00002"] = 7
+        cache_file.write_text(json.dumps(entries))
+
+        def fetch_metrics(dv_id, **kwargs):
+            if dv_id == "dv_00002":
+                raise RuntimeError("refresh failed")
+            return create_mock_metrics(dv_id)
+
+        cache_client.getMetrics.side_effect = fetch_metrics
+        config = OrgReportConfig(
+            use_cache=True, validate_cache=validate_cache, cja_per_thread=False, quiet=True, skip_lock=True
+        )
+        result = OrgComponentAnalyzer(
+            cache_client, config, logging.getLogger("failed_refresh"), cache=OrgReportCache(tmp_path)
+        ).run_analysis()
+        assert {s.data_view_id for s in result.data_view_summaries if s.has_error} == {"dv_00002"}
+        assert OrgReportCache(tmp_path).get("dv_00002") is None
+
+    def test_cache_storage_failure_preserves_complete_json_report(self, cache_client, tmp_path, caplog):
+        cache_dir = tmp_path / "cache"
+        cache_dir.write_text("occupied")
+        result = self.run_cached(cache_client, cache_dir)
+        self.assert_component_calls(cache_client, 3)
+        assert result.total_data_views == 3
+        assert not any(s.has_error for s in result.data_view_summaries)
+        output = tmp_path / "report.json"
+        write_org_report_json(result, output, str(tmp_path), logging.getLogger("storage_failure"))
+        assert len(json.loads(output.read_text())["data_views"]) == 3
+        assert "Failed to save org report cache" in caplog.text

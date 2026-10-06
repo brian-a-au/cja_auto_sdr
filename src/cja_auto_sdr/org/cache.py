@@ -11,6 +11,7 @@ import contextlib
 import errno
 import json
 import logging
+import math
 import os
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -173,14 +174,93 @@ class OrgReportCache:
         if self.cache_file.exists():
             try:
                 with open(self.cache_file, encoding="utf-8") as f:
-                    self._cache = json.load(f)
-            except (OSError, json.JSONDecodeError) as e:
-                self.logger.warning("Failed to load org report cache from %s: %s", self.cache_file, e)
+                    payload = json.load(f)
+            except (OSError, ValueError) as e:
+                # Includes invalid UTF-8/JSON and the JSON integer decoding limit.
+                self.logger.warning("Failed to load org report cache from %s: %s", self.cache_file, type(e).__name__)
                 self._cache = {}
+                return
+            if isinstance(payload, dict):
+                self._cache = payload
+            else:
+                self.logger.warning("Ignoring org report cache with invalid root shape at %s", self.cache_file)
+                self._cache = {}
+
+    @staticmethod
+    def _entry_validation_error(dv_id: str, entry: Any) -> str | None:
+        """Identify malformed consumed fields without coercing values or exposing contents.
+
+        Absent legacy fields retain the defaults used by get(); unknown additive
+        fields are ignored. Validation tokens are opaque, unlike the cache age.
+        """
+        if not isinstance(entry, dict):
+            return "entry shape"
+        if "data_view_id" in entry and entry["data_view_id"] != dv_id:
+            return "data_view_id"
+        for field in ("data_view_name", "status"):
+            if field in entry and not isinstance(entry[field], str):
+                return field
+        for field in ("metric_ids", "dimension_ids"):
+            if field in entry and (
+                not isinstance(entry[field], list) or not all(isinstance(value, str) for value in entry[field])
+            ):
+                return field
+        for field in (
+            "metric_count",
+            "dimension_count",
+            "standard_metric_count",
+            "derived_metric_count",
+            "standard_dimension_count",
+            "derived_dimension_count",
+        ):
+            if field in entry and (type(entry[field]) is not int or entry[field] < 0):
+                return field
+        if "fetch_duration" in entry:
+            duration = entry["fetch_duration"]
+            if type(duration) not in (int, float) or duration < 0:
+                return "fetch_duration"
+            try:
+                if not math.isfinite(duration):
+                    return "fetch_duration"
+            except OverflowError:
+                return "fetch_duration"
+        for field in ("metric_names", "dimension_names"):
+            names = entry.get(field)
+            if names is not None and (
+                not isinstance(names, dict)
+                or not all(isinstance(key, str) and isinstance(value, str) for key, value in names.items())
+            ):
+                return field
+        for field in ("error", "owner", "owner_id", "created", "modified", "description", "validation_modified"):
+            if entry.get(field) is not None and not isinstance(entry[field], str):
+                return field
+        for field in ("has_description", "include_names", "include_metadata", "include_component_types"):
+            if field in entry and not isinstance(entry[field], bool):
+                return field
+        fetched_at = entry.get("fetched_at")
+        if not isinstance(fetched_at, str):
+            return "fetched_at"
+        try:
+            if datetime.fromisoformat(fetched_at).tzinfo is None:
+                return "fetched_at"
+        except ValueError:
+            return "fetched_at"
+        return None
+
+    def _get_entry(self, dv_id: str) -> dict[str, Any] | None:
+        """Return a usable entry, evicting only malformed data and warning once."""
+        if dv_id not in self._cache:
+            return None
+        entry = self._cache[dv_id]
+        invalid_field = self._entry_validation_error(dv_id, entry)
+        if invalid_field is not None:
+            self.logger.warning("Ignoring malformed org report cache entry for %s: invalid %s", dv_id, invalid_field)
+            del self._cache[dv_id]
+            return None
+        return entry
 
     def _save_cache(self) -> None:
         """Save cache to disk via atomic write-then-rename."""
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
         try:
             write_json_atomic(self.cache_file, self._cache, indent=2, default=str)
         except OSError as e:
@@ -469,10 +549,9 @@ class OrgReportCache:
         Returns:
             Cached DataViewSummary or None if not cached or stale
         """
-        if dv_id not in self._cache:
+        entry = self._get_entry(dv_id)
+        if entry is None:
             return None
-
-        entry = self._cache[dv_id]
         fetched_at = entry.get("fetched_at")
         if not fetched_at:
             return None
@@ -649,10 +728,9 @@ class OrgReportCache:
         Returns:
             True if entry exists and is fresh enough to potentially use
         """
-        if dv_id not in self._cache:
+        entry = self._get_entry(dv_id)
+        if entry is None:
             return False
-
-        entry = self._cache[dv_id]
         fetched_at = entry.get("fetched_at")
         if not fetched_at:
             return False
@@ -675,9 +753,10 @@ class OrgReportCache:
         Returns:
             Cached modification timestamp or None if not cached
         """
-        if dv_id not in self._cache:
+        entry = self._get_entry(dv_id)
+        if entry is None:
             return None
-        return self._cache[dv_id].get("modified")
+        return entry.get("modified")
 
     def get_stats(self) -> dict[str, Any]:
         """Get cache statistics.

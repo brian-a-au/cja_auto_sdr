@@ -7,6 +7,17 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.12.8] - 2026-10-06
+
+### Fixed
+
+- **Org-report cache recovery:** malformed component-cache entries now refresh individually without aborting analysis or supplying invalid report data. Unreadable JSON/UTF-8 and invalid cache roots are treated as empty caches, while valid legacy entries and healthy warm-cache reuse remain supported.
+- **Optional cache storage:** cache-directory creation failures now follow the existing save-warning policy, allowing otherwise successful org analysis and report generation to complete when the component cache is unwritable.
+
+### Tests
+
+- Cover mixed healthy/corrupt persisted entries in both cache modes, malformed field types and identities, legacy defaults, failed refreshes, repaired warm reuse, and unavailable cache storage.
+
 ## [3.12.7] - 2026-10-06
 
 ### Fixed
