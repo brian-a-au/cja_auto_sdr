@@ -115,8 +115,8 @@ permission and fail with the built-in workflow token. Both implementations use
 contexts, app bindings, and administrator enforcement using Contents: read.
 They also compare base/head ancestry before approving or merging, independently
 confirming the PR contains current main. No administrator token is introduced.
-CJA additionally traverses downstream optional dependencies when excluding
-runtime packages; keep that conservative traversal aligned in AA.
+Both implementations traverse downstream optional dependencies when excluding
+runtime packages and request Checks/Actions read permissions to inspect CI.
 
 Copilot review is supplementary and requested on new PRs and each new push by
 CJA's repository ruleset, subject to Copilot availability and quota. It does not
