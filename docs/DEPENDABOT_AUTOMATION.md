@@ -19,8 +19,9 @@ The reviewer parses the base and head lockfiles and requires:
 - Versions move forward within the same major and minor version. Prereleases,
   postreleases, downgrades, and nonstandard versions are excluded.
 - Dependency metadata, all other packages, and lockfile settings are unchanged.
-  Transitive updates, new packages, and ambiguous multiple resolutions require
-  manual review.
+  Transitive updates and new packages require manual review. Unchanged alternative
+  platform/Python resolutions are retained exactly; runtime exclusion traverses
+  every alternative. Changes to a multiply resolved package require manual review.
 - Artifacts use the expected PyPI URLs and filenames with SHA-256 hashes. Every
   URL, hash, and size must match PyPI's release metadata; yanked files are rejected.
 

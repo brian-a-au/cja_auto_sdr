@@ -68,15 +68,22 @@ def pr_identity(pr: dict[str, Any], repo: str) -> bool:
     )
 
 
-def _packages(lock: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    packages = {package["name"]: package for package in lock["package"]}
-    if len(packages) != len(lock["package"]):
-        raise ValueError("Multiple resolutions for one package need manual review")
+def _packages(lock: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+    packages: dict[str, list[dict[str, Any]]] = {}
+    for package in lock["package"]:
+        packages.setdefault(package["name"], []).append(package)
+    for resolutions in packages.values():
+        resolutions.sort(key=lambda package: json.dumps(package, sort_keys=True))
+        if len({json.dumps(package, sort_keys=True) for package in resolutions}) != len(resolutions):
+            raise ValueError("Duplicate package resolution")
     return packages
 
 
-def _runtime_packages(packages: dict[str, dict[str, Any]]) -> set[str]:
-    root = packages["cja-auto-sdr"]
+def _runtime_packages(packages: dict[str, list[dict[str, Any]]]) -> set[str]:
+    roots = packages["cja-auto-sdr"]
+    if len(roots) != 1:
+        raise ValueError("Project has multiple resolutions")
+    root = roots[0]
     dependencies = list(root.get("dependencies", []))
     for optional in root.get("optional-dependencies", {}).values():
         dependencies.extend(optional)
@@ -86,10 +93,11 @@ def _runtime_packages(packages: dict[str, dict[str, Any]]) -> set[str]:
         name = pending.pop()
         if name not in visited:
             visited.add(name)
-            package = packages[name]
-            pending.extend(dependency["name"] for dependency in package.get("dependencies", []))
-            for optional in package.get("optional-dependencies", {}).values():
-                pending.extend(dependency["name"] for dependency in optional)
+            # Conservatively consider every platform/Python resolution.
+            for package in packages[name]:
+                pending.extend(dependency["name"] for dependency in package.get("dependencies", []))
+                for optional in package.get("optional-dependencies", {}).values():
+                    pending.extend(dependency["name"] for dependency in optional)
     return visited
 
 
@@ -126,11 +134,13 @@ def review_locks(before: dict[str, Any], after: dict[str, Any]) -> tuple[bool, s
     changed = sorted(name for name in old if old[name] != new[name])
     if not changed or not set(changed) <= ALLOWED_PACKAGES:
         return False, "Changes are outside the development-tool allowlist"
-    dev = {item["name"] for item in old["cja-auto-sdr"]["dev-dependencies"]["dev"]}
+    dev = {item["name"] for item in old["cja-auto-sdr"][0]["dev-dependencies"]["dev"]}
     runtime = _runtime_packages(old)
     updates = []
     for name in changed:
-        previous, updated = old[name], new[name]
+        if len(old[name]) != 1 or len(new[name]) != 1:
+            return False, f"{name} has multiple resolutions; manual review required"
+        previous, updated = old[name][0], new[name][0]
         if name not in dev or name in runtime:
             return False, f"{name} is not exclusively a direct development dependency"
         versions = [re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", package["version"]) for package in (previous, updated)]
@@ -166,9 +176,10 @@ def read_lock(repo: str, sha: str) -> dict[str, Any]:
 def verify_pypi_artifacts(before: dict[str, Any], after: dict[str, Any]) -> None:
     """Compare every changed artifact with the registry's published metadata."""
     old, new = _packages(before), _packages(after)
-    for name, package in new.items():
-        if package == old[name]:
+    for name, resolutions in new.items():
+        if resolutions == old[name]:
             continue
+        package = resolutions[0]
         # Called only after review_locks: name is allowlisted and version is
         # numeric, so PR data cannot select another host or endpoint.
         with urlopen(f"https://pypi.org/pypi/{name}/{package['version']}/json", timeout=30) as response:
