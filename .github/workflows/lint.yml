@@ -26,11 +26,11 @@ jobs:
           cache-dependency-glob: uv.lock
           prune-cache: false
       - name: Sync dependencies
-        run: uv sync --dev
+        run: uv sync --locked --dev
       - name: Ruff check
-        run: uv run ruff check src/ tests/ scripts/ examples/
+        run: uv run --locked ruff check src/ tests/ scripts/ examples/
       - name: Ruff format check
-        run: uv run ruff format --check src/ tests/ scripts/ examples/
+        run: uv run --locked ruff format --check src/ tests/ scripts/ examples/
 
   actionlint:
     runs-on: ubuntu-latest

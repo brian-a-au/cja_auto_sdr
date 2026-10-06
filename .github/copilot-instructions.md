@@ -34,3 +34,10 @@ uv lock --check
 uv run python scripts/check_version_sync.py
 uv run python scripts/update_test_counts.py --check
 ```
+
+For dependency and workflow reviews, read `docs/DEPENDABOT_AUTOMATION.md`.
+Preserve the lockfile-only development patch allowlist, current-commit review
+and test checks, PyPI artifact verification, and the separation between the
+read-only PR check and the privileged default-branch merge controller. Runtime,
+major/minor, and GitHub Actions updates require human review. Keep this design
+aligned with `aa_auto_sdr`; never weaken a gate to permit automatic merging.

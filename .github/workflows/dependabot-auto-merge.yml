@@ -1,0 +1,54 @@
+name: dependabot-auto-merge
+
+on:
+  workflow_run:
+    workflows: [dependabot-policy, tests, lint, version-sync, dependency-review]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Existing PR number to review under the same policy
+        required: true
+        type: number
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependabot-auto-merge-${{ github.event.workflow_run.head_branch || inputs.pr }}
+  cancel-in-progress: false
+
+jobs:
+  review-and-merge:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.event == 'pull_request' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      # workflow_run loads this workflow from main. No PR code is executed,
+      # and no PR artifacts or caches are consumed with this write token.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: false
+      - name: Revalidate policy and merge only after all protected checks pass
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ inputs.pr }}
+        shell: bash
+        run: |
+          args=()
+          if [[ -n "$PR_NUMBER" ]]; then
+            args+=(--pr "$PR_NUMBER")
+          fi
+          uv run --no-project --python 3.14 python scripts/dependabot_review.py --repo "$REPO" --apply "${args[@]}"

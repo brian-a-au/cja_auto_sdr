@@ -53,10 +53,10 @@ jobs:
           cache-dependency-glob: uv.lock
           prune-cache: false
       - name: Sync dependencies
-        run: uv sync --dev
+        run: uv sync --locked --dev
       - name: Run focused release-gate contract tests
         run: >
-          uv run pytest -q
+          uv run --locked pytest -q
           tests/test_check_version_sync.py
           tests/test_check_pypi_readme_links.py
           tests/test_cli_color_policy_e2e.py
@@ -76,12 +76,12 @@ jobs:
           cache-dependency-glob: uv.lock
           prune-cache: false
       - name: Sync dependencies
-        run: uv sync --dev --extra clustering
+        run: uv sync --locked --dev --extra clustering
       - name: Run unit tests with coverage (95% gate applies to this slice)
         shell: bash
         run: |
           set -o pipefail
-          uv run pytest tests/ -v --tb=short \
+          uv run --locked pytest tests/ -v --tb=short \
             -m "unit and not slow" -n auto \
             --cov=cja_auto_sdr --cov-report=term --cov-fail-under=95 \
             --durations=25 | tee /tmp/test-unit.log
@@ -108,7 +108,7 @@ jobs:
           # `--collect-only --no-cov` pass (no test execution; <1s wall time).
           # The summary line `N tests collected in X.XXs` only appears with
           # --collect-only.
-          TESTS=$(uv run pytest --collect-only --no-cov 2>&1 | grep -oE '[0-9]+ tests collected' | head -1 | awk '{print $1}')
+          TESTS=$(uv run --locked pytest --collect-only --no-cov 2>&1 | grep -oE '[0-9]+ tests collected' | head -1 | awk '{print $1}')
           if [ -z "$COV" ] || [ -z "$TESTS" ]; then
             echo "::warning::Could not parse coverage (got '$COV') or test count (got '$TESTS') — emitting placeholder summary"
             {
@@ -144,12 +144,12 @@ jobs:
           cache-dependency-glob: uv.lock
           prune-cache: false
       - name: Sync dependencies
-        run: uv sync --dev --extra clustering
+        run: uv sync --locked --dev --extra clustering
       - name: Run integration, end-to-end, and slow test slices
         shell: bash
         run: |
           set -o pipefail
-          uv run pytest tests/ -q --tb=short -m "integration or e2e or slow" --durations=25 | tee /tmp/test-integration.log
+          uv run --locked pytest tests/ -q --tb=short -m "integration or e2e or slow" --durations=25 | tee /tmp/test-integration.log
           {
             echo "### test-integration slowest tests"
             echo '```text'
@@ -172,10 +172,10 @@ jobs:
           cache-dependency-glob: uv.lock
           prune-cache: false
       - name: Sync dependencies
-        run: uv sync --dev
+        run: uv sync --locked --dev
       - name: Run run-summary JSON contract tests
         run: >
-          uv run pytest -q tests/test_quality_policy_and_run_summary.py
+          uv run --locked pytest -q tests/test_quality_policy_and_run_summary.py
           -m run_summary_contract
 
   smoke-test:
@@ -194,14 +194,14 @@ jobs:
           cache-dependency-glob: uv.lock
           prune-cache: false
       - name: Sync dependencies
-        run: uv sync --dev
+        run: uv sync --locked --dev
       - name: Smoke test - version, help, exit-codes
         run: |
-          uv run python -m cja_auto_sdr --version
-          uv run python -m cja_auto_sdr --exit-codes
-          uv run python -m cja_auto_sdr --help
+          uv run --locked python -m cja_auto_sdr --version
+          uv run --locked python -m cja_auto_sdr --exit-codes
+          uv run --locked python -m cja_auto_sdr --help
       - name: Smoke test - parser and contract tests
-        run: uv run pytest tests/ -q --tb=short -m smoke
+        run: uv run --locked pytest tests/ -q --tb=short -m smoke
 
   no-extras-smoke:
     # Confirm the package imports and runs without the optional `notion-client`
