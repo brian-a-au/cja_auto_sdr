@@ -104,7 +104,10 @@ merges a PR. Validation therefore happens before merging; main-branch badge
 refresh workflows may need a manual dispatch. Use a separately configured GitHub
 App if triggering those downstream workflows becomes necessary.
 
-To pause automatic merging, disable `dependabot-auto-merge.yml`. Keep the policy and existing required CI checks.
+The repository auto-merge setting enables GitHub's manual queueing feature; this
+controller performs an exact-commit merge after its own checks, so it does not
+need to read that administrator-only setting. To pause automatic merging,
+disable `dependabot-auto-merge.yml`. Keep the policy and existing required CI checks.
 Change the allowlist only through a reviewed repository PR.
 
 ## Alignment with aa_auto_sdr

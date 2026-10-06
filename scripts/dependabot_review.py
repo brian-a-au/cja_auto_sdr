@@ -217,7 +217,7 @@ def verify_merge_gates(repo: str) -> None:
         contexts = {check["context"] for check in checks if check.get("integration_id") == 15368}
         if parameters["strict_required_status_checks_policy"] and contexts >= REQUIRED_CHECKS:
             verified = True
-    if not metadata["allow_auto_merge"] or metadata["default_branch"] != "main" or not verified:
+    if metadata["default_branch"] != "main" or not verified:
         raise ValueError("Required auto-merge protections are not configured")
 
 

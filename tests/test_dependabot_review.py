@@ -210,17 +210,17 @@ def test_registry_provenance(locks, monkeypatch, change):
 
 
 @pytest.mark.parametrize(
-    "change", ["none", "auto_merge", "strict", "missing_check", "wrong_app", "missing_rule", "branch"]
+    "change", ["none", "wrong_rule", "strict", "missing_check", "wrong_app", "missing_rule", "branch"]
 )
 def test_fail_closed_when_merge_gates_weakened(monkeypatch, change):
-    metadata = {"allow_auto_merge": True, "default_branch": "main"}
+    metadata = {"default_branch": "main"}
     parameters = {
         "strict_required_status_checks_policy": True,
         "required_status_checks": [{"context": name, "integration_id": 15368} for name in review.REQUIRED_CHECKS],
     }
     rules = [{"type": "required_status_checks", "parameters": parameters}]
-    if change == "auto_merge":
-        metadata["allow_auto_merge"] = False
+    if change == "wrong_rule":
+        rules[0]["type"] = "copilot_code_review"
     elif change == "strict":
         parameters["strict_required_status_checks_policy"] = False
     elif change == "missing_check":
