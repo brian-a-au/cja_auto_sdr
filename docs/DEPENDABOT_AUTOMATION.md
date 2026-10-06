@@ -39,7 +39,8 @@ After a successful required CI workflow run, `dependabot-auto-merge.yml` runs th
 script with narrowly scoped write permissions. It resolves the current PR from
 the triggering head SHA and repeats the review, including registry verification.
 Stale events are ignored. Before approving, it verifies required branch gates, confirms every required
-check succeeded, and rechecks both base and head SHAs. The review is attached
+check succeeded, rechecks both base and head SHAs, and verifies the reviewed
+head contains current main through the comparison API. The review is attached
 to the reviewed commit; `gh pr merge --squash --match-head-commit` uses no
 administrator bypass. GitHub enforces the required tests and up-to-date-branch
 rule. A pending or failed check causes no write; the next successful workflow
@@ -103,13 +104,22 @@ Change the allowlist only through a reviewed repository PR.
 
 Both repositories use the same workflow names, `scripts/dependabot_review.py`,
 patch-only allowlist (`ruff`, `pytest`, `pytest-cov`), artifact verification,
-trusted-base review, and exact-commit merge behavior. Only the repository name,
-root lockfile package name, required CI contexts, and pytest layout differ.
+trusted-base review, and exact-commit merge behavior. Repository names, root
+lockfile package names, required CI contexts, and pytest layouts differ.
 AA's runtime `aanalytics2` and CJA's runtime `cjapy` updates stay on the manual
 path, along with GitHub Actions updates. The AA setup is managed separately.
 
-Copilot review is supplementary and may be requested on new PRs and each new
-push through a repository ruleset, subject to Copilot availability and quota.
-It does not replace the deterministic policy or CI, and no preview Copilot
-approval-counting feature is required. See
+Detailed branch-protection reads through REST or GraphQL need administrator
+permission and fail with the built-in workflow token. Both implementations use
+`GET /repos/{repo}/branches/main`, which exposes protected status, required check
+contexts, app bindings, and administrator enforcement using Contents: read.
+They also compare base/head ancestry before approving or merging, independently
+confirming the PR contains current main. No administrator token is introduced.
+CJA additionally traverses downstream optional dependencies when excluding
+runtime packages; keep that conservative traversal aligned in AA.
+
+Copilot review is supplementary and requested on new PRs and each new push by
+CJA's repository ruleset, subject to Copilot availability and quota. It does not
+replace the deterministic policy or CI, and no preview Copilot approval-counting
+feature is required. See
 [Copilot configuration](https://docs.github.com/en/copilot/how-tos/copilot-on-github/set-up-copilot/configure-code-review).
