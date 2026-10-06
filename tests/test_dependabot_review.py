@@ -154,7 +154,7 @@ def test_reject_artifact_substitution(locks, url):
 def test_reject_duplicate_resolution(locks):
     before, after = locks
     after["package"].append(deepcopy(after["package"][1]))
-    with pytest.raises(ValueError, match="Multiple resolutions"):
+    with pytest.raises(ValueError, match="Duplicate package resolution"):
         review.review_locks(before, after)
 
 
@@ -355,3 +355,46 @@ def test_privileged_workflow_uses_trusted_main_and_check_permissions():
     assert "          enable-cache: false" in workflow
     assert "uv run --no-project" in workflow
     assert '--apply "${args[@]}"' in workflow
+
+
+def test_unchanged_multiple_runtime_resolutions_allow_dev_patch(locks):
+    before, after = locks
+    for lock in (before, after):
+        alternate = deepcopy(lock["package"][2])
+        alternate["version"] = "0.5.4"
+        lock["package"].append(alternate)
+    after["package"].reverse()
+    assert review.review_locks(before, after)[0]
+
+
+def test_changed_multiple_runtime_resolution_needs_manual_review(locks):
+    before, after = locks
+    for lock in (before, after):
+        alternate = deepcopy(lock["package"][2])
+        alternate["version"] = "0.5.4"
+        lock["package"].append(alternate)
+    after["package"][-1]["version"] = "0.5.3"
+    assert not review.review_locks(before, after)[0]
+
+
+@pytest.mark.parametrize("optional", [False, True])
+def test_every_runtime_resolution_excludes_its_dependencies(locks, optional):
+    before, after = locks
+    for lock in (before, after):
+        alternate = deepcopy(lock["package"][2])
+        alternate["version"] = "0.5.4"
+        if optional:
+            alternate["optional-dependencies"] = {"extra": [{"name": "ruff"}]}
+        else:
+            alternate["dependencies"] = [{"name": "ruff"}]
+        lock["package"].append(alternate)
+    assert not review.review_locks(before, after)[0]
+
+
+def test_multiple_changed_dev_resolutions_need_manual_review(locks):
+    before, after = locks
+    for lock in (before, after):
+        lock["package"].append(package("ruff", "0.16.7"))
+    eligible, reason = review.review_locks(before, after)
+    assert not eligible
+    assert "multiple resolutions" in reason
