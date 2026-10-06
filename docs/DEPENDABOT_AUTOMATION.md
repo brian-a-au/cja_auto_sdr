@@ -39,7 +39,8 @@ After a successful required CI workflow run, `dependabot-auto-merge.yml` runs th
 script with narrowly scoped write permissions. It resolves the current PR from
 the triggering head SHA and repeats the review, including registry verification.
 Stale events are ignored. Before approving, it verifies required branch gates, confirms every required
-check succeeded, and rechecks both base and head SHAs. The review is attached
+check succeeded, rechecks both base and head SHAs, and verifies the reviewed
+head contains current main through the comparison API. The review is attached
 to the reviewed commit; `gh pr merge --squash --match-head-commit` uses no
 administrator bypass. GitHub enforces the required tests and up-to-date-branch
 rule. A pending or failed check causes no write; the next successful workflow
@@ -53,15 +54,7 @@ Adobe credential, or external review service is needed.
 ## Repository settings
 
 The deployment enables **Allow auto-merge** and adds `dependabot-policy` to the
-existing required checks, with the GitHub Actions app as the check source.
-A **Dependabot merge gates** ruleset also enforces the same checks on `main`,
-requires up-to-date branches, and has no bypass actors. The workflow validates
-its effective rules using the metadata-readable REST branch-rules endpoint.
-REST and GraphQL legacy branch-protection reads require administrator access
-and must not be used with the built-in workflow token. Legacy protections and
-administrator enforcement remain enabled.
-
-Required contexts:
+existing required checks, with the GitHub Actions app as the check source:
 
 `build`, `ruff`, `actionlint`, `shellcheck`, `lockfile`, `version-sync`,
 `ci-gate`, `dependency-review`, `dependabot-policy`.
@@ -104,29 +97,29 @@ merges a PR. Validation therefore happens before merging; main-branch badge
 refresh workflows may need a manual dispatch. Use a separately configured GitHub
 App if triggering those downstream workflows becomes necessary.
 
-The repository auto-merge setting enables GitHub's manual queueing feature; this
-controller performs an exact-commit merge after its own checks, so it does not
-need to read that administrator-only setting. To pause automatic merging,
-disable `dependabot-auto-merge.yml`. Keep the policy and existing required CI checks.
+To pause automatic merging, disable `dependabot-auto-merge.yml`. Keep the policy and existing required CI checks.
 Change the allowlist only through a reviewed repository PR.
 
 ## Alignment with aa_auto_sdr
 
 Both repositories use the same workflow names, `scripts/dependabot_review.py`,
 patch-only allowlist (`ruff`, `pytest`, `pytest-cov`), artifact verification,
-trusted-base review, and exact-commit merge behavior. Only the repository name,
-root lockfile package name, required CI contexts, and pytest layout differ.
+trusted-base review, and exact-commit merge behavior. Repository names, root
+lockfile package names, required CI contexts, and pytest layouts differ.
 AA's runtime `aanalytics2` and CJA's runtime `cjapy` updates stay on the manual
 path, along with GitHub Actions updates. The AA setup is managed separately.
 
-Copilot review is supplementary and may be requested on new PRs and each new
-push through a repository ruleset, subject to Copilot availability and quota.
-It does not replace the deterministic policy or CI, and no preview Copilot
-approval-counting feature is required. See
-[Copilot configuration](https://docs.github.com/en/copilot/how-tos/copilot-on-github/set-up-copilot/configure-code-review).
+Detailed branch-protection reads through REST or GraphQL need administrator
+permission and fail with the built-in workflow token. Both implementations use
+`GET /repos/{repo}/branches/main`, which exposes protected status, required check
+contexts, app bindings, and administrator enforcement using Contents: read.
+They also compare base/head ancestry before approving or merging, independently
+confirming the PR contains current main. No administrator token is introduced.
+CJA additionally traverses downstream optional dependencies when excluding
+runtime packages; keep that conservative traversal aligned in AA.
 
-The same metadata-readable ruleset check is required in the AA implementation.
-Port `verify_merge_gates()` and its focused tests, and create the corresponding
-strict **Dependabot merge gates** ruleset with AA's required check contexts and
-no bypass actors. CJA also traverses downstream optional dependencies when
-excluding runtime packages; keep that conservative traversal aligned.
+Copilot review is supplementary and requested on new PRs and each new push by
+CJA's repository ruleset, subject to Copilot availability and quota. It does not
+replace the deterministic policy or CI, and no preview Copilot approval-counting
+feature is required. See
+[Copilot configuration](https://docs.github.com/en/copilot/how-tos/copilot-on-github/set-up-copilot/configure-code-review).

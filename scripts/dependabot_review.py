@@ -202,22 +202,23 @@ def evaluate_pr(repo: str, pr: dict[str, Any]) -> tuple[bool, str]:
 
 
 def verify_merge_gates(repo: str) -> None:
-    # Branch-protection REST and GraphQL reads need administrator access.
-    # Rules for a branch are metadata-readable by the built-in workflow token.
-    # Deployment retains legacy protection and adds these strict, app-bound
-    # rules with no bypass actors; no administrator token is needed here.
+    # Detailed protection settings (REST and GraphQL) need Administration
+    # permission, which GITHUB_TOKEN cannot request. The branch endpoint
+    # exposes check contexts, app bindings, and administrator enforcement
+    # using Contents: read. Check ancestry separately before any write.
     metadata = gh_json(f"repos/{repo}")
-    rules = gh_json(f"repos/{repo}/rules/branches/main")
-    verified = False
-    for rule in rules:
-        if rule["type"] != "required_status_checks":
-            continue
-        parameters = rule["parameters"]
-        checks = parameters["required_status_checks"]
-        contexts = {check["context"] for check in checks if check.get("integration_id") == 15368}
-        if parameters["strict_required_status_checks_policy"] and contexts >= REQUIRED_CHECKS:
-            verified = True
-    if metadata["default_branch"] != "main" or not verified:
+    branch = gh_json(f"repos/{repo}/branches/main")
+    protection = branch["protection"]
+    checks = protection["required_status_checks"]
+    if (
+        not metadata["allow_auto_merge"]
+        or metadata["default_branch"] != "main"
+        or not branch["protected"]
+        or not protection["enabled"]
+        or not set(checks["contexts"]) >= REQUIRED_CHECKS
+        or checks["enforcement_level"] != "everyone"
+        or not {check["context"] for check in checks["checks"] if check["app_id"] == 15368} >= REQUIRED_CHECKS
+    ):
         raise ValueError("Required auto-merge protections are not configured")
 
 
@@ -240,7 +241,6 @@ def checks_ready(repo: str, number: int) -> bool:
 
 
 def apply_review(repo: str, pr: dict[str, Any], reason: str) -> None:
-    print("Verifying strict merge gates and required CI checks")
     verify_merge_gates(repo)
     if not checks_ready(repo, pr["number"]):
         print("Required CI checks are not all successful; a later completion will retry")
@@ -250,6 +250,10 @@ def apply_review(repo: str, pr: dict[str, Any], reason: str) -> None:
         raise ValueError("PR changed during review; wait for a fresh policy run")
     if not pr_identity(current, repo):
         raise ValueError("PR identity changed during review")
+    comparison = gh_json(f"repos/{repo}/compare/{pr['base']['sha']}...{pr['head']['sha']}")
+    if comparison["behind_by"] != 0 or comparison["status"] != "ahead":
+        print("PR does not contain current main; wait for a branch update and fresh CI")
+        return
     gh_json(
         f"repos/{repo}/pulls/{pr['number']}/reviews",
         {
@@ -338,4 +342,7 @@ if __name__ == "__main__":
     except (KeyError, ValueError, TypeError, OSError, subprocess.SubprocessError) as error:
         # API/parse errors fail closed rather than silently falling back.
         print(f"Dependabot review failed: {type(error).__name__}", file=sys.stderr)
+        if isinstance(error, subprocess.CalledProcessError):
+            # Commands contain endpoints and public SHAs, never the token.
+            print(f"Failed command: {' '.join(error.cmd[:3])} (exit {error.returncode})", file=sys.stderr)
         sys.exit(1)

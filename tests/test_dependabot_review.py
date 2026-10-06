@@ -209,29 +209,38 @@ def test_registry_provenance(locks, monkeypatch, change):
             review.verify_pypi_artifacts(before, after)
 
 
-@pytest.mark.parametrize(
-    "change", ["none", "wrong_rule", "strict", "missing_check", "wrong_app", "missing_rule", "branch"]
-)
+def gate_responses() -> tuple[dict, dict]:
+    return (
+        {"allow_auto_merge": True, "default_branch": "main"},
+        {
+            "protected": True,
+            "protection": {
+                "enabled": True,
+                "required_status_checks": {
+                    "contexts": sorted(review.REQUIRED_CHECKS),
+                    "checks": [{"context": name, "app_id": 15368} for name in review.REQUIRED_CHECKS],
+                    "enforcement_level": "everyone",
+                },
+            },
+        },
+    )
+
+
+@pytest.mark.parametrize("change", ["none", "auto_merge", "unprotected", "admin", "missing_check", "wrong_app"])
 def test_fail_closed_when_merge_gates_weakened(monkeypatch, change):
-    metadata = {"default_branch": "main"}
-    parameters = {
-        "strict_required_status_checks_policy": True,
-        "required_status_checks": [{"context": name, "integration_id": 15368} for name in review.REQUIRED_CHECKS],
-    }
-    rules = [{"type": "required_status_checks", "parameters": parameters}]
-    if change == "wrong_rule":
-        rules[0]["type"] = "copilot_code_review"
-    elif change == "strict":
-        parameters["strict_required_status_checks_policy"] = False
+    metadata, branch = gate_responses()
+    checks = branch["protection"]["required_status_checks"]
+    if change == "auto_merge":
+        metadata["allow_auto_merge"] = False
+    elif change == "unprotected":
+        branch["protected"] = False
+    elif change == "admin":
+        checks["enforcement_level"] = "non_admins"
     elif change == "missing_check":
-        parameters["required_status_checks"].pop()
+        checks["contexts"].remove("ci-gate")
     elif change == "wrong_app":
-        parameters["required_status_checks"][0]["integration_id"] = 1
-    elif change == "missing_rule":
-        rules = []
-    elif change == "branch":
-        metadata["default_branch"] = "other"
-    monkeypatch.setattr(review, "gh_json", Mock(side_effect=[metadata, rules]))
+        checks["checks"][0]["app_id"] = -1
+    monkeypatch.setattr(review, "gh_json", Mock(side_effect=[metadata, branch]))
     if change == "none":
         review.verify_merge_gates(review.REPOSITORY)
     else:
@@ -256,7 +265,7 @@ def test_changed_commit_cannot_be_approved(pr, monkeypatch, changed_ref):
 
 
 def test_approval_and_merge_are_bound_to_reviewed_commit(pr, monkeypatch):
-    api = Mock(side_effect=[pr, {}])
+    api = Mock(side_effect=[pr, {"behind_by": 0, "status": "ahead"}, {}])
     merge = Mock()
     monkeypatch.setattr(review, "verify_merge_gates", lambda *_args: None)
     monkeypatch.setattr(review, "checks_ready", lambda *_args: True)
@@ -269,6 +278,18 @@ def test_approval_and_merge_are_bound_to_reviewed_commit(pr, monkeypatch):
     # No persistent auto-merge request can survive a changed, ineligible head.
     assert "--auto" not in command
     assert "--admin" not in command
+
+
+def test_behind_branch_cannot_be_approved(pr, monkeypatch):
+    api = Mock(side_effect=[pr, {"behind_by": 1, "status": "diverged"}])
+    merge = Mock()
+    monkeypatch.setattr(review, "verify_merge_gates", lambda *_args: None)
+    monkeypatch.setattr(review, "checks_ready", lambda *_args: True)
+    monkeypatch.setattr(review, "gh_json", api)
+    monkeypatch.setattr(review.subprocess, "run", merge)
+    review.apply_review(review.REPOSITORY, pr, "ruff patch")
+    assert api.call_count == 2
+    merge.assert_not_called()
 
 
 @pytest.mark.parametrize("state", ["PENDING", "FAILURE", "SKIPPED", "CANCELLED"])
