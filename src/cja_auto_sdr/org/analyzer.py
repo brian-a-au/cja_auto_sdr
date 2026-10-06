@@ -705,6 +705,9 @@ class OrgComponentAnalyzer:
             return summaries
 
         pending_cache: list[DataViewSummary] = []
+        # Bind validation evidence to the listing that scheduled these fetches,
+        # independently of optional metadata enrichment from getDataView().
+        validation_modified_by_id = {dv.get("id", ""): dv.get("modified") or dv.get("modifiedDate") for dv in to_fetch}
 
         # Use explicit executor lifecycle so lock-loss can fail closed immediately.
         executor = ThreadPoolExecutor(max_workers=min(DEFAULT_ORG_REPORT_WORKERS, len(to_fetch)))
@@ -780,6 +783,7 @@ class OrgComponentAnalyzer:
                 include_names=self.config.include_names,
                 include_metadata=self.config.include_metadata,
                 include_component_types=self.config.include_component_types,
+                validation_modified_by_id=validation_modified_by_id,
             )
 
         return summaries

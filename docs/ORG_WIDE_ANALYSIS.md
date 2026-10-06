@@ -273,9 +273,10 @@ cja_auto_sdr --org-report --use-cache --refresh-cache
 ```
 
 > **Note:** Smart cache validation (`--validate-cache`) compares modification
-> timestamps. If the CJA API doesn't return a modification timestamp for a
-> data view, the cached entry is treated as valid (optimistic caching). Use
-> `--refresh-cache` to force a full refresh when in doubt.
+> timestamps from the data view listing, without requiring `--include-metadata`.
+> Unchanged data views reuse cached components; changed data views are refreshed
+> individually. If the listing or cached entry lacks a usable timestamp, the
+> data view is fetched again. Without `--validate-cache`, reuse is age-based.
 
 Cache is stored in:
 - **macOS/Linux:** `~/.cja_auto_sdr/cache/org_report_cache.json`
