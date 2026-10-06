@@ -30,6 +30,8 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      checks: read
+      actions: read
     steps:
       # workflow_run loads this workflow from main. No PR code is executed,
       # and no PR artifacts or caches are consumed with this write token.

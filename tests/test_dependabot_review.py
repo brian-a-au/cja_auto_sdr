@@ -336,3 +336,21 @@ def test_failed_workflow_never_fetches_pr(monkeypatch):
     monkeypatch.setattr(review, "gh_json", api)
     assert review.resolve_pr(review.REPOSITORY, event) == (None, None)
     api.assert_not_called()
+
+
+def test_privileged_workflow_uses_trusted_main_and_check_permissions():
+    import yaml
+
+    workflow = yaml.safe_load((Path(__file__).parents[1] / ".github/workflows/dependabot-auto-merge.yml").read_text())
+    job = workflow["jobs"]["review-and-merge"]
+    assert job["permissions"] == {
+        "contents": "write",
+        "pull-requests": "write",
+        "checks": "read",
+        "actions": "read",
+    }
+    checkout, setup, command = job["steps"]
+    assert checkout["with"] == {"ref": "main", "persist-credentials": False}
+    assert setup["with"]["enable-cache"] is False
+    assert "uv run --no-project" in command["run"]
+    assert "--apply" in command["run"]
