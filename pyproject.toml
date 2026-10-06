@@ -152,6 +152,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
+"scripts/dependabot_review.py" = ["T201"]  # intentional policy review CLI output
 "src/cja_auto_sdr/generator.py" = ["F401", "E402", "RUF001", "RUF003", "SIM115", "S105", "PLW2901", "T201"]  # F401: re-exports; E402: optional imports; RUF001/3: intentional Unicode symbols; SIM115: NamedTemporaryFile with delete=False; S105: token_name false positive; PLW2901: line=line.strip() pattern; T201: intentional CLI console output
 "src/cja_auto_sdr/__main__.py" = ["T201"]  # intentional CLI console output
 "src/cja_auto_sdr/core/credentials.py" = ["PLW2901"]  # line=line.strip() pattern

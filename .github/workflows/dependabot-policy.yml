@@ -1,0 +1,43 @@
+name: dependabot-policy
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  dependabot-policy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Review code comes from the trusted base, never the PR branch.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: false
+      - name: Review identity and actual lockfile changes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+        # stdlib only: no PR dependencies or build hooks are installed.
+        shell: bash
+        run: |
+          # The initial installation PR's base predates the policy script.
+          # Only a human bootstrap PR may pass without it; bots fail closed.
+          if [[ ! -f scripts/dependabot_review.py ]]; then
+            if [[ "$PR_AUTHOR" == 'dependabot[bot]' ]]; then
+              echo 'Policy script missing on base; automatic review unavailable'
+              exit 1
+            fi
+            echo 'Manual bootstrap PR: policy script is not on main yet'
+            exit 0
+          fi
+          uv run --no-project --python 3.14 python scripts/dependabot_review.py --repo "$REPO"
