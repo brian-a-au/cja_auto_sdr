@@ -278,6 +278,11 @@ cja_auto_sdr --org-report --use-cache --refresh-cache
 > individually. If the listing or cached entry lacks a usable timestamp, the
 > data view is fetched again. Without `--validate-cache`, reuse is age-based.
 
+Malformed component-cache entries are ignored individually and fetched again;
+healthy entries remain reusable. Unreadable cache files are treated as empty
+caches. If the optional component cache cannot be created or saved, analysis
+continues with a warning. These recovery rules do not hide component API failures.
+
 Cache is stored in:
 - **macOS/Linux:** `~/.cja_auto_sdr/cache/org_report_cache.json`
 - **Windows:** `%USERPROFILE%\.cja_auto_sdr\cache\org_report_cache.json`
