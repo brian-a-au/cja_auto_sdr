@@ -53,7 +53,15 @@ Adobe credential, or external review service is needed.
 ## Repository settings
 
 The deployment enables **Allow auto-merge** and adds `dependabot-policy` to the
-existing required checks, with the GitHub Actions app as the check source:
+existing required checks, with the GitHub Actions app as the check source.
+A **Dependabot merge gates** ruleset also enforces the same checks on `main`,
+requires up-to-date branches, and has no bypass actors. The workflow validates
+its effective rules using the metadata-readable REST branch-rules endpoint.
+REST and GraphQL legacy branch-protection reads require administrator access
+and must not be used with the built-in workflow token. Legacy protections and
+administrator enforcement remain enabled.
+
+Required contexts:
 
 `build`, `ruff`, `actionlint`, `shellcheck`, `lockfile`, `version-sync`,
 `ci-gate`, `dependency-review`, `dependabot-policy`.
@@ -113,3 +121,9 @@ push through a repository ruleset, subject to Copilot availability and quota.
 It does not replace the deterministic policy or CI, and no preview Copilot
 approval-counting feature is required. See
 [Copilot configuration](https://docs.github.com/en/copilot/how-tos/copilot-on-github/set-up-copilot/configure-code-review).
+
+The same metadata-readable ruleset check is required in the AA implementation.
+Port `verify_merge_gates()` and its focused tests, and create the corresponding
+strict **Dependabot merge gates** ruleset with AA's required check contexts and
+no bypass actors. CJA also traverses downstream optional dependencies when
+excluding runtime packages; keep that conservative traversal aligned.

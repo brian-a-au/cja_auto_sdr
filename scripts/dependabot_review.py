@@ -202,32 +202,22 @@ def evaluate_pr(repo: str, pr: dict[str, Any]) -> tuple[bool, str]:
 
 
 def verify_merge_gates(repo: str) -> None:
-    # The REST protection endpoint needs Administration permission, which
-    # GITHUB_TOKEN cannot request. GraphQL exposes the branch's gate settings
-    # without giving this workflow permission to change them.
-    owner, name = repo.split("/")
-    result = gh_json(
-        "graphql",
-        {
-            "query": (
-                f'query {{ repository(owner: "{owner}", name: "{name}") {{ '
-                "autoMergeAllowed defaultBranchRef { name branchProtectionRule { "
-                "requiresStatusChecks requiresStrictStatusChecks requiredStatusCheckContexts isAdminEnforced "
-                "} } } }"
-            )
-        },
-    )
-    metadata = result["data"]["repository"]
-    branch = metadata["defaultBranchRef"]
-    protection = branch["branchProtectionRule"]
-    if (
-        not metadata["autoMergeAllowed"]
-        or branch["name"] != "main"
-        or not protection["requiresStatusChecks"]
-        or not protection["requiresStrictStatusChecks"]
-        or not set(protection["requiredStatusCheckContexts"]) >= REQUIRED_CHECKS
-        or not protection["isAdminEnforced"]
-    ):
+    # Branch-protection REST and GraphQL reads need administrator access.
+    # Rules for a branch are metadata-readable by the built-in workflow token.
+    # Deployment retains legacy protection and adds these strict, app-bound
+    # rules with no bypass actors; no administrator token is needed here.
+    metadata = gh_json(f"repos/{repo}")
+    rules = gh_json(f"repos/{repo}/rules/branches/main")
+    verified = False
+    for rule in rules:
+        if rule["type"] != "required_status_checks":
+            continue
+        parameters = rule["parameters"]
+        checks = parameters["required_status_checks"]
+        contexts = {check["context"] for check in checks if check.get("integration_id") == 15368}
+        if parameters["strict_required_status_checks_policy"] and contexts >= REQUIRED_CHECKS:
+            verified = True
+    if not metadata["allow_auto_merge"] or metadata["default_branch"] != "main" or not verified:
         raise ValueError("Required auto-merge protections are not configured")
 
 
@@ -250,6 +240,7 @@ def checks_ready(repo: str, number: int) -> bool:
 
 
 def apply_review(repo: str, pr: dict[str, Any], reason: str) -> None:
+    print("Verifying strict merge gates and required CI checks")
     verify_merge_gates(repo)
     if not checks_ready(repo, pr["number"]):
         print("Required CI checks are not all successful; a later completion will retry")

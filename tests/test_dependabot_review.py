@@ -209,39 +209,29 @@ def test_registry_provenance(locks, monkeypatch, change):
             review.verify_pypi_artifacts(before, after)
 
 
-def gate_response() -> dict:
-    return {
-        "data": {
-            "repository": {
-                "autoMergeAllowed": True,
-                "defaultBranchRef": {
-                    "name": "main",
-                    "branchProtectionRule": {
-                        "requiresStatusChecks": True,
-                        "requiresStrictStatusChecks": True,
-                        "requiredStatusCheckContexts": sorted(review.REQUIRED_CHECKS),
-                        "isAdminEnforced": True,
-                    },
-                },
-            }
-        }
-    }
-
-
-@pytest.mark.parametrize("change", ["none", "auto_merge", "strict", "admin", "missing_check"])
+@pytest.mark.parametrize(
+    "change", ["none", "auto_merge", "strict", "missing_check", "wrong_app", "missing_rule", "branch"]
+)
 def test_fail_closed_when_merge_gates_weakened(monkeypatch, change):
-    response = gate_response()
-    metadata = response["data"]["repository"]
-    protection = metadata["defaultBranchRef"]["branchProtectionRule"]
+    metadata = {"allow_auto_merge": True, "default_branch": "main"}
+    parameters = {
+        "strict_required_status_checks_policy": True,
+        "required_status_checks": [{"context": name, "integration_id": 15368} for name in review.REQUIRED_CHECKS],
+    }
+    rules = [{"type": "required_status_checks", "parameters": parameters}]
     if change == "auto_merge":
-        metadata["autoMergeAllowed"] = False
+        metadata["allow_auto_merge"] = False
     elif change == "strict":
-        protection["requiresStrictStatusChecks"] = False
-    elif change == "admin":
-        protection["isAdminEnforced"] = False
+        parameters["strict_required_status_checks_policy"] = False
     elif change == "missing_check":
-        protection["requiredStatusCheckContexts"].remove("ci-gate")
-    monkeypatch.setattr(review, "gh_json", lambda *_args: response)
+        parameters["required_status_checks"].pop()
+    elif change == "wrong_app":
+        parameters["required_status_checks"][0]["integration_id"] = 1
+    elif change == "missing_rule":
+        rules = []
+    elif change == "branch":
+        metadata["default_branch"] = "other"
+    monkeypatch.setattr(review, "gh_json", Mock(side_effect=[metadata, rules]))
     if change == "none":
         review.verify_merge_gates(review.REPOSITORY)
     else:
