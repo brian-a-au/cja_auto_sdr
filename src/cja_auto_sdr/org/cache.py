@@ -485,12 +485,13 @@ class OrgReportCache:
             return None
 
         # Validate modification timestamp if provided
-        # NOTE: If current_modified is None (API didn't return timestamp),
-        # we skip validation and treat cached entry as valid (optimistic approach).
-        # This prevents unnecessary refetches when metadata is unavailable.
+        # Omitting current_modified preserves age-only lookup behavior. The
+        # analyzer rejects missing listing timestamps before validated lookup.
         if current_modified is not None:
-            cached_modified = entry.get("modified")
-            if cached_modified != current_modified:
+            # Only an absent key falls back to legacy metadata. Explicit None
+            # means the scheduling listing supplied no validation evidence.
+            cached_modified = entry.get("validation_modified", entry.get("modified"))
+            if not cached_modified or cached_modified != current_modified:
                 return None  # Data view has been modified since cached
 
         if required_flags:
@@ -554,6 +555,7 @@ class OrgReportCache:
             include_names=include_names,
             include_metadata=include_metadata,
             include_component_types=include_component_types,
+            validation_modified=summary.modified,
         )
         self._save_cache()
 
@@ -563,8 +565,14 @@ class OrgReportCache:
         include_names: bool = False,
         include_metadata: bool = False,
         include_component_types: bool = False,
+        validation_modified_by_id: dict[str, str | None] | None = None,
     ) -> None:
-        """Store multiple DataViewSummary objects in the cache with a single disk write."""
+        """Store summaries in one write, optionally with listing validation tokens.
+
+        A supplied mapping is authoritative, including missing timestamps; it
+        must not fall back to timestamps from optional metadata enrichment.
+        Without a mapping, preserve callers that supply summary.modified.
+        """
         if not summaries:
             return
         for summary in summaries:
@@ -573,6 +581,11 @@ class OrgReportCache:
                 include_names=include_names,
                 include_metadata=include_metadata,
                 include_component_types=include_component_types,
+                validation_modified=(
+                    summary.modified
+                    if validation_modified_by_id is None
+                    else validation_modified_by_id.get(summary.data_view_id)
+                ),
             )
         self._save_cache()
 
@@ -583,6 +596,7 @@ class OrgReportCache:
         include_names: bool,
         include_metadata: bool,
         include_component_types: bool,
+        validation_modified: str | None,
     ) -> dict[str, Any]:
         return {
             "data_view_id": summary.data_view_id,
@@ -604,6 +618,7 @@ class OrgReportCache:
             "owner_id": summary.owner_id,
             "created": summary.created,
             "modified": summary.modified,
+            "validation_modified": validation_modified,
             "description": summary.description,
             "has_description": summary.has_description,
             "include_names": include_names,

@@ -1107,3 +1107,43 @@ class TestIsProcessRunningOSError:
         with patch("os.kill", side_effect=err):
             result = OrgReportLock._is_process_running(os.getpid())
         assert result is False
+
+
+@pytest.mark.parametrize("cached_modified", [None, "", "2024-01-15T10:00:00Z"])
+def test_legacy_validation_uses_existing_modified_without_new_token(tmp_path, cached_modified):
+    cache = OrgReportCache(tmp_path)
+    summary = _summary("dv_legacy")
+    summary.modified = cached_modified
+    cache.put(summary, include_metadata=True)
+    # Model the pre-patch on-disk cache schema.
+    cache._cache["dv_legacy"].pop("validation_modified", None)
+    cache._save_cache()
+    reloaded = OrgReportCache(tmp_path)
+    retrieved = reloaded.get("dv_legacy", current_modified="2024-01-15T10:00:00Z")
+    if cached_modified:
+        assert retrieved is not None
+        assert retrieved.modified == "2024-01-15T10:00:00Z"
+    else:
+        assert retrieved is None
+    # Existing callers that request age-only reuse do not require a token.
+    assert reloaded.get("dv_legacy") is not None
+
+
+def test_put_many_without_listing_mapping_preserves_metadata_validation(tmp_path):
+    summary = _summary("dv_metadata")
+    summary.modified = "2024-01-15T10:00:00Z"
+    cache = OrgReportCache(tmp_path)
+    cache.put_many([summary], include_metadata=True)
+    reloaded = OrgReportCache(tmp_path)
+    assert reloaded.get("dv_metadata", current_modified="2024-01-15T10:00:00Z") is not None
+    assert reloaded.get("dv_metadata", current_modified="2024-01-16T10:00:00Z") is None
+
+
+def test_cached_report_modified_remains_separate_from_validation_token(tmp_path):
+    summary = _summary("dv_metadata")
+    summary.modified = "2024-02-01T10:00:00Z"
+    cache = OrgReportCache(tmp_path)
+    cache.put_many([summary], include_metadata=True, validation_modified_by_id={"dv_metadata": "2024-01-15T10:00:00Z"})
+    reloaded = OrgReportCache(tmp_path)
+    assert reloaded.get_cached_modified("dv_metadata") == "2024-02-01T10:00:00Z"
+    assert reloaded.get("dv_metadata", current_modified="2024-01-15T10:00:00Z").modified == "2024-02-01T10:00:00Z"

@@ -6,7 +6,10 @@ verifying that all components work together correctly.
 """
 
 import json
+import logging
 import sys
+from dataclasses import asdict
+from datetime import UTC, datetime, timedelta
 from unittest.mock import Mock, patch
 
 import pandas as pd
@@ -21,6 +24,7 @@ from cja_auto_sdr.generator import (
     write_org_report_excel,
     write_org_report_json,
 )
+from cja_auto_sdr.org.cache import OrgReportCache
 
 
 def create_mock_data_views(count: int = 5, prefix: str = "DV") -> list:
@@ -601,3 +605,162 @@ class TestCacheValidationBatch:
         calls = mock_cache.get.call_args_list
         for i, call in enumerate(calls):
             assert call.kwargs.get("current_modified") == data_views[i]["modified"]
+
+
+class TestValidatedCachePersistence:
+    """Validated reuse must survive disk reload without enriching report metadata."""
+
+    @pytest.fixture
+    def cache_client(self):
+        client = Mock()
+        client.getDataViews.return_value = create_mock_data_views(3)
+        client.getMetrics.side_effect = lambda dv_id, **kwargs: create_mock_metrics(dv_id)
+        client.getDimensions.side_effect = lambda dv_id, **kwargs: create_mock_dimensions(dv_id)
+        client.getDataView.side_effect = lambda dv_id: {
+            "id": dv_id,
+            "name": dv_id,
+            "owner": {"name": "Owner", "id": "owner_1"},
+            "created": "2023-01-01T10:00:00Z",
+            "modified": "2024-02-01T10:00:00Z",
+            "description": "Metadata from the detail endpoint",
+        }
+        return client
+
+    @staticmethod
+    def run_cached(client, tmp_path, **overrides):
+        config = OrgReportConfig(
+            use_cache=True,
+            validate_cache=True,
+            cja_per_thread=False,
+            quiet=True,
+            skip_lock=True,
+            **overrides,
+        )
+        client.reset_mock()
+        return OrgComponentAnalyzer(
+            client,
+            config,
+            logging.getLogger("validated_cache"),
+            cache=OrgReportCache(tmp_path),
+        ).run_analysis()
+
+    @staticmethod
+    def assert_component_calls(client, count):
+        assert client.getDataViews.call_count == 1
+        assert client.getMetrics.call_count == count
+        assert client.getDimensions.call_count == count
+
+    @pytest.mark.parametrize("timestamp_key", ["modified", "modifiedDate"])
+    @pytest.mark.parametrize("include_metadata", [False, True])
+    def test_validated_cache_reloaded_warm_and_selective_refresh(
+        self, cache_client, tmp_path, timestamp_key, include_metadata
+    ):
+        for view in cache_client.getDataViews.return_value:
+            view[timestamp_key] = view.pop("modified")
+        cold = self.run_cached(cache_client, tmp_path, include_metadata=include_metadata, include_names=True)
+        self.assert_component_calls(cache_client, 3)
+        assert cache_client.getDataView.call_count == (3 if include_metadata else 0)
+
+        warm = self.run_cached(cache_client, tmp_path, include_metadata=include_metadata, include_names=True)
+        self.assert_component_calls(cache_client, 0)
+        cache_client.getDataView.assert_not_called()
+        assert {s.data_view_id: asdict(s) for s in warm.data_view_summaries} == {
+            s.data_view_id: asdict(s) for s in cold.data_view_summaries
+        }
+        if not include_metadata:
+            assert all(
+                s.owner is None and s.owner_id is None and s.created is None and s.description is None
+                for s in warm.data_view_summaries
+            )
+        assert {s.modified for s in warm.data_view_summaries} == (
+            {"2024-02-01T10:00:00Z"} if include_metadata else {None}
+        )
+        write_org_report_json(warm, tmp_path / "warm_report.json", str(tmp_path), logging.getLogger("cache_json"))
+        payload = json.loads((tmp_path / "warm_report.json").read_text())
+        assert all("validation_modified" not in dv for dv in payload["data_views"])
+        assert {dv["modified"] for dv in payload["data_views"]} == (
+            {"2024-02-01T10:00:00Z"} if include_metadata else {None}
+        )
+
+        cache_client.getDataViews.return_value[1][timestamp_key] = "2024-03-01T10:00:00Z"
+        cache_client.getMetrics.side_effect = lambda dv_id, **kwargs: create_mock_metrics(
+            dv_id, count=11 if dv_id == "dv_00002" else 10
+        )
+        changed = self.run_cached(cache_client, tmp_path, include_metadata=include_metadata, include_names=True)
+        self.assert_component_calls(cache_client, 1)
+        assert cache_client.getMetrics.call_args.args == ("dv_00002",)
+        assert cache_client.getDimensions.call_args.args == ("dv_00002",)
+        assert changed.total_data_views == 3
+        changed_view = next(s for s in changed.data_view_summaries if s.data_view_id == "dv_00002")
+        assert changed_view.metric_count == 11
+        assert "dv_00002_metric_10" in changed_view.metric_ids
+        self.run_cached(cache_client, tmp_path, include_metadata=include_metadata, include_names=True)
+        self.assert_component_calls(cache_client, 0)
+
+    @pytest.mark.parametrize(
+        "miss_reason", ["missing_current", "empty_current", "expired", "names", "metadata", "component_types", "legacy"]
+    )
+    def test_validated_cache_safe_misses(self, cache_client, tmp_path, miss_reason):
+        self.run_cached(cache_client, tmp_path, include_component_types=False)
+        cache_file = tmp_path / "org_report_cache.json"
+        entries = json.loads(cache_file.read_text())
+        overrides = {"include_component_types": False}
+        if miss_reason in {"missing_current", "empty_current"}:
+            for view in cache_client.getDataViews.return_value:
+                view["modified"] = None if miss_reason == "missing_current" else ""
+        elif miss_reason == "expired":
+            for entry in entries.values():
+                entry["fetched_at"] = (datetime.now(UTC) - timedelta(hours=25)).isoformat()
+        elif miss_reason == "legacy":
+            for entry in entries.values():
+                entry.pop("validation_modified", None)
+        else:
+            overrides[f"include_{miss_reason}"] = True
+        cache_file.write_text(json.dumps(entries))
+        result = self.run_cached(cache_client, tmp_path, **overrides)
+        self.assert_component_calls(cache_client, 3)
+        assert result.total_data_views == 3
+
+    def test_validated_cache_missing_listing_token_does_not_adopt_detail_timestamp(self, cache_client, tmp_path):
+        for view in cache_client.getDataViews.return_value:
+            view.pop("modified")
+        self.run_cached(cache_client, tmp_path, include_metadata=True)
+        self.assert_component_calls(cache_client, 3)
+        for view in cache_client.getDataViews.return_value:
+            view["modified"] = "2024-02-01T10:00:00Z"
+        self.run_cached(cache_client, tmp_path, include_metadata=True)
+        self.assert_component_calls(cache_client, 3)
+        self.run_cached(cache_client, tmp_path, include_metadata=True)
+        self.assert_component_calls(cache_client, 0)
+
+    def test_validated_cache_failed_fetch_recovers_without_caching_error(self, cache_client, tmp_path):
+        cache_client.getDataViews.return_value = create_mock_data_views(1)
+        cache_client.getMetrics.side_effect = RuntimeError("Transient component failure")
+        failed = self.run_cached(cache_client, tmp_path)
+        assert failed.data_view_summaries[0].has_error
+        assert OrgReportCache(tmp_path).get("dv_00001") is None
+        cache_client.getMetrics.side_effect = lambda dv_id, **kwargs: create_mock_metrics(dv_id)
+        cache_client.getDataViews.return_value[0].pop("modified")
+        recovered = self.run_cached(cache_client, tmp_path)
+        self.assert_component_calls(cache_client, 1)
+        assert not recovered.data_view_summaries[0].has_error
+        self.run_cached(cache_client, tmp_path)
+        self.assert_component_calls(cache_client, 1)
+        cache_client.getDataViews.return_value[0]["modified"] = "2024-04-01T10:00:00Z"
+        self.run_cached(cache_client, tmp_path)
+        self.assert_component_calls(cache_client, 1)
+        self.run_cached(cache_client, tmp_path)
+        self.assert_component_calls(cache_client, 0)
+
+    def test_validated_cache_age_only_reuse_needs_no_listing_token(self, cache_client, tmp_path):
+        for view in cache_client.getDataViews.return_value:
+            view.pop("modified")
+        self.run_cached(cache_client, tmp_path)
+        self.assert_component_calls(cache_client, 3)
+        cache_client.reset_mock()
+        config = OrgReportConfig(use_cache=True, validate_cache=False, cja_per_thread=False, quiet=True, skip_lock=True)
+        warm = OrgComponentAnalyzer(
+            cache_client, config, logging.getLogger("age_only"), cache=OrgReportCache(tmp_path)
+        ).run_analysis()
+        self.assert_component_calls(cache_client, 0)
+        assert warm.total_data_views == 3

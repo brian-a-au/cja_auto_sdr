@@ -7,6 +7,16 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.12.7] - 2026-10-06
+
+### Fixed
+
+- **Validated org-report cache reuse:** `--org-report --use-cache --validate-cache` now retains modification timestamps from the data view listing independently of `--include-metadata`. Unchanged entries reloaded from disk reuse cached metrics and dimensions, and changed data views refresh individually. Report metadata remains unchanged; missing validation timestamps still require a refresh.
+
+### Tests
+
+- Cover persisted warm-cache reuse, selective invalidation, both modification timestamp aliases, optional metadata, legacy entries, expiration, required enrichment flags, and recovery after failed component fetches.
+
 ## [3.12.6] - 2026-09-23
 
 ### Added
