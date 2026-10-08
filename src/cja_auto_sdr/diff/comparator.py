@@ -84,6 +84,10 @@ class DataViewComparator:
         "nesting_depth",
         "tags",
     ]
+    INVENTORY_FIELD_ALIASES: ClassVar[dict[str, dict[str, str]]] = {
+        "calculated_metric": {"name": "metric_name"},
+        "segment": {"name": "segment_name", "segment_references": "other_segment_references"},
+    }
     DERIVED_FIELDS_COMPARE_FIELDS: ClassVar[list[str]] = [
         "name",
         "description",
@@ -162,7 +166,6 @@ class DataViewComparator:
                 target.calculated_metrics_inventory if target.calculated_metrics_inventory is not None else [],
                 "calculated_metric",
                 id_field="metric_id",
-                name_field="metric_name",
             )
             self.logger.info(f"  Calculated Metrics: {self._count_changes(calc_metrics_diffs)}")
 
@@ -172,7 +175,6 @@ class DataViewComparator:
                 target.segments_inventory if target.segments_inventory is not None else [],
                 "segment",
                 id_field="segment_id",
-                name_field="segment_name",
             )
             self.logger.info(f"  Segments: {self._count_changes(segments_diffs)}")
 
@@ -268,10 +270,9 @@ class DataViewComparator:
         target_list: list[dict],
         inventory_type: str,
         id_field: str = "id",
-        name_field: str = "name",
     ) -> list[InventoryItemDiff]:
         def name_extractor(item: dict) -> str:
-            return item.get(name_field, "Unknown")
+            return self._inventory_field_value(item, inventory_type, "name", "Unknown")
 
         def diff_factory(item_id, name, change_type, source, target, changed_fields):
             return InventoryItemDiff(
@@ -296,6 +297,12 @@ class DataViewComparator:
             find_changed,
         )
 
+    def _inventory_field_value(self, item: dict, inventory_type: str, field: str, default: Any = None) -> Any:
+        serialized_field = self.INVENTORY_FIELD_ALIASES.get(inventory_type, {}).get(field)
+        if serialized_field is not None and serialized_field in item:
+            return item[serialized_field]
+        return item.get(field, default)
+
     def _find_inventory_changed_fields(
         self,
         source: dict,
@@ -317,8 +324,8 @@ class DataViewComparator:
             if field in self.ignore_fields:
                 continue
 
-            source_val = source.get(field)
-            target_val = target.get(field)
+            source_val = self._inventory_field_value(source, inventory_type, field)
+            target_val = self._inventory_field_value(target, inventory_type, field)
 
             source_normalized = self._normalize_value(source_val, field_name=field)
             target_normalized = self._normalize_value(target_val, field_name=field)

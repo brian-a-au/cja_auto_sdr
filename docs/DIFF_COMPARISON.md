@@ -895,8 +895,8 @@ When created with `--include-calculated` and/or `--include-segments`:
   "dimensions": [...],
   "calculated_metrics_inventory": [
     {
-      "id": "cm_12345",
-      "name": "Revenue per Order",
+      "metric_id": "cm_12345",
+      "metric_name": "Revenue per Order",
       "description": "Average revenue per order",
       "owner": "Analytics Team",
       "approved": true,
@@ -908,13 +908,14 @@ When created with `--include-calculated` and/or `--include-segments`:
   ],
   "segments_inventory": [
     {
-      "id": "s_mobile",
-      "name": "Mobile Visitors",
+      "segment_id": "s_mobile",
+      "segment_name": "Mobile Visitors",
       "description": "All mobile device visitors",
       "owner": "Analytics Team",
       "approved": true,
       "complexity_score": 12.0,
       "container_type": "visitors",
+      "other_segment_references": [],
       "definition_summary": "Person where device_type = 'mobile'",
       ...
     }
@@ -1314,6 +1315,8 @@ SEGMENTS CHANGES (7)
 
 Each inventory type compares fields appropriate to its purpose:
 
+Diff output and `--ignore-fields` use the logical field names below. Existing snapshots store calculated metric names as `metric_name`, segment names as `segment_name`, and nested segment references as `other_segment_references`; comparison reads those keys without changing the snapshot format. A detected inventory change follows the usual diff exit code 2.
+
 **Calculated Metrics** - Full governance and formula tracking:
 
 | Field | Description |
@@ -1453,7 +1456,7 @@ The diff comparison feature includes comprehensive unit tests in `tests/test_dif
 | `TestAutoSnapshotCLIArguments` | 10 | --auto-snapshot, --snapshot-dir, --keep-last |
 | `TestGetMostRecentSnapshot` | 5 | Most recent snapshot lookup, filtering |
 
-**Total: 169 tests**
+**Total: 173 tests**
 
 ### Running Tests
 

@@ -7,6 +7,16 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.12.10] - 2026-10-08
+
+### Fixed
+
+- **Inventory snapshot comparisons:** detect calculated metric and segment renames, plus changes to nested segment references, from the keys written by existing snapshots. Diffs keep the logical `name` and `segment_references` field names, including for `--ignore-fields`. Inventory-enabled comparisons that previously missed these changes now report them and exit 2.
+
+### Tests
+
+- Cover production inventory serialization through saved snapshots and the offline CLI, including opt-in and ignored-field behavior, legacy aliases, and order-insensitive segment references.
+
 ## [3.12.9] - 2026-10-08
 
 ### Fixed
