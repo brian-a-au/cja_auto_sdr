@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from collections.abc import Iterator
 from pathlib import Path
@@ -364,7 +363,7 @@ def _load_snapshot_from_file(json_file: Path) -> TrendingSnapshot | None:
     """
     try:
         data = load_json_cached(json_file)
-    except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+    except (OSError, ValueError) as exc:
         logger.warning("Skipping %s: %s", json_file, exc)
         return None
 

@@ -10,6 +10,10 @@ files from disk.
 from __future__ import annotations
 
 import os
+import sys
+from datetime import UTC, datetime, timedelta
+
+import pytest
 
 from cja_auto_sdr.core import json_io
 from cja_auto_sdr.diff.models import DataViewSnapshot
@@ -75,3 +79,75 @@ def test_list_snapshots_parse_is_cached(tmp_path, monkeypatch):
 
     assert calls, "expected the counting_open shim to observe at least one open() call"
     assert all(v == 1 for k, v in calls.items() if k.endswith(".json"))
+
+
+@pytest.fixture(params=["invalid_utf8", "integer_limit"])
+def malformed_snapshot_bytes(request):
+    if request.param == "invalid_utf8":
+        yield b'{"snapshot_version": "1.0", "bad": "\xff"}'
+        return
+
+    previous_limit = sys.get_int_max_str_digits()
+    sys.set_int_max_str_digits(4300)
+    try:
+        yield b'{"snapshot_version": "1.0", "bad": ' + b"9" * 5000 + b"}"
+    finally:
+        sys.set_int_max_str_digits(previous_limit)
+
+
+def _write_healthy_diff_history(manager, tmp_path):
+    now = datetime.now(UTC)
+    for name, age in [("old", 60), ("new", 1)]:
+        manager.save_snapshot(
+            DataViewSnapshot(
+                data_view_id="dv_test",
+                data_view_name="View",
+                created_at=(now - timedelta(days=age)).isoformat(),
+            ),
+            str(tmp_path / f"{name}.json"),
+        )
+
+
+def test_snapshot_discovery_skips_decoding_failures(tmp_path, malformed_snapshot_bytes):
+    manager = SnapshotManager()
+    _write_healthy_diff_history(manager, tmp_path)
+    (tmp_path / "bad.json").write_bytes(malformed_snapshot_bytes)
+
+    assert [item["filename"] for item in manager.list_snapshots(str(tmp_path))] == ["new.json", "old.json"]
+    assert manager.get_most_recent_snapshot(str(tmp_path), "dv_test") == str(tmp_path / "new.json")
+
+
+@pytest.mark.parametrize("policy", ["count", "date"])
+def test_snapshot_retention_preserves_undecodable_files(tmp_path, malformed_snapshot_bytes, policy):
+    manager = SnapshotManager()
+    _write_healthy_diff_history(manager, tmp_path)
+    malformed_path = tmp_path / "bad.json"
+    malformed_path.write_bytes(malformed_snapshot_bytes)
+
+    if policy == "count":
+        deleted = manager.apply_retention_policy(str(tmp_path), "dv_test", keep_last=1)
+    else:
+        deleted = manager.apply_date_retention_policy(str(tmp_path), "dv_test", keep_since_days=30)
+
+    assert deleted == [str(tmp_path / "old.json")]
+    assert not (tmp_path / "old.json").exists()
+    assert (tmp_path / "new.json").exists()
+    assert malformed_path.read_bytes() == malformed_snapshot_bytes
+
+
+def test_snapshot_discovery_with_only_decoding_failures_returns_empty(tmp_path, malformed_snapshot_bytes):
+    manager = SnapshotManager()
+    (tmp_path / "bad.json").write_bytes(malformed_snapshot_bytes)
+
+    assert manager.list_snapshots(str(tmp_path)) == []
+    assert manager.get_most_recent_snapshot(str(tmp_path), "dv_test") is None
+
+
+def test_explicit_snapshot_and_shared_loader_keep_decoding_errors(tmp_path, malformed_snapshot_bytes):
+    path = tmp_path / "bad.json"
+    path.write_bytes(malformed_snapshot_bytes)
+
+    with pytest.raises(ValueError):
+        SnapshotManager().load_snapshot(str(path))
+    with pytest.raises(ValueError):
+        json_io.load_json_cached(path)

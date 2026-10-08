@@ -7,6 +7,16 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.12.9] - 2026-10-08
+
+### Fixed
+
+- **Snapshot discovery and retention:** diff snapshot scans, org-report snapshot metadata, and trending history now skip invalid UTF-8 and JSON integers beyond Python's decoding limit. Healthy snapshots remain available for latest selection and retention; malformed files remain untouched and consume no retention quota. Explicit snapshot loading and inspection still report errors.
+
+### Tests
+
+- Add regression coverage for malformed neighbors, empty history, count/date retention, org isolation, warning behavior, and strict explicit-file errors using real snapshot files.
+
 ## [3.12.8] - 2026-10-06
 
 ### Fixed
