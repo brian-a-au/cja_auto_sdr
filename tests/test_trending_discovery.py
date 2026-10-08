@@ -1,6 +1,8 @@
 """Tests for org-report trending: snapshot discovery, deltas, and drift scoring."""
 
 import json
+import sys
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -1358,3 +1360,83 @@ def test_build_trending_assigns_org_id_to_current_snapshot_when_missing(tmp_path
     assert result is not None
     # After build_trending the current_snapshot.org_id should be assigned
     assert current.org_id == "test_org"
+
+
+@pytest.fixture(params=["invalid_utf8", "integer_limit"])
+def malformed_org_snapshot_bytes(request):
+    if request.param == "invalid_utf8":
+        yield b'{"bad": "\xff"}'
+        return
+
+    previous_limit = sys.get_int_max_str_digits()
+    sys.set_int_max_str_digits(4300)
+    try:
+        yield b'{"bad": ' + b"9" * 5000 + b"}"
+    finally:
+        sys.set_int_max_str_digits(previous_limit)
+
+
+def _write_healthy_org_history(cache):
+    now = datetime.now(UTC)
+    return [
+        cache.save_org_report_snapshot(_make_org_report_json(timestamp=(now - timedelta(days=age)).isoformat()))
+        for age in [60, 1]
+    ]
+
+
+@pytest.mark.parametrize("reader", ["metadata", "trending"])
+def test_org_history_discovery_skips_decoding_failures(tmp_path, malformed_org_snapshot_bytes, caplog, reader):
+    cache = OrgReportCache(cache_dir=tmp_path)
+    old_path, new_path = _write_healthy_org_history(cache)
+    malformed_path = new_path.parent / "bad.json"
+    malformed_path.write_bytes(malformed_org_snapshot_bytes)
+    wrong_org = cache.save_org_report_snapshot(_make_org_report_json(org_id="other_org"))
+
+    if reader == "metadata":
+        metadata = cache.list_org_report_snapshots("test_org")
+        assert [item["filepath"] for item in metadata] == [str(new_path), str(old_path)]
+        warning_prefix = f"Skipping org-report snapshot {malformed_path}:"
+    else:
+        snapshots = discover_snapshots(cache.get_org_report_snapshot_root_dir(), org_id="test_org")
+        assert [item.source_path for item in snapshots] == [str(old_path), str(new_path)]
+        warning_prefix = f"Skipping {malformed_path}:"
+
+    assert any(warning_prefix in record.message for record in caplog.records)
+    assert wrong_org.exists()
+
+
+@pytest.mark.parametrize("policy", ["count", "date"])
+def test_org_history_retention_preserves_undecodable_files(tmp_path, malformed_org_snapshot_bytes, policy):
+    cache = OrgReportCache(cache_dir=tmp_path)
+    old_path, new_path = _write_healthy_org_history(cache)
+    malformed_path = new_path.parent / "bad.json"
+    malformed_path.write_bytes(malformed_org_snapshot_bytes)
+    wrong_org = cache.save_org_report_snapshot(_make_org_report_json(org_id="other_org"))
+
+    options = {"keep_last": 1} if policy == "count" else {"keep_since_days": 30}
+    assert cache.prune_org_report_snapshots(org_id="test_org", **options) == [str(old_path)]
+    assert not old_path.exists()
+    assert new_path.exists()
+    assert wrong_org.exists()
+    assert malformed_path.read_bytes() == malformed_org_snapshot_bytes
+
+
+def test_org_history_with_only_decoding_failures_returns_empty(tmp_path, malformed_org_snapshot_bytes, caplog):
+    cache = OrgReportCache(cache_dir=tmp_path)
+    snapshot_dir = cache.get_org_report_snapshot_dir("test_org")
+    snapshot_dir.mkdir(parents=True)
+    malformed_path = snapshot_dir / "bad.json"
+    malformed_path.write_bytes(malformed_org_snapshot_bytes)
+
+    assert cache.list_org_report_snapshots("test_org") == []
+    assert discover_snapshots(snapshot_dir, org_id="test_org") == []
+    assert build_trending(snapshot_dir, org_id="test_org") is None
+    assert any(str(malformed_path) in record.message for record in caplog.records)
+
+
+def test_explicit_org_snapshot_inspection_keeps_errors(tmp_path, malformed_org_snapshot_bytes):
+    path = tmp_path / "bad.json"
+    path.write_bytes(malformed_org_snapshot_bytes)
+
+    with pytest.raises(ValueError):
+        OrgReportCache(cache_dir=tmp_path).inspect_org_report_snapshot(path)

@@ -378,7 +378,7 @@ class OrgReportCache:
         path = Path(snapshot_file)
         try:
             payload = load_json_cached(path)
-        except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+        except (OSError, ValueError) as exc:
             self.logger.warning("Skipping org-report snapshot %s: %s", path, exc)
             return None
 
