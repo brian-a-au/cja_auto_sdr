@@ -178,7 +178,7 @@ tests/
 └── README.md                        # This file
 ```
 
-**Total: 8,604 comprehensive tests**
+**Total: 8,612 comprehensive tests**
 
 ### Test Count Breakdown
 
@@ -187,16 +187,16 @@ tests/
 
 | Category | Tests | Files | Notes |
 |----------|-------|-------|-------|
-| `unit` | 8,473 | 160 | Default primary category for files without explicit integration/e2e/smoke scope |
+| `unit` | 8,481 | 160 | Default primary category for files without explicit integration/e2e/smoke scope |
 | `integration` | 98 | 3 | Cross-module integration suites |
 | `e2e` | 23 | 2 | End-to-end suites with a mocked external boundary |
 | `smoke` | 10 | 1 | Lightweight command-mode coverage |
 | `slow` | 0 | 0 | Overlay marker; these tests are also counted in a primary category |
-| **Primary Total** | **8,604** | **166** | **unit + integration + e2e + smoke** |
+| **Primary Total** | **8,612** | **166** | **unit + integration + e2e + smoke** |
 
 | CI Slice | Tests | Files | Selector |
 |----------|-------|-------|----------|
-| `test-unit` | 8,473 | 160 | `-m "unit and not slow"` |
+| `test-unit` | 8,481 | 160 | `-m "unit and not slow"` |
 | `test-integration` | 121 | 5 | `-m "integration or e2e or slow"` |
 | `smoke-test` | 10 | 1 | `-m smoke` |
 
@@ -206,14 +206,14 @@ tests/
 
 | Test File | Tests | Coverage Area |
 |-----------|-------|---------------|
-| `test_diff_comparison.py` | 169 | Data view diff comparison feature with inventory support |
+| `test_diff_comparison.py` | 173 | Data view diff comparison feature with inventory support |
 | `test_ux_features.py` | 124 | UX features: --open, --stats, --output, --list-dataviews formats, inventory validation, inventory summary, include-all-inventory |
 | `test_org_report.py` | 209 | Org-wide component analysis: config, distribution, similarity, output formats, large org scaling, output path aliases |
 | `test_org_report_integration.py` | 42 | Org-wide analysis integration tests: end-to-end flows, caching, filtering, governance |
 | `test_cli.py` | 414 | Command-line interface and argument parsing |
 | `test_profiles.py` | 80 | Multi-organization profile support |
 | `test_derived_inventory.py` | 64 | Derived fields inventory feature |
-| `test_diff_snapshot_cjapy_payloads.py` | 5 | Diff snapshot cjapy payload classification |
+| `test_diff_snapshot_cjapy_payloads.py` | 8 | Diff snapshot cjapy payload classification |
 | `test_inventory_pragma_coverage.py` | 18 | Inventory pragma coverage hardening |
 | `test_inventory_summary_cjapy_payloads.py` | 4 | Inventory summary cjapy payload classification |
 | `test_inventory_utils.py` | 56 | Inventory utilities and helpers |
@@ -281,7 +281,7 @@ tests/
 | `test_diff_inventory_output.py` | 96 | Inventory diff output across all formats (console, JSON, HTML, Excel, MD, CSV) |
 | `test_cli_command_handlers.py` | 160 | CLI dispatch for --stats, --org-report, --list-snapshots, discovery inspection, diff config unpacking |
 | `test_profile_management.py` | 54 | Interactive profile creation, import, test, show |
-| `test_snapshot_commands.py` | 72 | Snapshot creation, comparison, name resolution |
+| `test_snapshot_commands.py` | 73 | Snapshot creation, comparison, name resolution |
 | `test_config_and_resolution.py` | 115 | Config status, validation, stats, name resolution |
 | `test_derived_fields_edge_cases.py` | 34 | Derived fields edge cases and coverage |
 | `test_diff_command_coverage.py` | 46 | Diff command edge cases and coverage |
@@ -372,7 +372,7 @@ tests/
 | `test_diff_snapshot_retention.py` | 12 | Diff snapshot-retention parse-cache characterization test |
 | `test_diff_comparator_normalize.py` | 1 | Diff field-normalization type-fast-path characterization test |
 | `test_logging_diagnostics.py` | 2 | emit_diagnostic isEnabledFor guard characterization tests |
-| **Total** | **8,604** | **Collected via pytest --collect-only** |
+| **Total** | **8,612** | **Collected via pytest --collect-only** |
 
 ## Running Tests
 
@@ -830,7 +830,7 @@ the `tests/README.md` inventory tree or count table.
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (8,604 tests total)
+- [x] Comprehensive test coverage (8,612 tests total)
 - [x] Org-wide analysis tests (test_org_report.py) - 209 tests (including large org scaling, output path aliases, memory warnings, smart cache invalidation)
 - [x] Org-wide analysis integration tests (test_org_report_integration.py) - 42 tests (end-to-end flows, caching, filtering, governance thresholds)
 - [x] Profile management tests (test_profiles.py) - 80 tests
@@ -842,7 +842,7 @@ the `tests/README.md` inventory tree or count table.
 - [x] Derived fields inventory tests (test_derived_inventory.py) - 64 tests
 - [x] Inventory utilities tests (test_inventory_utils.py) - 56 tests
 - [x] Git integration tests (test_git_integration.py) - 41 tests
-- [x] Inventory diff support in snapshot comparisons (test_diff_comparison.py) - 169 tests
+- [x] Inventory diff support in snapshot comparisons (test_diff_comparison.py) - 173 tests
 - [x] Inventory summary and include-all-inventory tests (test_ux_features.py) - 124 tests
 - [x] Parallel validation tests (test_parallel_validation.py)
 - [x] Validation caching tests (test_validation_cache.py)
@@ -858,7 +858,7 @@ the `tests/README.md` inventory tree or count table.
 - [x] Excel formatting tests (test_excel_formatting.py)
 - [x] CJA initialization tests (test_cja_initialization.py)
 - [x] Name resolution tests (test_name_resolution.py)
-- [x] Data view diff comparison tests (test_diff_comparison.py) - 169 tests covering snapshots, comparison logic, output formats, CLI arguments, name resolution
+- [x] Data view diff comparison tests (test_diff_comparison.py) - 173 tests covering snapshots, comparison logic, output formats, CLI arguments, name resolution
 - [x] Edge case tests (test_edge_cases.py) - 35 tests covering custom exceptions, configuration dataclasses, OutputWriter Protocol, boundary conditions
 
 ## Future Enhancements

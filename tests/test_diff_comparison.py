@@ -1106,6 +1106,88 @@ class TestExtendedFieldComparison:
         assert result.calc_metrics_diffs[0].changed_fields == {}
 
 
+@pytest.mark.parametrize(
+    ("inventory_type", "id_key", "canonical_name", "inventory_key", "diff_key"),
+    [
+        ("calculated_metric", "metric_id", "metric_name", "calculated_metrics_inventory", "calc_metrics_diffs"),
+        ("segment", "segment_id", "segment_name", "segments_inventory", "segments_diffs"),
+    ],
+)
+def test_inventory_name_aliases_and_canonical_precedence(
+    inventory_type, id_key, canonical_name, inventory_key, diff_key
+):
+    source_item = {id_key: "item_1", canonical_name: "Same name", "name": "Legacy source"}
+    target_item = {id_key: "item_1", "name": "Same name"}
+    source = DataViewSnapshot(data_view_id="dv_1", data_view_name="Test", **{inventory_key: [source_item]})
+    target = DataViewSnapshot(data_view_id="dv_1", data_view_name="Test", **{inventory_key: [target_item]})
+    comparator = DataViewComparator(
+        include_calc_metrics=inventory_type == "calculated_metric", include_segments=inventory_type == "segment"
+    )
+
+    item_diff = getattr(comparator.compare(source, target), diff_key)[0]
+    assert item_diff.change_type == ChangeType.UNCHANGED
+    assert item_diff.name == "Same name"
+    assert item_diff.changed_fields == {}
+    assert item_diff.source_data == source_item
+    assert item_diff.target_data == target_item
+
+    target_item[canonical_name] = ""
+    item_diff = getattr(comparator.compare(source, target), diff_key)[0]
+    assert item_diff.change_type == ChangeType.MODIFIED
+    assert item_diff.name == ""
+    assert item_diff.changed_fields == {"name": ("Same name", "")}
+
+    target_item[canonical_name] = None
+    item_diff = getattr(comparator.compare(source, target), diff_key)[0]
+    assert item_diff.changed_fields == {"name": ("Same name", None)}
+
+
+def test_segment_reference_aliases_preserve_order_insensitivity():
+    source_item = {
+        "segment_id": "s_1",
+        "segment_name": "Segment",
+        "other_segment_references": ["one", "two"],
+        "segment_references": ["ignored"],
+    }
+    target_item = {"segment_id": "s_1", "name": "Segment", "segment_references": ["two", "one"]}
+    source = DataViewSnapshot(data_view_id="dv_1", data_view_name="Test", segments_inventory=[source_item])
+    target = DataViewSnapshot(data_view_id="dv_1", data_view_name="Test", segments_inventory=[target_item])
+    comparator = DataViewComparator(include_segments=True)
+
+    item_diff = comparator.compare(source, target).segments_diffs[0]
+    assert item_diff.change_type == ChangeType.UNCHANGED
+    assert item_diff.name == "Segment"
+
+    target_item["other_segment_references"] = []
+    item_diff = comparator.compare(source, target).segments_diffs[0]
+    assert item_diff.change_type == ChangeType.MODIFIED
+    assert item_diff.changed_fields == {"segment_references": (["one", "two"], [])}
+
+
+def test_inventory_rename_from_comparator_reaches_console_and_markdown(tmp_path, logger):
+    source = DataViewSnapshot(
+        data_view_id="dv_1",
+        data_view_name="Test",
+        segments_inventory=[{"segment_id": "s_1", "segment_name": "Old segment"}],
+    )
+    target = DataViewSnapshot(
+        data_view_id="dv_1",
+        data_view_name="Test",
+        segments_inventory=[{"segment_id": "s_1", "segment_name": "New segment"}],
+    )
+    result = DataViewComparator(include_segments=True).compare(source, target)
+
+    console = write_diff_console_output(result, use_color=False)
+    markdown_file = write_diff_markdown_output(result, "rename", str(tmp_path), logger)
+    with open(markdown_file, encoding="utf-8") as f:
+        markdown = f.read()
+
+    for output in (console, markdown):
+        assert "New segment" in output
+        assert "Old segment" in output
+        assert "name" in output
+
+
 class TestShowOnlyFilter:
     """Tests for --show-only filter functionality"""
 

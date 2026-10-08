@@ -751,6 +751,41 @@ class TestHandleDiffSnapshotCommand:
 
         assert success is True
 
+    @patch("cja_auto_sdr.inventory.segments.SegmentsInventoryBuilder.build")
+    @patch("cja_auto_sdr.generator.cjapy")
+    @patch("cja_auto_sdr.generator.configure_cjapy")
+    def test_live_segment_rename_uses_snapshot_inventory_keys(
+        self, mock_configure, mock_cjapy, mock_build, tmp_path, capsys
+    ):
+        mock_configure.return_value = (True, "config", None)
+        mock_cja = mock_cjapy.CJA.return_value
+        mock_cja.getDataView.return_value = {"id": "dv_test", "name": "Test DV"}
+        mock_cja.getMetrics.return_value = MagicMock(empty=True)
+        mock_cja.getDimensions.return_value = MagicMock(empty=True)
+        mock_build.return_value.segments = [
+            MagicMock(to_full_dict=MagicMock(return_value={"segment_id": "s_1", "segment_name": "New segment"}))
+        ]
+        baseline = _make_snapshot(
+            metrics=[], dimensions=[], segments_inventory=[{"segment_id": "s_1", "segment_name": "Old segment"}]
+        )
+        snap_file = str(tmp_path / "baseline.json")
+        _write_snapshot_file(snap_file, baseline)
+
+        success, has_changes, exit_override = handle_diff_snapshot_command(
+            data_view_id="dv_test",
+            snapshot_file=snap_file,
+            include_segments=True,
+            output_format="json",
+            output_to_stdout=True,
+            quiet=True,
+        )
+
+        assert (success, has_changes, exit_override) == (True, True, None)
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["segments_diffs"][0]["changed_fields"] == {
+            "name": {"source": "Old segment", "target": "New segment"}
+        }
+
     @patch("cja_auto_sdr.generator.configure_cjapy")
     def test_diff_snapshot_config_failure(self, mock_configure, tmp_path, capsys):
         """Returns failure when CJA configuration fails."""
