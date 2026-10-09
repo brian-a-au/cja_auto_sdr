@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from cja_auto_sdr.diff.models import DiffSummary
 from cja_auto_sdr.output.watch_event import BaselineEvent, ChangeEvent, ErrorEvent
 from cja_auto_sdr.pipeline.watch import WatchCycleRunner
 
@@ -39,13 +40,7 @@ def test_second_cycle_with_no_changes_threshold_default_emits_nothing(fake_snaps
     snapshot_manager.create_snapshot.return_value = fake_snapshot
     comparator = MagicMock()
     diff_result = MagicMock()
-    diff_result.summary.total_changes = 0
-    diff_result.summary.calc_metrics_added = 0
-    diff_result.summary.calc_metrics_removed = 0
-    diff_result.summary.calc_metrics_modified = 0
-    diff_result.summary.segments_added = 0
-    diff_result.summary.segments_removed = 0
-    diff_result.summary.segments_modified = 0
+    diff_result.summary = DiffSummary()
     comparator.compare.return_value = diff_result
     runner = WatchCycleRunner(snapshot_manager=snapshot_manager, comparator=comparator, threshold=1)
 
@@ -61,13 +56,7 @@ def test_second_cycle_with_no_changes_threshold_zero_emits_heartbeat(fake_snapsh
     snapshot_manager.create_snapshot.return_value = fake_snapshot
     comparator = MagicMock()
     diff_result = MagicMock()
-    diff_result.summary.total_changes = 0
-    diff_result.summary.calc_metrics_added = 0
-    diff_result.summary.calc_metrics_removed = 0
-    diff_result.summary.calc_metrics_modified = 0
-    diff_result.summary.segments_added = 0
-    diff_result.summary.segments_removed = 0
-    diff_result.summary.segments_modified = 0
+    diff_result.summary = DiffSummary()
     comparator.compare.return_value = diff_result
     runner = WatchCycleRunner(snapshot_manager=snapshot_manager, comparator=comparator, threshold=0)
 
@@ -84,19 +73,13 @@ def test_second_cycle_with_changes_emits_change_event(fake_snapshot):
     snapshot_manager.create_snapshot.return_value = fake_snapshot
     comparator = MagicMock()
     diff_result = MagicMock()
-    diff_result.summary.total_changes = 5  # metrics + dimensions
-    diff_result.summary.calc_metrics_added = 1
-    diff_result.summary.calc_metrics_removed = 0
-    diff_result.summary.calc_metrics_modified = 1
-    diff_result.summary.segments_added = 2
-    diff_result.summary.segments_removed = 0
-    diff_result.summary.segments_modified = 0
-    diff_result.summary.metrics_added = 0
-    diff_result.summary.metrics_removed = 0
-    diff_result.summary.metrics_modified = 0
-    diff_result.summary.dimensions_added = 1
-    diff_result.summary.dimensions_removed = 0
-    diff_result.summary.dimensions_modified = 4
+    diff_result.summary = DiffSummary(
+        dimensions_added=1,
+        dimensions_modified=4,
+        calc_metrics_added=1,
+        calc_metrics_modified=1,
+        segments_added=2,
+    )
     comparator.compare.return_value = diff_result
     runner = WatchCycleRunner(snapshot_manager=snapshot_manager, comparator=comparator, threshold=1)
 
@@ -105,7 +88,7 @@ def test_second_cycle_with_changes_emits_change_event(fake_snapshot):
 
     assert len(events) == 1
     assert isinstance(events[0], ChangeEvent)
-    # Watch-specific total includes inventory:
+    # All changed items contribute exactly once:
     assert events[0].total_changes == 5 + (1 + 1) + (2 + 0 + 0)
 
 
@@ -161,3 +144,27 @@ def test_one_failure_does_not_block_other_data_views(fake_snapshot):
     assert events[0].data_view_id == "dv_bad"
     assert isinstance(events[1], BaselineEvent)
     assert events[1].data_view_id == "dv_good"
+
+
+@pytest.mark.parametrize(
+    ("counts", "expected"),
+    [
+        ({"calc_metrics_added": 2, "segments_added": 1}, 3),
+        ({"calc_metrics_removed": 2, "segments_removed": 1}, 3),
+        ({"calc_metrics_modified": 2, "segments_modified": 1}, 3),
+        ({"metrics_added": 1, "dimensions_removed": 1, "calc_metrics_modified": 2, "segments_added": 1}, 5),
+    ],
+)
+def test_watch_threshold_uses_aggregate_once(fake_snapshot, counts, expected):
+    snapshot_manager = MagicMock()
+    snapshot_manager.create_snapshot.return_value = fake_snapshot
+    comparator = MagicMock()
+    comparator.compare.return_value.summary = DiffSummary(**counts)
+    runner = WatchCycleRunner(snapshot_manager=snapshot_manager, comparator=comparator, threshold=expected)
+    list(runner.run_cycle(cja=MagicMock(), data_view_ids=["dv_abc"], cycle=1))
+    events = list(runner.run_cycle(cja=MagicMock(), data_view_ids=["dv_abc"], cycle=2))
+    assert len(events) == 1
+    assert events[0].total_changes == expected
+    runner = WatchCycleRunner(snapshot_manager=snapshot_manager, comparator=comparator, threshold=expected + 1)
+    list(runner.run_cycle(cja=MagicMock(), data_view_ids=["dv_abc"], cycle=1))
+    assert list(runner.run_cycle(cja=MagicMock(), data_view_ids=["dv_abc"], cycle=2)) == []

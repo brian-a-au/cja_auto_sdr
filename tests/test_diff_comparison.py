@@ -399,6 +399,17 @@ class TestDiffSummary:
         )
         assert summary.total_changes == 21
 
+    @pytest.mark.parametrize("change", ["added", "removed", "modified"])
+    def test_inventory_aggregate_totals(self, change):
+        summary = DiffSummary(**{f"calc_metrics_{change}": 2, f"segments_{change}": 1})
+        assert summary.total_changes == 3
+        assert summary.total_changes == summary.total_added + summary.total_removed + summary.total_modified
+
+        summary.metrics_added = 2
+        summary.dimensions_modified = 1
+        assert summary.total_changes == 6
+        assert summary.total_changes == summary.total_added + summary.total_removed + summary.total_modified
+
 
 # ==================== Diff Output Writer Tests ====================
 

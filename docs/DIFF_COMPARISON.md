@@ -1284,7 +1284,12 @@ To fix: Re-create the snapshot with the required --include-* flags.
 
 ### Inventory Diff Output
 
-When inventory diff is enabled, the output includes additional sections:
+When inventory diff is enabled, the output includes additional sections. Aggregate
+`total_changes` counts additions, removals, and modifications across metrics,
+dimensions, calculated metrics, and segments exactly once. JSON, CSV/Excel metadata,
+HTML, console summaries, grouped summaries, watch events and thresholds, and GitHub
+step summaries use this same total. Inventory-disabled comparisons retain component-only
+totals. Component-specific percentages and `--warn-threshold` precedence are unchanged.
 
 **Console output:**
 
@@ -1458,7 +1463,7 @@ The diff comparison feature includes comprehensive unit tests in `tests/test_dif
 | `TestAutoSnapshotCLIArguments` | 10 | --auto-snapshot, --snapshot-dir, --keep-last |
 | `TestGetMostRecentSnapshot` | 5 | Most recent snapshot lookup, filtering |
 
-**Total: 173 tests**
+**Total: 176 tests**
 
 ### Running Tests
 

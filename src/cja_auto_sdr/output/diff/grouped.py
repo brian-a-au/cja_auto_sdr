@@ -59,10 +59,10 @@ def write_diff_grouped_by_field_output(diff_result: DiffResult, use_color: bool 
     # Summary
     lines.append("")
     lines.append(ANSIColors.bold("SUMMARY", c))
-    lines.append(f"Total components changed: {summary.total_changes}")
-    lines.append(f"  Added: {ANSIColors.green(str(summary.metrics_added + summary.dimensions_added), c)}")
-    lines.append(f"  Removed: {ANSIColors.red(str(summary.metrics_removed + summary.dimensions_removed), c)}")
-    lines.append(f"  Modified: {ANSIColors.yellow(str(summary.metrics_modified + summary.dimensions_modified), c)}")
+    lines.append(f"Total changes: {summary.total_changes}")
+    lines.append(f"  Added: {ANSIColors.green(str(summary.total_added), c)}")
+    lines.append(f"  Removed: {ANSIColors.red(str(summary.total_removed), c)}")
+    lines.append(f"  Modified: {ANSIColors.yellow(str(summary.total_modified), c)}")
     lines.append(f"Fields with changes: {len(field_changes)}")
 
     # Breaking changes warning

@@ -108,13 +108,12 @@ def build_quality_step_summary(results: list[ProcessingResult]) -> str:
 def build_diff_step_summary(diff_result: DiffResult) -> str:
     """Build markdown summary table for diff output."""
     summary = diff_result.summary
-    total_changes = summary.total_changes + summary.calc_metrics_changed + summary.segments_changed
     lines = [
         "### Diff Summary",
         "",
         f"- Source: `{diff_result.metadata_diff.source_id}` ({diff_result.metadata_diff.source_name})",
         f"- Target: `{diff_result.metadata_diff.target_id}` ({diff_result.metadata_diff.target_name})",
-        f"- Total changes: {total_changes}",
+        f"- Total changes: {summary.total_changes}",
         "",
         "| Type | Source | Target | Added | Removed | Modified | Unchanged |",
         "|---|---:|---:|---:|---:|---:|---:|",

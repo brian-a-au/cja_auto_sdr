@@ -7,6 +7,7 @@ display functions.
 
 from __future__ import annotations
 
+import csv
 import inspect
 import json
 import logging
@@ -35,6 +36,8 @@ from cja_auto_sdr.generator import (
     write_diff_output,
     write_diff_pr_comment_output,
 )
+from cja_auto_sdr.output.diff.grouped import write_diff_grouped_by_field_output
+from cja_auto_sdr.output.run_summary import build_diff_step_summary
 
 # ==================== Helpers ====================
 
@@ -1644,3 +1647,61 @@ class TestInventoryEdgeCases:
         # total_added from summary includes inventory
         # metrics_added=2, dims_added=3, calc_added=2, seg_added=1 = 8 total added
         assert "8 added" in output
+
+
+@pytest.mark.parametrize(
+    ("counts", "expected", "added", "removed", "modified"),
+    [
+        ({"calc_metrics_added": 2, "segments_added": 1}, 3, 3, 0, 0),
+        ({"calc_metrics_removed": 2, "segments_removed": 1}, 3, 0, 3, 0),
+        ({"calc_metrics_modified": 2, "segments_modified": 1}, 3, 0, 0, 3),
+        ({"metrics_added": 1, "dimensions_removed": 1, "calc_metrics_modified": 2, "segments_added": 1}, 5, 2, 1, 2),
+        ({}, 0, 0, 0, 0),
+    ],
+)
+def test_aggregate_totals_agree_across_outputs(tmp_path, counts, expected, added, removed, modified):
+    """Each changed inventory/component item contributes once on every aggregate surface."""
+    import pandas as pd
+
+    summary = DiffSummary(**counts)
+    result = DiffResult(
+        summary=summary,
+        metadata_diff=_make_metadata(),
+        metric_diffs=[],
+        dimension_diffs=[],
+        calc_metrics_diffs=[],
+        segments_diffs=[],
+    )
+    logger = _make_logger()
+    assert summary.total_changes == expected
+    assert (summary.total_added, summary.total_removed, summary.total_modified) == (added, removed, modified)
+    json_path = write_diff_json_output(result, "aggregate", str(tmp_path), logger)
+    with open(json_path, encoding="utf-8") as handle:
+        payload = json.load(handle)["summary"]
+    assert payload["total_changes"] == expected
+    assert (payload["total_added"], payload["total_removed"], payload["total_modified"]) == (added, removed, modified)
+
+    csv_dir = write_diff_csv_output(result, "aggregate", str(tmp_path), logger)
+    with open(os.path.join(csv_dir, "metadata.csv"), encoding="utf-8") as handle:
+        metadata = {row["Property"]: row["Value"] for row in csv.DictReader(handle)}
+    assert int(metadata["total_changes"]) == expected
+    excel_path = write_diff_excel_output(result, "aggregate", str(tmp_path), logger)
+    metadata = pd.read_excel(excel_path, sheet_name="Metadata").set_index("Property")["Value"]
+    assert int(metadata["Total Changes"]) == expected
+
+    html_path = write_diff_html_output(result, "aggregate", str(tmp_path), logger)
+    with open(html_path, encoding="utf-8") as handle:
+        html = handle.read()
+    console = write_diff_console_output(result, summary_only=True, use_color=False)
+    if expected:
+        assert f"Total changes: {expected}" in html
+        assert f"Total changes: {expected}" in console
+    else:
+        assert "No differences found." in html
+        assert "No differences found." in console
+    grouped = write_diff_grouped_by_field_output(result, use_color=False)
+    assert f"Total changes: {expected}" in grouped
+    assert f"  Added: {added}" in grouped
+    assert f"  Removed: {removed}" in grouped
+    assert f"  Modified: {modified}" in grouped
+    assert f"- Total changes: {expected}" in build_diff_step_summary(result)
