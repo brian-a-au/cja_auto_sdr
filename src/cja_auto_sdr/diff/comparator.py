@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any, ClassVar
 
@@ -14,6 +15,7 @@ from cja_auto_sdr.diff.models import (
     InventoryItemDiff,
     MetadataDiff,
 )
+from cja_auto_sdr.inventory.utils import extract_short_name, normalize_func_name
 
 
 class DataViewComparator:
@@ -333,7 +335,119 @@ class DataViewComparator:
             if source_normalized != target_normalized:
                 changed[field] = (source_val, target_val)
 
+        if inventory_type in {"segment", "calculated_metric"} and "definition_json" not in self.ignore_fields:
+            source_definition = source.get("definition_json")
+            target_definition = target.get("definition_json")
+            if (
+                source_definition is None
+                or source_definition == ""
+                or target_definition is None
+                or target_definition == ""
+            ):
+                self.logger.warning(
+                    "Full %s definition comparison unavailable for shared item %s: missing or empty definition_json",
+                    inventory_type,
+                    source.get("segment_id", source.get("metric_id", source.get("id"))),
+                )
+            else:
+                definitions = []
+                for label, value in (("source", source_definition), ("target", target_definition)):
+                    try:
+                        definition = json.loads(value)
+                    except (ValueError, TypeError) as exc:
+                        raise ValueError(f"Invalid {label} {inventory_type} definition_json: {exc}") from exc
+                    self._mask_definition_references(definition, inventory_type)
+                    # Canonical JSON preserves JSON types (in particular true versus 1).
+                    definitions.append(json.dumps(definition, sort_keys=True, separators=(",", ":")))
+                if definitions[0] != definitions[1]:
+                    changed["definition_json"] = (source_definition, target_definition)
+
         return changed
+
+    def _mask_definition_references(self, definition: Any, inventory_type: str) -> None:
+        """Mask selected reference leaves only along the inventory builders' AST paths.
+
+        json.loads supplies private copies; neither snapshots nor output data are changed.
+        Reference dictionaries and lists keep their shape and all unused fields.
+        """
+        reference_keys = (
+            ("id", "name", "dimension", "metric", "segment", "value", "val")
+            if inventory_type == "segment"
+            else ("segment_id", "id", "name", "metric", "value", "val")
+        )
+
+        def reference_path(value: Any) -> tuple | None:
+            if isinstance(value, dict):
+                candidates = ((key, value[key]) for key in reference_keys if key in value)
+            elif isinstance(value, list):
+                candidates = enumerate(value)
+            else:
+                normalized = extract_short_name(value)
+                return () if normalized.lower() not in {"", "nan", "none", "null"} else None
+            for key, candidate in candidates:
+                path = reference_path(candidate)
+                if path is not None:
+                    return (key, *path)
+            return None
+
+        def mask(node: dict, field: str) -> None:
+            path = reference_path(node[field])
+            if path is None:
+                return
+            parent, key = node, field
+            for next_key in path:
+                parent, key = parent[key], next_key
+            parent[key] = None
+
+        def traverse(node: Any) -> None:
+            if not isinstance(node, dict):
+                return
+            if inventory_type == "segment":
+                for logical, primary, fallback in (
+                    ("dimension_references", "dimension", "dim"),
+                    ("metric_references", "metric", "metric"),
+                    ("segment_references", "segment", "seg"),
+                ):
+                    field = primary if primary in node else fallback
+                    if logical in self.ignore_fields and node.get(field):
+                        mask(node, field)
+                child_keys = ("pred", "container", "exclude")
+                list_keys = ("preds", "checkpoints")
+            else:
+                func = normalize_func_name(node.get("func"))
+                if func == "metric" and "metric_references" in self.ignore_fields and "name" in node:
+                    mask(node, "name")
+                if func == "segment" and "segment_references" in self.ignore_fields:
+                    field = "segment_id" if "segment_id" in node else "id"
+                    if field in node:
+                        mask(node, field)
+                child_keys = (
+                    "col1",
+                    "col2",
+                    "col",
+                    "metric",
+                    "val",
+                    "formula",
+                    "then",
+                    "else",
+                    "left",
+                    "right",
+                    "condition",
+                    "value",
+                    "operand",
+                    "dividend",
+                    "divisor",
+                )
+                list_keys = ("operands", "values", "metrics", "columns")
+            for key in child_keys:
+                traverse(node.get(key))
+            for key in list_keys:
+                children = node.get(key)
+                if isinstance(children, list):
+                    for child in children:
+                        traverse(child)
+
+        traverse(definition)
 
     def _apply_show_only_filter(self, diffs: list[ComponentDiff]) -> list[ComponentDiff]:
         if not self.show_only:
