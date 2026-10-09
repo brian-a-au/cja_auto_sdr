@@ -23,6 +23,7 @@ from cja_auto_sdr.core.locks.manager import LockManager, normalize_lock_stale_th
 from cja_auto_sdr.org.models import DataViewSummary
 from cja_auto_sdr.org.snapshot_utils import (
     ORG_REPORT_SNAPSHOT_ROOT_DIRNAME,
+    SnapshotTimestampError,
     is_org_report_snapshot_payload,
     iter_org_report_snapshot_files,
     newest_first_snapshot_sort_fields,
@@ -366,13 +367,16 @@ class OrgReportCache:
         snapshot_epoch = snapshot.get("generated_at_epoch")
         if snapshot_epoch is None:
             return False
-        return datetime.fromtimestamp(snapshot_epoch, tz=UTC) >= cutoff
+        # Avoid a lossy epoch round trip at datetime.max (float rounding can
+        # produce year 10000 even when the original UTC timestamp is valid).
+        return snapshot_epoch >= cutoff.timestamp()
 
     def _load_org_report_snapshot_metadata(
         self,
         snapshot_file: str | Path,
         *,
         include_data_views: bool = False,
+        strict_timestamp: bool = False,
     ) -> dict[str, Any] | None:
         """Load one persisted org-report snapshot and return summarized metadata."""
         path = Path(snapshot_file)
@@ -386,7 +390,13 @@ class OrgReportCache:
             self.logger.warning("Skipping org-report snapshot %s: expected JSON object", path)
             return None
 
-        metadata = org_report_snapshot_metadata(payload, source_path=path, include_data_views=include_data_views)
+        try:
+            metadata = org_report_snapshot_metadata(payload, source_path=path, include_data_views=include_data_views)
+        except SnapshotTimestampError as exc:
+            if strict_timestamp:
+                raise
+            self.logger.warning("Skipping org-report snapshot %s: %s", path, exc)
+            return None
         if metadata is None:
             self.logger.warning("Skipping org-report snapshot %s: expected org-report snapshot payload", path)
             return None
@@ -457,7 +467,9 @@ class OrgReportCache:
 
     def inspect_org_report_snapshot(self, snapshot_file: str | Path) -> dict[str, Any]:
         """Return detailed summary metadata for one persisted org-report snapshot."""
-        metadata = self._load_org_report_snapshot_metadata(snapshot_file, include_data_views=True)
+        metadata = self._load_org_report_snapshot_metadata(
+            snapshot_file, include_data_views=True, strict_timestamp=True
+        )
         if metadata is None:
             raise ValueError(f"Invalid org-report snapshot: {snapshot_file}")
         return metadata

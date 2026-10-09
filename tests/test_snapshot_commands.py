@@ -1858,3 +1858,42 @@ class TestDiffCommandsRemainingCoverage:
         assert exit_code is None
         captured = capsys.readouterr()
         assert "Failed to compare snapshots" in captured.err
+
+
+@pytest.mark.parametrize(
+    "bad_fields", [{"metrics": [None]}, {"segments_inventory": {}}, {"created_at": "0001-01-01T00:00:00+01:00"}]
+)
+def test_offline_cli_rejects_unusable_snapshot_with_json_diagnostics(tmp_path, bad_fields):
+    import subprocess
+    import sys
+
+    source = tmp_path / "source.json"
+    target = tmp_path / "bad.json"
+    _write_snapshot_file(str(source))
+    target.write_text(json.dumps({"snapshot_version": "1.0", **bad_fields}))
+    summary = tmp_path / "run-summary.json"
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "cja_auto_sdr",
+            "--compare-snapshots",
+            str(source),
+            str(target),
+            "--format",
+            "json",
+            "--output",
+            "-",
+            "--run-summary-json",
+            str(summary),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 1
+    diagnostics = json.loads(summary.read_text())
+    assert diagnostics["exit_code"] == 1 and diagnostics["status"] == "error"
+    assert diagnostics["details"]["operation_success"] is False
+    assert "Invalid snapshot file" in completed.stderr
+    assert "AttributeError" not in completed.stderr

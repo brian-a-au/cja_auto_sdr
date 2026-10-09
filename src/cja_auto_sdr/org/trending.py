@@ -15,6 +15,7 @@ from cja_auto_sdr.org.models import (
     _snapshot_effective_data_view_count,
 )
 from cja_auto_sdr.org.snapshot_utils import (
+    SnapshotTimestampError,
     _org_report_snapshot_state,
     chronological_snapshot_sort_fields,
     coerce_snapshot_float,
@@ -374,7 +375,11 @@ def _load_snapshot_from_file(json_file: Path) -> TrendingSnapshot | None:
     if not is_org_report_snapshot_payload(data):
         return None
 
-    return _extract_snapshot_from_json(data, source_path=json_file)
+    try:
+        return _extract_snapshot_from_json(data, source_path=json_file)
+    except SnapshotTimestampError as exc:
+        logger.warning("Skipping %s: %s", json_file, exc)
+        return None
 
 
 # ---------------------------------------------------------------------------

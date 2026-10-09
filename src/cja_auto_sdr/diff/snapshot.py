@@ -85,7 +85,12 @@ class SnapshotManager:
         if parsed.tzinfo is None:
             parsed = parsed.replace(tzinfo=self._default_snapshot_timezone())
 
-        return parsed.astimezone(UTC)
+        try:
+            normalized = parsed.astimezone(UTC)
+            normalized.timestamp()
+        except (OverflowError, OSError, ValueError) as exc:
+            raise ValueError(f"Invalid snapshot timestamp: cannot normalize {created_at!r}") from exc
+        return normalized
 
     def _snapshot_created_at_utc(self, snapshot: dict) -> datetime | None:
         """Resolve snapshot created_at to UTC datetime with mtime fallback."""
@@ -280,8 +285,8 @@ class SnapshotManager:
         with open(filepath, encoding="utf-8") as f:
             data = json.load(f)
 
-        if "snapshot_version" not in data:
-            raise ValueError(f"Invalid snapshot file: {filepath} (missing snapshot_version)")
+        DataViewSnapshot.validate_payload(data)
+        self._parse_snapshot_created_at(data.get("created_at"))
 
         snapshot = DataViewSnapshot.from_dict(data)
         self.logger.info(f"Loaded snapshot: {snapshot.data_view_name} ({snapshot.data_view_id})")
@@ -305,27 +310,22 @@ class SnapshotManager:
                     data = load_json_cached(filepath)
                 except OSError, ValueError:
                     continue
-                if not isinstance(data, dict):
+                try:
+                    DataViewSnapshot.validate_payload(data)
+                    self._parse_snapshot_created_at(data.get("created_at"))
+                except ValueError:
                     continue
-                # A syntactically valid JSON file may still be an invalid
-                # snapshot. Do not let it block discovery of healthy files
-                # or become a candidate for automatic retention deletion.
-                if not isinstance(data.get("metrics", []), list) or not isinstance(data.get("dimensions", []), list):
-                    continue
-                if data.get("created_at") is not None and not isinstance(data["created_at"], str):
-                    continue
-                if "snapshot_version" in data:
-                    snapshots.append(
-                        {
-                            "filename": filename,
-                            "filepath": filepath,
-                            "data_view_id": data.get("data_view_id", ""),
-                            "data_view_name": data.get("data_view_name", ""),
-                            "created_at": data.get("created_at", ""),
-                            "metrics_count": len(data.get("metrics", [])),
-                            "dimensions_count": len(data.get("dimensions", [])),
-                        },
-                    )
+                snapshots.append(
+                    {
+                        "filename": filename,
+                        "filepath": filepath,
+                        "data_view_id": data.get("data_view_id", ""),
+                        "data_view_name": data.get("data_view_name", ""),
+                        "created_at": data.get("created_at", ""),
+                        "metrics_count": len(data.get("metrics", [])),
+                        "dimensions_count": len(data.get("dimensions", [])),
+                    },
+                )
 
         return sorted(snapshots, key=self._snapshot_sort_key, reverse=True)
 

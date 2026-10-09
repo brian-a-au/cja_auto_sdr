@@ -178,7 +178,7 @@ tests/
 └── README.md                        # This file
 ```
 
-**Total: 8,612 comprehensive tests**
+**Total: 8,658 comprehensive tests**
 
 ### Test Count Breakdown
 
@@ -187,16 +187,16 @@ tests/
 
 | Category | Tests | Files | Notes |
 |----------|-------|-------|-------|
-| `unit` | 8,481 | 160 | Default primary category for files without explicit integration/e2e/smoke scope |
+| `unit` | 8,527 | 160 | Default primary category for files without explicit integration/e2e/smoke scope |
 | `integration` | 98 | 3 | Cross-module integration suites |
 | `e2e` | 23 | 2 | End-to-end suites with a mocked external boundary |
 | `smoke` | 10 | 1 | Lightweight command-mode coverage |
 | `slow` | 0 | 0 | Overlay marker; these tests are also counted in a primary category |
-| **Primary Total** | **8,612** | **166** | **unit + integration + e2e + smoke** |
+| **Primary Total** | **8,658** | **166** | **unit + integration + e2e + smoke** |
 
 | CI Slice | Tests | Files | Selector |
 |----------|-------|-------|----------|
-| `test-unit` | 8,481 | 160 | `-m "unit and not slow"` |
+| `test-unit` | 8,527 | 160 | `-m "unit and not slow"` |
 | `test-integration` | 121 | 5 | `-m "integration or e2e or slow"` |
 | `smoke-test` | 10 | 1 | `-m smoke` |
 
@@ -281,7 +281,7 @@ tests/
 | `test_diff_inventory_output.py` | 96 | Inventory diff output across all formats (console, JSON, HTML, Excel, MD, CSV) |
 | `test_cli_command_handlers.py` | 160 | CLI dispatch for --stats, --org-report, --list-snapshots, discovery inspection, diff config unpacking |
 | `test_profile_management.py` | 54 | Interactive profile creation, import, test, show |
-| `test_snapshot_commands.py` | 73 | Snapshot creation, comparison, name resolution |
+| `test_snapshot_commands.py` | 76 | Snapshot creation, comparison, name resolution |
 | `test_config_and_resolution.py` | 115 | Config status, validation, stats, name resolution |
 | `test_derived_fields_edge_cases.py` | 34 | Derived fields edge cases and coverage |
 | `test_diff_command_coverage.py` | 46 | Diff command edge cases and coverage |
@@ -304,11 +304,11 @@ tests/
 | `test_exception_narrowing.py` | 55 | Exception narrowing boundary tests |
 | `test_coverage_hardening.py` | 101 | Coverage hardening tests |
 | `test_trending_models.py` | 53 | Trending dataclass construction and bridge tests |
-| `test_trending_discovery.py` | 100 | Snapshot cache discovery, deltas, drift scoring |
+| `test_trending_discovery.py` | 104 | Snapshot cache discovery, deltas, drift scoring |
 | `test_trending_cli.py` | 9 | --trending-window CLI flag parsing |
 | `test_trending_output.py` | 23 | Trending output across all 6 formats |
 | `test_trending_integration.py` | 15 | Trending backwards compatibility and integration |
-| `test_org_snapshot_utils.py` | 128 | Org snapshot helper utilities edge cases |
+| `test_org_snapshot_utils.py` | 133 | Org snapshot helper utilities edge cases |
 | `test_org_trending_contracts.py` | 108 | Org/trending public API contract tests |
 | `test_org_trending_adversarial.py` | 51 | Adversarial and stress tests for trending |
 | `test_cli_diff_contracts.py` | 73 | CLI/diff public API contract tests |
@@ -369,10 +369,10 @@ tests/
 | `test_sdr_markdown_escaping.py` | 4 | SDR markdown vectorized cell-escaping characterization test |
 | `test_diff_excel.py` | 3 | Diff Excel row-coloring characterization tests |
 | `test_org_snapshot_parse_cache.py` | 3 | Org snapshot JSON parse-cache characterization test |
-| `test_diff_snapshot_retention.py` | 12 | Diff snapshot-retention parse-cache characterization test |
+| `test_diff_snapshot_retention.py` | 46 | Diff snapshot-retention parse-cache characterization test |
 | `test_diff_comparator_normalize.py` | 1 | Diff field-normalization type-fast-path characterization test |
 | `test_logging_diagnostics.py` | 2 | emit_diagnostic isEnabledFor guard characterization tests |
-| **Total** | **8,612** | **Collected via pytest --collect-only** |
+| **Total** | **8,658** | **Collected via pytest --collect-only** |
 
 ## Running Tests
 
@@ -830,7 +830,7 @@ the `tests/README.md` inventory tree or count table.
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (8,612 tests total)
+- [x] Comprehensive test coverage (8,658 tests total)
 - [x] Org-wide analysis tests (test_org_report.py) - 209 tests (including large org scaling, output path aliases, memory warnings, smart cache invalidation)
 - [x] Org-wide analysis integration tests (test_org_report_integration.py) - 42 tests (end-to-end flows, caching, filtering, governance thresholds)
 - [x] Profile management tests (test_profiles.py) - 80 tests

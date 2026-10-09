@@ -1849,3 +1849,24 @@ class TestStateComponentIdsOnDemand:
 def test_normalize_org_report_data_view_id_none_returns_empty_string() -> None:
     assert normalize_org_report_data_view_id(None) == ""
     assert normalize_org_report_data_view_id("  dv_1  ") == "dv_1"
+
+
+@pytest.mark.parametrize("timestamp", ["0001-01-01T00:00:00+01:00", "9999-12-31T23:59:59-01:00"])
+def test_iso_conversion_overflow_is_an_explicit_timestamp_error(timestamp):
+    with pytest.raises(ValueError, match="timestamp"):
+        parse_snapshot_timestamp(timestamp)
+    with pytest.raises(ValueError, match="timestamp"):
+        snapshot_epoch(timestamp)
+    with pytest.raises(ValueError, match="timestamp"):
+        org_report_snapshot_comparison_input(
+            {"generated_at": timestamp, "summary": {"data_views_total": 0}, "data_views": []}
+        )
+
+
+@pytest.mark.parametrize(
+    "timestamp", ["0001-01-01T01:00:00+01:00", "9999-12-31T22:59:59-01:00", " 2026-03-01T01:00:00+01:00 "]
+)
+def test_representable_boundary_and_offset_timestamps_remain_dated(timestamp):
+    parsed = parse_snapshot_timestamp(timestamp)
+    assert parsed is not None and parsed.tzinfo is UTC
+    assert snapshot_epoch(timestamp) is not None

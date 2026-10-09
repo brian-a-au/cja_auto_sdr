@@ -1440,3 +1440,63 @@ def test_explicit_org_snapshot_inspection_keeps_errors(tmp_path, malformed_org_s
 
     with pytest.raises(ValueError):
         OrgReportCache(cache_dir=tmp_path).inspect_org_report_snapshot(path)
+
+
+@pytest.mark.parametrize("timestamp", ["0001-01-01T00:00:00+01:00", "9999-12-31T23:59:59-01:00"])
+def test_org_overflow_neighbors_are_skipped_and_survive_retention(tmp_path, timestamp):
+    cache = OrgReportCache(cache_dir=tmp_path)
+    healthy = cache.save_org_report_snapshot(_make_org_report_json(timestamp="2026-01-01T00:00:00Z"))
+    directory = healthy.parent
+    payload = _make_org_report_json(timestamp=timestamp)
+    # Matching identity must not let duplicate cleanup delete the invalid copy.
+    payload["_snapshot_meta"] = {"content_hash": "same-invalid-time"}
+    bad = directory / "overflow.json"
+    duplicate = directory / "overflow-copy.json"
+    for path in (bad, duplicate):
+        path.write_text(json.dumps(payload))
+    from cja_auto_sdr.core.json_io import load_json_cached
+
+    cached = load_json_cached(bad)
+    original = json.dumps(cached, sort_keys=True)
+    assert [item["filepath"] for item in cache.list_org_report_snapshots("test_org")] == [str(healthy)]
+    assert len(discover_snapshots(directory, org_id="test_org")) == 1
+    assert cache.prune_org_report_snapshots(org_id="test_org", keep_last=1) == []
+    assert bad.exists() and duplicate.exists() and healthy.exists()
+    with pytest.raises(ValueError, match="timestamp"):
+        cache.inspect_org_report_snapshot(bad)
+    cache.prune_org_report_snapshots(org_id="test_org", keep_since_days=1)
+    assert bad.exists() and duplicate.exists()
+    assert json.dumps(cached, sort_keys=True) == original
+
+
+def test_org_history_revalidates_replaced_file_without_mutating_old_cache(tmp_path):
+    import os
+
+    from cja_auto_sdr.core.json_io import load_json_cached
+
+    cache = OrgReportCache(cache_dir=tmp_path)
+    path = cache.save_org_report_snapshot(_make_org_report_json(timestamp="2026-01-01T00:00:00+01:00"))
+    original = load_json_cached(path)
+    before = path.stat()
+    replacement = path.parent / "replacement.json"
+    replacement.write_bytes(path.read_bytes().replace(b"2026-01-01T00:00:00+01:00", b"0001-01-01T00:00:00+01:00"))
+    os.utime(replacement, ns=(before.st_atime_ns, before.st_mtime_ns))
+    os.replace(replacement, path)
+    assert (path.stat().st_size, path.stat().st_mtime_ns) == (before.st_size, before.st_mtime_ns)
+    assert cache.list_org_report_snapshots("test_org") == []
+    assert discover_snapshots(path.parent, org_id="test_org") == []
+    assert cache.prune_org_report_snapshots(org_id="test_org", keep_last=1) == []
+    assert path.exists()
+    assert original["generated_at"] == "2026-01-01T00:00:00+01:00"
+
+
+def test_valid_upper_utc_boundary_survives_org_date_retention(tmp_path):
+    cache = OrgReportCache(cache_dir=tmp_path)
+    old = cache.save_org_report_snapshot(_make_org_report_json(timestamp="2000-01-01T00:00:00Z"))
+    timestamp = "9999-12-31T23:59:59.999999+00:00"
+    boundary = cache.save_org_report_snapshot(_make_org_report_json(timestamp=timestamp))
+    assert cache.inspect_org_report_snapshot(boundary)["generated_at"] == timestamp
+    assert [item["filepath"] for item in cache.list_org_report_snapshots("test_org")] == [str(boundary), str(old)]
+    assert len(discover_snapshots(boundary.parent, org_id="test_org")) == 2
+    assert cache.prune_org_report_snapshots(org_id="test_org", keep_since_days=30) == [str(old)]
+    assert boundary.exists()
