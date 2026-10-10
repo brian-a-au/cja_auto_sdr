@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Performance
 
+- **Similarity-only org reports:** stream exact pairwise scores and retain qualifying pairs without a full distance dictionary. Sparse-overlap reports use less allocation; comparisons remain quadratic, dense qualifying output remains quadratic, and clustering keeps full pairwise distances.
+
 - **Validated org-report cache lookup:** validate each healthy persisted entry once before hydration, reducing warm lookup CPU overhead while preserving refresh decisions, cache accounting, and public cache probes.
 
 ### Fixed

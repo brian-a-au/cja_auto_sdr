@@ -13,7 +13,7 @@ import re
 import threading
 import time
 from collections import defaultdict
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
@@ -398,8 +398,8 @@ class OrgComponentAnalyzer:
         distribution = self._compute_distribution(component_index, len(successful_summaries))
         self._assert_lock_healthy()
 
-        # 5. Compute pairwise Jaccard distances (shared by similarity & clustering)
-        # Computed once to avoid duplicate O(n²) work.
+        # 5. Retain all pairwise distances only when clustering needs them.
+        # Similarity alone streams scores and retains only qualifying pairs.
         similarity_pairs = None
         pairwise_data = None
         need_similarity = not self.config.skip_similarity and not self.config.org_stats_only
@@ -417,7 +417,7 @@ class OrgComponentAnalyzer:
                 )
                 similarity_guardrail_blocked = True
 
-        if (need_similarity and not similarity_guardrail_blocked) or need_clustering:
+        if need_clustering:
             self.logger.info("Computing pairwise Jaccard distances...")
             pairwise_data = self._compute_pairwise_jaccard(summaries)
             self._assert_lock_healthy()
@@ -425,6 +425,8 @@ class OrgComponentAnalyzer:
         if need_similarity and not similarity_guardrail_blocked:
             self.logger.info("Computing similarity matrix...")
             similarity_pairs = self._compute_similarity_matrix(summaries, precomputed=pairwise_data)
+            if not need_clustering:
+                self._assert_lock_healthy()
             effective_threshold = effective_governance_overlap_threshold(self.config.overlap_threshold)
             self.logger.info("Found %s pairs above threshold (>= %s)", len(similarity_pairs), effective_threshold)
         elif self.config.org_stats_only:
@@ -1142,6 +1144,12 @@ class OrgComponentAnalyzer:
         Returns:
             Tuple of (valid_summaries, pairwise_similarities dict)
         """
+        valid, component_sets = self._prepare_jaccard_inputs(summaries)
+        return valid, dict(self._iter_pairwise_jaccard(component_sets))
+
+    @staticmethod
+    def _prepare_jaccard_inputs(summaries: list[DataViewSummary]) -> tuple[list[DataViewSummary], list[set[str]]]:
+        """Keep nonempty successful views in input order and evaluate each set once."""
         valid = []
         component_sets = []
         for summary in summaries:
@@ -1151,18 +1159,19 @@ class OrgComponentAnalyzer:
             if component_ids:
                 valid.append(summary)
                 component_sets.append(component_ids)
-        pairwise: dict[tuple, float] = {}
+        return valid, component_sets
 
-        for i in range(len(valid)):
+    @staticmethod
+    def _iter_pairwise_jaccard(component_sets: list[set[str]]) -> Iterator[tuple[tuple[int, int], float]]:
+        """Yield exact scores in input pair order without retaining rejected distances."""
+        for i in range(len(component_sets)):
             set_i = component_sets[i]
             len_i = len(set_i)
-            for j in range(i + 1, len(valid)):
+            for j in range(i + 1, len(component_sets)):
                 set_j = component_sets[j]
                 intersection = len(set_i & set_j)
                 union = len_i + len(set_j) - intersection  # no `set_i | set_j` allocation
-                pairwise[(i, j)] = intersection / union if union > 0 else 0.0
-
-        return valid, pairwise
+                yield (i, j), intersection / union if union > 0 else 0.0
 
     def _compute_similarity_matrix(
         self,
@@ -1187,14 +1196,16 @@ class OrgComponentAnalyzer:
         """
         if precomputed is not None:
             valid_summaries, pairwise = precomputed
+            component_sets = [s.all_component_ids for s in valid_summaries]
+            scores = pairwise.items()
         else:
-            valid_summaries, pairwise = self._compute_pairwise_jaccard(summaries)
+            valid_summaries, component_sets = self._prepare_jaccard_inputs(summaries)
+            scores = self._iter_pairwise_jaccard(component_sets)
 
         pairs = []
         min_similarity_threshold = effective_governance_overlap_threshold(self.config.overlap_threshold)
-        component_sets = [s.all_component_ids for s in valid_summaries]  # each property evaluated once
 
-        for (i, j), similarity in pairwise.items():
+        for (i, j), similarity in scores:
             if similarity >= min_similarity_threshold:
                 dv1 = valid_summaries[i]
                 dv2 = valid_summaries[j]
