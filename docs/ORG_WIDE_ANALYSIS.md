@@ -139,6 +139,8 @@ and reports will note the configured vs. effective threshold.
 > data views exceed this threshold. Use `--force-similarity` to override, or `--skip-similarity`
 > to disable entirely.
 
+Similarity-only reports retain component sets and pairs meeting the effective threshold rather than all pairwise scores. Comparisons still require O(n²) work; dense qualifying output still requires O(n²) storage. Clustering retains all pairwise distances, including when similarity output is skipped.
+
 ```bash
 # Flag pairs with 90%+ similarity (default: 80%)
 cja_auto_sdr --org-report --overlap-threshold 0.9
