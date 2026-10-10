@@ -1320,6 +1320,10 @@ SEGMENTS CHANGES (7)
 
 ### Inventory Comparison Fields
 
+Full segment and calculated metric definitions are compared for shared IDs when both snapshots contain nonempty `definition_json`. Object key order and JSON whitespace are ignored; list order, operators, predicate values, types, and unknown fields are preserved. Definition-only edits now produce exit code 2 and add `definition_json` to `changed_fields` with the original serialized values.
+
+Logical reference ignores mask only the recognized reference leaves, preserving other edits in the same definition. `--ignore-fields definition_json` skips definition parsing and comparison entirely. Inventory opt-out also skips parsing. Added and removed items are classified without parsing definitions. If either shared item lacks a definition or has an empty string, existing summary comparison continues and a limitation warning goes to stderr. Invalid nonempty JSON in a compared pair produces input failure (exit code 1); legacy valid JSON scalars and arrays remain supported.
+
 Each inventory type compares fields appropriate to its purpose:
 
 Diff output and `--ignore-fields` use the logical field names below. Existing snapshots store calculated metric names as `metric_name`, segment names as `segment_name`, and nested segment references as `other_segment_references`; comparison reads those keys without changing the snapshot format. A detected inventory change follows the usual diff exit code 2.

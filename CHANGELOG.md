@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Full inventory definition diffs:** compare persisted segment and calculated metric definitions, detecting hidden predicate and formula changes with exit code 2 and additive `definition_json` changed-field details. Preserve logical reference ignores, JSON object order/whitespace equivalence, inventory opt-in, and legacy missing-definition comparisons with stderr limitation warnings; malformed compared definitions fail explicitly.
 - **Aggregate diff totals:** include calculated metric and segment additions, removals, and modifications in `total_changes`, matching the aggregate added/removed/modified counts across reports. Watch thresholds/events and GitHub step summaries count each changed item once. Component percentages and warn-threshold precedence remain unchanged.
 
 ## [3.12.11] - 2026-10-09
