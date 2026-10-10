@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Performance
+
+- **Validated org-report cache lookup:** validate each healthy persisted entry once before hydration, reducing warm lookup CPU overhead while preserving refresh decisions, cache accounting, and public cache probes.
+
 ### Fixed
 
 - **Full inventory definition diffs:** compare persisted segment and calculated metric definitions, detecting hidden predicate and formula changes with exit code 2 and additive `definition_json` changed-field details. Preserve logical reference ignores, JSON object order/whitespace equivalence, inventory opt-in, and legacy missing-definition comparisons with stderr limitation warnings; malformed compared definitions fail explicitly.

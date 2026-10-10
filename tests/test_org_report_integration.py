@@ -583,8 +583,7 @@ class TestCacheValidationBatch:
 
         # Setup mock cache
         mock_cache = Mock(spec=OrgReportCache)
-        mock_cache.has_valid_entry.return_value = True
-        mock_cache.get.return_value = None  # All stale
+        mock_cache._lookup_validated.return_value = (True, None)  # All stale
 
         logger = logging.getLogger("test_batch_cache")
 
@@ -598,11 +597,11 @@ class TestCacheValidationBatch:
         # getDataView should NOT be called (batch optimization)
         mock_cja.getDataView.assert_not_called()
 
-        # Cache.get should have been called with the modification dates from the list
-        assert mock_cache.get.call_count == 2
+        # Validated lookup receives modification dates from the list
+        assert mock_cache._lookup_validated.call_count == 2
 
         # Verify modification dates were passed
-        calls = mock_cache.get.call_args_list
+        calls = mock_cache._lookup_validated.call_args_list
         for i, call in enumerate(calls):
             assert call.kwargs.get("current_modified") == data_views[i]["modified"]
 
@@ -661,7 +660,11 @@ class TestValidatedCachePersistence:
         self.assert_component_calls(cache_client, 3)
         assert cache_client.getDataView.call_count == (3 if include_metadata else 0)
 
-        warm = self.run_cached(cache_client, tmp_path, include_metadata=include_metadata, include_names=True)
+        with patch.object(
+            OrgReportCache, "_entry_validation_error", wraps=OrgReportCache._entry_validation_error
+        ) as validate_entry:
+            warm = self.run_cached(cache_client, tmp_path, include_metadata=include_metadata, include_names=True)
+        assert validate_entry.call_count == 3
         self.assert_component_calls(cache_client, 0)
         cache_client.getDataView.assert_not_called()
         assert {s.data_view_id: asdict(s) for s in warm.data_view_summaries} == {

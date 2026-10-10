@@ -561,23 +561,58 @@ class OrgReportCache:
         Returns:
             Cached DataViewSummary or None if not cached or stale
         """
+        entry = self._get_fresh_entry(dv_id, max_age_hours)
+        if entry is None:
+            return None
+        return self._hydrate_entry(dv_id, entry, required_flags, current_modified)
+
+    def _get_fresh_entry(self, dv_id: str, max_age_hours: int) -> dict[str, Any] | None:
+        """Validate an entry and its age once, without retaining trusted state."""
         entry = self._get_entry(dv_id)
         if entry is None:
             return None
         fetched_at = entry.get("fetched_at")
         if not fetched_at:
             return None
-
         try:
             fetched_time = datetime.fromisoformat(fetched_at)
             if datetime.now(UTC) - fetched_time > timedelta(hours=max_age_hours):
-                return None  # Cache is stale
+                return None
         except ValueError, TypeError:
             return None
+        return entry
 
+    def _lookup_validated(
+        self,
+        dv_id: str,
+        max_age_hours: int,
+        required_flags: dict[str, bool],
+        current_modified: str | None,
+    ) -> tuple[bool, DataViewSummary | None]:
+        """Return age validity and hydrated summary for one analyzer lookup.
+
+        An age-valid entry that cannot satisfy listing evidence or enrichment
+        remains stale for accounting; absent, malformed, and expired entries
+        remain misses. Unlike public get(), None means no listing evidence.
+        """
+        entry = self._get_fresh_entry(dv_id, max_age_hours)
+        if entry is None:
+            return False, None
+        if current_modified is None:
+            return True, None
+        return True, self._hydrate_entry(dv_id, entry, required_flags, current_modified)
+
+    def _hydrate_entry(
+        self,
+        dv_id: str,
+        entry: dict[str, Any],
+        required_flags: dict[str, bool] | None,
+        current_modified: str | None,
+    ) -> DataViewSummary | None:
+        """Hydrate an already validated, fresh entry under the requested flags."""
         # Validate modification timestamp if provided
         # Omitting current_modified preserves age-only lookup behavior. The
-        # analyzer rejects missing listing timestamps before validated lookup.
+        # validated lookup rejects missing listing timestamps before hydration.
         if current_modified is not None:
             # Only an absent key falls back to legacy metadata. Explicit None
             # means the scheduling listing supplied no validation evidence.
@@ -740,21 +775,7 @@ class OrgReportCache:
         Returns:
             True if entry exists and is fresh enough to potentially use
         """
-        entry = self._get_entry(dv_id)
-        if entry is None:
-            return False
-        fetched_at = entry.get("fetched_at")
-        if not fetched_at:
-            return False
-
-        try:
-            fetched_time = datetime.fromisoformat(fetched_at)
-            if datetime.now(UTC) - fetched_time > timedelta(hours=max_age_hours):
-                return False  # Cache is stale anyway
-        except ValueError, TypeError:
-            return False
-
-        return True
+        return self._get_fresh_entry(dv_id, max_age_hours) is not None
 
     def get_cached_modified(self, dv_id: str) -> str | None:
         """Get the cached modification timestamp for a data view.
