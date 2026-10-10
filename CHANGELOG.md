@@ -7,6 +7,12 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **Aggregate diff totals:** include calculated metric and segment additions, removals, and modifications in `total_changes`, matching the aggregate added/removed/modified counts across reports. Watch thresholds/events and GitHub step summaries count each changed item once. Component percentages and warn-threshold precedence remain unchanged.
+
 ## [3.12.11] - 2026-10-09
 
 ### Fixed

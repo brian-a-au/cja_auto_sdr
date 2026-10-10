@@ -3,7 +3,9 @@
 Signal tests are in test_watch_signals.py (subprocess-based, @pytest.mark.slow).
 """
 
+import json
 import signal as _signal
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -13,6 +15,7 @@ from cja_auto_sdr.cli.commands.watch import (
     _stop_requested,
     run_watch,
 )
+from cja_auto_sdr.diff.models import DiffSummary
 from cja_auto_sdr.output.watch_event import BaselineEvent, ChangeEvent, ErrorEvent
 
 
@@ -441,3 +444,49 @@ def test_run_watch_returns_1_when_credential_resolution_fails(mock_resolve, caps
     captured = capsys.readouterr()
     assert "ERROR: cred boom" in captured.err
     mock_resolve.assert_called_once()
+
+
+@patch("cja_auto_sdr.cli.commands.watch._sleep_with_stop")
+@patch("cja_auto_sdr.cli.commands.watch.emit_diagnostic")
+@patch("cja_auto_sdr.cli.commands.watch.DataViewComparator")
+@patch("cja_auto_sdr.cli.commands.watch.SnapshotManager")
+def test_run_watch_reports_real_aggregate_once(MockSnapshots, MockComparator, mock_emit, mock_sleep, capsys):
+    """The real runner passes mixed totals unchanged to NDJSON and cycle diagnostics."""
+    snapshot = MagicMock()
+    snapshot.data_view_id = "dv_abc"
+    snapshot.metrics = []
+    snapshot.dimensions = []
+    snapshot.calculated_metrics_inventory = []
+    snapshot.segments_inventory = []
+    MockSnapshots.return_value.create_snapshot.return_value = snapshot
+    MockComparator.return_value.compare.return_value.summary = DiffSummary(
+        metrics_added=1,
+        dimensions_removed=1,
+        calc_metrics_modified=2,
+        segments_added=1,
+    )
+
+    def stop_after_second_cycle(_seconds):
+        if mock_sleep.call_count == 2:
+            _stop_requested.set()
+
+    mock_sleep.side_effect = stop_after_second_cycle
+    args = SimpleNamespace(
+        watch_data_views=["dv_abc"],
+        watch_interval="1h",
+        watch_threshold=5,
+        quiet=True,
+    )
+    try:
+        assert run_watch(args, cja=MagicMock()) == 0
+    finally:
+        _stop_requested.clear()
+    events = [json.loads(line) for line in capsys.readouterr().out.splitlines() if line.startswith("{")]
+    assert [event["type"] for event in events] == ["baseline", "change"]
+    assert events[1]["total_changes"] == 5
+    cycle_totals = [
+        call.kwargs["total_changes"] for call in mock_emit.call_args_list if call.args[1] == "watch_cycle_complete"
+    ]
+    assert cycle_totals == [0, 5]
+    assert MockComparator.call_args.kwargs["include_calc_metrics"] is True
+    assert MockComparator.call_args.kwargs["include_segments"] is True

@@ -169,9 +169,7 @@ def run_watch(args: Any, *, cja: Any | None = None) -> int:
 
     snapshot_manager = SnapshotManager(logger=_logger)
     # `include_calc_metrics=True, include_segments=True` ensures the diff result populates
-    # calc_metrics_* and segments_* counters. Without these, `_watch_total_changes` would
-    # always read zero for inventory deltas (see DataViewComparator.__init__ defaults at
-    # diff/comparator.py:116-117).
+    # calc_metrics_* and segments_* counters for the aggregate total and category details.
     comparator = DataViewComparator(
         logger=_logger,
         include_calc_metrics=True,

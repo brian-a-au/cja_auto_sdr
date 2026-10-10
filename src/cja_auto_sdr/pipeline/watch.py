@@ -21,23 +21,6 @@ from cja_auto_sdr.output.watch_event import (
 )
 
 
-def _watch_total_changes(summary: Any) -> int:
-    """Watch-specific total: includes calc-metric + segment changes.
-
-    `DiffSummary.total_changes` (diff/models.py:111) only sums metrics + dimensions.
-    For watch threshold semantics we want the full picture.
-    """
-    return (
-        summary.total_changes
-        + summary.calc_metrics_added
-        + summary.calc_metrics_removed
-        + summary.calc_metrics_modified
-        + summary.segments_added
-        + summary.segments_removed
-        + summary.segments_modified
-    )
-
-
 def _changes_by_category(summary: Any) -> dict[str, dict[str, int]]:
     return {
         "dimensions": {
@@ -142,7 +125,7 @@ class WatchCycleRunner:
                 )
                 continue
 
-            total = _watch_total_changes(diff.summary)
+            total = diff.summary.total_changes
             if total >= self._threshold:
                 yield ChangeEvent(
                     ts=iso8601_utc_now(),

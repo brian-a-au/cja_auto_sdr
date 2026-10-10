@@ -111,14 +111,7 @@ class DiffSummary:
     @property
     def total_changes(self) -> int:
         """Total number of changed items."""
-        return (
-            self.metrics_added
-            + self.metrics_removed
-            + self.metrics_modified
-            + self.dimensions_added
-            + self.dimensions_removed
-            + self.dimensions_modified
-        )
+        return self.total_added + self.total_removed + self.total_modified
 
     @property
     def metrics_changed(self) -> int:
