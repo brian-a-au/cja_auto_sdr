@@ -2,6 +2,8 @@
 
 Compare two CJA data views to identify differences in metrics, dimensions, and metadata. This feature enables environment validation, migration verification, and change tracking over time.
 
+Snapshot discovery and retention admit only usable component and optional inventory structures. Truthy component and inventory IDs must be strings; legacy falsy IDs remain skipped. Malformed rows, unusable IDs, and ISO timestamps that overflow UTC or epoch conversion are skipped and left untouched; they do not consume retention quota. Explicit file loading and comparison report input errors. Omitted legacy arrays and inventories remain supported. Missing, blank, or ordinarily malformed timestamps retain the file-mtime fallback, and naive diff timestamps remain interpreted in local time.
+
 ## Overview
 
 The diff comparison feature allows you to:

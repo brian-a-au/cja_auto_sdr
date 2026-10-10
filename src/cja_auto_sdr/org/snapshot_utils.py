@@ -109,6 +109,10 @@ class _OrgReportSnapshotState:
     comparison_assessment: OrgReportSnapshotComparisonAssessment
 
 
+class SnapshotTimestampError(ValueError):
+    """An ISO timestamp parsed successfully but cannot be normalized."""
+
+
 def parse_snapshot_timestamp(raw_timestamp: Any) -> datetime | None:
     """Normalize snapshot timestamps to UTC for stable ordering."""
     if raw_timestamp in (None, ""):
@@ -127,7 +131,12 @@ def parse_snapshot_timestamp(raw_timestamp: Any) -> datetime | None:
 
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=UTC)
-    return parsed.astimezone(UTC)
+    try:
+        normalized = parsed.astimezone(UTC)
+        normalized.timestamp()
+    except (OverflowError, OSError, ValueError) as exc:
+        raise SnapshotTimestampError(f"Invalid snapshot timestamp: cannot normalize {raw_timestamp!r}") from exc
+    return normalized
 
 
 def snapshot_epoch(raw_timestamp: Any) -> float | None:
@@ -1231,6 +1240,7 @@ def org_report_snapshot_comparison_input(
     if not is_org_report_snapshot_payload(data) or state.timestamp is None:
         raise ValueError("expected org-report snapshot payload")
 
+    snapshot_epoch(state.timestamp)
     history_exclusion_reason = str(state.history_assessment.exclusion_reason or "").strip()
     if require_history_eligible and history_exclusion_reason:
         raise ValueError(f"snapshot is not eligible for comparison: {history_exclusion_reason}")

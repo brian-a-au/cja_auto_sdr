@@ -4,6 +4,8 @@
 
 Analyze component usage patterns across all data views in your CJA organization. This feature provides governance insights, identifies duplication, and helps standardize your analytics implementation.
 
+Org snapshot scans skip ISO timestamps that overflow UTC or epoch conversion before ordering, retention quota, date pruning, or duplicate cleanup. The skipped files remain untouched; explicit snapshot inspection and comparison report input errors. Ordinary malformed timestamps retain the existing undated policy, and naive org timestamps remain interpreted as UTC. History eligibility and retention eligibility remain separate.
+
 ## Overview
 
 The org-wide analysis feature allows you to:

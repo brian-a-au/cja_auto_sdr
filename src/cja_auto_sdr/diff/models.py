@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import Enum
@@ -385,9 +386,39 @@ class DataViewSnapshot:
             result["metadata"]["segments_count"] = len(self.segments_inventory)
         return result
 
+    @staticmethod
+    def validate_payload(data: Any, *, require_version: bool = True) -> None:
+        """Validate only persisted structure consumed by snapshot comparison."""
+        if not isinstance(data, Mapping):
+            raise ValueError("Invalid snapshot: expected JSON object")
+        if require_version and "snapshot_version" not in data:
+            raise ValueError("Invalid snapshot: missing snapshot_version")
+        if data.get("created_at") is not None and not isinstance(data["created_at"], str):
+            raise ValueError("Invalid snapshot: created_at must be a string or null")
+        for field, id_field in (
+            ("metrics", "id"),
+            ("dimensions", "id"),
+            ("calculated_metrics_inventory", "metric_id"),
+            ("segments_inventory", "segment_id"),
+        ):
+            rows = data.get(field, [] if field in ("metrics", "dimensions") else None)
+            if rows is None and field not in ("metrics", "dimensions"):
+                continue
+            if not isinstance(rows, list):
+                raise ValueError(f"Invalid snapshot: {field} must be an array")
+            for index, row in enumerate(rows):
+                if not isinstance(row, Mapping):
+                    raise ValueError(f"Invalid snapshot: {field}[{index}] must be an object")
+                item_id = row.get(id_field)
+                if not item_id:
+                    continue
+                if not isinstance(item_id, str):
+                    raise ValueError(f"Invalid snapshot: {field}[{index}].{id_field} must be a string")
+
     @classmethod
     def from_dict(cls, data: dict) -> DataViewSnapshot:
         """Create snapshot from dictionary (loaded from JSON)."""
+        cls.validate_payload(data, require_version=False)
         return cls(
             snapshot_version=data.get("snapshot_version", "1.0"),
             created_at=data.get("created_at", ""),

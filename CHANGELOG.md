@@ -7,6 +7,21 @@ All notable changes to the CJA SDR Generator project will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.12.11] - 2026-10-09
+
+### Fixed
+
+- **Snapshot history safety:** diff history skips malformed component and optional inventory containers or rows, including truthy IDs that are not strings. Invalid neighbors cannot replace a healthy baseline or consume retention quota and remain untouched by count/date pruning. Explicit file comparison reports an input error. Legacy omissions, skipped falsy IDs, duplicate overwrite behavior, and additive fields remain supported.
+- **Timestamp normalization:** diff and org-report history skip ISO timestamps whose UTC or epoch conversion overflows, including boundary dates with offsets. Such files remain outside baseline selection, retention quota, date pruning, and org duplicate cleanup; explicit loading, comparison, and inspection report errors. Ordinary missing or malformed timestamps retain existing fallback policies, including local-time interpretation for naive diff timestamps and UTC for naive org timestamps.
+
+### Changed
+
+- Update `python-dotenv` to 1.2.4 (merged dependency update #166).
+
+### Tests
+
+- Cover real-file malformed neighbors, strict offline CLI input failures with run summaries, legacy compatibility, timestamp boundaries, retention and duplicate safety, and parse-cache identity after replacement with preserved size and mtime.
+
 ## [3.12.10] - 2026-10-08
 
 ### Fixed
