@@ -1396,7 +1396,7 @@ class TestCachePaths:
         analyzer = _make_analyzer(mock_cja, logger, config=config)
 
         mock_cache = MagicMock()
-        mock_cache.has_valid_entry.return_value = True
+        mock_cache._lookup_validated.return_value = (True, None)
         analyzer.cache = mock_cache
 
         dvs = [{"id": "dv1", "name": "No Modified"}]  # no 'modified' key
@@ -1414,8 +1414,7 @@ class TestCachePaths:
 
         cached_summary = DataViewSummary(data_view_id="dv1", data_view_name="Cached DV")
         mock_cache = MagicMock()
-        mock_cache.has_valid_entry.return_value = True
-        mock_cache.get.return_value = cached_summary
+        mock_cache._lookup_validated.return_value = (True, cached_summary)
         analyzer.cache = mock_cache
 
         dvs = [{"id": "dv1", "name": "Cached DV", "modified": "2025-01-01T00:00:00Z"}]
@@ -1433,8 +1432,7 @@ class TestCachePaths:
         analyzer = _make_analyzer(mock_cja, logger, config=config)
 
         mock_cache = MagicMock()
-        mock_cache.has_valid_entry.return_value = True
-        mock_cache.get.return_value = None  # stale
+        mock_cache._lookup_validated.return_value = (True, None)  # stale
         analyzer.cache = mock_cache
 
         dvs = [{"id": "dv1", "name": "Stale DV", "modified": "2025-06-01T00:00:00Z"}]
@@ -1451,7 +1449,7 @@ class TestCachePaths:
         analyzer = _make_analyzer(mock_cja, logger, config=config)
 
         mock_cache = MagicMock()
-        mock_cache.has_valid_entry.return_value = False
+        mock_cache._lookup_validated.return_value = (False, None)
         analyzer.cache = mock_cache
 
         dvs = [{"id": "dv1", "name": "No Cache"}]

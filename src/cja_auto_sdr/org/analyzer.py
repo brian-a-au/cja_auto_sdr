@@ -1803,28 +1803,17 @@ class OrgComponentAnalyzer:
         for dv in data_views:
             dv_id = dv.get("id", "")
 
-            # No valid cache entry → must fetch from API
-            if not self.cache.has_valid_entry(dv_id, self.config.cache_max_age_hours):
-                to_fetch.append(dv)
-                continue
-
-            # Use modification date from getDataViews() response (no extra API call needed)
+            # Listing evidence and hydration share one full entry validation.
             current_modified = dv.get("modified") or dv.get("modifiedDate")
-
-            # If API doesn't return modification timestamp, treat as stale to honor
-            # --validate-cache guarantee (we can't verify freshness without it)
-            if current_modified is None:
-                to_fetch.append(dv)
-                stale_count += 1
-                continue
-
-            # Try to get from cache with validation
-            cached = self.cache.get(
+            age_valid, cached = self.cache._lookup_validated(
                 dv_id,
                 self.config.cache_max_age_hours,
                 required_flags=required_flags,
                 current_modified=current_modified,
             )
+            if not age_valid:
+                to_fetch.append(dv)
+                continue
 
             if cached:
                 valid_summaries.append(cached)

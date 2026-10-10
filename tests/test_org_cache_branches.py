@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import errno
 import json
+import logging
 import os
 from contextlib import nullcontext
 from datetime import UTC, datetime, timedelta
@@ -1289,3 +1290,74 @@ def test_cached_report_modified_remains_separate_from_validation_token(tmp_path)
     reloaded = OrgReportCache(tmp_path)
     assert reloaded.get_cached_modified("dv_metadata") == "2024-02-01T10:00:00Z"
     assert reloaded.get("dv_metadata", current_modified="2024-01-15T10:00:00Z").modified == "2024-02-01T10:00:00Z"
+
+
+@pytest.mark.parametrize(
+    ("case", "expected_hits", "expected_stale"),
+    [
+        ("healthy", 1, 0),
+        ("missing", 0, 0),
+        ("malformed", 0, 0),
+        ("expired", 0, 0),
+        ("missing_listing", 0, 1),
+        ("expired_missing_listing", 0, 0),
+        ("changed", 0, 1),
+        ("missing_evidence", 0, 1),
+        ("legacy", 1, 0),
+        ("enrichment", 0, 1),
+        ("hydration", 0, 1),
+    ],
+)
+def test_analyzer_persisted_cache_classifications(tmp_path, case, expected_hits, expected_stale, caplog):
+    from cja_auto_sdr.org.analyzer import OrgComponentAnalyzer
+    from cja_auto_sdr.org.models import OrgReportConfig
+
+    summary = _summary("dv_case")
+    summary.modified = "listing-token"
+    cache = OrgReportCache(tmp_path)
+    cache.put(summary)
+    payload = json.loads(cache.cache_file.read_text())
+    listing = {"id": "dv_case", "modified": "listing-token"}
+    if case == "missing":
+        payload.clear()
+    elif case == "malformed":
+        payload["dv_case"]["metric_count"] = "invalid"
+    elif case in {"expired", "expired_missing_listing"}:
+        payload["dv_case"]["fetched_at"] = (datetime.now(UTC) - timedelta(hours=25)).isoformat()
+    elif case == "changed":
+        listing["modified"] = "changed-token"
+    elif case == "missing_evidence":
+        payload["dv_case"]["validation_modified"] = None
+    elif case == "legacy":
+        payload["dv_case"].pop("validation_modified")
+    if case in {"missing_listing", "expired_missing_listing"}:
+        listing.pop("modified")
+    cache.cache_file.write_text(json.dumps(payload))
+    reloaded = OrgReportCache(tmp_path)
+    config = OrgReportConfig(
+        use_cache=True,
+        validate_cache=True,
+        include_names=case == "enrichment",
+        include_component_types=False,
+        skip_lock=True,
+    )
+    analyzer = OrgComponentAnalyzer(Mock(), config, logging.getLogger("classification"), cache=reloaded)
+    with (
+        patch("cja_auto_sdr.org.cache.DataViewSummary", side_effect=TypeError("cannot hydrate"))
+        if case == "hydration"
+        else nullcontext()
+    ):
+        to_fetch, summaries, hits, stale = analyzer._validate_cache_entries([listing])
+    assert (hits, stale) == (expected_hits, expected_stale)
+    assert to_fetch == ([] if expected_hits else [listing])
+    assert summaries == ([summary] if expected_hits else [])
+    if case == "missing_evidence":
+        assert reloaded.has_valid_entry("dv_case")
+        assert reloaded.get("dv_case") == summary
+        assert reloaded.get("dv_case", current_modified=None) == summary
+        assert reloaded.get("dv_case", current_modified="listing-token") is None
+    if case == "malformed":
+        assert "dv_case" not in reloaded._cache
+        assert len([record for record in caplog.records if "malformed org report cache entry" in record.message]) == 1
+        analyzer._validate_cache_entries([listing])
+        assert len([record for record in caplog.records if "malformed org report cache entry" in record.message]) == 1
