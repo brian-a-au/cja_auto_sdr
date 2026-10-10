@@ -9,27 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.12.11] - 2026-10-09
+
 ### Performance
 
 - **Similarity-only org reports:** stream exact pairwise scores and retain qualifying pairs without a full distance dictionary. Sparse-overlap reports use less allocation; comparisons remain quadratic, dense qualifying output remains quadratic, and clustering keeps full pairwise distances.
-
 - **Validated org-report cache lookup:** validate each healthy persisted entry once before hydration, reducing warm lookup CPU overhead while preserving refresh decisions, cache accounting, and public cache probes.
-
-### Fixed
-
-- **Full inventory definition diffs:** compare persisted segment and calculated metric definitions, detecting hidden predicate and formula changes with exit code 2 and additive `definition_json` changed-field details. Preserve logical reference ignores, JSON object order/whitespace equivalence, inventory opt-in, and legacy missing-definition comparisons with stderr limitation warnings; malformed compared definitions fail explicitly.
-- **Aggregate diff totals:** include calculated metric and segment additions, removals, and modifications in `total_changes`, matching the aggregate added/removed/modified counts across reports. Watch thresholds/events and GitHub step summaries count each changed item once. Component percentages and warn-threshold precedence remain unchanged.
-
-## [3.12.11] - 2026-10-09
 
 ### Fixed
 
 - **Snapshot history safety:** diff history skips malformed component and optional inventory containers or rows, including truthy IDs that are not strings. Invalid neighbors cannot replace a healthy baseline or consume retention quota and remain untouched by count/date pruning. Explicit file comparison reports an input error. Legacy omissions, skipped falsy IDs, duplicate overwrite behavior, and additive fields remain supported.
 - **Timestamp normalization:** diff and org-report history skip ISO timestamps whose UTC or epoch conversion overflows, including boundary dates with offsets. Such files remain outside baseline selection, retention quota, date pruning, and org duplicate cleanup; explicit loading, comparison, and inspection report errors. Ordinary missing or malformed timestamps retain existing fallback policies, including local-time interpretation for naive diff timestamps and UTC for naive org timestamps.
+- **Full inventory definition diffs:** compare persisted segment and calculated metric definitions, detecting hidden predicate and formula changes with exit code 2 and additive `definition_json` changed-field details. Preserve logical reference ignores, JSON object order/whitespace equivalence, inventory opt-in, and legacy missing-definition comparisons with stderr limitation warnings; malformed compared definitions fail explicitly.
+- **Aggregate diff totals:** include calculated metric and segment additions, removals, and modifications in `total_changes`, matching the aggregate added/removed/modified counts across reports. Watch thresholds/events and GitHub step summaries count each changed item once. Component percentages and warn-threshold precedence remain unchanged.
 
 ### Changed
 
-- Update `python-dotenv` to 1.2.4 (merged dependency update #166).
+- Update optional `python-dotenv` to 1.2.4 (merged dependency update #166).
+- Update development tool `ruff` to 0.16.10 (merged dependency update #167).
 
 ### Tests
 
