@@ -1861,7 +1861,18 @@ class TestDiffCommandsRemainingCoverage:
 
 
 @pytest.mark.parametrize(
-    "bad_fields", [{"metrics": [None]}, {"segments_inventory": {}}, {"created_at": "0001-01-01T00:00:00+01:00"}]
+    "bad_fields",
+    [{"metrics": [None]}, {"segments_inventory": {}}, {"created_at": "0001-01-01T00:00:00+01:00"}]
+    + [
+        {field: [{id_field: bad_id}]}
+        for field, id_field in (
+            ("metrics", "id"),
+            ("dimensions", "id"),
+            ("calculated_metrics_inventory", "metric_id"),
+            ("segments_inventory", "segment_id"),
+        )
+        for bad_id in (1, True)
+    ],
 )
 def test_offline_cli_rejects_unusable_snapshot_with_json_diagnostics(tmp_path, bad_fields):
     import subprocess

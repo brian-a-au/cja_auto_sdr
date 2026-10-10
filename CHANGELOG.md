@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **Snapshot history safety:** diff history skips malformed component and optional inventory containers or rows, including unusable IDs. Invalid neighbors cannot replace a healthy baseline or consume retention quota and remain untouched by count/date pruning. Explicit file comparison reports an input error. Legacy omissions, skipped falsy IDs, duplicate overwrite behavior, and additive fields remain supported.
+- **Snapshot history safety:** diff history skips malformed component and optional inventory containers or rows, including truthy IDs that are not strings. Invalid neighbors cannot replace a healthy baseline or consume retention quota and remain untouched by count/date pruning. Explicit file comparison reports an input error. Legacy omissions, skipped falsy IDs, duplicate overwrite behavior, and additive fields remain supported.
 - **Timestamp normalization:** diff and org-report history skip ISO timestamps whose UTC or epoch conversion overflows, including boundary dates with offsets. Such files remain outside baseline selection, retention quota, date pruning, and org duplicate cleanup; explicit loading, comparison, and inspection report errors. Ordinary missing or malformed timestamps retain existing fallback policies, including local-time interpretation for naive diff timestamps and UTC for naive org timestamps.
 
 ### Changed

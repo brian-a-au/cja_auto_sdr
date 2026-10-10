@@ -153,9 +153,14 @@ def test_explicit_snapshot_and_shared_loader_keep_decoding_errors(tmp_path, malf
         json_io.load_json_cached(path)
 
 
-def test_malformed_newer_snapshot_cannot_replace_or_delete_healthy_baseline(tmp_path):
+@pytest.mark.parametrize("field", ["metrics", "dimensions", "calculated_metrics_inventory", "segments_inventory"])
+@pytest.mark.parametrize("rows", [[None], [{"id": 1}], [{"id": -1}], [{"id": 1.5}], [{"id": True}]])
+def test_malformed_newer_snapshot_cannot_replace_or_delete_healthy_baseline(tmp_path, field, rows):
     import json
 
+    if field in ("calculated_metrics_inventory", "segments_inventory"):
+        id_field = "metric_id" if field == "calculated_metrics_inventory" else "segment_id"
+        rows = [{id_field: row["id"]} if isinstance(row, dict) else row for row in rows]
     manager = SnapshotManager()
     healthy = tmp_path / "healthy.json"
     bad = tmp_path / "bad.json"
@@ -166,12 +171,13 @@ def test_malformed_newer_snapshot_cannot_replace_or_delete_healthy_baseline(tmp_
         "snapshot_version": "1.0",
         "data_view_id": "dv_test",
         "created_at": "2026-02-01T00:00:00Z",
-        "metrics": [None],
+        field: rows,
     }
-    bad.write_text(json.dumps(payload))
-    assert manager.get_most_recent_snapshot(str(tmp_path), "dv_test") == str(healthy)
+    bad_content = json.dumps(payload)
+    bad.write_text(bad_content)
     assert manager.apply_retention_policy(str(tmp_path), "dv_test", keep_last=1) == []
-    assert healthy.exists() and bad.exists()
+    assert manager.get_most_recent_snapshot(str(tmp_path), "dv_test") == str(healthy)
+    assert healthy.exists() and bad.read_text() == bad_content
 
 
 @pytest.mark.parametrize("timestamp", ["0001-01-01T00:00:00+01:00", "9999-12-31T23:59:59-01:00"])
@@ -191,7 +197,21 @@ def test_timestamp_conversion_overflow_is_ineligible_for_diff_history(tmp_path, 
 
 
 @pytest.mark.parametrize("field", ["metrics", "dimensions", "calculated_metrics_inventory", "segments_inventory"])
-@pytest.mark.parametrize("rows", [42, [None], ["row"], [{"id": [1]}], [{"id": {"key": 1}}], [{"id": "m"}, {"id": 1}]])
+@pytest.mark.parametrize(
+    "rows",
+    [
+        42,
+        [None],
+        ["row"],
+        [{"id": [1]}],
+        [{"id": {"key": 1}}],
+        [{"id": "m"}, {"id": 1}],
+        [{"id": 1}],
+        [{"id": -1}],
+        [{"id": 1.5}],
+        [{"id": True}],
+    ],
+)
 def test_unusable_consumed_rows_are_excluded_from_history(tmp_path, field, rows):
     import json
 
@@ -206,13 +226,14 @@ def test_unusable_consumed_rows_are_excluded_from_history(tmp_path, field, rows)
             {"snapshot_version": "1.0", "data_view_id": "dv_test", "created_at": "2000-01-01T00:00:00Z", field: rows}
         )
     )
+    with pytest.raises(ValueError, match=field):
+        manager.load_snapshot(str(bad))
     assert [s["filename"] for s in manager.list_snapshots(str(tmp_path))] == ["new.json", "old.json"]
+    assert manager.get_most_recent_snapshot(str(tmp_path), "dv_test") == str(tmp_path / "new.json")
     assert manager.apply_date_retention_policy(str(tmp_path), "dv_test", keep_since_days=30) == [
         str(tmp_path / "old.json")
     ]
     assert bad.exists()
-    with pytest.raises(ValueError, match=field):
-        manager.load_snapshot(str(bad))
 
 
 @pytest.mark.parametrize("timestamp", [None, "", "   ", "not-an-iso-time"])
@@ -237,6 +258,9 @@ def test_validation_preserves_legacy_rows_and_cached_payload(tmp_path):
         {},
         {"id": None},
         {"id": False},
+        {"id": 0},
+        {"id": 0.0},
+        {"id": ""},
         {"id": []},
         {"id": {}},
         {"id": "m", "name": "first"},

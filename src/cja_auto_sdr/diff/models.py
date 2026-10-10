@@ -406,21 +406,14 @@ class DataViewSnapshot:
                 continue
             if not isinstance(rows, list):
                 raise ValueError(f"Invalid snapshot: {field} must be an array")
-            ids = set()
             for index, row in enumerate(rows):
                 if not isinstance(row, Mapping):
                     raise ValueError(f"Invalid snapshot: {field}[{index}] must be an object")
                 item_id = row.get(id_field)
                 if not item_id:
                     continue
-                try:
-                    ids.add(item_id)
-                except TypeError as exc:
-                    raise ValueError(f"Invalid snapshot: {field}[{index}] id must be hashable") from exc
-            try:
-                sorted(ids)
-            except TypeError as exc:
-                raise ValueError(f"Invalid snapshot: {field} ids must be mutually sortable") from exc
+                if not isinstance(item_id, str):
+                    raise ValueError(f"Invalid snapshot: {field}[{index}].{id_field} must be a string")
 
     @classmethod
     def from_dict(cls, data: dict) -> DataViewSnapshot:
