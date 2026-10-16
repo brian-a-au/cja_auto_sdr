@@ -3162,3 +3162,40 @@ def test_run_analysis_impl_logs_cluster_count_and_exposes_lock_backend(
     assert result.clusters == clusters
     compute_clusters.assert_called_once_with(summaries, precomputed=(summaries, {(0, 1): 0.9}))
     assert "Found 1 clusters" in caplog.text
+
+
+def test_compact_clusters_share_canonical_distance_buffer(mock_cja, logger, monkeypatch):
+    import numpy as np
+
+    captured = _install_fake_scipy(monkeypatch, labels=[1, 1, 1])
+    analyzer = _make_analyzer(mock_cja, logger, config=OrgReportConfig(enable_clustering=True))
+    summaries = [
+        DataViewSummary(data_view_id="a", data_view_name="Prod A", metric_ids={"shared"}),
+        DataViewSummary(data_view_id="b", data_view_name="Prod B", metric_ids={"shared", "b"}),
+        DataViewSummary(data_view_id="c", data_view_name="Prod C", metric_ids={"shared", "b", "c"}),
+    ]
+    precomputed = analyzer._compute_pairwise_jaccard(summaries)
+    _, pairwise = precomputed
+    clusters = analyzer._compute_clusters(summaries, precomputed=precomputed)
+    condensed = captured["condensed_dist"]
+    assert condensed.tolist() == [0.5, 1 - 1 / 3, 1 - 2 / 3]
+    assert np.shares_memory(condensed, np.frombuffer(pairwise.distances, dtype=float))
+    assert clusters is not None
+    assert len(clusters) == 1
+    assert clusters[0].data_view_ids == ["a", "b", "c"]
+    assert clusters[0].cohesion_score == 0.5
+
+
+def test_compact_cluster_cohesion_preserves_distance_round_trip(mock_cja, logger, monkeypatch):
+    _install_fake_scipy(monkeypatch, labels=[1, 1])
+    analyzer = _make_analyzer(mock_cja, logger, config=OrgReportConfig(enable_clustering=True))
+    summaries = [
+        DataViewSummary(data_view_id="a", data_view_name="A", metric_ids={"shared"}),
+        DataViewSummary(data_view_id="b", data_view_name="B", metric_ids={"shared"} | {f"m{i}" for i in range(159)}),
+    ]
+    precomputed = analyzer._compute_pairwise_jaccard(summaries)
+    assert precomputed[1][(0, 1)] == 0.00625
+    assert round(precomputed[1][(0, 1)], 4) == 0.0063
+    clusters = analyzer._compute_clusters(summaries, precomputed=precomputed)
+    assert clusters is not None
+    assert clusters[0].cohesion_score == 0.0062
