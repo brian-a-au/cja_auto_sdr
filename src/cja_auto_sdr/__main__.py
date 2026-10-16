@@ -85,6 +85,7 @@ class _FastPathRequest(NamedTuple):
     flag: str
     completion_shell: str | None = None
     explain_exit_code: int | None = None
+    help_output: str | None = None
 
 
 _STANDALONE_FAST_PATH_MODE_NAMES: Mapping[str, str] = {
@@ -250,15 +251,6 @@ def _has_run_summary_flag(args: list[str]) -> bool:
     return any(option == _RUN_SUMMARY_OPTION for option in scan.options)
 
 
-def _probe_argparse_termination(args: list[str], argv0: str | None = None) -> _ArgparseProbeResult | None:
-    """Return argparse termination info for *args* without printing output.
-
-    This uses the real parser as the source of truth for precedence and
-    validation (help/version actions, missing values, and mutex conflicts).
-    """
-    return _probe_argparse_parse(args, argv0).termination
-
-
 def _probe_argparse_parse(args: list[str], argv0: str | None = None) -> _ArgparseProbeParseResult:
     """Probe argparse parse result for *args* without emitting output."""
     from cja_auto_sdr.cli.parser import parse_arguments
@@ -375,19 +367,24 @@ def _resolve_fast_path_request(argv: list[str]) -> _FastPathRequest | None:
 
     scan = _scan_option_tokens(args)
 
+    probe = _probe_argparse_parse(args, argv[0] if argv else None)
+    termination = probe.termination
+    # Reuse the real parser's successful help action, including argparse's
+    # ordering, abbreviations, and short-option cluster behavior.
+    if termination is not None and termination.status == 0 and "usage:" in (termination.output or "").lower():
+        return _FastPathRequest(flag="--help", help_output=termination.output)
+
     has_version_candidate = any(option in (_VERSION_OPTION, _VERSION_SHORT_OPTION) for option in scan.options)
     if has_version_candidate:
-        probe = _probe_argparse_termination(args, argv[0] if argv else None)
-        if probe is not None:
-            probe_text = (probe.output or "").lower()
-            if probe.status == 0 and probe_text and "usage:" not in probe_text:
+        if termination is not None:
+            probe_text = (termination.output or "").lower()
+            if termination.status == 0 and probe_text and "usage:" not in probe_text:
                 return _FastPathRequest(flag=_VERSION_OPTION)
         return None
 
     if scan.has_parse_error:
         return None
 
-    probe = _probe_argparse_parse(args, argv[0] if argv else None)
     if probe.termination is not None:
         return None
 
@@ -526,6 +523,10 @@ def main() -> None:
         return
 
     request = _resolve_fast_path_request(sys.argv)
+
+    if request is not None and request.flag == "--help":
+        sys.stdout.write(request.help_output or "")
+        raise SystemExit(0)
 
     if request is not None and request.flag == "--version":
         _print_version(_resolve_program_name(sys.argv[0] if sys.argv else None))

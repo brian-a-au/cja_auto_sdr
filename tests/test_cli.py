@@ -723,7 +723,7 @@ class TestFastPathEntryPoint:
     def test_is_fast_path_flag_help_precedes_version(self):
         from cja_auto_sdr.__main__ import _is_fast_path_flag
 
-        assert _is_fast_path_flag(["prog", "--help", "--version"]) is None
+        assert _is_fast_path_flag(["prog", "--help", "--version"]) == "--help"
 
     def test_is_fast_path_flag_rejects_missing_value_before_version(self):
         from cja_auto_sdr.__main__ import _is_fast_path_flag

@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import runpy
+import subprocess
 import sys
 import warnings
 from contextlib import redirect_stderr, redirect_stdout
@@ -599,3 +600,70 @@ def test_main_module_invocation_executes_main_guard(
 
     assert exc_info.value.code == 0
     assert "cja_auto_sdr" in capsys.readouterr().out
+
+
+def test_help_termination_matches_full_entry_point(monkeypatch, capsys):
+    from cja_auto_sdr.__main__ import main as entry_main
+
+    cases = [
+        ["--help"],
+        ["-h"],
+        ["--hel"],
+        ["-qh"],
+        ["--help", "--version"],
+        ["--version", "--help"],
+        ["--unknown", "--help"],
+        ["--help", "--format", "invalid"],
+        ["--format", "invalid", "--help"],
+        ["--help=bad"],
+        ["--format", "--help"],
+        ["--help", "--out"],
+        ["--", "--help"],
+        ["-hV"],
+        ["-Vh"],
+        ["--help", "--run-summary-json", "-"],
+    ]
+    monkeypatch.delenv("_ARGCOMPLETE", raising=False)
+    monkeypatch.setattr(sys.modules["__main__"], "__spec__", None)
+    for args in cases:
+        monkeypatch.setattr(sys, "argv", ["cja_auto_sdr", *args])
+        monkeypatch.setattr(sys, "orig_argv", ["cja_auto_sdr", *args])
+        with pytest.raises(SystemExit) as full_exit:
+            main()
+        full_output = capsys.readouterr()
+        with pytest.raises(SystemExit) as entry_exit:
+            entry_main()
+        entry_output = capsys.readouterr()
+        assert entry_exit.value.code == full_exit.value.code, args
+        # Run summaries include timestamps and durations; their contract is
+        # covered separately. Help itself must remain byte-for-byte identical.
+        if "--run-summary-json" not in args:
+            assert entry_output == full_output, args
+        else:
+            assert entry_output.err == full_output.err, args
+            assert json.loads(entry_output.out)["exit_code"] == json.loads(full_output.out)["exit_code"]
+
+    monkeypatch.setattr(sys, "argv", ["cja_auto_sdr", "--help"])
+    monkeypatch.setenv("_ARGCOMPLETE", "1")
+    with patch("cja_auto_sdr.generator.main") as generator_main:
+        entry_main()
+    generator_main.assert_called_once_with()
+
+
+def test_help_avoids_heavy_imports_in_fresh_process():
+    script = """
+import sys
+from cja_auto_sdr.__main__ import main
+sys.argv = ["cja_auto_sdr", "--help"]
+try:
+    main()
+except SystemExit as exc:
+    assert exc.code == 0
+assert not {"cja_auto_sdr.generator", "pandas", "numpy", "cjapy", "tqdm"}.intersection(sys.modules)
+"""
+    env = os.environ.copy()
+    env.pop("_ARGCOMPLETE", None)
+    result = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, env=env, check=False)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.startswith("usage: cja_auto_sdr ")
+    assert result.stderr == ""
