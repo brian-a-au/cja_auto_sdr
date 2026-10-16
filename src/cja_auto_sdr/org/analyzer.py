@@ -12,6 +12,7 @@ import random
 import re
 import threading
 import time
+from array import array
 from collections import defaultdict
 from collections.abc import Iterator, Mapping
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
@@ -61,6 +62,39 @@ _STALE_KEYWORDS_RE = re.compile(
 )
 _VERSION_SUFFIX_RE = re.compile(r"[_\-]v\d+$", re.IGNORECASE)
 _DATE_PATTERN_RE = re.compile(r"[_\-]?(20\d{2}[01]\d[0-3]\d|20\d{2}[_\-][01]\d[_\-][0-3]\d)([_\-]|$)")
+
+
+class _PairwiseJaccard(Mapping[tuple[int, int], float]):
+    def __init__(self, component_sizes: list[int]):
+        self.component_sizes = component_sizes
+        self.intersections = array("Q")
+        self.distances = array("d")
+
+    def __len__(self) -> int:
+        return len(self.intersections)
+
+    def __iter__(self) -> Iterator[tuple[int, int]]:
+        n = len(self.component_sizes)
+        for i in range(n):
+            for j in range(i + 1, n):
+                yield i, j
+
+    def __getitem__(self, key: tuple[int, int]) -> float:
+        if not isinstance(key, tuple) or len(key) != 2:
+            raise KeyError(key)
+        i, j = key
+        n = len(self.component_sizes)
+        if not isinstance(i, int) or not isinstance(j, int) or not 0 <= i < j < n:
+            raise KeyError(key)
+        index = n * i - i * (i + 1) // 2 + j - i - 1
+        shared = self.intersections[index]
+        union = self.component_sizes[i] + self.component_sizes[j] - shared
+        return shared / union if union > 0 else 0.0
+
+    def iter_scores(self) -> Iterator[tuple[tuple[int, int], float, int, int]]:
+        for (i, j), shared in zip(self, self.intersections, strict=True):
+            union = self.component_sizes[i] + self.component_sizes[j] - shared
+            yield (i, j), shared / union if union > 0 else 0.0, shared, union
 
 
 class OrgComponentAnalyzer:
@@ -1137,15 +1171,19 @@ class OrgComponentAnalyzer:
     def _compute_pairwise_jaccard(self, summaries: list[DataViewSummary]) -> tuple:
         """Compute all pairwise Jaccard similarities between valid data views.
 
-        Returns the valid summaries list and a dict mapping (i, j) index pairs
+        Returns the valid summaries list and a compact mapping of (i, j) index pairs
         to Jaccard similarity values. Shared by both similarity matrix and
         clustering to avoid duplicate O(n²) computation.
 
         Returns:
-            Tuple of (valid_summaries, pairwise_similarities dict)
+            Tuple of (valid_summaries, pairwise_similarities mapping)
         """
         valid, component_sets = self._prepare_jaccard_inputs(summaries)
-        return valid, {pair: score for pair, score, _, _ in self._iter_pairwise_jaccard(component_sets)}
+        pairwise = _PairwiseJaccard([len(components) for components in component_sets])
+        for _, score, shared, _ in self._iter_pairwise_jaccard(component_sets):
+            pairwise.intersections.append(shared)
+            pairwise.distances.append(1 - score)
+        return valid, pairwise
 
     @staticmethod
     def _prepare_jaccard_inputs(summaries: list[DataViewSummary]) -> tuple[list[DataViewSummary], list[set[str]]]:
@@ -1199,7 +1237,11 @@ class OrgComponentAnalyzer:
         if precomputed is not None:
             valid_summaries, pairwise = precomputed
             component_sets = [s.all_component_ids for s in valid_summaries]
-            scores = ((pair, score, None, None) for pair, score in pairwise.items())
+            scores = (
+                pairwise.iter_scores()
+                if isinstance(pairwise, _PairwiseJaccard)
+                else ((pair, score, None, None) for pair, score in pairwise.items())
+            )
         else:
             valid_summaries, component_sets = self._prepare_jaccard_inputs(summaries)
             scores = self._iter_pairwise_jaccard(component_sets)
@@ -1297,11 +1339,14 @@ class OrgComponentAnalyzer:
 
         # SciPy consumes the upper triangle in row order. Build it directly
         # instead of allocating and then copying an n-by-n distance matrix.
-        condensed_dist = np.fromiter(
-            (1 - pairwise[(i, j)] for i in range(n) for j in range(i + 1, n)),
-            dtype=float,
-            count=n * (n - 1) // 2,
-        )
+        if isinstance(pairwise, _PairwiseJaccard):
+            condensed_dist = np.frombuffer(pairwise.distances, dtype=float)
+        else:
+            condensed_dist = np.fromiter(
+                (1 - pairwise[(i, j)] for i in range(n) for j in range(i + 1, n)),
+                dtype=float,
+                count=n * (n - 1) // 2,
+            )
 
         # Perform hierarchical clustering
         try:
@@ -1335,7 +1380,8 @@ class OrgComponentAnalyzer:
                         idx_i, idx_j = member_indices[i], member_indices[j]
                         # Preserve the distance round trip used by the old matrix
                         # so four-decimal rounding stays stable at float boundaries.
-                        distance = 1 - pairwise[(idx_i, idx_j)]
+                        distance_index = n * idx_i - idx_i * (idx_i + 1) // 2 + idx_j - idx_i - 1
+                        distance = float(condensed_dist[distance_index])
                         similarities.append(1 - distance)
                 cohesion = sum(similarities) / len(similarities) if similarities else 0.0
 

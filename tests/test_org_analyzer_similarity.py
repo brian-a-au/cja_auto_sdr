@@ -260,3 +260,50 @@ def test_similarity_order_is_stable_for_scores_that_round_to_a_tie():
     assert pairs == analyzer._compute_similarity_matrix(
         summaries, precomputed=analyzer._compute_pairwise_jaccard(summaries)
     )
+
+
+def test_pairwise_mapping_preserves_raw_float_and_key_behavior():
+    summaries = [_dv("a", ["shared"], []), _dv("b", ["shared", "b", "c"], [])]
+    analyzer = OrgComponentAnalyzer(MagicMock(), OrgReportConfig(overlap_threshold=1 / 3), logging.getLogger("t"))
+    precomputed = analyzer._compute_pairwise_jaccard(summaries)
+    _, pairwise = precomputed
+    assert 1 / 3 != 1 - (1 - 1 / 3)
+    assert pairwise == {(0, 1): 1 / 3}
+    assert {(0, 1): 1 / 3} == pairwise
+    assert list(pairwise) == [(0, 1)]
+    assert list(pairwise.items()) == [((0, 1), 1 / 3)]
+    for key in [(1, 0), (0, 0), (-1, 1), (0, 2), "invalid"]:
+        with pytest.raises(KeyError):
+            pairwise[key]
+    pairs = analyzer._compute_similarity_matrix(summaries, precomputed=precomputed)
+    assert len(pairs) == 1
+    assert pairs[0].shared_count == 1
+    assert pairs[0].union_count == 3
+
+
+def test_real_scipy_linkage_preserves_condensed_input():
+    np = pytest.importorskip("numpy")
+    hierarchy = pytest.importorskip("scipy.cluster.hierarchy")
+    for method in ["single", "complete", "average", "weighted", "centroid", "median", "ward"]:
+        distances = np.array([2 / 3, 0.5, 0.75, 0.25, 0.6, 0.8])
+        before = distances.copy()
+        hierarchy.linkage(distances, method=method)
+        assert np.array_equal(distances, before)
+
+
+def test_compact_precomputed_similarity_reuses_intersection_counts(monkeypatch):
+    analyzer = OrgComponentAnalyzer(MagicMock(), OrgReportConfig(overlap_threshold=0), logging.getLogger("t"))
+    summaries = [_dv("a", ["shared", "a"], []), _dv("b", ["shared", "b"], [])]
+    precomputed = analyzer._compute_pairwise_jaccard(summaries)
+
+    class NoIntersection(set):
+        def __and__(self, other):
+            pytest.fail("precomputed similarity repeated an intersection")
+
+    getter = DataViewSummary.all_component_ids.fget
+    monkeypatch.setattr(DataViewSummary, "all_component_ids", property(lambda summary: NoIntersection(getter(summary))))
+    pairs = analyzer._compute_similarity_matrix(summaries, precomputed=precomputed)
+    assert len(pairs) == 1
+    assert pairs[0].shared_count == 1
+    assert pairs[0].union_count == 3
+    assert pairs[0].jaccard_similarity == 0.3333

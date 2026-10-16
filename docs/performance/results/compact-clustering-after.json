@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "revision": "a1d33bcb6d8d245904d2ef7f714f47a797b59d8e",
+  "python": "3.14.0 (main, Oct 14 2025, 21:10:22) [Clang 20.1.4 ]",
+  "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+  "hash_seed": 0,
+  "dependency_versions": {
+    "pandas": "3.0.6",
+    "numpy": "2.5.4",
+    "xlsxwriter": "3.2.9",
+    "cjapy": "0.3.1"
+  },
+  "lockfile_sha256": "148683187aa98a6ae35e1f7888ae17652e219d84be72b2945a8c4ef233307c9c",
+  "working_tree_dirty": true,
+  "config": {
+    "scenarios": [
+      "org-clustering"
+    ],
+    "samples": 5,
+    "warmups": 1,
+    "components": 20,
+    "views": 500,
+    "batch_size": 4
+  },
+  "scenarios": {
+    "org-clustering": {
+      "cold_process_seconds": {
+        "samples": [
+          3.0091724160010926,
+          2.2913389580207877,
+          2.6179186669760384,
+          2.7751622080104426,
+          2.8491493749897927
+        ],
+        "median": 2.7751622080104426
+      },
+      "warm_operation_seconds": {
+        "samples": [
+          0.25754570798017085,
+          0.23881929100025445,
+          0.31661737500689924,
+          0.23538091697264463,
+          0.31722295901272446
+        ],
+        "median": 0.25754570798017085
+      },
+      "peak_traced_bytes": 45718944,
+      "correctness_sha256": "6d03375a16667fb39aebf5c3d4b237f046db57554489541c1df225d9596c1192"
+    }
+  }
+}
