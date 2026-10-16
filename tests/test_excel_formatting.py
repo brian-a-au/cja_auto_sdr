@@ -578,3 +578,38 @@ class TestWriteExcelOutputFormatCache:
         first_cache = seen_caches[0][1]
         assert first_cache is not None
         assert all(cache is first_cache for _, cache in seen_caches)
+
+
+def test_benchmark_workbook_digest_preserves_semantics(tmp_path):
+    from zipfile import ZipFile, ZipInfo
+
+    from scripts.benchmark_workloads import artifact, digest
+
+    namespace = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+
+    def workbook(name, cell, row_attributes="", strings=("7", "other"), year=2025):
+        path = tmp_path / name
+        members = {
+            "xl/workbook.xml": f'<workbook xmlns="{namespace}"><sheets><sheet name="Metrics"/></sheets></workbook>',
+            "xl/worksheets/sheet1.xml": (
+                f'<worksheet xmlns="{namespace}"><sheetData><row r="1" {row_attributes}>'
+                f"{cell}</row></sheetData></worksheet>"
+            ),
+            "xl/sharedStrings.xml": f'<sst xmlns="{namespace}">'
+            + "".join(f"<si><t>{value}</t></si>" for value in strings)
+            + "</sst>",
+        }
+        with ZipFile(path, "w") as archive:
+            for member, payload in members.items():
+                archive.writestr(ZipInfo(member, date_time=(year, 1, 1, 0, 0, 0)), payload)
+        return digest(artifact(path))
+
+    text = workbook("text.xlsx", '<c r="A1" t="s"><v>0</v></c>')
+    number = workbook("number.xlsx", '<c r="A1"><v>7</v></c>')
+    assert text != number
+    for index, attributes in enumerate(['ht="40" customHeight="1"', 's="2" customFormat="1"', 'hidden="1"']):
+        assert text != workbook(f"row{index}.xlsx", '<c r="A1" t="s"><v>0</v></c>', attributes)
+    assert text == workbook("reordered.xlsx", '<c r="A1" t="s"><v>1</v></c>', strings=("other", "7"), year=2026)
+    assert workbook("formula1.xlsx", '<c r="A1"><f>1+1</f><v>2</v></c>') != workbook(
+        "formula2.xlsx", '<c r="A1"><f>2*1</f><v>2</v></c>'
+    )

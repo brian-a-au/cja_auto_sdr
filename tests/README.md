@@ -178,7 +178,7 @@ tests/
 └── README.md                        # This file
 ```
 
-**Total: 8,762 comprehensive tests**
+**Total: 8,763 comprehensive tests**
 
 ### Test Count Breakdown
 
@@ -187,16 +187,16 @@ tests/
 
 | Category | Tests | Files | Notes |
 |----------|-------|-------|-------|
-| `unit` | 8,631 | 160 | Default primary category for files without explicit integration/e2e/smoke scope |
+| `unit` | 8,632 | 160 | Default primary category for files without explicit integration/e2e/smoke scope |
 | `integration` | 98 | 3 | Cross-module integration suites |
 | `e2e` | 23 | 2 | End-to-end suites with a mocked external boundary |
 | `smoke` | 10 | 1 | Lightweight command-mode coverage |
 | `slow` | 0 | 0 | Overlay marker; these tests are also counted in a primary category |
-| **Primary Total** | **8,762** | **166** | **unit + integration + e2e + smoke** |
+| **Primary Total** | **8,763** | **166** | **unit + integration + e2e + smoke** |
 
 | CI Slice | Tests | Files | Selector |
 |----------|-------|-------|----------|
-| `test-unit` | 8,631 | 160 | `-m "unit and not slow"` |
+| `test-unit` | 8,632 | 160 | `-m "unit and not slow"` |
 | `test-integration` | 121 | 5 | `-m "integration or e2e or slow"` |
 | `smoke-test` | 10 | 1 | `-m smoke` |
 
@@ -226,7 +226,7 @@ tests/
 | `test_cjapy_retry_interaction.py` | 58 | cjapy retry/status-payload normalization contract |
 | `test_classify_component_payload.py` | 10 | Shared component payload classification helper |
 | `test_utils.py` | 50 | Utility functions and helpers |
-| `test_excel_formatting.py` | 30 | Excel sheet formatting and styling |
+| `test_excel_formatting.py` | 31 | Excel sheet formatting and styling |
 | `test_parallel_api_fetcher.py` | 41 | Parallel API data fetching |
 | `test_api_tuning.py` | 25 | API worker auto-tuning |
 | `test_error_messages.py` | 23 | Enhanced error messages and guidance |
@@ -372,7 +372,7 @@ tests/
 | `test_diff_snapshot_retention.py` | 81 | Diff snapshot-retention parse-cache characterization test |
 | `test_diff_comparator_normalize.py` | 7 | Diff field-normalization type-fast-path characterization test |
 | `test_logging_diagnostics.py` | 2 | emit_diagnostic isEnabledFor guard characterization tests |
-| **Total** | **8,762** | **Collected via pytest --collect-only** |
+| **Total** | **8,763** | **Collected via pytest --collect-only** |
 
 ## Running Tests
 
@@ -830,7 +830,7 @@ the `tests/README.md` inventory tree or count table.
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (8,762 tests total)
+- [x] Comprehensive test coverage (8,763 tests total)
 - [x] Org-wide analysis tests (test_org_report.py) - 209 tests (including large org scaling, output path aliases, memory warnings, smart cache invalidation)
 - [x] Org-wide analysis integration tests (test_org_report_integration.py) - 42 tests (end-to-end flows, caching, filtering, governance thresholds)
 - [x] Profile management tests (test_profiles.py) - 80 tests
