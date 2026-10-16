@@ -1,0 +1,84 @@
+{
+  "schema_version": 1,
+  "revision": "191ba5f2155da0a5d3197881a6b444f53f1cd1bc",
+  "python": "3.14.0 (main, Oct 14 2025, 21:10:22) [Clang 20.1.4 ]",
+  "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+  "hash_seed": 0,
+  "dependency_versions": {
+    "pandas": "3.0.6",
+    "numpy": "2.5.4",
+    "xlsxwriter": "3.2.9",
+    "cjapy": "0.3.1"
+  },
+  "lockfile_sha256": "148683187aa98a6ae35e1f7888ae17652e219d84be72b2945a8c4ef233307c9c",
+  "working_tree_dirty": true,
+  "config": {
+    "scenarios": [
+      "org-similarity",
+      "org-clustering"
+    ],
+    "samples": 7,
+    "warmups": 2,
+    "components": 1000,
+    "views": 25,
+    "batch_size": 4
+  },
+  "scenarios": {
+    "org-similarity": {
+      "cold_process_seconds": {
+        "samples": [
+          1.083250958006829,
+          0.8711167500005104,
+          0.950060666014906,
+          1.4191567919915542,
+          1.0152206670027226,
+          0.8332418330246583,
+          0.9634695840068161
+        ],
+        "median": 0.9634695840068161
+      },
+      "warm_operation_seconds": {
+        "samples": [
+          0.019995790964458138,
+          0.019462374970316887,
+          0.018534875009208918,
+          0.021692249982152134,
+          0.019992750021629035,
+          0.017649417044594884,
+          0.02026691602077335
+        ],
+        "median": 0.019992750021629035
+      },
+      "peak_traced_bytes": 6679456,
+      "correctness_sha256": "bbabf96210eb64632f2c0bc47e9ee4f659f6f5121a1fbe4617a673471b9c66a1"
+    },
+    "org-clustering": {
+      "cold_process_seconds": {
+        "samples": [
+          1.2150961249717511,
+          1.2933587079751305,
+          1.1710369170177728,
+          1.2074494999833405,
+          0.9447179579874501,
+          1.1568613340496086,
+          1.1022717090090737
+        ],
+        "median": 1.1710369170177728
+      },
+      "warm_operation_seconds": {
+        "samples": [
+          0.029079333995468915,
+          0.030167165969032794,
+          0.027502291020937264,
+          0.029005833028350025,
+          0.02873704198282212,
+          0.031379375024698675,
+          0.03132466698298231
+        ],
+        "median": 0.029079333995468915
+      },
+      "peak_traced_bytes": 6696056,
+      "correctness_sha256": "96785e28703f6765218ba0390d978cc5588d37b55da39107c412a2a9a1a24bd8"
+    }
+  }
+}

@@ -144,7 +144,27 @@ def test_similarity_only_does_not_materialize_rejected_distances(monkeypatch):
         pytest.fail("similarity-only analysis retained the full pairwise dictionary")
 
     monkeypatch.setattr(analyzer, "_compute_pairwise_jaccard", unexpected_materialization)
+    intersections = []
+    prepare_inputs = analyzer._prepare_jaccard_inputs
+
+    class CountedSet(set):
+        def __and__(self, other):
+            intersections.append(1)
+            return super().__and__(other)
+
+    def counted_inputs(values):
+        valid, sets = prepare_inputs(values)
+        return valid, [CountedSet(value) for value in sets]
+
+    monkeypatch.setattr(analyzer, "_prepare_jaccard_inputs", counted_inputs)
     assert analyzer._compute_similarity_matrix(summaries) == []
+    assert len(intersections) == 40 * 39 // 2
+
+    intersections.clear()
+    accepted = analyzer._compute_similarity_matrix([_dv(str(i), ["shared"], []) for i in range(40)])
+    assert len(accepted) == 40 * 39 // 2
+    assert all(pair.shared_count == pair.union_count == 1 for pair in accepted)
+    assert len(intersections) == 40 * 39 // 2
 
 
 @pytest.mark.parametrize("threshold", [0.9, 0.95, 1.0])
