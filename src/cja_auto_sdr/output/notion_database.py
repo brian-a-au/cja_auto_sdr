@@ -16,7 +16,7 @@ metadata.
 
 from __future__ import annotations
 
-import datetime as _dt
+import datetime as dt
 import os
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -186,7 +186,7 @@ def _iso_date_value(raw: str | None) -> dict | None:
         return None
     s = str(raw).strip()
     try:
-        return {"start": _dt.datetime.fromisoformat(s).isoformat()}
+        return {"start": dt.datetime.fromisoformat(s).isoformat()}
     except ValueError:
         pass
     import re
@@ -206,10 +206,10 @@ def build_row_properties(
     page_id: str,
     *,
     tool_version: str,
-    now: _dt.datetime | None = None,
+    now: dt.datetime | None = None,
 ) -> dict[str, dict]:
     """Build the Notion ``properties`` payload for one database row."""
-    now = now or _dt.datetime.now(_dt.UTC)
+    now = now or dt.datetime.now(dt.UTC)
     dv_name = str(metadata_dict.get("Data View Name", ""))
     dv_id = str(metadata_dict.get("Data View ID", ""))
     captured_at = metadata_dict.get("Generated Date & timestamp and timezone")
@@ -243,7 +243,7 @@ def build_catalog_row_properties(
     page_id: str | None = None,
     tool_version: str,
     captured_at: str | None = None,
-    now: _dt.datetime | None = None,
+    now: dt.datetime | None = None,
 ) -> dict[str, dict]:
     """Build the Notion ``properties`` payload for an org-report catalog row.
 
@@ -252,7 +252,7 @@ def build_catalog_row_properties(
     columns (Segments, Calculated Metrics, Derived Fields) as ``None`` and
     Data Quality as "unknown".
     """
-    now = now or _dt.datetime.now(_dt.UTC)
+    now = now or dt.datetime.now(dt.UTC)
     sdr_page_url = f"notion://pages/{page_id}" if page_id else ""
     return {
         "Name": {"title": _title(data_view_name)},
