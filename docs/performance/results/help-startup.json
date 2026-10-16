@@ -1,0 +1,95 @@
+{
+  "schema_version": 1,
+  "revision": "191ba5f2155da0a5d3197881a6b444f53f1cd1bc",
+  "python": "3.14.0 (main, Oct 14 2025, 21:10:22) [Clang 20.1.4 ]",
+  "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+  "hash_seed": 0,
+  "dependency_versions": {
+    "pandas": "3.0.6",
+    "numpy": "2.5.4",
+    "xlsxwriter": "3.2.9",
+    "cjapy": "0.3.1"
+  },
+  "lockfile_sha256": "148683187aa98a6ae35e1f7888ae17652e219d84be72b2945a8c4ef233307c9c",
+  "working_tree_dirty": true,
+  "config": {
+    "scenarios": [
+      "cli-version",
+      "cli-help",
+      "cli-exit-codes"
+    ],
+    "samples": 9,
+    "warmups": 2,
+    "components": 1000,
+    "views": 25,
+    "batch_size": 4
+  },
+  "scenarios": {
+    "cli-version": {
+      "cold_process_seconds": {
+        "samples": [
+          0.09527112497016788,
+          0.06790800002636388,
+          0.06842116598272696,
+          0.06726262503070757,
+          0.06553879100829363,
+          0.0720865000039339,
+          0.07681050000246614,
+          0.06869758298853412,
+          0.07422070798929781
+        ],
+        "median": 0.06869758298853412
+      },
+      "warm_operation_seconds": {
+        "samples": [],
+        "median": null
+      },
+      "peak_traced_bytes": null,
+      "correctness_sha256": "e9604ed66296abf91b3d197e07c75eb10ab2fa9deaa6559d36408402283ecc36"
+    },
+    "cli-help": {
+      "cold_process_seconds": {
+        "samples": [
+          0.07197866699425504,
+          0.06936608295654878,
+          0.06711283401818946,
+          0.06790508300764486,
+          0.06888691702624783,
+          0.07082554104272276,
+          0.07604333298513666,
+          0.08049616700736806,
+          0.06890383397694677
+        ],
+        "median": 0.06936608295654878
+      },
+      "warm_operation_seconds": {
+        "samples": [],
+        "median": null
+      },
+      "peak_traced_bytes": null,
+      "correctness_sha256": "b367543f672e97af9c4a248fc349f31a396befb653e31a8956e44df3789bddde"
+    },
+    "cli-exit-codes": {
+      "cold_process_seconds": {
+        "samples": [
+          0.08106091700028628,
+          0.06773104099556804,
+          0.0901754170190543,
+          0.061736583011224866,
+          0.0681203329586424,
+          0.07136454101419076,
+          0.06421629100805148,
+          0.06413933297153562,
+          0.07000258303014562
+        ],
+        "median": 0.0681203329586424
+      },
+      "warm_operation_seconds": {
+        "samples": [],
+        "median": null
+      },
+      "peak_traced_bytes": null,
+      "correctness_sha256": "24949c82caea06b2e2f40dc28986991aabbc5f516860498104787a021a2f1098"
+    }
+  }
+}
