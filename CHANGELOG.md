@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.12.12] - 2026-10-16
+
+### Performance
+
+- **Org-report similarity:** reuse intersection and union counts for accepted pairs while retaining streaming rejection, exact thresholds and stable ordering. Paired local synthetic measurements showed a 28.1% lower warm similarity median.
+- **Org-report clustering:** store exact intersection counts and canonical distances in compact arrays, avoiding the tuple-key score dictionary and a second condensed-distance allocation. The scaled local synthetic workload used 27.0% less peak Python-traced allocation and had a 32.1% lower warm median, with unchanged output digests and cohesion rounding. These measurements do not describe total RSS or API latency.
+- **CLI help startup:** return the real parser's help output before importing heavy dependencies. Local cold-process help median fell from 860.6 ms to 69.4 ms (91.9% shorter), preserving argument precedence, completion and run-summary behavior.
+
+### Added
+
+- Reproducible offline workload benchmarks and raw results for CLI startup, JSON/Excel generation, org similarity/clustering, sequential batch workers and local validation-cache hits/misses. Document contract and measurement reasons for deferring endpoint skipping, bounded submission and shared-cache changes.
+
+### Changed
+
+- Update NumPy to 2.5.4, development Ruff to 0.17.0 and the setup-uv workflow dependency.
+
 ## [3.12.11] - 2026-10-09
 
 ### Performance
