@@ -1145,7 +1145,7 @@ class OrgComponentAnalyzer:
             Tuple of (valid_summaries, pairwise_similarities dict)
         """
         valid, component_sets = self._prepare_jaccard_inputs(summaries)
-        return valid, dict(self._iter_pairwise_jaccard(component_sets))
+        return valid, {pair: score for pair, score, _, _ in self._iter_pairwise_jaccard(component_sets)}
 
     @staticmethod
     def _prepare_jaccard_inputs(summaries: list[DataViewSummary]) -> tuple[list[DataViewSummary], list[set[str]]]:
@@ -1162,7 +1162,9 @@ class OrgComponentAnalyzer:
         return valid, component_sets
 
     @staticmethod
-    def _iter_pairwise_jaccard(component_sets: list[set[str]]) -> Iterator[tuple[tuple[int, int], float]]:
+    def _iter_pairwise_jaccard(
+        component_sets: list[set[str]],
+    ) -> Iterator[tuple[tuple[int, int], float, int, int]]:
         """Yield exact scores in input pair order without retaining rejected distances."""
         for i in range(len(component_sets)):
             set_i = component_sets[i]
@@ -1171,7 +1173,7 @@ class OrgComponentAnalyzer:
                 set_j = component_sets[j]
                 intersection = len(set_i & set_j)
                 union = len_i + len(set_j) - intersection  # no `set_i | set_j` allocation
-                yield (i, j), intersection / union if union > 0 else 0.0
+                yield (i, j), intersection / union if union > 0 else 0.0, intersection, union
 
     def _compute_similarity_matrix(
         self,
@@ -1197,7 +1199,7 @@ class OrgComponentAnalyzer:
         if precomputed is not None:
             valid_summaries, pairwise = precomputed
             component_sets = [s.all_component_ids for s in valid_summaries]
-            scores = pairwise.items()
+            scores = ((pair, score, None, None) for pair, score in pairwise.items())
         else:
             valid_summaries, component_sets = self._prepare_jaccard_inputs(summaries)
             scores = self._iter_pairwise_jaccard(component_sets)
@@ -1205,15 +1207,15 @@ class OrgComponentAnalyzer:
         pairs = []
         min_similarity_threshold = effective_governance_overlap_threshold(self.config.overlap_threshold)
 
-        for (i, j), similarity in scores:
+        for (i, j), similarity, shared_count, union_count in scores:
             if similarity >= min_similarity_threshold:
                 dv1 = valid_summaries[i]
                 dv2 = valid_summaries[j]
                 set1 = component_sets[i]
                 set2 = component_sets[j]
 
-                intersection = len(set1 & set2)
-                union = len(set1) + len(set2) - intersection  # no `set1 | set2` allocation
+                intersection = shared_count if shared_count is not None else len(set1 & set2)
+                union = union_count if union_count is not None else len(set1) + len(set2) - intersection
 
                 # Compute drift details if enabled
                 only_in_dv1 = []
