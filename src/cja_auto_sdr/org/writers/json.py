@@ -201,6 +201,7 @@ def build_org_report_json_data(
         else None,
         "recommendations": [_normalize_recommendation_for_json(rec) for rec in result.recommendations],
         # New features
+        "governance_checks": result.governance_checks,
         "governance_violations": result.governance_violations,
         "thresholds_exceeded": result.thresholds_exceeded,
         "naming_audit": result.naming_audit,

@@ -19,6 +19,7 @@ from cja_auto_sdr.org.models import (
 from cja_auto_sdr.org.writers.common import (
     _flatten_recommendation_for_tabular as _flatten_recommendation_for_tabular_impl,
 )
+from cja_auto_sdr.org.writers.common import _governance_check_rows
 from cja_auto_sdr.org.writers.common import (
     _normalize_recommendation_for_json as _normalize_recommendation_for_json_impl,
 )
@@ -99,6 +100,11 @@ def write_org_report_csv(
         csv_dir = Path(output_dir) / f"org_report_{result.org_id}_{timestamp}"
 
     csv_dir.mkdir(parents=True, exist_ok=True)
+
+    if result.governance_checks:
+        pd.DataFrame(_governance_check_rows(result.governance_checks)).to_csv(
+            csv_dir / "org_report_governance_checks.csv", index=False
+        )
 
     # 1. Summary CSV
     # Calculate total aggregates (non-unique counts across all data views)
