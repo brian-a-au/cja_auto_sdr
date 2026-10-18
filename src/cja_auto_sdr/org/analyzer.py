@@ -393,7 +393,22 @@ class OrgComponentAnalyzer:
 
         if not data_views:
             self.logger.warning("No data views found matching criteria")
+            checks, violations = self._evaluate_governance_thresholds(
+                None,
+                ComponentDistribution(),
+                0,
+                scope={
+                    "selected_data_views": 0,
+                    "successful_data_views": 0,
+                    "failed_data_views": 0,
+                    "total_available_data_views": total_available,
+                    "is_sampled": is_sampled,
+                },
+                similarity_unavailable_reason="no_data_views",
+            )
             return OrgReportResult(
+                governance_checks=checks,
+                governance_violations=violations if checks else None,
                 timestamp=timestamp,
                 org_id=self.org_id,
                 parameters=self.config,
@@ -481,18 +496,32 @@ class OrgComponentAnalyzer:
         recommendations = self._generate_recommendations(summaries, component_index, distribution, similarity_pairs)
         self._assert_lock_healthy()
 
-        # 8. Check governance thresholds (Feature 1)
-        governance_violations = None
-        thresholds_exceeded = False
-        if self.config.duplicate_threshold is not None or self.config.isolated_threshold is not None:
+        similarity_unavailable_reason = None
+        if self.config.org_stats_only:
+            similarity_unavailable_reason = "org_stats_only"
+        elif self.config.skip_similarity:
+            similarity_unavailable_reason = "skip_similarity"
+        elif similarity_guardrail_blocked:
+            similarity_unavailable_reason = "similarity_guardrail"
+        governance_checks, violations = self._evaluate_governance_thresholds(
+            similarity_pairs,
+            distribution,
+            len(component_index),
+            scope={
+                "selected_data_views": len(summaries),
+                "successful_data_views": len(successful_summaries),
+                "failed_data_views": len(summaries) - len(successful_summaries),
+                "total_available_data_views": total_available,
+                "is_sampled": is_sampled,
+            },
+            similarity_unavailable_reason=similarity_unavailable_reason,
+        )
+        governance_violations = violations if governance_checks else None
+        thresholds_exceeded = bool(violations)
+        if governance_checks:
             self.logger.info("Checking governance thresholds...")
-            governance_violations, thresholds_exceeded = self._check_governance_thresholds(
-                similarity_pairs,
-                distribution,
-                len(component_index),
-            )
-            if thresholds_exceeded:
-                self.logger.warning("Governance thresholds exceeded: %s violation(s)", len(governance_violations))
+        if thresholds_exceeded:
+            self.logger.warning("Governance thresholds exceeded: %s violation(s)", len(violations))
         self._assert_lock_healthy()
 
         # 9. Naming audit (Feature 3)
@@ -536,6 +565,7 @@ class OrgComponentAnalyzer:
             clusters=clusters,
             is_sampled=is_sampled,
             total_available_data_views=total_available,
+            governance_checks=governance_checks,
             governance_violations=governance_violations,
             thresholds_exceeded=thresholds_exceeded,
             naming_audit=naming_audit,
@@ -1621,38 +1651,69 @@ class OrgComponentAnalyzer:
         distribution: ComponentDistribution,
         total_components: int,
     ) -> tuple[list[dict[str, Any]], bool]:
-        """Check if governance thresholds are exceeded (Feature 1).
+        _, violations = self._evaluate_governance_thresholds(similarity_pairs, distribution, total_components)
+        return violations, bool(violations)
 
-        Args:
-            similarity_pairs: List of similarity pairs from analysis
-            distribution: Component distribution across buckets
-            total_components: Total unique components
-
-        Returns:
-            Tuple of (violations_list, thresholds_exceeded)
-        """
+    def _evaluate_governance_thresholds(
+        self,
+        similarity_pairs: list[SimilarityPair] | None,
+        distribution: ComponentDistribution,
+        total_components: int,
+        *,
+        scope: dict[str, Any] | None = None,
+        similarity_unavailable_reason: str | None = None,
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        checks = []
         violations = []
-        exceeded = False
-
-        # Check duplicate threshold (high-similarity pairs >= 90%)
-        if self.config.duplicate_threshold is not None and similarity_pairs:
-            high_sim_pairs = [p for p in similarity_pairs if p.jaccard_similarity >= GOVERNANCE_MAX_OVERLAP_THRESHOLD]
-            if len(high_sim_pairs) > self.config.duplicate_threshold:
+        scope = scope or {}
+        if self.config.duplicate_threshold is not None:
+            actual = (
+                sum(p.jaccard_similarity >= GOVERNANCE_MAX_OVERLAP_THRESHOLD for p in similarity_pairs)
+                if similarity_pairs is not None
+                else None
+            )
+            successful = scope.get("successful_data_views", 0)
+            check = {
+                "type": "duplicate_threshold",
+                "status": "not_evaluated"
+                if actual is None
+                else ("fail" if actual > self.config.duplicate_threshold else "pass"),
+                "threshold": self.config.duplicate_threshold,
+                "actual": actual,
+                "denominator": successful * (successful - 1) // 2,
+                "denominator_type": "data_view_pairs",
+                "scope": scope,
+                "reason": (similarity_unavailable_reason or "similarity_unavailable") if actual is None else None,
+            }
+            checks.append(check)
+            if check["status"] == "fail":
                 violations.append(
                     {
                         "type": "duplicate_threshold_exceeded",
                         "threshold": self.config.duplicate_threshold,
-                        "actual": len(high_sim_pairs),
-                        "message": f"Found {len(high_sim_pairs)} high-similarity pairs (>=90%), threshold is {self.config.duplicate_threshold}",
-                    },
+                        "actual": actual,
+                        "message": f"Found {actual} high-similarity pairs (>=90%), threshold is {self.config.duplicate_threshold}",
+                    }
                 )
-                exceeded = True
 
-        # Check isolated threshold (percentage of isolated components)
-        if self.config.isolated_threshold is not None and total_components > 0:
+        if self.config.isolated_threshold is not None:
             isolated_count = distribution.total_isolated
-            isolated_pct = isolated_count / total_components
-            if isolated_pct > self.config.isolated_threshold:
+            isolated_pct = isolated_count / total_components if total_components > 0 else None
+            check = {
+                "type": "isolated_threshold",
+                "status": "not_evaluated"
+                if isolated_pct is None
+                else ("fail" if isolated_pct > self.config.isolated_threshold else "pass"),
+                "threshold": self.config.isolated_threshold,
+                "actual": isolated_pct,
+                "denominator": total_components,
+                "denominator_type": "unique_components",
+                "isolated_count": isolated_count,
+                "scope": scope,
+                "reason": "no_components" if isolated_pct is None else None,
+            }
+            checks.append(check)
+            if check["status"] == "fail":
                 violations.append(
                     {
                         "type": "isolated_threshold_exceeded",
@@ -1661,11 +1722,10 @@ class OrgComponentAnalyzer:
                         "isolated_count": isolated_count,
                         "total_components": total_components,
                         "message": f"Isolated components at {isolated_pct * 100:.1f}% ({isolated_count}/{total_components}), threshold is {self.config.isolated_threshold * 100:.1f}%",
-                    },
+                    }
                 )
-                exceeded = True
 
-        return violations, exceeded
+        return checks, violations
 
     def _audit_naming_conventions(self, component_index: dict[str, ComponentInfo]) -> dict[str, Any]:
         """Audit naming convention consistency (Feature 3).

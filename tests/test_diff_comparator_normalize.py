@@ -5,6 +5,42 @@ for consistent diff comparison.
 """
 
 import numpy as np
+import pandas as pd
+import pytest
+
+
+class TestDerivedDefinitions:
+    @pytest.mark.parametrize(
+        ("before", "after", "changed"),
+        [
+            ('[{"func":"match","value":"a"}]', [{"value": "a", "func": "match"}], False),
+            ({"rules": [1, 2]}, {"rules": [2, 1]}, True),
+            ({"value": True}, {"value": 1}, True),
+            ({"value": None}, {"value": ""}, True),
+            ({"value": {}}, {}, True),
+            ({"value": []}, {}, True),
+            ({"value": None}, {}, True),
+            ({"value": " a "}, {"value": "a"}, True),
+            ({"value": "true"}, {"value": True}, True),
+            ("malformed {", " malformed { ", True),
+            ("malformed {", "malformed {", False),
+            (pd.NA, None, False),
+            (np.nan, None, False),
+            (None, "", True),
+        ],
+    )
+    def test_definition_fidelity(self, before, after, changed):
+        from cja_auto_sdr.diff.comparator import DataViewComparator
+        from cja_auto_sdr.diff.models import DataViewSnapshot
+
+        source = DataViewSnapshot(
+            data_view_id="dv_1", data_view_name="Test", metrics=[{"id": "m1", "fieldDefinition": before}], dimensions=[]
+        )
+        target = DataViewSnapshot(
+            data_view_id="dv_1", data_view_name="Test", metrics=[{"id": "m1", "fieldDefinition": after}], dimensions=[]
+        )
+        result = DataViewComparator(compare_fields=["fieldDefinition"]).compare(source, target)
+        assert bool(result.summary.metrics_modified) is changed
 
 
 class TestNormalizeValue:

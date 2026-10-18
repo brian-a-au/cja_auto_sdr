@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+from contextlib import suppress
 from typing import Any, ClassVar
 
 import pandas as pd
@@ -57,6 +58,7 @@ class DataViewComparator:
         "formula",
         "isCalculated",
         "derivedFieldId",
+        "fieldDefinition",
     ]
 
     CALC_METRICS_COMPARE_FIELDS: ClassVar[list[str]] = [
@@ -517,8 +519,12 @@ class DataViewComparator:
             source_val = source.get(field)
             target_val = target.get(field)
 
-            source_normalized = self._normalize_value(source_val, field_name=field)
-            target_normalized = self._normalize_value(target_val, field_name=field)
+            if field == "fieldDefinition":
+                source_normalized = self._normalize_field_definition(source_val)
+                target_normalized = self._normalize_field_definition(target_val)
+            else:
+                source_normalized = self._normalize_value(source_val, field_name=field)
+                target_normalized = self._normalize_value(target_val, field_name=field)
 
             if source_normalized != target_normalized:
                 changed[field] = (source_val, target_val)
@@ -547,6 +553,23 @@ class DataViewComparator:
                 return sorted(normalized_list, key=repr)
             return normalized_list
         return value
+
+    @staticmethod
+    def _normalize_field_definition(value: Any) -> Any:
+        if isinstance(value, str):
+            with suppress(json.JSONDecodeError):
+                value = json.loads(value)
+
+        def canonical(node: Any) -> Any:
+            if isinstance(node, dict):
+                return ("object", tuple((key, canonical(item)) for key, item in sorted(node.items())))
+            if isinstance(node, list):
+                return ("array", tuple(canonical(item) for item in node))
+            if node is None or (not isinstance(node, str) and pd.api.types.is_scalar(node) and pd.isna(node)):
+                return ("null",)
+            return (type(node).__name__, node)
+
+        return canonical(value)
 
     def _normalize_dict(self, d: dict) -> dict:
         if not d:

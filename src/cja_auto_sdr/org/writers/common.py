@@ -173,3 +173,34 @@ def _validate_org_report_output_request(
         return False
 
     return True
+
+
+def _governance_check_rows(checks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    recovery = {
+        "skip_similarity": "Rerun without --skip-similarity.",
+        "org_stats_only": "Rerun without --org-stats.",
+        "similarity_guardrail": "Narrow the selected views, increase --similarity-max-dvs, or use --force-similarity.",
+        "no_components": "Select successfully fetched views containing components.",
+        "no_data_views": "Select accessible data views.",
+        "similarity_unavailable": "Rerun with similarity analysis enabled.",
+    }
+    rows = []
+    for check in checks:
+        scope = check["scope"]
+        rows.append(
+            {
+                "Check": check["type"],
+                "Status": check["status"],
+                "Threshold": check["threshold"],
+                "Actual": check["actual"] if check["actual"] is not None else "N/A",
+                "Denominator": f"{check['denominator']} {check['denominator_type']}",
+                "Scope": (
+                    f"{scope['successful_data_views']} successful / {scope['selected_data_views']} selected views; "
+                    f"{scope['failed_data_views']} failed; {scope['total_available_data_views']} available; "
+                    f"sampled: {scope['is_sampled']}"
+                ),
+                "Reason": check["reason"] or "",
+                "Next step": recovery.get(check["reason"], ""),
+            }
+        )
+    return rows
