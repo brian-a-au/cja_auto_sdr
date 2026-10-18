@@ -39,20 +39,25 @@ def staged_excel_writer(destination: str | Path) -> Iterator[pd.ExcelWriter]:
     staging_dir = Path(tempfile.mkdtemp(prefix=".xlsx-", dir=target.parent))
     staged = staging_dir / "workbook.xlsx"
     try:
-        with staged.open("wb") as workbook_file:
+        workbook_file = staged.open("wb")
+        try:
             writer = pd.ExcelWriter(workbook_file, engine="xlsxwriter")
             try:
                 yield writer
             except BaseException:
-                # Closing can also fail; preserve the original rendering exception.
                 with suppress(Exception):
                     writer.close()
                 raise
             else:
                 writer.close()
+        except BaseException:
+            with suppress(Exception):
+                workbook_file.close()
+            raise
+        else:
+            workbook_file.close()
         if previous is not None:
             staged.chmod(stat.S_IMODE(previous.st_mode))
         os.replace(staged, target)
     finally:
-        # Cleanup must never hide a rendering, close, or publication failure.
         shutil.rmtree(staging_dir, ignore_errors=True)

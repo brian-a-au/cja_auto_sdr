@@ -108,6 +108,66 @@ def test_publication_failure_preserves_destination(generate, monkeypatch, tmp_pa
 
 
 @pytest.mark.parametrize("entry", ["writer", "generator"])
+@pytest.mark.parametrize("existing", [True, False])
+@pytest.mark.parametrize("failure", ["render", "writer_close", "stream_close"])
+def test_buffered_stream_cleanup_preserves_primary_error(generate, monkeypatch, tmp_path, entry, existing, failure):
+    import errno
+    import io
+    from pathlib import Path
+
+    from xlsxwriter.exceptions import FileCreateError
+
+    destination = tmp_path / "report.xlsx"
+    if existing:
+        pd.DataFrame({"original": [42]}).to_excel(destination, index=False)
+    old_bytes = destination.read_bytes() if existing else None
+    disk_error = OSError(errno.ENOSPC, "disk full")
+
+    class DiskFullRaw(io.RawIOBase):
+        def writable(self):
+            return True
+
+        def write(self, data):
+            raise disk_error
+
+    stream = io.BufferedWriter(DiskFullRaw(), buffer_size=1024 * 1024)
+    stream.write(b"pending buffered bytes")
+    real_open = Path.open
+
+    def open_staged(path, mode="r", *args, **kwargs):
+        if path.name == "workbook.xlsx" and mode == "wb":
+            return stream
+        return real_open(path, mode, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", open_staged)
+    if failure == "render":
+        error = ValueError("original rendering failure")
+        module = sdr if entry == "writer" else generator
+        monkeypatch.setattr(module, "apply_excel_formatting", Mock(side_effect=error))
+    elif failure == "writer_close":
+        error = FileCreateError("original workbook close failure")
+        monkeypatch.setattr(pd.ExcelWriter, "close", Mock(side_effect=error))
+    else:
+        error = disk_error
+        # Leave the buffered bytes for file close, independently of workbook close.
+        monkeypatch.setattr(pd.ExcelWriter, "close", Mock())
+
+    if entry == "writer":
+        with pytest.raises(type(error)) as caught:
+            generate(entry, destination)
+        assert caught.value is error
+    else:
+        result = generate(entry, destination)
+        assert not result.success
+        assert result.failure_code == "OUTPUT_WRITE_FAILED"
+        assert result.error_message == str(error)
+        assert result.output_files == []
+    assert stream.closed
+    assert destination.read_bytes() == old_bytes if existing else not destination.exists()
+    assert set(tmp_path.iterdir()) == ({destination} if existing else set())
+
+
+@pytest.mark.parametrize("entry", ["writer", "generator"])
 def test_existing_permissions_and_symlink_preserved(generate, tmp_path, entry):
     import stat
 
