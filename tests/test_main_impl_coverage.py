@@ -1455,7 +1455,7 @@ class TestProcessSingleDataviewExcelPlaceholders:
         sample_dimensions_df,
         sample_dataview_info,
     ):
-        """Lines 5857-5859: exception writing individual sheet logs error and continues."""
+        """A failed sheet prevents workbook publication and reports an output failure."""
         _configure_standard_mocks(
             mock_setup_logging,
             mock_init_cja,
@@ -1474,7 +1474,9 @@ class TestProcessSingleDataviewExcelPlaceholders:
             output_dir=temp_output_dir,
             skip_validation=True,
         )
-        assert result.success is True
+        assert result.success is False
+        assert result.failure_code == "OUTPUT_WRITE_FAILED"
+        assert result.output_files == []
 
 
 # ============================================================================

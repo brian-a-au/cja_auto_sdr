@@ -67,6 +67,7 @@ tests/
 ├── test_main_entry_points.py        # main() and _main_impl() entry point tests
 ├── test_malformed_api_responses.py  # Negative tests for malformed API data
 ├── test_output_content_validation.py # Output format content validation tests
+├── test_excel_publication.py        # Complete Excel publication and destination compatibility
 ├── test_output_extraction_contracts.py # Extraction contracts for output.diff and output.inventory
 ├── test_quality_policy_and_run_summary.py # Quality policy and run summary tests
 ├── test_api_client.py               # API client exception path tests
@@ -180,7 +181,7 @@ tests/
 └── README.md                        # This file
 ```
 
-**Total: 8,868 comprehensive tests**
+**Total: 8,915 comprehensive tests**
 
 ### Test Count Breakdown
 
@@ -189,16 +190,16 @@ tests/
 
 | Category | Tests | Files | Notes |
 |----------|-------|-------|-------|
-| `unit` | 8,737 | 162 | Default primary category for files without explicit integration/e2e/smoke scope |
+| `unit` | 8,784 | 163 | Default primary category for files without explicit integration/e2e/smoke scope |
 | `integration` | 98 | 3 | Cross-module integration suites |
 | `e2e` | 23 | 2 | End-to-end suites with a mocked external boundary |
 | `smoke` | 10 | 1 | Lightweight command-mode coverage |
 | `slow` | 0 | 0 | Overlay marker; these tests are also counted in a primary category |
-| **Primary Total** | **8,868** | **168** | **unit + integration + e2e + smoke** |
+| **Primary Total** | **8,915** | **169** | **unit + integration + e2e + smoke** |
 
 | CI Slice | Tests | Files | Selector |
 |----------|-------|-------|----------|
-| `test-unit` | 8,737 | 162 | `-m "unit and not slow"` |
+| `test-unit` | 8,784 | 163 | `-m "unit and not slow"` |
 | `test-integration` | 121 | 5 | `-m "integration or e2e or slow"` |
 | `smoke-test` | 10 | 1 | `-m smoke` |
 
@@ -256,6 +257,7 @@ tests/
 | `test_discovery_dataset_metadata.py` | 27 | Connection-scoped dataset discovery metadata contracts |
 | `test_diagnostic_events.py` | 23 | Structured diagnostic event vocabulary, logger adapters, and redaction |
 | `test_output_content_validation.py` | 29 | Output format content validation (CSV, JSON, HTML, Excel, Markdown roundtrip) |
+| `test_excel_publication.py` | 47 | Excel render/close/publication failures, destination integrity, and filesystem compatibility |
 | `test_output_extraction_contracts.py` | 347 | Extraction contracts for output.diff and output.inventory |
 | `test_malformed_api_responses.py` | 21 | Negative tests for malformed/unexpected API responses |
 | `test_main_entry_points.py` | 45 | main() and _main_impl() entry points, dispatch, run_state, run summary |
@@ -376,7 +378,7 @@ tests/
 | `test_diff_snapshot_retention.py` | 81 | Diff snapshot-retention parse-cache characterization test |
 | `test_diff_comparator_normalize.py` | 21 | Diff field-normalization type-fast-path characterization test |
 | `test_logging_diagnostics.py` | 2 | emit_diagnostic isEnabledFor guard characterization tests |
-| **Total** | **8,868** | **Collected via pytest --collect-only** |
+| **Total** | **8,915** | **Collected via pytest --collect-only** |
 
 ## Running Tests
 
@@ -834,7 +836,7 @@ the `tests/README.md` inventory tree or count table.
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (8,868 tests total)
+- [x] Comprehensive test coverage (8,915 tests total)
 - [x] Org-wide analysis tests (test_org_report.py) - 209 tests (including large org scaling, output path aliases, memory warnings, smart cache invalidation)
 - [x] Org-wide analysis integration tests (test_org_report_integration.py) - 42 tests (end-to-end flows, caching, filtering, governance thresholds)
 - [x] Profile management tests (test_profiles.py) - 80 tests

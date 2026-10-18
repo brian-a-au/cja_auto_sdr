@@ -31,6 +31,7 @@ from typing import Any, NoReturn, Protocol, runtime_checkable
 import cjapy
 import pandas as pd
 from tqdm import tqdm
+from xlsxwriter.exceptions import XlsxWriterException
 
 from cja_auto_sdr.api.fetch import classify_component_payload as _classify_component_payload
 from cja_auto_sdr.api.quality_policy import (
@@ -2970,6 +2971,7 @@ from cja_auto_sdr.output.diff import (
     write_diff_output,
     write_diff_pr_comment_output,
 )
+from cja_auto_sdr.output.excel_staging import staged_excel_writer
 
 # ==================== INVENTORY SUMMARY MODE ====================
 # display_inventory_summary -> output.inventory.summary
@@ -4032,7 +4034,7 @@ def process_single_dataview(
             for fmt in formats_to_generate:
                 if fmt == "excel":
                     logger.info("Generating Excel file...")
-                    with pd.ExcelWriter(str(output_path), engine="xlsxwriter") as writer:
+                    with staged_excel_writer(output_path) as writer:
                         # Create format cache once for the entire workbook
                         # This improves performance by 15-25% by reusing format objects
                         format_cache = ExcelFormatCache(writer.book)
@@ -4081,16 +4083,12 @@ def process_single_dataview(
                                     sheets_to_write.append((placeholder_df, name))
 
                         for sheet_data, sheet_name in sheets_to_write:
-                            try:
-                                if sheet_data.empty:
-                                    logger.warning(f"Sheet {sheet_name} is empty, creating placeholder")
-                                    placeholder_df = pd.DataFrame({"Note": [f"No data available for {sheet_name}"]})
-                                    apply_excel_formatting(writer, placeholder_df, sheet_name, logger, format_cache)
-                                else:
-                                    apply_excel_formatting(writer, sheet_data, sheet_name, logger, format_cache)
-                            except (OutputError, OSError, KeyError, TypeError, ValueError) as e:
-                                logger.error(f"Failed to write sheet {sheet_name}: {e!s}")
-                                continue
+                            if sheet_data.empty:
+                                logger.warning(f"Sheet {sheet_name} is empty, creating placeholder")
+                                placeholder_df = pd.DataFrame({"Note": [f"No data available for {sheet_name}"]})
+                                apply_excel_formatting(writer, placeholder_df, sheet_name, logger, format_cache)
+                            else:
+                                apply_excel_formatting(writer, sheet_data, sheet_name, logger, format_cache)
 
                     logger.info(f"✓ Excel file created: {output_path}")
                     output_files.append(str(output_path))
@@ -4303,7 +4301,7 @@ def process_single_dataview(
                 failure_code=FAILURE_CODE_OUTPUT_PERMISSION_DENIED,
                 failure_reason="output_permission_denied",
             )
-        except (OSError, KeyError, TypeError, ValueError) as e:
+        except (OutputError, XlsxWriterException, OSError, KeyError, TypeError, ValueError) as e:
             logger.critical("Failed to generate output file: %s", e)
             logger.exception("Full exception details:")
             logger.info("=" * BANNER_WIDTH)
