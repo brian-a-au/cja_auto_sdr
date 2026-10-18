@@ -1531,6 +1531,10 @@ uv run cja_auto_sdr dv_123 --agent-mode --run-summary-json run_summary.json
 
 > **Note:** When using `--inventory-only`, only the inventory sheets (6-8) are generated, skipping sheets 1-5.
 
+Excel workbooks are published only after all requested sheets render and the workbook closes successfully. If rendering, closing, or replacement fails, the run reports failure and an existing destination remains unchanged; an absent destination stays absent. Multi-format runs publish each artifact independently and are not a transaction.
+
+Publication requires write access to the destination directory. Existing regular-file permission bits are preserved, and new files use the process creation permissions (umask). A symlink destination updates its resolved target while retaining the link. Destinations with multiple hard links or non-regular targets are rejected; choose an ordinary file path instead.
+
 ### Log Files
 
 - **Single mode**: `logs/SDR_Generation_[DataViewID]_[Timestamp].log`

@@ -27,6 +27,7 @@ from cja_auto_sdr.core.colors import _format_error_msg
 from cja_auto_sdr.core.exceptions import OutputError
 from cja_auto_sdr.core.json_io import write_json_atomic_compatible, write_text_atomic_compatible
 from cja_auto_sdr.core.version import __version__
+from cja_auto_sdr.output.excel_staging import staged_excel_writer
 
 __all__ = [
     "ExcelFormatCache",
@@ -432,7 +433,7 @@ def write_excel_output(
         logger.info("Generating Excel output...")
 
         excel_file = os.path.join(output_dir, f"{base_filename}.xlsx")
-        with pd.ExcelWriter(excel_file, engine="xlsxwriter") as writer:
+        with staged_excel_writer(excel_file) as writer:
             format_cache = ExcelFormatCache(writer.book)
             for sheet_name, df in data_dict.items():
                 if df.empty:
