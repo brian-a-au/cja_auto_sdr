@@ -1269,7 +1269,11 @@ cja_auto_sdr dv_12345 --diff-snapshot ./baseline.json --include-all-inventory
 
 ### Inventory Validation
 
-If you request an inventory type that wasn't captured in the snapshot, you'll receive a helpful error:
+Explicitly requested calculated metrics and segments must be available on both sides of a comparison. An omitted or `null` inventory fails with exit code 1 and identifies the missing inventory and source or target side. A collected empty array (`[]`) is valid evidence: comparing a populated inventory with `[]` reports genuine removals.
+
+Requested inventory import or collection failures also fail with exit code 1. Failed collection or missing requested evidence stops comparison before automatic snapshot saves or retention pruning, preserving previous captures. Machine-readable failures emit an `error`/`error_type` envelope on stderr without a successful diff payload on stdout. Historical snapshots remain readable and can be compared without requesting their absent inventories.
+
+If the baseline lacks an inventory you request, the error includes guidance such as:
 
 ```text
 Error: Snapshot missing required inventory data.

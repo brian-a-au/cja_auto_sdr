@@ -15,6 +15,7 @@ from cja_auto_sdr.diff.models import (
     InventoryItemDiff,
     MetadataDiff,
 )
+from cja_auto_sdr.diff.snapshot import _annotate_snapshot_failure
 from cja_auto_sdr.inventory.utils import extract_short_name, normalize_func_name
 
 
@@ -136,6 +137,19 @@ class DataViewComparator:
         self.include_calc_metrics = include_calc_metrics
         self.include_segments = include_segments
 
+    def validate_requested_inventories(self, source: DataViewSnapshot, target: DataViewSnapshot) -> None:
+        """Reject unavailable requested evidence before comparison or snapshot side effects."""
+        for side, snapshot in (("source", source), ("target", target)):
+            for requested, field, label in (
+                (self.include_calc_metrics, "calculated_metrics_inventory", "calculated metrics"),
+                (self.include_segments, "segments_inventory", "segments"),
+            ):
+                if requested and getattr(snapshot, field) is None:
+                    raise _annotate_snapshot_failure(
+                        ValueError(f"Missing requested {label} inventory on {side} snapshot"),
+                        stage="requested_inventory_validation",
+                    )
+
     def compare(
         self,
         source: DataViewSnapshot,
@@ -143,6 +157,7 @@ class DataViewComparator:
         source_label: str = "Source",
         target_label: str = "Target",
     ) -> DiffResult:
+        self.validate_requested_inventories(source, target)
         self.logger.info("Comparing data views:")
         self.logger.info(f"  {source_label}: {source.data_view_name} ({source.data_view_id})")
         self.logger.info(f"  {target_label}: {target.data_view_name} ({target.data_view_id})")
@@ -164,8 +179,8 @@ class DataViewComparator:
 
         if self.include_calc_metrics:
             calc_metrics_diffs = self._compare_inventory_items(
-                source.calculated_metrics_inventory if source.calculated_metrics_inventory is not None else [],
-                target.calculated_metrics_inventory if target.calculated_metrics_inventory is not None else [],
+                source.calculated_metrics_inventory,
+                target.calculated_metrics_inventory,
                 "calculated_metric",
                 id_field="metric_id",
             )
@@ -173,8 +188,8 @@ class DataViewComparator:
 
         if self.include_segments:
             segments_diffs = self._compare_inventory_items(
-                source.segments_inventory if source.segments_inventory is not None else [],
-                target.segments_inventory if target.segments_inventory is not None else [],
+                source.segments_inventory,
+                target.segments_inventory,
                 "segment",
                 id_field="segment_id",
             )
