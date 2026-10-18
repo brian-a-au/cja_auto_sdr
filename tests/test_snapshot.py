@@ -291,112 +291,47 @@ class TestCreateSnapshot:
         assert snap.metrics == []
         assert snap.dimensions == []
 
-    def test_calc_metrics_import_error(self, manager, capsys):
-        """Lines 147-150: ImportError when loading calc metrics module."""
+    @pytest.mark.parametrize(
+        ("module", "builder", "flag", "stage"),
+        [
+            (
+                "calculated_metrics",
+                "CalculatedMetricsInventoryBuilder",
+                "include_calculated_metrics",
+                "calculated_metrics_inventory",
+            ),
+            ("segments", "SegmentsInventoryBuilder", "include_segments", "segments_inventory"),
+        ],
+    )
+    @pytest.mark.parametrize("quiet", [False, True])
+    @pytest.mark.parametrize("error_type", [ImportError, RuntimeError, OSError])
+    def test_requested_inventory_failure_propagates(
+        self, manager, capsys, module, builder, flag, stage, quiet, error_type
+    ):
+        """Requested inventories cannot degrade into a completed partial snapshot."""
         import builtins
 
         cja = self._mock_cja(metrics_df=None, dimensions_df=None)
-
+        failure = error_type("inventory unavailable")
+        module_path = f"cja_auto_sdr.inventory.{module}"
         original_import = builtins.__import__
 
-        def fail_calc_import(name, *args, **kwargs):
-            if name == "cja_auto_sdr.inventory.calculated_metrics":
-                raise ImportError("test: module not available")
+        def fail_import(name, *args, **kwargs):
+            if name == module_path:
+                raise failure
             return original_import(name, *args, **kwargs)
 
-        with patch("builtins.__import__", side_effect=fail_calc_import):
-            snap = manager.create_snapshot(cja, "dv_test", quiet=False, include_calculated_metrics=True)
-            captured = capsys.readouterr()
-            assert snap.calculated_metrics_inventory is None
-            assert "Warning" in captured.out
-
-    def test_calc_metrics_generic_exception(self, manager, capsys):
-        """Lines 151-154: Generic exception when fetching calc metrics."""
-        cja = self._mock_cja(metrics_df=None, dimensions_df=None)
-
-        with patch("cja_auto_sdr.inventory.calculated_metrics.CalculatedMetricsInventoryBuilder") as mock_builder_cls:
-            mock_builder_cls.return_value.build.side_effect = RuntimeError("API failure")
-            manager.create_snapshot(cja, "dv_test", quiet=False, include_calculated_metrics=True)
-            captured = capsys.readouterr()
-            assert "Warning" in captured.out
-            assert "API failure" in captured.out
-
-    def test_calc_metrics_transport_exception_non_fatal(self, manager, capsys):
-        """Optional calculated metrics transport errors should not abort snapshot creation."""
-        cja = self._mock_cja(metrics_df=None, dimensions_df=None)
-
-        with patch("cja_auto_sdr.inventory.calculated_metrics.CalculatedMetricsInventoryBuilder") as mock_builder_cls:
-            mock_builder_cls.return_value.build.side_effect = OSError("connection reset by peer")
-            snapshot = manager.create_snapshot(cja, "dv_test", quiet=False, include_calculated_metrics=True)
-            captured = capsys.readouterr()
-
-        assert snapshot.calculated_metrics_inventory is None
-        assert "Warning" in captured.out
-        assert "connection reset by peer" in captured.out
-
-    def test_segments_import_error(self, manager, capsys):
-        """Lines 168-170: ImportError when loading segments module."""
-        import builtins
-
-        cja = self._mock_cja(metrics_df=None, dimensions_df=None)
-
-        original_import = builtins.__import__
-
-        def fail_seg_import(name, *args, **kwargs):
-            if name == "cja_auto_sdr.inventory.segments":
-                raise ImportError("test: segments module not available")
-            return original_import(name, *args, **kwargs)
-
-        with patch("builtins.__import__", side_effect=fail_seg_import):
-            snap = manager.create_snapshot(cja, "dv_test", quiet=False, include_segments=True)
-            captured = capsys.readouterr()
-            assert snap.segments_inventory is None
-            assert "Warning" in captured.out
-
-    def test_segments_generic_exception(self, manager, capsys):
-        """Lines 172-175: Generic exception when fetching segments."""
-        cja = self._mock_cja(metrics_df=None, dimensions_df=None)
-
-        with patch("cja_auto_sdr.inventory.segments.SegmentsInventoryBuilder") as mock_builder_cls:
-            mock_builder_cls.return_value.build.side_effect = RuntimeError("Segment fail")
-            manager.create_snapshot(cja, "dv_test", quiet=False, include_segments=True)
-            captured = capsys.readouterr()
-            assert "Warning" in captured.out
-            assert "Segment fail" in captured.out
-
-    def test_segments_transport_exception_non_fatal(self, manager, capsys):
-        """Optional segments transport errors should not abort snapshot creation."""
-        cja = self._mock_cja(metrics_df=None, dimensions_df=None)
-
-        with patch("cja_auto_sdr.inventory.segments.SegmentsInventoryBuilder") as mock_builder_cls:
-            mock_builder_cls.return_value.build.side_effect = OSError("segments api timeout")
-            snapshot = manager.create_snapshot(cja, "dv_test", quiet=False, include_segments=True)
-            captured = capsys.readouterr()
-
-        assert snapshot.segments_inventory is None
-        assert "Warning" in captured.out
-        assert "segments api timeout" in captured.out
-
-    def test_calc_metrics_quiet_suppresses_output(self, manager, capsys):
-        """Lines 147-154 with quiet=True: warnings still print but success messages don't."""
-        cja = self._mock_cja(metrics_df=None, dimensions_df=None)
-
-        with patch("cja_auto_sdr.inventory.calculated_metrics.CalculatedMetricsInventoryBuilder") as mock_builder_cls:
-            mock_builder_cls.return_value.build.side_effect = RuntimeError("quiet test")
-            manager.create_snapshot(cja, "dv_test", quiet=True, include_calculated_metrics=True)
-            captured = capsys.readouterr()
-            # quiet=True means no warning is printed to stdout
-            assert "quiet test" not in captured.out
-
-    def test_segments_quiet_suppresses_output(self, manager, capsys):
-        """Lines 168-175 with quiet=True: warnings suppressed."""
-        cja = self._mock_cja(metrics_df=None, dimensions_df=None)
-
-        with patch("cja_auto_sdr.inventory.segments.SegmentsInventoryBuilder") as mock_builder_cls:
-            mock_builder_cls.return_value.build.side_effect = RuntimeError("quiet seg")
-            manager.create_snapshot(cja, "dv_test", quiet=True, include_segments=True)
-            captured = capsys.readouterr()
-            assert "quiet seg" not in captured.out
+        failure_patch = (
+            patch("builtins.__import__", side_effect=fail_import)
+            if error_type is ImportError
+            else patch(f"{module_path}.{builder}.build", side_effect=failure)
+        )
+        with failure_patch, pytest.raises(error_type, match="inventory unavailable") as caught:
+            manager.create_snapshot(cja, "dv_test", quiet=quiet, **{flag: True})
+        assert caught.value is failure
+        assert getattr(caught.value, "_cja_snapshot_failure_stage") == stage
+        if quiet:
+            assert capsys.readouterr().out == ""
 
 
 # ==================== save_snapshot Tests ====================
