@@ -316,7 +316,10 @@ class TestCheckAllParallelWorkerException:
             "check_all_quality_issues_optimized",
             side_effect=RuntimeError("worker failed"),
         ):
-            with caplog.at_level(logging.ERROR, logger="test_parallel_exc"):
+            with (
+                caplog.at_level(logging.ERROR, logger="test_parallel_exc"),
+                pytest.raises(RuntimeError, match="validation workers failed"),
+            ):
                 checker.check_all_parallel(metrics_df, dims_df, ["id"], ["id"], ["name"], max_workers=1)
         assert "validation failed" in caplog.text
 
