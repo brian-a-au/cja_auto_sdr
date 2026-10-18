@@ -46,6 +46,7 @@ tests/
 ├── test_name_resolution.py          # Data view name resolution tests
 ├── test_optimized_validation.py     # Optimized validation tests
 ├── test_org_report.py               # Org-wide analysis tests
+├── test_org_governance_checks.py    # Governance evaluation status and strict exit contracts
 ├── test_org_report_integration.py   # Org-wide analysis integration tests
 ├── test_output_formats.py           # Output format tests
 ├── test_parallel_api_fetcher.py     # Parallel API fetcher tests
@@ -74,6 +75,7 @@ tests/
 ├── test_credentials.py              # Credential resolution tests
 ├── test_performance_tracker.py      # Performance tracker tests
 ├── test_snapshot.py                 # Diff snapshot tests
+├── test_requested_comparison_inventories.py # Required comparison evidence and side-effect safety
 ├── test_colors.py                   # Console color formatting tests
 ├── test_exceptions.py               # Custom exception class tests
 ├── test_logging_redaction.py        # Logging and sensitive data redaction tests
@@ -179,7 +181,7 @@ tests/
 └── README.md                        # This file
 ```
 
-**Total: 8,817 comprehensive tests**
+**Total: 8,915 comprehensive tests**
 
 ### Test Count Breakdown
 
@@ -188,16 +190,16 @@ tests/
 
 | Category | Tests | Files | Notes |
 |----------|-------|-------|-------|
-| `unit` | 8,686 | 161 | Default primary category for files without explicit integration/e2e/smoke scope |
+| `unit` | 8,784 | 163 | Default primary category for files without explicit integration/e2e/smoke scope |
 | `integration` | 98 | 3 | Cross-module integration suites |
 | `e2e` | 23 | 2 | End-to-end suites with a mocked external boundary |
 | `smoke` | 10 | 1 | Lightweight command-mode coverage |
 | `slow` | 0 | 0 | Overlay marker; these tests are also counted in a primary category |
-| **Primary Total** | **8,817** | **167** | **unit + integration + e2e + smoke** |
+| **Primary Total** | **8,915** | **169** | **unit + integration + e2e + smoke** |
 
 | CI Slice | Tests | Files | Selector |
 |----------|-------|-------|----------|
-| `test-unit` | 8,686 | 161 | `-m "unit and not slow"` |
+| `test-unit` | 8,784 | 163 | `-m "unit and not slow"` |
 | `test-integration` | 121 | 5 | `-m "integration or e2e or slow"` |
 | `smoke-test` | 10 | 1 | `-m smoke` |
 
@@ -207,9 +209,10 @@ tests/
 
 | Test File | Tests | Coverage Area |
 |-----------|-------|---------------|
-| `test_diff_comparison.py` | 176 | Data view diff comparison feature with inventory support |
+| `test_diff_comparison.py` | 178 | Data view diff comparison feature with inventory support |
 | `test_ux_features.py` | 124 | UX features: --open, --stats, --output, --list-dataviews formats, inventory validation, inventory summary, include-all-inventory |
 | `test_org_report.py` | 209 | Org-wide component analysis: config, distribution, similarity, output formats, large org scaling, output path aliases |
+| `test_org_governance_checks.py` | 26 | Governance evaluation statuses, evidence scope, strict exits, and writer contracts |
 | `test_org_report_integration.py` | 42 | Org-wide analysis integration tests: end-to-end flows, caching, filtering, governance |
 | `test_cli.py` | 414 | Command-line interface and argument parsing |
 | `test_profiles.py` | 80 | Multi-organization profile support |
@@ -264,7 +267,8 @@ tests/
 | `test_config_validation.py` | 55 | Configuration validation logic |
 | `test_credentials.py` | 73 | Credential resolution and source selection |
 | `test_performance_tracker.py` | 7 | Performance tracker (cache eviction, statistics) |
-| `test_snapshot.py` | 85 | Diff snapshot creation and comparison |
+| `test_snapshot.py` | 89 | Diff snapshot creation and comparison |
+| `test_requested_comparison_inventories.py` | 50 | Requested inventory completeness, CLI errors, and snapshot retention safety |
 | `test_colors.py` | 122 | Console color formatting, themes, TTY detection |
 | `test_exceptions.py` | 70 | Custom exception classes construction and formatting |
 | `test_logging_redaction.py` | 180 | Logging, sensitive data redaction, JSON formatter |
@@ -313,7 +317,7 @@ tests/
 | `test_org_snapshot_utils.py` | 133 | Org snapshot helper utilities edge cases |
 | `test_org_trending_contracts.py` | 108 | Org/trending public API contract tests |
 | `test_org_trending_adversarial.py` | 51 | Adversarial and stress tests for trending |
-| `test_cli_diff_contracts.py` | 73 | CLI/diff public API contract tests |
+| `test_cli_diff_contracts.py` | 75 | CLI/diff public API contract tests |
 | `test_list_command_edge_cases.py` | 68 | List command edge cases and coverage |
 | `test_cli_commands_config_coverage.py` | 46 | Config command edge cases and coverage |
 | `test_cli_execution.py` | 27 | CLI execution edge cases and coverage |
@@ -372,9 +376,9 @@ tests/
 | `test_diff_excel.py` | 3 | Diff Excel row-coloring characterization tests |
 | `test_org_snapshot_parse_cache.py` | 3 | Org snapshot JSON parse-cache characterization test |
 | `test_diff_snapshot_retention.py` | 81 | Diff snapshot-retention parse-cache characterization test |
-| `test_diff_comparator_normalize.py` | 7 | Diff field-normalization type-fast-path characterization test |
+| `test_diff_comparator_normalize.py` | 21 | Diff field-normalization type-fast-path characterization test |
 | `test_logging_diagnostics.py` | 2 | emit_diagnostic isEnabledFor guard characterization tests |
-| **Total** | **8,817** | **Collected via pytest --collect-only** |
+| **Total** | **8,915** | **Collected via pytest --collect-only** |
 
 ## Running Tests
 
@@ -832,7 +836,7 @@ the `tests/README.md` inventory tree or count table.
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (8,817 tests total)
+- [x] Comprehensive test coverage (8,915 tests total)
 - [x] Org-wide analysis tests (test_org_report.py) - 209 tests (including large org scaling, output path aliases, memory warnings, smart cache invalidation)
 - [x] Org-wide analysis integration tests (test_org_report_integration.py) - 42 tests (end-to-end flows, caching, filtering, governance thresholds)
 - [x] Profile management tests (test_profiles.py) - 80 tests
@@ -844,7 +848,7 @@ the `tests/README.md` inventory tree or count table.
 - [x] Derived fields inventory tests (test_derived_inventory.py) - 64 tests
 - [x] Inventory utilities tests (test_inventory_utils.py) - 56 tests
 - [x] Git integration tests (test_git_integration.py) - 41 tests
-- [x] Inventory diff support in snapshot comparisons (test_diff_comparison.py) - 176 tests
+- [x] Inventory diff support in snapshot comparisons (test_diff_comparison.py) - 178 tests
 - [x] Inventory summary and include-all-inventory tests (test_ux_features.py) - 124 tests
 - [x] Parallel validation tests (test_parallel_validation.py)
 - [x] Validation caching tests (test_validation_cache.py)
@@ -860,7 +864,7 @@ the `tests/README.md` inventory tree or count table.
 - [x] Excel formatting tests (test_excel_formatting.py)
 - [x] CJA initialization tests (test_cja_initialization.py)
 - [x] Name resolution tests (test_name_resolution.py)
-- [x] Data view diff comparison tests (test_diff_comparison.py) - 176 tests covering snapshots, comparison logic, output formats, CLI arguments, name resolution
+- [x] Data view diff comparison tests (test_diff_comparison.py) - 178 tests covering snapshots, comparison logic, output formats, CLI arguments, name resolution
 - [x] Edge case tests (test_edge_cases.py) - 35 tests covering custom exceptions, configuration dataclasses, OutputWriter Protocol, boundary conditions
 
 ## Future Enhancements

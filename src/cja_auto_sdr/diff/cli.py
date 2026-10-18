@@ -567,7 +567,10 @@ def dispatch_snapshot_cli_modes(
                 file=sys.stderr,
             )
             print("Derived fields inventory is only available in SDR generation mode.", file=sys.stderr)
-            print("Derived field changes are captured in the standard Metrics/Dimensions diff.", file=sys.stderr)
+            print(
+                "Use --extended-fields when comparing snapshots to detect captured fieldDefinition changes.",
+                file=sys.stderr,
+            )
             sys.exit(1)
 
         resolved_ids = _resolve_single_data_view_id_or_exit(

@@ -10,6 +10,8 @@ import json
 import subprocess
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from cja_auto_sdr.diff.comparator import DataViewComparator
 from cja_auto_sdr.diff.git import (
     _snapshot_pathspecs_for_data_view,
@@ -1052,7 +1054,7 @@ class TestComparatorEmptyInventory:
         assert result.calc_metrics_diffs is None
         assert result.segments_diffs is None
 
-    def test_none_inventory_with_flags_on_coalesces_to_empty(self):
+    def test_none_inventory_with_flags_on_fails(self):
         source = _make_snapshot()  # inventory is None
         target = _make_snapshot()
         comp = DataViewComparator(
@@ -1060,13 +1062,8 @@ class TestComparatorEmptyInventory:
             include_calc_metrics=True,
             include_segments=True,
         )
-        result = comp.compare(source, target)
-
-        # Flags on but inventory is None — coalesces to [] for comparison
-        assert result.calc_metrics_diffs is not None
-        assert len(result.calc_metrics_diffs) == 0
-        assert result.segments_diffs is not None
-        assert len(result.segments_diffs) == 0
+        with pytest.raises(ValueError, match="calculated metrics inventory on source"):
+            comp.compare(source, target)
 
 
 # ==================== git.py remaining-line coverage ====================

@@ -375,6 +375,7 @@ class OrgReportResult:
     owner_summary: dict[str, Any] | None = None
     # Stale components (Feature 6)
     stale_components: list[dict[str, Any]] | None = None
+    governance_checks: list[dict[str, Any]] = field(default_factory=list)
 
     @property
     def total_data_views(self) -> int:

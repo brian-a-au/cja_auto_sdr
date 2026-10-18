@@ -9,12 +9,41 @@ from __future__ import annotations
 
 import argparse
 import inspect
+import json
+import sys
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+
+@pytest.mark.parametrize(("flags", "expected_exit"), [([], 0), (["--extended-fields"], 2)])
+def test_offline_derived_definition_cli(tmp_path, monkeypatch, capsys, flags, expected_exit):
+    from cja_auto_sdr.diff.models import DataViewSnapshot
+    from cja_auto_sdr.generator import main
+
+    paths = []
+    for label, value in (("source", "old"), ("target", "new")):
+        snapshot = DataViewSnapshot(
+            data_view_id="dv_1",
+            data_view_name="Test",
+            metrics=[{"id": "m1", "fieldDefinition": json.dumps([{"func": "match", "value": value}])}],
+            dimensions=[],
+        )
+        path = tmp_path / f"{label}.json"
+        path.write_text(json.dumps(snapshot.to_dict()))
+        paths.append(str(path))
+    monkeypatch.setattr(sys, "argv", ["cja_auto_sdr", "--compare-snapshots", *paths, "--agent-mode", *flags])
+    with pytest.raises(SystemExit) as exc_info:
+        main()
+    assert exc_info.value.code == expected_exit
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["summary"]["metrics_modified"] == (1 if flags else 0)
+    if flags:
+        assert "fieldDefinition" in payload["metric_diffs"][0]["changed_fields"]
+
 
 # ---------------------------------------------------------------------------
 # Helpers

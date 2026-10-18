@@ -2510,6 +2510,9 @@ def _merge_org_report_run_summary_details(
         },
     )
 
+    if "governance_checks" in lock_details:
+        _merge_run_details(run_state, governance_checks=lock_details["governance_checks"])
+
     if advisory_rollup is not None:
         _merge_run_details(run_state, advisories=advisory_rollup)
 
@@ -5966,6 +5969,11 @@ def run_org_report(
         # Run analysis
         analyzer = OrgComponentAnalyzer(cja, org_config, logger, org_id=org_id, cache=cache)
         result = analyzer.run_analysis()
+        if runtime_details is not None:
+            runtime_details["governance_checks"] = result.governance_checks
+        governance_evaluation_failed = org_config.fail_on_threshold and any(
+            check["status"] == "not_evaluated" for check in result.governance_checks
+        )
         _copy_org_report_lock_runtime_details_from_state(
             runtime_details,
             lock_state=analyzer.lock_runtime_state,
@@ -6034,7 +6042,7 @@ def run_org_report(
                         _status_print(f"JSON saved to: {file_path}")
             append_github_step_summary(build_org_step_summary(result), logger)
             _populate_org_report_advisory_rollup(runtime_details, result, trending)
-            return True, result.thresholds_exceeded
+            return not governance_evaluation_failed, result.thresholds_exceeded
 
         # Handle format aliases (reports, data, ci)
         if output_format in FORMAT_ALIASES:
@@ -6156,7 +6164,7 @@ def run_org_report(
 
         append_github_step_summary(build_org_step_summary(result), logger)
         _populate_org_report_advisory_rollup(runtime_details, result, trending)
-        return True, result.thresholds_exceeded
+        return not governance_evaluation_failed, result.thresholds_exceeded
 
     except ConcurrentOrgReportError as e:
         _status_print(ConsoleColors.error(f"ERROR: Org report failed: {e!s}"))
@@ -7040,6 +7048,18 @@ def _dispatch_post_validation_report_modes(
             if thresholds_exceeded and org_config.fail_on_threshold:
                 sys.exit(2)
             sys.exit(0)
+        if org_config.fail_on_threshold:
+            unavailable_checks = [
+                check for check in lock_details.get("governance_checks", []) if check["status"] == "not_evaluated"
+            ]
+            if unavailable_checks:
+                reasons = ", ".join(f"{check['type']} ({check['reason']})" for check in unavailable_checks)
+                _emit_discovery_error(
+                    f"Requested governance checks could not be evaluated: {reasons}",
+                    is_machine_readable=True,
+                    error_type="governance_evaluation_error",
+                    human_to_stderr=True,
+                )
         sys.exit(1)
 
     return data_view_inputs

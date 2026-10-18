@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from cja_auto_sdr.core.json_io import write_text_atomic_compatible
+from cja_auto_sdr.diff.snapshot import _annotate_snapshot_failure
 
 if TYPE_CHECKING:
     from cja_auto_sdr.diff.models import DiffResult
@@ -55,6 +56,20 @@ def _populate_diff_advisory_rollup(
 def _emit_api_failure_hint(generator: Any, exc: Exception) -> None:
     """Print a diff/snapshot API hint to stderr when one is available."""
     generator._print_api_hint(exc, file=sys.stderr)
+
+
+def _emit_requested_inventory_failure(generator: Any, exc: Exception) -> bool:
+    stage = getattr(exc, "_cja_snapshot_failure_stage", None)
+    if stage not in {"calculated_metrics_inventory", "segments_inventory", "requested_inventory_validation"}:
+        return False
+    hint = generator.api_connection_hint(exc)
+    generator._emit_discovery_error(
+        str(exc),
+        is_machine_readable=True,
+        error_type="comparison_error",
+        additional_fields={"hint": hint} if hint else None,
+    )
+    return True
 
 
 def handle_snapshot_command(
@@ -105,6 +120,8 @@ def handle_snapshot_command(
                 include_segments=include_segments,
             )
         except generator.RECOVERABLE_COMMAND_HANDLER_EXCEPTIONS as e:
+            if _emit_requested_inventory_failure(generator, e):
+                return False
             print(generator.ConsoleColors.error(f"ERROR: Failed to create snapshot: {e!s}"), file=sys.stderr)
             _emit_api_failure_hint(generator, e)
             return False
@@ -529,10 +546,17 @@ def handle_diff_snapshot_command(
             missing_inventory.append("segments")
 
         if missing_inventory:
+            if output_format == "json":
+                generator._emit_discovery_error(
+                    f"Missing requested {', '.join(missing_inventory)} inventory on source snapshot",
+                    is_machine_readable=True,
+                    error_type="comparison_error",
+                )
+                return False, False, None
             inv_summary = source_snapshot.get_inventory_summary()
             print(
                 generator.ConsoleColors.error(
-                    "ERROR: Cannot perform inventory diff - snapshot missing requested data."
+                    "ERROR: Cannot perform inventory diff - source snapshot missing requested data."
                 ),
                 file=sys.stderr,
             )
@@ -597,7 +621,7 @@ def handle_diff_snapshot_command(
                     if not quiet and not quiet_diff:
                         print(f"  Calculated metrics: {len(target_snapshot.calculated_metrics_inventory)} items")
                 except generator.RECOVERABLE_OPTIONAL_INVENTORY_EXCEPTIONS as e:
-                    logger.warning(f"Failed to build calculated metrics inventory: {e}")
+                    raise _annotate_snapshot_failure(e, stage="calculated_metrics_inventory") from e
 
             if include_segments:
                 try:
@@ -609,10 +633,22 @@ def handle_diff_snapshot_command(
                     if not quiet and not quiet_diff:
                         print(f"  Segments: {len(target_snapshot.segments_inventory)} items")
                 except generator.RECOVERABLE_OPTIONAL_INVENTORY_EXCEPTIONS as e:
-                    logger.warning(f"Failed to build segments inventory: {e}")
+                    raise _annotate_snapshot_failure(e, stage="segments_inventory") from e
 
             if not quiet and not quiet_diff:
                 print()
+
+        comparator = generator.DataViewComparator(
+            logger,
+            ignore_fields=ignore_fields,
+            use_extended_fields=extended_fields,
+            show_only=show_only,
+            metrics_only=metrics_only,
+            dimensions_only=dimensions_only,
+            include_calc_metrics=include_calc_metrics,
+            include_segments=include_segments,
+        )
+        comparator.validate_requested_inventories(source_snapshot, target_snapshot)
 
         if auto_snapshot:
             os.makedirs(snapshot_dir, exist_ok=True)
@@ -650,16 +686,6 @@ def handle_diff_snapshot_command(
 
         source_label = labels[0] if labels else f"Snapshot ({source_snapshot.created_at[:10]})"
         target_label = labels[1] if labels else "Current"
-        comparator = generator.DataViewComparator(
-            logger,
-            ignore_fields=ignore_fields,
-            use_extended_fields=extended_fields,
-            show_only=show_only,
-            metrics_only=metrics_only,
-            dimensions_only=dimensions_only,
-            include_calc_metrics=include_calc_metrics,
-            include_segments=include_segments,
-        )
         diff_result = comparator.compare(source_snapshot, target_snapshot, source_label, target_label)
 
         exit_code_override = None
@@ -706,15 +732,21 @@ def handle_diff_snapshot_command(
         generator.append_github_step_summary(generator.build_diff_step_summary(diff_result), logger)
         _populate_diff_advisory_rollup(runtime_details, diff_result, changes_only=changes_only)
         return True, diff_result.summary.has_changes, exit_code_override
-    except FileNotFoundError:
+    except FileNotFoundError as e:
+        if _emit_requested_inventory_failure(generator, e):
+            return False, False, None
         print(generator.ConsoleColors.error(f"ERROR: Snapshot file not found: {snapshot_file}"), file=sys.stderr)
         return False, False, None
     except ValueError as e:
+        if _emit_requested_inventory_failure(generator, e):
+            return False, False, None
         print(generator.ConsoleColors.error(f"ERROR: Invalid snapshot file: {e!s}"), file=sys.stderr)
         return False, False, None
     except KeyboardInterrupt, SystemExit:
         raise
     except generator.RECOVERABLE_COMMAND_HANDLER_EXCEPTIONS as e:
+        if _emit_requested_inventory_failure(generator, e):
+            return False, False, None
         print(generator.ConsoleColors.error(f"ERROR: Failed to compare against snapshot: {e!s}"), file=sys.stderr)
         _emit_api_failure_hint(generator, e)
         logger.debug("Diff-snapshot comparison failed", exc_info=True)
@@ -887,6 +919,8 @@ def handle_compare_snapshots_command(
         print(generator.ConsoleColors.error(f"ERROR: Snapshot file not found: {e!s}"), file=sys.stderr)
         return False, False, None
     except ValueError as e:
+        if _emit_requested_inventory_failure(generator, e):
+            return False, False, None
         print(generator.ConsoleColors.error(f"ERROR: Invalid snapshot file: {e!s}"), file=sys.stderr)
         return False, False, None
     except KeyboardInterrupt, SystemExit:
