@@ -987,6 +987,36 @@ class TestOutputFormatVerification:
 class TestExtendedFieldComparison:
     """Tests for extended field comparison (attribution, format, etc.)"""
 
+    @pytest.mark.parametrize("selection", [{"use_extended_fields": True}, {"compare_fields": ["fieldDefinition"]}])
+    def test_derived_definition_logic_change(self, selection):
+        before = '[{"func":"match","condition":{"value":"old"}}]'
+        after = '[{"func":"match","condition":{"value":"new"}}]'
+        source = DataViewSnapshot(
+            data_view_id="dv_1",
+            data_view_name="Test",
+            metrics=[{"id": "m1", "fieldDefinition": before}],
+            dimensions=[{"id": "d1", "fieldDefinition": before}],
+        )
+        target = DataViewSnapshot(
+            data_view_id="dv_1",
+            data_view_name="Test",
+            metrics=[{"id": "m1", "fieldDefinition": after}],
+            dimensions=[{"id": "d1", "fieldDefinition": after}],
+        )
+        assert not DataViewComparator().compare(source, target).summary.has_changes
+        result = DataViewComparator(**selection).compare(source, target)
+        assert result.summary.metrics_modified == result.summary.dimensions_modified == 1
+        assert result.metric_diffs[0].changed_fields == {"fieldDefinition": (before, after)}
+        assert result.dimension_diffs[0].changed_fields == {"fieldDefinition": (before, after)}
+        ignored = DataViewComparator(**selection, ignore_fields=["fieldDefinition"]).compare(source, target)
+        assert not ignored.summary.has_changes
+        metrics = DataViewComparator(**selection, metrics_only=True).compare(source, target)
+        assert metrics.summary.metrics_modified == 1
+        assert not metrics.dimension_diffs
+        dimensions = DataViewComparator(**selection, dimensions_only=True).compare(source, target)
+        assert dimensions.summary.dimensions_modified == 1
+        assert not dimensions.metric_diffs
+
     def test_extended_compare_fields_list(self, logger):
         """Test that EXTENDED_COMPARE_FIELDS contains expected fields"""
         assert "name" in DataViewComparator.EXTENDED_COMPARE_FIELDS
