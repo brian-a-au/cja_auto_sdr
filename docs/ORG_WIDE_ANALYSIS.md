@@ -663,7 +663,7 @@ Integrate org-report into CI/CD pipelines with threshold-based exit codes.
 ```bash
 # Exit with code 2 if more than 5 high-similarity pairs exist
 cja_auto_sdr --org-report --duplicate-threshold 5 --fail-on-threshold
-echo $?              # bash: 0 = pass, 2 = threshold exceeded
+echo $?              # bash: 0 = pass, 1 = failure/unavailable check, 2 = threshold exceeded
 $LASTEXITCODE        # PowerShell equivalent
 
 # Exit with code 2 if isolated components exceed 30%
@@ -681,7 +681,19 @@ cja_auto_sdr --org-report \
 |--------|-------------|
 | `--duplicate-threshold N` | Max allowed high-similarity pairs (>=90%) |
 | `--isolated-threshold PERCENT` | Max isolated component percentage (0.0-1.0) |
-| `--fail-on-threshold` | Enable exit code 2 when thresholds exceeded |
+| `--fail-on-threshold` | Exit 2 for evaluated violations; exit 1 if any requested check cannot be evaluated |
+
+Each requested threshold produces a `governance_checks` entry in JSON and in run-summary `details.governance_checks`. The entry includes `type`, `status` (`pass`, `fail`, or `not_evaluated`), `threshold`, `actual`, `denominator`, `denominator_type`, `scope`, and `reason`. No thresholds requested means an empty list. Existing `governance_violations` and `thresholds_exceeded` retain their meanings: they describe evaluated violations only.
+
+- Duplicate checks count pairs at or above 90% similarity. Their denominator is the number of possible pairs of successfully fetched views. Completed similarity with no qualifying pairs passes a zero threshold. Skipped similarity is `not_evaluated`, with a `null` actual value and a reason of `skip_similarity`, `org_stats_only`, or `similarity_guardrail`.
+- Isolated checks divide isolated components by all unique components in the successful subset. Equality with the threshold passes. With zero components, the ratio is undefined: status is `not_evaluated`, actual is `null`, and reason is `no_components`.
+- Scope records selected, successful, failed, and total available view counts plus whether sampling was used. A passing check applies to that successful subset; partial fetches retain the existing exit policy.
+
+With `--fail-on-threshold`, an unavailable requested check exits **1**, including when another check exceeds its threshold. Evaluated violations alone exit **2**. The report is still written, so automation can inspect both outcomes. Without `--fail-on-threshold`, unavailable checks and violations remain visible without changing the reporting exit policy. Console, stats, Markdown, HTML, Excel, and CSV reports also show outcomes and scope.
+
+The strict unavailable-check failure also writes a JSON error envelope to stderr with `error_type: "governance_evaluation_error"`; its message names each unavailable check and reason.
+
+To evaluate a skipped duplicate check, remove `--skip-similarity` or `--org-stats`. For a guardrail skip, narrow the selected views, increase `--similarity-max-dvs`, or explicitly choose `--force-similarity`; requesting a threshold never bypasses the guardrail automatically. Empty selections retain the existing no-data-views error.
 
 ### Org Summary Stats Mode
 

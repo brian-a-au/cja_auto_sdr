@@ -19,6 +19,7 @@ from cja_auto_sdr.org.models import (
 from cja_auto_sdr.org.writers.common import (
     _format_recommendation_context_entries as _format_recommendation_context_entries_impl,
 )
+from cja_auto_sdr.org.writers.common import _governance_check_rows
 from cja_auto_sdr.org.writers.common import (
     _normalize_recommendation_for_json as _normalize_recommendation_for_json_impl,
 )
@@ -337,6 +338,13 @@ def write_org_report_html(
             </table>
         </div>
 """
+
+    if result.governance_checks:
+        html_out += "<h2>Governance Checks</h2><ul>"
+        for row in _governance_check_rows(result.governance_checks):
+            text = "; ".join(f"{key}: {value}" for key, value in row.items() if value != "")
+            html_out += f"<li>{_html.escape(text)}</li>"
+        html_out += "</ul>"
 
     # Recommendations
     if result.recommendations:
