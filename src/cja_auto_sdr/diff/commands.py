@@ -59,12 +59,16 @@ def _emit_api_failure_hint(generator: Any, exc: Exception) -> None:
 
 
 def _emit_requested_inventory_failure(generator: Any, exc: Exception) -> bool:
-    """Keep requested-inventory errors on the established machine-readable error route."""
     stage = getattr(exc, "_cja_snapshot_failure_stage", None)
     if stage not in {"calculated_metrics_inventory", "segments_inventory", "requested_inventory_validation"}:
         return False
-    generator._emit_discovery_error(str(exc), is_machine_readable=True, error_type="comparison_error")
-    _emit_api_failure_hint(generator, exc)
+    hint = generator.api_connection_hint(exc)
+    generator._emit_discovery_error(
+        str(exc),
+        is_machine_readable=True,
+        error_type="comparison_error",
+        additional_fields={"hint": hint} if hint else None,
+    )
     return True
 
 

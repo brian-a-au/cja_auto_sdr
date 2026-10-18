@@ -134,17 +134,23 @@ def test_requested_collection_failure_preserves_files(
 
 @pytest.mark.parametrize(("field", "flag", "module", "builder", "id_key", "label"), INVENTORIES)
 @pytest.mark.parametrize(
-    ("flow", "missing_source"),
+    ("flow", "missing_source", "error_kind"),
     [
-        ("snapshot", False),
-        ("diff_snapshot", False),
-        ("compare_with_prev", False),
-        ("diff_snapshot", True),
-        ("compare_with_prev", True),
+        ("snapshot", False, "timeout"),
+        ("diff_snapshot", False, "timeout"),
+        ("compare_with_prev", False, "timeout"),
+        ("diff_snapshot", True, "timeout"),
+        ("compare_with_prev", True, "timeout"),
+        ("snapshot", False, "401"),
+        ("snapshot", False, "403"),
+        ("snapshot", False, "content"),
+        ("diff_snapshot", False, "401"),
+        ("diff_snapshot", False, "403"),
+        ("diff_snapshot", False, "content"),
     ],
 )
 def test_cli_requested_collection_failure_exit_and_summary(
-    field, flag, module, builder, id_key, label, flow, missing_source, tmp_path, capsys, monkeypatch
+    field, flag, module, builder, id_key, label, flow, missing_source, error_kind, tmp_path, capsys, monkeypatch
 ):
     import sys
 
@@ -173,7 +179,13 @@ def test_cli_requested_collection_failure_exit_and_summary(
     cja.getDimensions.return_value = []
     monkeypatch.setattr(sys, "argv", args)
     api_method = cja.getFilters if module == "segments" else cja.getCalculatedMetrics
-    api_method.side_effect = OSError("inventory timeout")
+    failure = {
+        "timeout": OSError("inventory timeout"),
+        "401": RuntimeError("HTTP 401 Unauthorized"),
+        "403": RuntimeError("HTTP 403 Forbidden"),
+        "content": KeyError("content"),
+    }[error_kind]
+    api_method.side_effect = failure
     with (
         patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "test", None)),
         patch("cja_auto_sdr.generator.cjapy.CJA", return_value=cja),
@@ -188,7 +200,10 @@ def test_cli_requested_collection_failure_exit_and_summary(
     if missing_source:
         assert "source" in error["error"] and label in error["error"]
     else:
-        assert error["error"] == "inventory timeout"
+        assert error["error"] == str(failure)
+        if error_kind != "timeout":
+            assert "Hint:" in error["hint"]
+            assert "Developer Console" in error["hint"]
     report = json.loads(summary.read_text())
     assert report["exit_code"] == 1 and report["status"] == "error"
     assert report["details"]["operation_success"] is False
