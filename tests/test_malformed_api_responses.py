@@ -681,6 +681,7 @@ class TestDataQualityCheckerMalformedInput:
 
         # Create DataFrame with duplicate column via construction trick
         df = pd.DataFrame([[1, "a", "int", "desc", "extra"]], columns=["id", "name", "type", "description", "name"])
-        checker.check_all_quality_issues_optimized(df, "Metrics", ["id", "name", "type"], ["id", "name", "description"])
-        # Should not crash
-        assert isinstance(checker.issues, list)
+        with pytest.raises(ValueError, match="Grouper for 'name' not 1-dimensional"):
+            checker.check_all_quality_issues_optimized(
+                df, "Metrics", ["id", "name", "type"], ["id", "name", "description"]
+            )

@@ -9,9 +9,58 @@ from concurrent.futures import Future
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
+import pytest
 
+from cja_auto_sdr.api.cache import ValidationCache
 from cja_auto_sdr.api.quality import DataQualityChecker
 from cja_auto_sdr.core.constants import DEFAULT_VALIDATION_WORKERS, QUALITY_SEVERITY_ORDER
+
+
+def test_optimized_failure_after_finding_propagates_without_caching():
+    cache = ValidationCache()
+    checker = DataQualityChecker(logging.getLogger("test"), validation_cache=cache, quiet=True)
+    frame = pd.DataFrame({"id": ["m1", "m2"], "name": ["Duplicate", "Duplicate"]})
+    original_add = checker.add_issue
+    failure = ValueError("injected check failure")
+
+    def fail_after_finding(**kwargs):
+        original_add(**kwargs)
+        raise failure
+
+    with patch.object(checker, "add_issue", side_effect=fail_after_finding):
+        with pytest.raises(ValueError) as caught:
+            checker.check_all_quality_issues_optimized(frame, "Metrics", ["id", "name"], ["id"])
+
+    assert caught.value is failure
+    assert len(checker.issues) == 1
+    assert cache.get(frame, "Metrics", ["id", "name"], ["id"])[0] is None
+
+    retry = DataQualityChecker(logging.getLogger("test"), validation_cache=cache, quiet=True)
+    retry.check_all_quality_issues_optimized(frame, "Metrics", ["id", "name"], ["id"])
+    assert len(retry.issues) == 1
+    assert cache.get(frame, "Metrics", ["id", "name"], ["id"])[0] == retry.issues
+
+
+@pytest.mark.parametrize("failed_types", [("Metrics",), ("Dimensions",), ("Metrics", "Dimensions")])
+def test_parallel_worker_failures_are_raised_after_all_workers_finish(failed_types):
+    checker = DataQualityChecker(logging.getLogger("test"), quiet=True)
+    finished = set()
+    failures = {item_type: ValueError(f"{item_type} worker broke") for item_type in failed_types}
+
+    def worker(_frame, item_type, _required, _critical):
+        finished.add(item_type)
+        if item_type in failures:
+            raise failures[item_type]
+
+    with patch.object(checker, "check_all_quality_issues_optimized", side_effect=worker):
+        with pytest.raises(RuntimeError) as caught:
+            checker.check_all_parallel(pd.DataFrame(), pd.DataFrame(), [], [], [])
+
+    assert finished == {"Metrics", "Dimensions"}
+    assert caught.value.__cause__ in failures.values()
+    for item_type in failed_types:
+        assert f"{item_type.lower()}: {item_type} worker broke" in str(caught.value)
+
 
 # ==================== Severity Ordering ====================
 

@@ -342,6 +342,7 @@ class DataQualityChecker:
         except Exception as e:  # Intentional: Orchestrator boundary for optimized single-pass validation
             self.logger.error(_format_error_msg("in optimized validation", item_type, e))
             self.logger.exception("Full error details:")
+            raise
 
     def check_all_parallel(
         self,
@@ -373,6 +374,7 @@ class DataQualityChecker:
                 ),
             }
 
+            failures: list[tuple[str, Exception]] = []
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 future_to_name = {executor.submit(task): name for name, task in tasks.items()}
 
@@ -391,10 +393,15 @@ class DataQualityChecker:
                             pbar.set_postfix_str(f"\u2713 {task_name}", refresh=True)
                             self.logger.debug("\u2713 %s validation completed", task_name.capitalize())
                         except Exception as e:  # Intentional: Future result collection must handle any worker exception
+                            failures.append((task_name, e))
                             pbar.set_postfix_str(f"\u2717 {task_name}", refresh=True)
                             self.logger.error("\u2717 %s validation failed: %s", task_name.capitalize(), e)
                             self.logger.exception("Full error details:")
                         pbar.update(1)
+
+            if failures:
+                details = "; ".join(f"{name}: {error}" for name, error in failures)
+                raise RuntimeError(f"Data quality validation workers failed: {details}") from failures[0][1]
 
             self.logger.info("Parallel validation complete. Found %s issue(s)", len(self.issues))
 

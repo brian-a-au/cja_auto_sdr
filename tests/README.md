@@ -181,7 +181,7 @@ tests/
 └── README.md                        # This file
 ```
 
-**Total: 8,915 comprehensive tests**
+**Total: 8,923 comprehensive tests**
 
 ### Test Count Breakdown
 
@@ -190,16 +190,16 @@ tests/
 
 | Category | Tests | Files | Notes |
 |----------|-------|-------|-------|
-| `unit` | 8,784 | 163 | Default primary category for files without explicit integration/e2e/smoke scope |
+| `unit` | 8,792 | 163 | Default primary category for files without explicit integration/e2e/smoke scope |
 | `integration` | 98 | 3 | Cross-module integration suites |
 | `e2e` | 23 | 2 | End-to-end suites with a mocked external boundary |
 | `smoke` | 10 | 1 | Lightweight command-mode coverage |
 | `slow` | 0 | 0 | Overlay marker; these tests are also counted in a primary category |
-| **Primary Total** | **8,915** | **169** | **unit + integration + e2e + smoke** |
+| **Primary Total** | **8,923** | **169** | **unit + integration + e2e + smoke** |
 
 | CI Slice | Tests | Files | Selector |
 |----------|-------|-------|----------|
-| `test-unit` | 8,784 | 163 | `-m "unit and not slow"` |
+| `test-unit` | 8,792 | 163 | `-m "unit and not slow"` |
 | `test-integration` | 121 | 5 | `-m "integration or e2e or slow"` |
 | `smoke-test` | 10 | 1 | `-m smoke` |
 
@@ -330,7 +330,7 @@ tests/
 | `test_discovery_exceptions.py` | 6 | Discovery exception classification contracts |
 | `test_orchestrator.py` | 19 | Automation orchestrator wrapper CLI and exit-code handling |
 | `test_pipeline_single.py` | 2 | Modular single-dataview pipeline wrapper tests |
-| `test_processing_execution_policy.py` | 11 | Processing execution-policy derivation tests |
+| `test_processing_execution_policy.py` | 15 | Processing execution-policy derivation tests |
 | `test_github_actions_audit.py` | 7 | GitHub Actions audit workflow helper and manifest staging tests |
 | `test_example_automation_scripts.py` | 4 | Automation shell script validation tests |
 | `test_exit_codes.py` | 11 | Exit code helpers and signal detection tests |
@@ -338,7 +338,7 @@ tests/
 | `test_lock_info_normalization.py` | 54 | Lock-info normalization classmethod direct unit tests |
 | `test_resilience_edge_cases.py` | 74 | Resilience edge-case tests |
 | `test_cache_edge_cases.py` | 20 | Cache edge-case tests |
-| `test_quality_edge_cases.py` | 23 | Quality edge-case tests |
+| `test_quality_edge_cases.py` | 27 | Quality edge-case tests |
 | `test_tuning_edge_cases.py` | 15 | Tuning edge-case tests |
 | `test_fetch_edge_cases.py` | 9 | Fetch edge-case tests |
 | `test_advisories.py` | 53 | Advisory model, builder, and rollup tests |
@@ -378,7 +378,7 @@ tests/
 | `test_diff_snapshot_retention.py` | 81 | Diff snapshot-retention parse-cache characterization test |
 | `test_diff_comparator_normalize.py` | 21 | Diff field-normalization type-fast-path characterization test |
 | `test_logging_diagnostics.py` | 2 | emit_diagnostic isEnabledFor guard characterization tests |
-| **Total** | **8,915** | **Collected via pytest --collect-only** |
+| **Total** | **8,923** | **Collected via pytest --collect-only** |
 
 ## Running Tests
 
@@ -836,7 +836,7 @@ the `tests/README.md` inventory tree or count table.
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (8,915 tests total)
+- [x] Comprehensive test coverage (8,923 tests total)
 - [x] Org-wide analysis tests (test_org_report.py) - 209 tests (including large org scaling, output path aliases, memory warnings, smart cache invalidation)
 - [x] Org-wide analysis integration tests (test_org_report_integration.py) - 42 tests (end-to-end flows, caching, filtering, governance thresholds)
 - [x] Profile management tests (test_profiles.py) - 80 tests
