@@ -31,6 +31,7 @@ from typing import Any, NoReturn, Protocol, runtime_checkable
 import cjapy
 import pandas as pd
 from tqdm import tqdm
+from xlsxwriter.exceptions import XlsxWriterException
 
 from cja_auto_sdr.api.fetch import classify_component_payload as _classify_component_payload
 from cja_auto_sdr.api.quality_policy import (
@@ -2509,6 +2510,9 @@ def _merge_org_report_run_summary_details(
         },
     )
 
+    if "governance_checks" in lock_details:
+        _merge_run_details(run_state, governance_checks=lock_details["governance_checks"])
+
     if advisory_rollup is not None:
         _merge_run_details(run_state, advisories=advisory_rollup)
 
@@ -2967,6 +2971,7 @@ from cja_auto_sdr.output.diff import (
     write_diff_output,
     write_diff_pr_comment_output,
 )
+from cja_auto_sdr.output.excel_staging import staged_excel_writer
 
 # ==================== INVENTORY SUMMARY MODE ====================
 # display_inventory_summary -> output.inventory.summary
@@ -4029,7 +4034,7 @@ def process_single_dataview(
             for fmt in formats_to_generate:
                 if fmt == "excel":
                     logger.info("Generating Excel file...")
-                    with pd.ExcelWriter(str(output_path), engine="xlsxwriter") as writer:
+                    with staged_excel_writer(output_path) as writer:
                         # Create format cache once for the entire workbook
                         # This improves performance by 15-25% by reusing format objects
                         format_cache = ExcelFormatCache(writer.book)
@@ -4078,16 +4083,12 @@ def process_single_dataview(
                                     sheets_to_write.append((placeholder_df, name))
 
                         for sheet_data, sheet_name in sheets_to_write:
-                            try:
-                                if sheet_data.empty:
-                                    logger.warning(f"Sheet {sheet_name} is empty, creating placeholder")
-                                    placeholder_df = pd.DataFrame({"Note": [f"No data available for {sheet_name}"]})
-                                    apply_excel_formatting(writer, placeholder_df, sheet_name, logger, format_cache)
-                                else:
-                                    apply_excel_formatting(writer, sheet_data, sheet_name, logger, format_cache)
-                            except (OutputError, OSError, KeyError, TypeError, ValueError) as e:
-                                logger.error(f"Failed to write sheet {sheet_name}: {e!s}")
-                                continue
+                            if sheet_data.empty:
+                                logger.warning(f"Sheet {sheet_name} is empty, creating placeholder")
+                                placeholder_df = pd.DataFrame({"Note": [f"No data available for {sheet_name}"]})
+                                apply_excel_formatting(writer, placeholder_df, sheet_name, logger, format_cache)
+                            else:
+                                apply_excel_formatting(writer, sheet_data, sheet_name, logger, format_cache)
 
                     logger.info(f"✓ Excel file created: {output_path}")
                     output_files.append(str(output_path))
@@ -4300,7 +4301,7 @@ def process_single_dataview(
                 failure_code=FAILURE_CODE_OUTPUT_PERMISSION_DENIED,
                 failure_reason="output_permission_denied",
             )
-        except (OSError, KeyError, TypeError, ValueError) as e:
+        except (OutputError, XlsxWriterException, OSError, KeyError, TypeError, ValueError) as e:
             logger.critical("Failed to generate output file: %s", e)
             logger.exception("Full exception details:")
             logger.info("=" * BANNER_WIDTH)
@@ -5968,6 +5969,11 @@ def run_org_report(
         # Run analysis
         analyzer = OrgComponentAnalyzer(cja, org_config, logger, org_id=org_id, cache=cache)
         result = analyzer.run_analysis()
+        if runtime_details is not None:
+            runtime_details["governance_checks"] = result.governance_checks
+        governance_evaluation_failed = org_config.fail_on_threshold and any(
+            check["status"] == "not_evaluated" for check in result.governance_checks
+        )
         _copy_org_report_lock_runtime_details_from_state(
             runtime_details,
             lock_state=analyzer.lock_runtime_state,
@@ -6036,7 +6042,7 @@ def run_org_report(
                         _status_print(f"JSON saved to: {file_path}")
             append_github_step_summary(build_org_step_summary(result), logger)
             _populate_org_report_advisory_rollup(runtime_details, result, trending)
-            return True, result.thresholds_exceeded
+            return not governance_evaluation_failed, result.thresholds_exceeded
 
         # Handle format aliases (reports, data, ci)
         if output_format in FORMAT_ALIASES:
@@ -6158,7 +6164,7 @@ def run_org_report(
 
         append_github_step_summary(build_org_step_summary(result), logger)
         _populate_org_report_advisory_rollup(runtime_details, result, trending)
-        return True, result.thresholds_exceeded
+        return not governance_evaluation_failed, result.thresholds_exceeded
 
     except ConcurrentOrgReportError as e:
         _status_print(ConsoleColors.error(f"ERROR: Org report failed: {e!s}"))
@@ -7042,6 +7048,18 @@ def _dispatch_post_validation_report_modes(
             if thresholds_exceeded and org_config.fail_on_threshold:
                 sys.exit(2)
             sys.exit(0)
+        if org_config.fail_on_threshold:
+            unavailable_checks = [
+                check for check in lock_details.get("governance_checks", []) if check["status"] == "not_evaluated"
+            ]
+            if unavailable_checks:
+                reasons = ", ".join(f"{check['type']} ({check['reason']})" for check in unavailable_checks)
+                _emit_discovery_error(
+                    f"Requested governance checks could not be evaluated: {reasons}",
+                    is_machine_readable=True,
+                    error_type="governance_evaluation_error",
+                    human_to_stderr=True,
+                )
         sys.exit(1)
 
     return data_view_inputs

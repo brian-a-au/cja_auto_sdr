@@ -9,6 +9,7 @@ from cja_auto_sdr.org.models import (
     OrgReportResult,
     OrgReportTrending,
 )
+from cja_auto_sdr.org.writers.common import _governance_check_rows
 from cja_auto_sdr.org.writers.common import _render_distribution_bar as _render_distribution_bar_impl
 from cja_auto_sdr.org.writers.compat import make_override_proxy
 from cja_auto_sdr.org.writers.trending import _print_trending_console_section as _print_trending_console_section_impl
@@ -23,6 +24,14 @@ _print_trending_console_section = make_override_proxy(
     "_print_trending_console_section",
     _print_trending_console_section_impl,
 )
+
+
+def _print_governance_checks(result: OrgReportResult) -> None:
+    if result.governance_checks:
+        print("GOVERNANCE CHECKS")
+        for row in _governance_check_rows(result.governance_checks):
+            print(" | ".join(f"{key}: {value}" for key, value in row.items() if value != ""))
+        print()
 
 
 def write_org_report_console(
@@ -287,6 +296,8 @@ def write_org_report_console(
             print(f"\n  ... and {len(result.clusters) - 10} more clusters")
         print()
 
+    _print_governance_checks(result)
+
     # Governance Violations (Feature 1)
     if result.governance_violations:
         print("-" * 110)
@@ -409,6 +420,7 @@ def write_org_report_stats_only(
     print(f"  Common:   {dist.total_common:>6} ({dist.total_common / total * 100:>5.1f}%)")
     print(f"  Limited:  {dist.total_limited:>6} ({dist.total_limited / total * 100:>5.1f}%)")
     print(f"  Isolated: {dist.total_isolated:>6} ({dist.total_isolated / total * 100:>5.1f}%)")
+    _print_governance_checks(result)
     print(f"Duration: {result.duration:.2f}s")
     print("=" * BANNER_WIDTH)
     print()

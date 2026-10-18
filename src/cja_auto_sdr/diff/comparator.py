@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+from contextlib import suppress
 from typing import Any, ClassVar
 
 import pandas as pd
@@ -15,6 +16,7 @@ from cja_auto_sdr.diff.models import (
     InventoryItemDiff,
     MetadataDiff,
 )
+from cja_auto_sdr.diff.snapshot import _annotate_snapshot_failure
 from cja_auto_sdr.inventory.utils import extract_short_name, normalize_func_name
 
 
@@ -56,6 +58,7 @@ class DataViewComparator:
         "formula",
         "isCalculated",
         "derivedFieldId",
+        "fieldDefinition",
     ]
 
     CALC_METRICS_COMPARE_FIELDS: ClassVar[list[str]] = [
@@ -136,6 +139,19 @@ class DataViewComparator:
         self.include_calc_metrics = include_calc_metrics
         self.include_segments = include_segments
 
+    def validate_requested_inventories(self, source: DataViewSnapshot, target: DataViewSnapshot) -> None:
+        """Reject unavailable requested evidence before comparison or snapshot side effects."""
+        for side, snapshot in (("source", source), ("target", target)):
+            for requested, field, label in (
+                (self.include_calc_metrics, "calculated_metrics_inventory", "calculated metrics"),
+                (self.include_segments, "segments_inventory", "segments"),
+            ):
+                if requested and getattr(snapshot, field) is None:
+                    raise _annotate_snapshot_failure(
+                        ValueError(f"Missing requested {label} inventory on {side} snapshot"),
+                        stage="requested_inventory_validation",
+                    )
+
     def compare(
         self,
         source: DataViewSnapshot,
@@ -143,6 +159,7 @@ class DataViewComparator:
         source_label: str = "Source",
         target_label: str = "Target",
     ) -> DiffResult:
+        self.validate_requested_inventories(source, target)
         self.logger.info("Comparing data views:")
         self.logger.info(f"  {source_label}: {source.data_view_name} ({source.data_view_id})")
         self.logger.info(f"  {target_label}: {target.data_view_name} ({target.data_view_id})")
@@ -164,8 +181,8 @@ class DataViewComparator:
 
         if self.include_calc_metrics:
             calc_metrics_diffs = self._compare_inventory_items(
-                source.calculated_metrics_inventory if source.calculated_metrics_inventory is not None else [],
-                target.calculated_metrics_inventory if target.calculated_metrics_inventory is not None else [],
+                source.calculated_metrics_inventory,
+                target.calculated_metrics_inventory,
                 "calculated_metric",
                 id_field="metric_id",
             )
@@ -173,8 +190,8 @@ class DataViewComparator:
 
         if self.include_segments:
             segments_diffs = self._compare_inventory_items(
-                source.segments_inventory if source.segments_inventory is not None else [],
-                target.segments_inventory if target.segments_inventory is not None else [],
+                source.segments_inventory,
+                target.segments_inventory,
                 "segment",
                 id_field="segment_id",
             )
@@ -502,8 +519,12 @@ class DataViewComparator:
             source_val = source.get(field)
             target_val = target.get(field)
 
-            source_normalized = self._normalize_value(source_val, field_name=field)
-            target_normalized = self._normalize_value(target_val, field_name=field)
+            if field == "fieldDefinition":
+                source_normalized = self._normalize_field_definition(source_val)
+                target_normalized = self._normalize_field_definition(target_val)
+            else:
+                source_normalized = self._normalize_value(source_val, field_name=field)
+                target_normalized = self._normalize_value(target_val, field_name=field)
 
             if source_normalized != target_normalized:
                 changed[field] = (source_val, target_val)
@@ -532,6 +553,23 @@ class DataViewComparator:
                 return sorted(normalized_list, key=repr)
             return normalized_list
         return value
+
+    @staticmethod
+    def _normalize_field_definition(value: Any) -> Any:
+        if isinstance(value, str):
+            with suppress(json.JSONDecodeError):
+                value = json.loads(value)
+
+        def canonical(node: Any) -> Any:
+            if isinstance(node, dict):
+                return ("object", tuple((key, canonical(item)) for key, item in sorted(node.items())))
+            if isinstance(node, list):
+                return ("array", tuple(canonical(item) for item in node))
+            if node is None or (not isinstance(node, str) and pd.api.types.is_scalar(node) and pd.isna(node)):
+                return ("null",)
+            return (type(node).__name__, node)
+
+        return canonical(value)
 
     def _normalize_dict(self, d: dict) -> dict:
         if not d:

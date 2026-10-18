@@ -7,13 +7,11 @@ from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from cja_auto_sdr.api.fetch import classify_component_payload
-from cja_auto_sdr.core.colors import ConsoleColors
 from cja_auto_sdr.core.discovery_payloads import (
     TOLERATED_LEGACY_LOOKUP_REASONS,
     PayloadKind,
     assess_dataview_lookup_payload,
 )
-from cja_auto_sdr.core.error_policies import RECOVERABLE_OPTIONAL_ENRICHMENT_EXCEPTIONS
 from cja_auto_sdr.core.exceptions import attach_api_connection_hint_context
 from cja_auto_sdr.core.json_io import load_json_cached, write_json_atomic
 from cja_auto_sdr.diff.models import DataViewSnapshot
@@ -234,14 +232,8 @@ class SnapshotManager:
                 self.logger.info(f"  Fetched {len(snapshot.calculated_metrics_inventory)} calculated metrics")
                 if not quiet:
                     print(f"  Calculated metrics: {len(snapshot.calculated_metrics_inventory)} items")
-            except ImportError as e:
-                self.logger.warning(f"Could not import calculated metrics inventory module: {e}")
-                if not quiet:
-                    print(ConsoleColors.warning("  Warning: Calculated metrics module not available"))
-            except RECOVERABLE_OPTIONAL_ENRICHMENT_EXCEPTIONS as e:
-                self.logger.warning(f"Failed to fetch calculated metrics inventory: {e}")
-                if not quiet:
-                    print(ConsoleColors.warning(f"  Warning: Could not fetch calculated metrics: {e}"))
+            except Exception as exc:
+                raise _annotate_snapshot_failure(exc, stage="calculated_metrics_inventory") from exc
 
         if include_segments:
             if not quiet:
@@ -255,14 +247,8 @@ class SnapshotManager:
                 self.logger.info(f"  Fetched {len(snapshot.segments_inventory)} segments")
                 if not quiet:
                     print(f"  Segments: {len(snapshot.segments_inventory)} items")
-            except ImportError as e:
-                self.logger.warning(f"Could not import segments inventory module: {e}")
-                if not quiet:
-                    print(ConsoleColors.warning("  Warning: Segments module not available"))
-            except RECOVERABLE_OPTIONAL_ENRICHMENT_EXCEPTIONS as e:
-                self.logger.warning(f"Failed to fetch segments inventory: {e}")
-                if not quiet:
-                    print(ConsoleColors.warning(f"  Warning: Could not fetch segments: {e}"))
+            except Exception as exc:
+                raise _annotate_snapshot_failure(exc, stage="segments_inventory") from exc
 
         self.logger.info(f"Snapshot created: {len(metrics_list)} metrics, {len(dimensions_list)} dimensions")
         return snapshot

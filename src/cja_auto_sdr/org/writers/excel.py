@@ -20,6 +20,7 @@ from cja_auto_sdr.org.models import (
 from cja_auto_sdr.org.writers.common import (
     _flatten_recommendation_for_tabular as _flatten_recommendation_for_tabular_impl,
 )
+from cja_auto_sdr.org.writers.common import _governance_check_rows
 from cja_auto_sdr.org.writers.common import (
     _normalize_recommendation_for_json as _normalize_recommendation_for_json_impl,
 )
@@ -406,6 +407,12 @@ def write_org_report_excel(
                 worksheet.set_column("D:D", 12)
                 worksheet.set_column("E:E", 20)
                 worksheet.set_column("F:F", 40)
+
+        if result.governance_checks:
+            pd.DataFrame(_governance_check_rows(result.governance_checks)).to_excel(
+                writer, sheet_name="Governance Checks", index=False
+            )
+            writer.sheets["Governance Checks"].set_column("A:I", 24)
 
         # Sheet 6: Recommendations
         if result.recommendations:

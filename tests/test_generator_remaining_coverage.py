@@ -29,6 +29,7 @@ Targets the ~180 remaining uncovered lines across:
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import os
 import sys
@@ -1076,7 +1077,8 @@ class TestHandleDiffSnapshotCommand:
                 quiet=False,
                 quiet_diff=False,
             )
-        assert success is True
+        assert (success, _has_changes, _code) == (False, False, None)
+        assert json.loads(capsys.readouterr().err) == {"error": "Build failed", "error_type": "comparison_error"}
 
     @patch("cja_auto_sdr.generator.SnapshotManager")
     @patch("cja_auto_sdr.generator.DataViewComparator")
@@ -1131,7 +1133,8 @@ class TestHandleDiffSnapshotCommand:
                 quiet=False,
                 quiet_diff=False,
             )
-        assert success is True
+        assert (success, _has_changes, _code) == (False, False, None)
+        assert json.loads(capsys.readouterr().err) == {"error": "Seg build failed", "error_type": "comparison_error"}
 
 
 # ===========================================================================

@@ -415,7 +415,9 @@ Cache is stored in `~/.cja_auto_sdr/cache/org_report_cache.json`.
 |--------|-------------|---------|
 | `--duplicate-threshold N` | Maximum allowed high-similarity pairs (>=90%). Exit code 2 if exceeded with `--fail-on-threshold` | - |
 | `--isolated-threshold PERCENT` | Maximum isolated component percentage (0.0-1.0). Exit code 2 if exceeded with `--fail-on-threshold` | - |
-| `--fail-on-threshold` | Enable exit code 2 when governance thresholds are exceeded (for CI/CD integration) | False |
+| `--fail-on-threshold` | Exit 2 for evaluated governance violations; exit 1 when any requested gate cannot be evaluated (failure takes precedence) | False |
+
+Requested gates appear in JSON `governance_checks` and run-summary `details.governance_checks`, with `pass`, `fail`, or `not_evaluated` status, threshold, actual value, denominator, scope, and an unavailable reason. Scope includes successful and failed view counts; partial fetches retain their existing exit policy. A completed empty similarity result passes a zero duplicate threshold. `--skip-similarity`, `--org-stats`, or the similarity guardrail makes a requested duplicate gate unavailable. An isolated gate with zero components is also unavailable. Strict mode still emits the report before exiting 1 for these cases; without `--fail-on-threshold`, reporting exits are unchanged. See [governance outcomes](ORG_WIDE_ANALYSIS.md#governance-exit-codes).
 
 #### Advanced Analysis Options
 
@@ -1532,6 +1534,10 @@ uv run cja_auto_sdr dv_123 --agent-mode --run-summary-json run_summary.json
   8. Calculated Metrics (if `--include-calculated`)
 
 > **Note:** When using `--inventory-only`, only the inventory sheets (6-8) are generated, skipping sheets 1-5.
+
+Excel workbooks are published only after all requested sheets render and the workbook closes successfully. If rendering, closing, or replacement fails, the run reports failure and an existing destination remains unchanged; an absent destination stays absent. Multi-format runs publish each artifact independently and are not a transaction.
+
+Publication requires write access to the destination directory. Existing regular-file permission bits are preserved, and new files use the process creation permissions (umask). A symlink destination updates its resolved target while retaining the link. Destinations with multiple hard links or non-regular targets are rejected; choose an ordinary file path instead.
 
 ### Log Files
 

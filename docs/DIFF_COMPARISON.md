@@ -72,6 +72,13 @@ Use `--extended-fields` to include additional fields in comparison:
 | `formula` | Calculated metric formula |
 | `isCalculated` | Whether metric is calculated |
 | `derivedFieldId` | Linked derived field ID |
+| `fieldDefinition` | Captured derived-field rules and literal values |
+
+Derived-field logic changes require `--extended-fields`. Python callers can also select
+`DataViewComparator(compare_fields=["fieldDefinition"])`; default comparison fields remain unchanged.
+Use `--ignore-fields fieldDefinition` to exclude definitions from extended comparison.
+Definitions are compared only when captured in the metric/dimension payloads. Older snapshots
+without definitions remain readable, but cannot establish complete derived-logic coverage.
 
 ### Metadata Comparison
 
@@ -140,7 +147,7 @@ else:
 
 ### Value Normalization
 
-Before comparison, values are normalized to ensure accurate detection:
+Before comparison, ordinary component fields are normalized to ensure accurate detection:
 
 | Original Value | Normalized Value | Purpose |
 |---------------|------------------|---------|
@@ -155,6 +162,12 @@ This normalization ensures that:
 - `description: NaN` equals `description: ""` (both are treated as empty)
 - `name: "Page Views "` equals `name: "Page Views"`
 - Nested objects with different key ordering compare correctly
+
+`fieldDefinition` uses a separate comparison representation. Valid JSON-encoded definitions
+and equivalent native objects/lists compare equally, regardless of object-key order. Rule
+list order, value types (including boolean versus number), literal whitespace, nulls, empty
+values, and empty object members are preserved. Malformed JSON strings compare literally.
+Pandas missing scalars are treated as null. Diff output retains the original before/after values.
 
 **Display Format:** Empty/null/NaN values are displayed as `(empty)` in diff output for clarity.
 
@@ -934,7 +947,7 @@ When created with `--include-calculated` and/or `--include-segments`:
 
 Inventory arrays are only present when the corresponding `--include-*` flag was used during snapshot creation. The `metadata` section includes counts for any included inventory types.
 
-> **Note:** Derived fields inventory (`--include-derived`) is for SDR generation only, not snapshot diff. Derived fields are already included in the standard metrics/dimensions output, so changes are automatically captured in the Metrics/Dimensions diff.
+> **Note:** Derived fields inventory (`--include-derived`) is for SDR generation only, not snapshot diff. Use `--extended-fields` to compare captured `fieldDefinition` values in the Metrics/Dimensions diff.
 
 ## CI/CD Integration
 
@@ -1194,6 +1207,7 @@ With `--extended-fields`, additional fields are compared:
 - `bucketing`, `bucketingSetting` - Bucketing configuration
 - `persistence`, `persistenceSetting`, `allocation` - Persistence settings
 - `formula`, `isCalculated`, `derivedFieldId` - Calculated metric settings
+- `fieldDefinition` - Captured derived-field logic
 - `segmentable`, `reportable`, `componentType` - Component capabilities
 - `dataType`, `hasData`, `approved` - Data and status fields
 
@@ -1203,7 +1217,7 @@ Use `--ignore-fields` to exclude any of these from comparison.
 
 You can include inventory items (calculated metrics, segments) in snapshot-based diff comparisons. This allows you to track changes to these components over time for the **same data view**.
 
-> **Note:** Derived fields are not included in inventory diff since they're already captured in the standard metrics/dimensions diff. Use `--include-derived` for SDR generation only.
+> **Note:** Derived fields are not a separate snapshot inventory. Use `--extended-fields` to compare their captured `fieldDefinition` values in the Metrics/Dimensions diff. Use `--include-derived` for SDR generation only.
 
 > **Important:** Inventory diff is only supported for snapshot comparisons of the **same data view** over time. Cross-data-view comparisons (e.g., `--diff dv_12345 dv_67890`) do not support inventory options.
 
@@ -1245,7 +1259,7 @@ cja_auto_sdr dv_12345 --snapshot ./baseline.json --include-calculated
 
 Snapshots with inventory data use version 2.0 format and include the inventory arrays.
 
-> **Note:** `--include-derived` is not supported with `--snapshot`. Derived fields inventory is only available in SDR generation mode. Derived field changes are captured in the standard Metrics/Dimensions diff. `--include-all-inventory` uses smart mode detection in snapshot/diff workflows and automatically enables only `--include-calculated` + `--include-segments`.
+> **Note:** `--include-derived` is not supported with `--snapshot`. Derived fields inventory is only available in SDR generation mode. Compare captured derived-field definitions using `--extended-fields`. `--include-all-inventory` uses smart mode detection in snapshot/diff workflows and automatically enables only `--include-calculated` + `--include-segments`.
 
 ### Comparing Snapshots with Inventory
 
@@ -1269,7 +1283,11 @@ cja_auto_sdr dv_12345 --diff-snapshot ./baseline.json --include-all-inventory
 
 ### Inventory Validation
 
-If you request an inventory type that wasn't captured in the snapshot, you'll receive a helpful error:
+Explicitly requested calculated metrics and segments must be available on both sides of a comparison. An omitted or `null` inventory fails with exit code 1 and identifies the missing inventory and source or target side. A collected empty array (`[]`) is valid evidence: comparing a populated inventory with `[]` reports genuine removals.
+
+Requested inventory import or collection failures also fail with exit code 1. Failed collection or missing requested evidence stops comparison before automatic snapshot saves or retention pruning, preserving previous captures. Machine-readable failures emit an `error`/`error_type` envelope on stderr without a successful diff payload on stdout; API guidance, when available, stays inside the envelope's additive `hint` field. Historical snapshots remain readable and can be compared without requesting their absent inventories.
+
+If the baseline lacks an inventory you request, the error includes guidance such as:
 
 ```text
 Error: Snapshot missing required inventory data.
@@ -1386,10 +1404,10 @@ Diff output and `--ignore-fields` use the logical field names below. Existing sn
    # Quarterly snapshots for audit trail
    cja_auto_sdr dv_12345 --snapshot ./q1-2025.json
 
-   # Compare Q1 to Q2 - derived field changes appear in Metrics/Dimensions diff
-   cja_auto_sdr --compare-snapshots ./q1-2025.json ./q2-2025.json
+   # Compare Q1 to Q2, including captured derived-field definitions
+   cja_auto_sdr --compare-snapshots ./q1-2025.json ./q2-2025.json --extended-fields
    ```
-   > **Note:** Derived field changes are captured in the standard Metrics/Dimensions diff (they're part of the metrics/dimensions API data). Use `--include-derived` only in SDR generation mode to output the derived fields inventory sheet.
+   > **Note:** Definition changes appear in the Metrics/Dimensions diff when `fieldDefinition` is captured and `--extended-fields` is selected. Use `--include-derived` only in SDR generation mode to output the derived fields inventory sheet.
 
 ## Best Practices
 
@@ -1467,7 +1485,7 @@ The diff comparison feature includes comprehensive unit tests in `tests/test_dif
 | `TestAutoSnapshotCLIArguments` | 10 | --auto-snapshot, --snapshot-dir, --keep-last |
 | `TestGetMostRecentSnapshot` | 5 | Most recent snapshot lookup, filtering |
 
-**Total: 176 tests**
+**Total: 178 tests**
 
 ### Running Tests
 
@@ -1507,7 +1525,7 @@ python -m pytest tests/test_diff_comparison.py --cov=cja_auto_sdr --cov-report=t
 18. **Ambiguous Names** - Proper handling when names match multiple data views
 19. **Auto-Snapshot** - Automatic snapshot saving with timestamped filenames
 20. **Retention Policy** - Configurable snapshot retention per data view
-21. **Inventory Diff** - Calculated metrics, segments, and derived fields comparison in snapshots
+21. **Inventory Diff** - Calculated metrics and segments comparison in snapshots; captured derived-field definitions use the extended Metrics/Dimensions diff
 22. **Inventory Change Percentages** - Percentage calculations for inventory item changes
 
 ## See Also
