@@ -16,6 +16,9 @@ from cja_auto_sdr.core.config import (
     WorkerConfig,
 )
 
+# Minimum supported Python version (keep in sync with requires-python in pyproject.toml)
+MIN_PYTHON_VERSION: tuple[int, int] = (3, 11)
+
 # ==================== FORMAT ALIASES ====================
 
 # Shorthand format aliases for common output combinations

@@ -280,7 +280,7 @@ Exit Codes:
   3 - Diff warning threshold exceeded (--warn-threshold)
 
 Requirements:
-  Python 3.14 or higher required. Verify with: python3 --version
+  Python 3.11 or higher required. Verify with: python3 --version
         """,
     )
 

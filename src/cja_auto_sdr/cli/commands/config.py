@@ -11,6 +11,8 @@ import os
 from pathlib import Path
 from typing import Any
 
+from cja_auto_sdr.core.constants import MIN_PYTHON_VERSION
+
 __all__ = [
     "_check_output_dir_access",
     "_read_config_status_file",
@@ -331,10 +333,11 @@ def validate_config_only(
     print("[1/5] Checking environment...")
     vi = generator.sys.version_info
     python_version = f"{vi.major}.{vi.minor}.{vi.micro}"
-    if vi >= (3, 14):
-        print(generator.ConsoleColors.success(f"  \u2713 Python {python_version} (minimum: 3.14)"))
+    min_python = ".".join(map(str, MIN_PYTHON_VERSION))
+    if vi >= MIN_PYTHON_VERSION:
+        print(generator.ConsoleColors.success(f"  \u2713 Python {python_version} (minimum: {min_python})"))
     else:
-        print(generator.ConsoleColors.error(f"  \u2717 Python {python_version} (minimum: 3.14)"))
+        print(generator.ConsoleColors.error(f"  \u2717 Python {python_version} (minimum: {min_python})"))
         all_passed = False
     platform_system = generator.platform.system()
     platform_release = generator.platform.release()

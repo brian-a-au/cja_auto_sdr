@@ -469,7 +469,7 @@ class TestValidateConfigOnlyEnvironmentStep:
         output = capsys.readouterr().out
         assert "[1/5] Checking environment..." in output
         assert "Python" in output
-        assert "(minimum: 3.14)" in output
+        assert "(minimum: 3.11)" in output
 
     @patch("cja_auto_sdr.generator._config_from_env")
     @patch("cja_auto_sdr.generator.cjapy")
@@ -488,7 +488,7 @@ class TestValidateConfigOnlyEnvironmentStep:
         assert "Platform:" in output
 
     def test_python_version_too_low_fails(self, capsys: pytest.CaptureFixture) -> None:
-        """Python version below 3.14 should fail validation."""
+        """Python version below 3.11 should fail validation."""
         import sys as _sys
 
         from cja_auto_sdr.generator import validate_config_only
@@ -498,10 +498,10 @@ class TestValidateConfigOnlyEnvironmentStep:
         class FakeVersionInfo(tuple):
             __slots__ = ()
             major = 3
-            minor = 12
+            minor = 10
             micro = 0
 
-        fake_version_info = FakeVersionInfo((3, 12, 0))
+        fake_version_info = FakeVersionInfo((3, 10, 0))
 
         with patch("cja_auto_sdr.generator.sys") as mock_sys:
             mock_sys.version_info = fake_version_info
@@ -509,8 +509,29 @@ class TestValidateConfigOnlyEnvironmentStep:
             result = validate_config_only()
         assert result is False
         output = capsys.readouterr().out
-        assert "Python 3.12.0" in output
+        assert "Python 3.10.0" in output
         assert "VALIDATION FAILED" in output
+
+    def test_python_version_at_floor_passes(self, capsys: pytest.CaptureFixture) -> None:
+        """Python 3.11 is the supported floor and should pass the environment check."""
+        import sys as _sys
+
+        from cja_auto_sdr.generator import validate_config_only
+
+        class FakeVersionInfo(tuple):
+            __slots__ = ()
+            major = 3
+            minor = 11
+            micro = 0
+
+        fake_version_info = FakeVersionInfo((3, 11, 0))
+
+        with patch("cja_auto_sdr.generator.sys") as mock_sys:
+            mock_sys.version_info = fake_version_info
+            mock_sys.platform = _sys.platform
+            validate_config_only()
+        output = capsys.readouterr().out
+        assert "\u2713 Python 3.11.0 (minimum: 3.11)" in output
 
 
 class TestValidateConfigOnlyDependenciesStep:
