@@ -168,6 +168,28 @@ cja_auto_sdr dv_12345 --stats --format csv --output stats.csv
 - No index columns
 - Header row included
 - Compatible with all spreadsheet tools
+- Staged publication: every section is written to a hidden `.csv-*` directory inside the bundle first, so a failed render leaves the previous bundle unchanged
+- Completion manifest: `_manifest.json` is written last
+
+**Manifest contract (`_manifest.json`):**
+
+```json
+{
+  "manifest_version": "1.0",
+  "complete": true,
+  "generated_at": "2026-01-01T12:00:00+00:00",
+  "files": [
+    {"name": "metrics.csv", "sheet": "Metrics", "sha256": "...", "rows": 12, "bytes": 640}
+  ]
+}
+```
+
+- `generated_at` is a UTC ISO-8601 timestamp. `rows` counts data rows and does not include the header. `files` is in section order.
+- Consumers should trust `_manifest.json`, not directory contents. Only files listed in the manifest belong to the run.
+- If a run fails while publishing, no `_manifest.json` is left in the bundle.
+- Files that are not in the new manifest, such as an older `segments.csv` or your own notes, are never deleted.
+- Concurrent writes to one bundle are unsupported.
+- Replacing several files is not atomic. A reader can see a mix of old and new files while publishing is in progress, which is why the manifest is removed first and written last.
 
 **Best for:**
 - Automated data processing

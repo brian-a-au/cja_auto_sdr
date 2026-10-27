@@ -11,12 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Staged CSV bundles with a completion manifest:** `--format csv` now writes all sections to a hidden staging directory and publishes them together, ending with `_manifest.json` (file name, sheet, SHA-256, row count, and byte size for each file). If a section fails to render, the previous bundle is left untouched. Files that are not part of the new run are never deleted. Duplicate or unsafe section names now raise an output error.
 - **Quality rule identity:** every data quality issue now has a stable `Rule ID` (for example `dq.missing_description.v1`), a sorted list of affected `Component IDs`, an `Occurrences` count and an `Unaddressable IDs` count. These appear as four new trailing columns in the Data Quality output. JSON keeps `Component IDs` as a list. Excel, CSV, HTML and Markdown show it as a comma-separated string. Severity counts are unchanged.
 - **Diff coverage:** diff JSON output now has a top-level `coverage` object that lists the fields compared, ignored fields, component types, inventories, metadata policy, `--show-only` filter, and known limitations. `summary.metadata_changes` and `summary.metadata_policy` are also new. Console and Markdown reports show a `Metadata changes: N` line.
 - **`--include-metadata-changes` for diffs:** counts data view name, owner, and description changes as changes for `has_changes` and exit code 2. By default they are reported but not counted, as before.
 
 ### Fixed
 
+- A failed output write no longer drops files that already finished in the same run. With `--format all`, a CSV failure now keeps the completed Excel file in the run summary `output_files`.
 - **Derived-field diffs:** `--extended-fields` comparisons now detect changes to a derived field's `fieldDefinition` logic. Object key order is ignored, while rule order and value types are preserved.
 - **Unavailable inventories in diffs:** when a requested calculated-metric or segment inventory is unavailable, the diff now fails with exit code 1. Before, it reported every item as removed. No snapshot is saved or pruned in that case.
 - **Excel publication:** Excel workbooks are now staged and published only after every sheet renders and the workbook closes. If anything fails, the previous workbook stays unchanged. Hardlinked and non-regular destination files are refused.
