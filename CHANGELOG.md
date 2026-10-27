@@ -9,6 +9,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.13.1] - 2026-10-27
+
+This patch brings the CLI in line with how aa_auto_sdr v1.21.21 to v1.22.0 handles failed fetches, Git snapshot commits, batch failures, and report coverage.
+
+### Added
+
+- **Coverage and quality status in SDR reports:** Excel gains a `Coverage` sheet after `Metadata`, CSV bundles gain `coverage.csv`, and Markdown and HTML gain a Coverage section. Each component family (Metrics, Dimensions, Derived Fields, Calculated Metrics, Segments) shows whether it was `collected`, `collected_empty`, `excluded`, `not_requested`, or `failed`, and a final row shows whether the data quality audit `ran`, was `skipped`, `failed`, or did `not_run`. Empty sections print their coverage state instead of a generic "no data" message, and HTML no longer drops empty sections.
+- **`collected_components` and `coverage` in SDR JSON:** default and `--json-typed` JSON gain these additive top-level keys. Excluded families keep their key as an empty list, so use `collected_components` to tell "excluded" from "empty". The typed schema version stays `cja-auto-sdr.sdr-typed/1`.
+- **Quality gate in reports:** with `--fail-on-quality`, the Metadata section gains `Quality Gate Verdict` (`PASS`, `FAIL`, or `NOT_EVALUATED`) and `Quality Gate Threshold` rows. With `--skip-validation`, the Data Quality section says the audit was skipped and why.
+
+### Changed
+
+- **CI impact:** fixes below turn runs that used to exit 0 into exit 1: a `--batch --continue-on-error` run in which a data view failed, a metrics or dimensions fetch that returned an API error, and a `--git-commit` run whose snapshot could not be fetched, whose repository could not be initialized, or whose commit failed. Check CI jobs that expect these cases to pass.
+- `--metrics-only` and `--dimensions-only` now leave the excluded family out of every SDR format, not only Excel, and mark it `excluded` in Coverage. Using both flags together keeps both families in every format.
+- Org reports run with `--filter` or `--exclude`, or with a `--limit` that cut data views, are no longer used as `--trending-window` history (`history_exclusion_reason: filtered_scope`), so a partial report cannot show false data view drift. `--compare-org-report` still accepts them.
+
+### Fixed
+
+- **Batch exit code:** `--batch ... --continue-on-error` still processes every data view, but now exits 1 when any data view failed. Before, it exited 0 and the run summary reported success.
+- **API errors read as empty components:** a metrics or dimensions response that is an API error body (for example HTTP 403 or 500), has no `content` list, or has rows without an `id` is now a failed fetch, not an empty one. SDR runs fail with `COMPONENT_FETCH_FAILED` unless `--allow-partial` is given, snapshots fail instead of saving zero components, and org reports record the data view as an error. A genuine empty data view is unchanged, and a valid page carrying an empty `error` field is not treated as an error.
+- **Empty Git snapshot commits:** when `--git-commit` has to fetch the snapshot again and that fetch fails, nothing is saved or committed and the run exits 1. Before, empty metric and dimension files were committed, so Git history showed every component as removed.
+- **Git snapshot commit scope:** snapshot commits now include only the data view's own files. Other staged or unstaged work in the snapshot repository is left alone, and an unchanged data view reports no changes.
+- **Git repository discovery and init:** an inconclusive check (for example a timeout) fails the Git step instead of running `git init`. A snapshot directory inside another repository keeps using it, now with scoped commits. `--git-init` no longer overwrites an existing `README.md` or `.gitignore`. A failed init or commit now fails the run with exit 1. A commit that succeeded but whose SHA could not be read is reported as `unknown`, not as a failure.
+- **Notion retries:** the page ID is saved as soon as the page is created, so a run that fails while uploading content is repaired in place on the next run instead of creating a duplicate page.
+
 ## [3.13.0] - 2026-10-27
 
 ### Added

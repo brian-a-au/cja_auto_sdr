@@ -513,6 +513,9 @@ _CALCULATED_METRICS_COMPONENT_FETCH_SPEC = _ComponentFetchSpec(
 )
 
 
+_VALIDATED_COMPONENT_BY_METHOD: dict[str, str] = {"getMetrics": "metrics", "getDimensions": "dimensions"}
+
+
 def _fetch_component_payload(cja: Any, data_view_id: str, fetch_spec: _ComponentFetchSpec) -> Any:
     """Invoke a component-list API call using a declarative fetch spec."""
     fetch_method = getattr(cja, fetch_spec.method_name, None)
@@ -525,6 +528,13 @@ def _fetch_component_payload(cja: Any, data_view_id: str, fetch_spec: _Component
     if fetch_spec.data_view_arg_name:
         kwargs[fetch_spec.data_view_arg_name] = data_view_id
         return fetch_method(**kwargs)
+    validated_component = _VALIDATED_COMPONENT_BY_METHOD.get(fetch_spec.method_name)
+    if validated_component is not None:
+        # Real cjapy clients turn API error bodies into empty DataFrames; the
+        # validated fetch surfaces them as error payloads instead.
+        from cja_auto_sdr.api.fetch import fetch_component_payload
+
+        return fetch_component_payload(cja, validated_component, data_view_id, **kwargs)
     return fetch_method(data_view_id, **kwargs)
 
 

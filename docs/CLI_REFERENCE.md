@@ -107,7 +107,7 @@ cja-auto-sdr [OPTIONS] DATA_VIEW_ID_OR_NAME [...]
 |--------|-------------|---------|
 | `--batch` | Enable batch processing; multiple data view arguments also trigger batch processing automatically | False |
 | `--workers N` | Number of parallel workers (1-256), or `auto` for automatic detection based on CPU cores and workload complexity | auto |
-| `--continue-on-error` | Continue if a data view fails | False |
+| `--continue-on-error` | Continue if a data view fails. The run still exits 1 when any data view failed | False |
 | `--skip-validation` | Skip data quality validation (20-30% faster) | False |
 
 ### Output
@@ -119,8 +119,8 @@ cja-auto-sdr [OPTIONS] DATA_VIEW_ID_OR_NAME [...]
 | `--format FORMAT` | Output format (see table below) | excel (SDR), console (diff) |
 | `--json-typed` | Emit versioned typed JSON (`schema_version: cja-auto-sdr.sdr-typed/1`) that keeps nested objects, lists, booleans, and numbers native. SDR generation only; requires `--format json` (or `--agent-mode`, which defaults to JSON on stdout). Any other format exits 1 with `ERROR: --json-typed requires --format json` before any API call. Ignored in other modes, and has no effect with `--quality-report`. See [OUTPUT_FORMATS.md](OUTPUT_FORMATS.md#typed-json---json-typed) | False |
 | `--stats` | Show quick statistics (metrics/dimensions count) without generating full SDR report | False |
-| `--metrics-only` | Restrict output to metrics (exclude dimensions). Applies to SDR generation and diff comparison | False |
-| `--dimensions-only` | Restrict output to dimensions (exclude metrics). Applies to SDR generation and diff comparison | False |
+| `--metrics-only` | Restrict output to metrics (exclude dimensions). Applies to SDR generation and diff comparison. Every SDR format leaves out dimensions and marks them `excluded` in Coverage | False |
+| `--dimensions-only` | Restrict output to dimensions (exclude metrics). Applies to SDR generation and diff comparison. Every SDR format leaves out metrics and marks them `excluded` in Coverage | False |
 | `--max-issues N` | Limit issues to top N by severity (0=all) | 0 |
 | `--run-summary-json PATH` | Write a machine-readable run summary JSON (all modes). Use `-` or `stdout` for stdout | - |
 | `--name-match MODE` | Data view name matching mode: `exact` (default), `insensitive` (case-insensitive), or `fuzzy` (nearest match) | exact |

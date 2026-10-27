@@ -68,6 +68,8 @@ tests/
 ├── test_malformed_api_responses.py  # Negative tests for malformed API data
 ├── test_output_content_validation.py # Output format content validation tests
 ├── test_excel_publication.py        # Complete Excel publication and destination compatibility
+├── test_component_fetch_validation.py # API error bodies on metrics/dimensions fetch fail closed
+├── test_sdr_coverage.py             # Per-family SDR coverage and quality status across formats
 ├── test_inventory_operation_status.py # Failed vs empty optional inventory status
 ├── test_output_extraction_contracts.py # Extraction contracts for output.diff and output.inventory
 ├── test_quality_policy_and_run_summary.py # Quality policy and run summary tests
@@ -184,7 +186,7 @@ tests/
 └── README.md                        # This file
 ```
 
-**Total: 9,066 comprehensive tests**
+**Total: 9,183 comprehensive tests**
 
 ### Test Count Breakdown
 
@@ -193,17 +195,17 @@ tests/
 
 | Category | Tests | Files | Notes |
 |----------|-------|-------|-------|
-| `unit` | 8,935 | 166 | Default primary category for files without explicit integration/e2e/smoke scope |
-| `integration` | 98 | 3 | Cross-module integration suites |
+| `unit` | 9,032 | 168 | Default primary category for files without explicit integration/e2e/smoke scope |
+| `integration` | 118 | 3 | Cross-module integration suites |
 | `e2e` | 23 | 2 | End-to-end suites with a mocked external boundary |
 | `smoke` | 10 | 1 | Lightweight command-mode coverage |
 | `slow` | 0 | 0 | Overlay marker; these tests are also counted in a primary category |
-| **Primary Total** | **9,066** | **172** | **unit + integration + e2e + smoke** |
+| **Primary Total** | **9,183** | **174** | **unit + integration + e2e + smoke** |
 
 | CI Slice | Tests | Files | Selector |
 |----------|-------|-------|----------|
-| `test-unit` | 8,935 | 166 | `-m "unit and not slow"` |
-| `test-integration` | 121 | 5 | `-m "integration or e2e or slow"` |
+| `test-unit` | 9,032 | 168 | `-m "unit and not slow"` |
+| `test-integration` | 141 | 5 | `-m "integration or e2e or slow"` |
 | `smoke-test` | 10 | 1 | `-m smoke` |
 
 > Coverage note: the `--cov-fail-under=95` gate currently runs only in the `test-unit` CI slice.
@@ -217,7 +219,7 @@ tests/
 | `test_org_report.py` | 209 | Org-wide component analysis: config, distribution, similarity, output formats, large org scaling, output path aliases |
 | `test_org_governance_checks.py` | 26 | Governance evaluation statuses, evidence scope, strict exits, and writer contracts |
 | `test_org_report_integration.py` | 42 | Org-wide analysis integration tests: end-to-end flows, caching, filtering, governance |
-| `test_cli.py` | 414 | Command-line interface and argument parsing |
+| `test_cli.py` | 415 | Command-line interface and argument parsing |
 | `test_profiles.py` | 80 | Multi-organization profile support |
 | `test_derived_inventory.py` | 64 | Derived fields inventory feature |
 | `test_diff_snapshot_cjapy_payloads.py` | 10 | Diff snapshot cjapy payload classification |
@@ -227,7 +229,7 @@ tests/
 | `test_segments_inventory.py` | 48 | Segments inventory feature |
 | `test_edge_cases.py` | 35 | Edge cases, configuration dataclasses, custom exceptions |
 | `test_calculated_metrics_inventory.py` | 366 | Calculated metrics inventory feature |
-| `test_git_integration.py` | 41 | Git integration, snapshot management, inventory snapshots |
+| `test_git_integration.py` | 61 | Git integration, snapshot management, inventory snapshots |
 | `test_output_formats.py` | 37 | CSV, JSON, HTML, Markdown output generation |
 | `test_cja_initialization.py` | 51 | CJA connection and configuration validation |
 | `test_cjapy_retry_interaction.py` | 58 | cjapy retry/status-payload normalization contract |
@@ -261,6 +263,8 @@ tests/
 | `test_diagnostic_events.py` | 23 | Structured diagnostic event vocabulary, logger adapters, and redaction |
 | `test_output_content_validation.py` | 45 | Output format content validation (CSV, JSON, HTML, Excel, Markdown roundtrip) |
 | `test_excel_publication.py` | 47 | Excel render/close/publication failures, destination integrity, and filesystem compatibility |
+| `test_component_fetch_validation.py` | 27 | Metrics/dimensions error payloads classified as failed, not empty |
+| `test_sdr_coverage.py` | 48 | SDR Coverage sheet/section, collected_components, quality gate rows |
 | `test_inventory_operation_status.py` | 16 | Optional inventory completed/failed status, unavailable placeholders, run summary parity |
 | `test_output_extraction_contracts.py` | 347 | Extraction contracts for output.diff and output.inventory |
 | `test_malformed_api_responses.py` | 21 | Negative tests for malformed/unexpected API responses |
@@ -295,11 +299,11 @@ tests/
 | `test_config_and_resolution.py` | 115 | Config status, validation, stats, name resolution |
 | `test_derived_fields_edge_cases.py` | 34 | Derived fields edge cases and coverage |
 | `test_diff_command_coverage.py` | 46 | Diff command edge cases and coverage |
-| `test_generator_interactive_and_console.py` | 38 | Generator interactive and console tests |
+| `test_generator_interactive_and_console.py` | 41 | Generator interactive and console tests |
 | `test_generator_remaining_coverage.py` | 82 | Generator remaining coverage edge cases |
 | `test_interactive_discovery_coverage.py` | 118 | Interactive discovery and helpers coverage |
 | `test_lock_backends.py` | 46 | Lock backends edge cases and coverage |
-| `test_main_impl_cli_coverage.py` | 91 | _main_impl CLI path coverage |
+| `test_main_impl_cli_coverage.py` | 94 | _main_impl CLI path coverage |
 | `test_main_impl_coverage.py` | 64 | _main_impl coverage edge cases |
 | `test_org_cache_branches.py` | 121 | Org cache branch coverage |
 | `test_org_writer_compat_contracts.py` | 116 | Org writer compatibility boundary contract tests |
@@ -318,7 +322,7 @@ tests/
 | `test_trending_cli.py` | 9 | --trending-window CLI flag parsing |
 | `test_trending_output.py` | 23 | Trending output across all 6 formats |
 | `test_trending_integration.py` | 15 | Trending backwards compatibility and integration |
-| `test_org_snapshot_utils.py` | 133 | Org snapshot helper utilities edge cases |
+| `test_org_snapshot_utils.py` | 146 | Org snapshot helper utilities edge cases |
 | `test_org_trending_contracts.py` | 108 | Org/trending public API contract tests |
 | `test_org_trending_adversarial.py` | 51 | Adversarial and stress tests for trending |
 | `test_cli_diff_contracts.py` | 88 | CLI/diff public API contract tests |
@@ -365,7 +369,7 @@ tests/
 | `test_watch_dispatch.py` | 2 | End-to-end dispatch wiring tests |
 | `test_watch_logging.py` | 4 | Structured-log event emission tests |
 | `test_notion_registry.py` | 18 | Notion page ID registry CRUD tests |
-| `test_notion_writer.py` | 93 | Notion block builder + API layer tests |
+| `test_notion_writer.py` | 95 | Notion block builder + API layer tests |
 | `test_cli_notion.py` | 28 | CLI flag wiring for --format notion and --push-to-notion |
 | `test_push_to_notion.py` | 5 | --push-to-notion JSON ingest and error paths |
 | `test_cli_notion_database.py` | 34 | CLI flag wiring for --notion-create-database and --notion-database-id |
@@ -384,7 +388,7 @@ tests/
 | `test_diff_snapshot_retention.py` | 81 | Diff snapshot-retention parse-cache characterization test |
 | `test_diff_comparator_normalize.py` | 21 | Diff field-normalization type-fast-path characterization test |
 | `test_logging_diagnostics.py` | 2 | emit_diagnostic isEnabledFor guard characterization tests |
-| **Total** | **9,066** | **Collected via pytest --collect-only** |
+| **Total** | **9,183** | **Collected via pytest --collect-only** |
 
 ## Running Tests
 
@@ -842,7 +846,7 @@ the `tests/README.md` inventory tree or count table.
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (9,066 tests total)
+- [x] Comprehensive test coverage (9,183 tests total)
 - [x] Org-wide analysis tests (test_org_report.py) - 209 tests (including large org scaling, output path aliases, memory warnings, smart cache invalidation)
 - [x] Org-wide analysis integration tests (test_org_report_integration.py) - 42 tests (end-to-end flows, caching, filtering, governance thresholds)
 - [x] Profile management tests (test_profiles.py) - 80 tests
@@ -853,7 +857,7 @@ the `tests/README.md` inventory tree or count table.
 - [x] Segments inventory tests (test_segments_inventory.py) - 48 tests
 - [x] Derived fields inventory tests (test_derived_inventory.py) - 64 tests
 - [x] Inventory utilities tests (test_inventory_utils.py) - 56 tests
-- [x] Git integration tests (test_git_integration.py) - 41 tests
+- [x] Git integration tests (test_git_integration.py) - 61 tests
 - [x] Inventory diff support in snapshot comparisons (test_diff_comparison.py) - 186 tests
 - [x] Inventory summary and include-all-inventory tests (test_ux_features.py) - 124 tests
 - [x] Parallel validation tests (test_parallel_validation.py)

@@ -351,7 +351,7 @@ Requirements:
     parser.add_argument(
         "--continue-on-error",
         action="store_true",
-        help="Continue processing remaining data views if one fails",
+        help="Continue processing remaining data views if one fails (still exits 1 if any failed)",
     )
 
     parser.add_argument(

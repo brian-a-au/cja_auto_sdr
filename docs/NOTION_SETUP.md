@@ -96,7 +96,7 @@ What happens:
 
 On success, open Notion and check your parent page. A new child page should be there.
 
-Re-running the same command updates the existing page in place. The tool reads the page ID from `.notion_pages.json` and sends an update request instead of creating a duplicate.
+Re-running the same command updates the existing page in place. The tool reads the page ID from `.notion_pages.json` and sends an update request instead of creating a duplicate. The page ID is saved as soon as the page is created, so if a run fails while uploading the page content, the next run replaces the partly filled page instead of creating a second one.
 
 To force a brand new page instead of updating, add `--notion-force-new`. The old page is left in Notion and its ID is recorded in `.notion_pages.json` as an orphan, so you can clean it up later. See step 7.
 

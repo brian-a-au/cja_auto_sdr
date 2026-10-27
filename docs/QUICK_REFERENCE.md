@@ -1,6 +1,6 @@
 # Quick Reference Card
 
-Single-page command cheat sheet for CJA SDR Generator v3.13.0.
+Single-page command cheat sheet for CJA SDR Generator v3.13.1.
 
 ## Main Modes
 
@@ -344,7 +344,7 @@ cja_auto_sdr --list-dataviews  # Uses client-a
 | `--skip-validation` | Skip data quality checks (faster) | SDR only |
 | `--metrics-only` | Include/compare metrics only (exclude dimensions) | SDR + Diff |
 | `--dimensions-only` | Include/compare dimensions only (exclude metrics) | SDR + Diff |
-| `--continue-on-error` | Don't stop on failures in batch mode | SDR only |
+| `--continue-on-error` | Don't stop on failures in batch mode (still exits 1 if any view failed) | SDR only |
 | `--fail-on-quality SEVERITY` | Exit with code 2 when quality issues at or above severity are found (requires validation; incompatible with `--skip-validation`) | SDR only |
 | `--quality-report FORMAT` | Generate standalone quality issues report (`json` or `csv`) without SDR files (requires validation; incompatible with `--skip-validation`) | SDR only |
 | `--allow-partial` | Opt-in exploratory SDR mode: continue on required component fetch or validation runtime failures (not supported with `--quality-report` or `--fail-on-quality`) | SDR only |

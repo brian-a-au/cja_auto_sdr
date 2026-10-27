@@ -454,7 +454,7 @@ class TestIncludeAllInventory:
     @patch("cja_auto_sdr.generator.aggregate_quality_issues", return_value=[])
     @patch("cja_auto_sdr.generator.append_github_step_summary")
     @patch("cja_auto_sdr.generator.build_quality_step_summary", return_value="")
-    @patch("cja_auto_sdr.generator.is_git_repository", return_value=True)
+    @patch("cja_auto_sdr.generator.git_repository_state", return_value="repo")
     @patch("cja_auto_sdr.generator.save_git_friendly_snapshot")
     @patch("cja_auto_sdr.generator.git_commit_snapshot", return_value=(True, "abc123"))
     def test_include_all_inventory_snapshot_mode_excludes_derived(
@@ -1302,13 +1302,20 @@ class TestGitCommitIntegration:
         defaults.update(overrides)
         return ProcessingResult(**defaults)
 
+    def _make_success_result_with_components(self, **overrides):
+        """Success result that already carries component data, so no Git re-fetch is needed."""
+        result = self._make_success_result(**overrides)
+        result.metrics_data = [{"id": "m1"}]
+        result.dimensions_data = [{"id": "d1"}]
+        return result
+
     @patch("cja_auto_sdr.generator._cli_option_specified", _mock_cli_option_specified)
     @patch("cja_auto_sdr.generator.resolve_data_view_names", return_value=(["dv_123"], {}))
     @patch("cja_auto_sdr.generator.process_single_dataview")
     @patch("cja_auto_sdr.generator.aggregate_quality_issues", return_value=[])
     @patch("cja_auto_sdr.generator.append_github_step_summary")
     @patch("cja_auto_sdr.generator.build_quality_step_summary", return_value="")
-    @patch("cja_auto_sdr.generator.is_git_repository", return_value=False)
+    @patch("cja_auto_sdr.generator.git_repository_state", return_value="not_repo")
     @patch("cja_auto_sdr.generator.git_init_snapshot_repo", return_value=(True, "Initialized"))
     @patch("cja_auto_sdr.generator.save_git_friendly_snapshot")
     @patch("cja_auto_sdr.generator.git_commit_snapshot", return_value=(True, "abc1234"))
@@ -1316,7 +1323,7 @@ class TestGitCommitIntegration:
         self, mock_commit, mock_save, mock_init, mock_is_git, _bqs, _aghs, _aqi, mock_proc, _resolve, capsys
     ):
         """Line 15362-15438: full git-commit workflow — init + save + commit."""
-        mock_proc.return_value = self._make_success_result()
+        mock_proc.return_value = self._make_success_result_with_components()
 
         args = _make_args(data_views=["dv_123"], git_commit=True)
         with patch("cja_auto_sdr.generator.parse_arguments", return_value=args):
@@ -1338,25 +1345,25 @@ class TestGitCommitIntegration:
     @patch("cja_auto_sdr.generator.aggregate_quality_issues", return_value=[])
     @patch("cja_auto_sdr.generator.append_github_step_summary")
     @patch("cja_auto_sdr.generator.build_quality_step_summary", return_value="")
-    @patch("cja_auto_sdr.generator.is_git_repository", return_value=False)
+    @patch("cja_auto_sdr.generator.git_repository_state", return_value="not_repo")
     @patch("cja_auto_sdr.generator.git_init_snapshot_repo", return_value=(False, "Permission denied"))
     @patch("cja_auto_sdr.generator.save_git_friendly_snapshot")
     @patch("cja_auto_sdr.generator.git_commit_snapshot", return_value=(True, "abc1234"))
     def test_git_commit_init_failure(
-        self, _commit, _save, _init, _is_git, _bqs, _aghs, _aqi, mock_proc, _resolve, capsys
+        self, mock_commit, mock_save, _init, _is_git, _bqs, _aghs, _aqi, mock_proc, _resolve, capsys
     ):
-        """Line 15369-15370: git init fails → error message printed."""
+        """Git init fails → error printed, nothing saved or committed, run exits 1."""
         mock_proc.return_value = self._make_success_result()
 
         args = _make_args(data_views=["dv_123"], git_commit=True)
-        with patch("cja_auto_sdr.generator.parse_arguments", return_value=args):
-            try:
-                _main_impl()
-            except SystemExit:
-                pass
+        with patch("cja_auto_sdr.generator.parse_arguments", return_value=args), pytest.raises(SystemExit) as exc:
+            _main_impl()
 
+        assert exc.value.code == 1
         out = capsys.readouterr().out
         assert "Git init failed" in out
+        mock_save.assert_not_called()
+        mock_commit.assert_not_called()
 
     @patch("cja_auto_sdr.generator._cli_option_specified", _mock_cli_option_specified)
     @patch("cja_auto_sdr.generator.resolve_data_view_names", return_value=(["dv_123"], {}))
@@ -1364,12 +1371,12 @@ class TestGitCommitIntegration:
     @patch("cja_auto_sdr.generator.aggregate_quality_issues", return_value=[])
     @patch("cja_auto_sdr.generator.append_github_step_summary")
     @patch("cja_auto_sdr.generator.build_quality_step_summary", return_value="")
-    @patch("cja_auto_sdr.generator.is_git_repository", return_value=True)
+    @patch("cja_auto_sdr.generator.git_repository_state", return_value="repo")
     @patch("cja_auto_sdr.generator.save_git_friendly_snapshot")
     @patch("cja_auto_sdr.generator.git_commit_snapshot", return_value=(True, "no_changes"))
     def test_git_commit_no_changes(self, _commit, _save, _is_git, _bqs, _aghs, _aqi, mock_proc, _resolve, capsys):
         """Line 15435-15436: commit with no_changes result."""
-        mock_proc.return_value = self._make_success_result()
+        mock_proc.return_value = self._make_success_result_with_components()
 
         args = _make_args(data_views=["dv_123"], git_commit=True)
         with patch("cja_auto_sdr.generator.parse_arguments", return_value=args):
@@ -1387,20 +1394,18 @@ class TestGitCommitIntegration:
     @patch("cja_auto_sdr.generator.aggregate_quality_issues", return_value=[])
     @patch("cja_auto_sdr.generator.append_github_step_summary")
     @patch("cja_auto_sdr.generator.build_quality_step_summary", return_value="")
-    @patch("cja_auto_sdr.generator.is_git_repository", return_value=True)
+    @patch("cja_auto_sdr.generator.git_repository_state", return_value="repo")
     @patch("cja_auto_sdr.generator.save_git_friendly_snapshot")
     @patch("cja_auto_sdr.generator.git_commit_snapshot", return_value=(False, "merge conflict"))
     def test_git_commit_failure(self, _commit, _save, _is_git, _bqs, _aghs, _aqi, mock_proc, _resolve, capsys):
-        """Line 15441-15442: commit fails → error printed."""
-        mock_proc.return_value = self._make_success_result()
+        """Commit fails → error printed and the run exits 1."""
+        mock_proc.return_value = self._make_success_result_with_components()
 
         args = _make_args(data_views=["dv_123"], git_commit=True)
-        with patch("cja_auto_sdr.generator.parse_arguments", return_value=args):
-            try:
-                _main_impl()
-            except SystemExit:
-                pass
+        with patch("cja_auto_sdr.generator.parse_arguments", return_value=args), pytest.raises(SystemExit) as exc:
+            _main_impl()
 
+        assert exc.value.code == 1
         out = capsys.readouterr().out
         assert "Git commit failed" in out
 
@@ -1410,12 +1415,12 @@ class TestGitCommitIntegration:
     @patch("cja_auto_sdr.generator.aggregate_quality_issues", return_value=[])
     @patch("cja_auto_sdr.generator.append_github_step_summary")
     @patch("cja_auto_sdr.generator.build_quality_step_summary", return_value="")
-    @patch("cja_auto_sdr.generator.is_git_repository", return_value=True)
+    @patch("cja_auto_sdr.generator.git_repository_state", return_value="repo")
     @patch("cja_auto_sdr.generator.save_git_friendly_snapshot")
     @patch("cja_auto_sdr.generator.git_commit_snapshot", return_value=(True, "def5678"))
     def test_git_commit_with_push(self, mock_commit, _save, _is_git, _bqs, _aghs, _aqi, mock_proc, _resolve, capsys):
         """Line 15439-15440: --git-push flag results in 'Pushed to remote' message."""
-        mock_proc.return_value = self._make_success_result()
+        mock_proc.return_value = self._make_success_result_with_components()
 
         args = _make_args(data_views=["dv_123"], git_commit=True, git_push=True)
         with patch("cja_auto_sdr.generator.parse_arguments", return_value=args):
@@ -1436,7 +1441,7 @@ class TestGitCommitIntegration:
     @patch("cja_auto_sdr.generator.aggregate_quality_issues", return_value=[])
     @patch("cja_auto_sdr.generator.append_github_step_summary")
     @patch("cja_auto_sdr.generator.build_quality_step_summary", return_value="")
-    @patch("cja_auto_sdr.generator.is_git_repository", return_value=True)
+    @patch("cja_auto_sdr.generator.git_repository_state", return_value="repo")
     @patch("cja_auto_sdr.generator.initialize_cja", return_value=MagicMock())
     @patch("cja_auto_sdr.generator.SnapshotManager")
     @patch("cja_auto_sdr.generator.save_git_friendly_snapshot")
@@ -1469,14 +1474,14 @@ class TestGitCommitIntegration:
     @patch("cja_auto_sdr.generator.aggregate_quality_issues", return_value=[])
     @patch("cja_auto_sdr.generator.append_github_step_summary")
     @patch("cja_auto_sdr.generator.build_quality_step_summary", return_value="")
-    @patch("cja_auto_sdr.generator.is_git_repository", return_value=True)
+    @patch("cja_auto_sdr.generator.git_repository_state", return_value="repo")
     @patch("cja_auto_sdr.generator.initialize_cja", side_effect=OSError("API Error"))
     @patch("cja_auto_sdr.generator.save_git_friendly_snapshot")
     @patch("cja_auto_sdr.generator.git_commit_snapshot", return_value=(True, "abc123"))
-    def test_git_commit_fetch_failure_continues(
+    def test_git_commit_fetch_failure_warns(
         self, _commit, _save, _init_cja, _is_git, _bqs, _aghs, _aqi, mock_proc, _resolve, capsys
     ):
-        """Line 15408-15409: snapshot fetch fails → warning, commit still attempted."""
+        """Snapshot fetch fails → warning is printed (save/commit skipped; see required-refetch tests)."""
         mock_proc.return_value = self._make_success_result()
 
         args = _make_args(
@@ -1499,15 +1504,15 @@ class TestGitCommitIntegration:
     @patch("cja_auto_sdr.generator.aggregate_quality_issues", return_value=[])
     @patch("cja_auto_sdr.generator.append_github_step_summary")
     @patch("cja_auto_sdr.generator.build_quality_step_summary", return_value="")
-    @patch("cja_auto_sdr.generator.is_git_repository", return_value=True)
+    @patch("cja_auto_sdr.generator.git_repository_state", return_value="repo")
     @patch("cja_auto_sdr.generator.initialize_cja", return_value=MagicMock())
     @patch("cja_auto_sdr.generator.SnapshotManager")
     @patch("cja_auto_sdr.generator.save_git_friendly_snapshot")
     @patch("cja_auto_sdr.generator.git_commit_snapshot", return_value=(True, "abc123"))
-    def test_git_commit_refetch_value_error_continues(
+    def test_git_commit_refetch_value_error_skips_empty_snapshot(
         self, mock_commit, mock_save, mock_sm_cls, _init_cja, _is_git, _bqs, _aghs, _aqi, mock_proc, _resolve, capsys
     ):
-        """ValueError during snapshot re-fetch should warn and continue commit flow."""
+        """ValueError during a required snapshot re-fetch must skip save/commit and fail the run."""
         mock_proc.return_value = self._make_success_result()
         mock_sm = MagicMock()
         mock_sm.create_snapshot.side_effect = ValueError("data view not found")
@@ -1518,16 +1523,16 @@ class TestGitCommitIntegration:
             git_commit=True,
             include_segments_inventory=True,
         )
-        with patch("cja_auto_sdr.generator.parse_arguments", return_value=args):
-            try:
-                _main_impl()
-            except SystemExit:
-                pass
+        with patch("cja_auto_sdr.generator.parse_arguments", return_value=args), pytest.raises(SystemExit) as exc:
+            _main_impl()
+
+        assert exc.value.code == 1
 
         out = capsys.readouterr().out
         assert "Could not fetch snapshot data" in out
-        mock_save.assert_called_once()
-        mock_commit.assert_called_once()
+        assert "Git snapshot not saved" in out
+        mock_save.assert_not_called()
+        mock_commit.assert_not_called()
 
     @patch("cja_auto_sdr.generator._cli_option_specified", _mock_cli_option_specified)
     @patch("cja_auto_sdr.generator.resolve_data_view_names", return_value=(["dv_123"], {}))
@@ -1535,7 +1540,7 @@ class TestGitCommitIntegration:
     @patch("cja_auto_sdr.generator.aggregate_quality_issues", return_value=[])
     @patch("cja_auto_sdr.generator.append_github_step_summary")
     @patch("cja_auto_sdr.generator.build_quality_step_summary", return_value="")
-    @patch("cja_auto_sdr.generator.is_git_repository", return_value=True)
+    @patch("cja_auto_sdr.generator.git_repository_state", return_value="repo")
     @patch("cja_auto_sdr.generator.initialize_cja", return_value=MagicMock())
     @patch("cja_auto_sdr.generator.SnapshotManager")
     @patch("cja_auto_sdr.generator.save_git_friendly_snapshot")
@@ -1543,7 +1548,7 @@ class TestGitCommitIntegration:
     def test_git_commit_refetch_hint_bearing_failure_prints_hint(
         self, mock_commit, mock_save, mock_sm_cls, _init_cja, _is_git, _bqs, _aghs, _aqi, mock_proc, _resolve, capsys
     ):
-        """Hint-bearing re-fetch failures should still surface remediation before falling back."""
+        """Hint-bearing re-fetch failures should surface remediation before skipping the empty snapshot."""
         mock_proc.return_value = self._make_success_result()
         mock_sm = MagicMock()
         mock_sm.create_snapshot.side_effect = RuntimeError("HTTP 403 Forbidden")
@@ -1554,17 +1559,17 @@ class TestGitCommitIntegration:
             git_commit=True,
             include_segments_inventory=True,
         )
-        with patch("cja_auto_sdr.generator.parse_arguments", return_value=args):
-            try:
-                _main_impl()
-            except SystemExit:
-                pass
+        with patch("cja_auto_sdr.generator.parse_arguments", return_value=args), pytest.raises(SystemExit) as exc:
+            _main_impl()
+
+        assert exc.value.code == 1
 
         out = capsys.readouterr().out
         assert "Could not fetch snapshot data" in out
         assert "authentication or authorization failed" in out
-        mock_save.assert_called_once()
-        mock_commit.assert_called_once()
+        assert "Git snapshot not saved" in out
+        mock_save.assert_not_called()
+        mock_commit.assert_not_called()
 
     @patch("cja_auto_sdr.generator._cli_option_specified", _mock_cli_option_specified)
     @patch("cja_auto_sdr.generator.resolve_data_view_names", return_value=(["dv_123"], {}))
@@ -1572,15 +1577,15 @@ class TestGitCommitIntegration:
     @patch("cja_auto_sdr.generator.aggregate_quality_issues", return_value=[])
     @patch("cja_auto_sdr.generator.append_github_step_summary")
     @patch("cja_auto_sdr.generator.build_quality_step_summary", return_value="")
-    @patch("cja_auto_sdr.generator.is_git_repository", return_value=True)
+    @patch("cja_auto_sdr.generator.git_repository_state", return_value="repo")
     @patch("cja_auto_sdr.generator.initialize_cja", return_value=MagicMock())
     @patch("cja_auto_sdr.generator.SnapshotManager")
     @patch("cja_auto_sdr.generator.save_git_friendly_snapshot")
     @patch("cja_auto_sdr.generator.git_commit_snapshot", return_value=(True, "abc123"))
-    def test_git_commit_refetch_api_error_continues(
+    def test_git_commit_refetch_api_error_skips_empty_snapshot(
         self, mock_commit, mock_save, mock_sm_cls, _init_cja, _is_git, _bqs, _aghs, _aqi, mock_proc, _resolve, capsys
     ):
-        """APIError during snapshot re-fetch should warn and continue commit flow."""
+        """APIError during a required snapshot re-fetch must skip save/commit and fail the run."""
         mock_proc.return_value = self._make_success_result()
         mock_sm = MagicMock()
         mock_sm.create_snapshot.side_effect = APIError("transient api failure")
@@ -1591,16 +1596,16 @@ class TestGitCommitIntegration:
             git_commit=True,
             include_segments_inventory=True,
         )
-        with patch("cja_auto_sdr.generator.parse_arguments", return_value=args):
-            try:
-                _main_impl()
-            except SystemExit:
-                pass
+        with patch("cja_auto_sdr.generator.parse_arguments", return_value=args), pytest.raises(SystemExit) as exc:
+            _main_impl()
+
+        assert exc.value.code == 1
 
         out = capsys.readouterr().out
         assert "Could not fetch snapshot data" in out
-        mock_save.assert_called_once()
-        mock_commit.assert_called_once()
+        assert "Git snapshot not saved" in out
+        mock_save.assert_not_called()
+        mock_commit.assert_not_called()
 
     @patch("cja_auto_sdr.generator._cli_option_specified", _mock_cli_option_specified)
     @patch("cja_auto_sdr.generator.resolve_data_view_names", return_value=(["dv_123"], {}))
@@ -1608,15 +1613,15 @@ class TestGitCommitIntegration:
     @patch("cja_auto_sdr.generator.aggregate_quality_issues", return_value=[])
     @patch("cja_auto_sdr.generator.append_github_step_summary")
     @patch("cja_auto_sdr.generator.build_quality_step_summary", return_value="")
-    @patch("cja_auto_sdr.generator.is_git_repository", return_value=True)
+    @patch("cja_auto_sdr.generator.git_repository_state", return_value="repo")
     @patch("cja_auto_sdr.generator.initialize_cja", return_value=MagicMock())
     @patch("cja_auto_sdr.generator.SnapshotManager")
     @patch("cja_auto_sdr.generator.save_git_friendly_snapshot")
     @patch("cja_auto_sdr.generator.git_commit_snapshot", return_value=(True, "abc123"))
-    def test_git_commit_refetch_runtime_error_continues(
+    def test_git_commit_refetch_runtime_error_skips_empty_snapshot(
         self, mock_commit, mock_save, mock_sm_cls, _init_cja, _is_git, _bqs, _aghs, _aqi, mock_proc, _resolve, capsys
     ):
-        """RuntimeError during snapshot re-fetch should warn and continue commit flow."""
+        """RuntimeError during a required snapshot re-fetch must skip save/commit and fail the run."""
         mock_proc.return_value = self._make_success_result()
         mock_sm = MagicMock()
         mock_sm.create_snapshot.side_effect = RuntimeError("unexpected internal error")
@@ -1627,16 +1632,16 @@ class TestGitCommitIntegration:
             git_commit=True,
             include_segments_inventory=True,
         )
-        with patch("cja_auto_sdr.generator.parse_arguments", return_value=args):
-            try:
-                _main_impl()
-            except SystemExit:
-                pass
+        with patch("cja_auto_sdr.generator.parse_arguments", return_value=args), pytest.raises(SystemExit) as exc:
+            _main_impl()
+
+        assert exc.value.code == 1
 
         out = capsys.readouterr().out
         assert "Could not fetch snapshot data" in out
-        mock_save.assert_called_once()
-        mock_commit.assert_called_once()
+        assert "Git snapshot not saved" in out
+        mock_save.assert_not_called()
+        mock_commit.assert_not_called()
 
     @patch("cja_auto_sdr.generator._cli_option_specified", _mock_cli_option_specified)
     @patch("cja_auto_sdr.generator.resolve_data_view_names", return_value=(["dv_123"], {}))
@@ -1644,7 +1649,7 @@ class TestGitCommitIntegration:
     @patch("cja_auto_sdr.generator.aggregate_quality_issues", return_value=[])
     @patch("cja_auto_sdr.generator.append_github_step_summary")
     @patch("cja_auto_sdr.generator.build_quality_step_summary", return_value="")
-    @patch("cja_auto_sdr.generator.is_git_repository", return_value=True)
+    @patch("cja_auto_sdr.generator.git_repository_state", return_value="repo")
     @patch("cja_auto_sdr.generator.initialize_cja", return_value=MagicMock())
     @patch("cja_auto_sdr.generator.SnapshotManager")
     @patch("cja_auto_sdr.generator.save_git_friendly_snapshot")
@@ -1687,7 +1692,7 @@ class TestGitCommitIntegration:
     @patch("cja_auto_sdr.generator.aggregate_quality_issues", return_value=[])
     @patch("cja_auto_sdr.generator.append_github_step_summary")
     @patch("cja_auto_sdr.generator.build_quality_step_summary", return_value="")
-    @patch("cja_auto_sdr.generator.is_git_repository", return_value=True)
+    @patch("cja_auto_sdr.generator.git_repository_state", return_value="repo")
     @patch("cja_auto_sdr.generator.initialize_cja", return_value=MagicMock())
     @patch("cja_auto_sdr.generator.SnapshotManager")
     @patch("cja_auto_sdr.generator.save_git_friendly_snapshot")
@@ -1723,6 +1728,88 @@ class TestGitCommitIntegration:
         assert saved_snapshot.metrics == result.metrics_data
         assert saved_snapshot.dimensions == result.dimensions_data
         mock_commit.assert_called_once()
+
+    @patch("cja_auto_sdr.generator._cli_option_specified", _mock_cli_option_specified)
+    @patch("cja_auto_sdr.generator.resolve_data_view_names", return_value=(["dv_123"], {}))
+    @patch("cja_auto_sdr.generator.process_single_dataview")
+    @patch("cja_auto_sdr.generator.aggregate_quality_issues", return_value=[])
+    @patch("cja_auto_sdr.generator.append_github_step_summary")
+    @patch("cja_auto_sdr.generator.build_quality_step_summary", return_value="")
+    @patch("cja_auto_sdr.generator.git_repository_state", return_value="repo")
+    @patch("cja_auto_sdr.generator.initialize_cja", side_effect=OSError("API Error"))
+    @patch("cja_auto_sdr.generator.save_git_friendly_snapshot")
+    @patch("cja_auto_sdr.generator.git_commit_snapshot", return_value=(True, "abc123"))
+    def test_git_commit_required_refetch_exception_skips_save_and_fails_run(
+        self, mock_commit, mock_save, _init_cja, _state, _bqs, _aghs, _aqi, mock_proc, _resolve, capsys
+    ):
+        """A failed re-fetch with no component data must not write/commit an empty snapshot."""
+        mock_proc.return_value = self._make_success_result()
+
+        args = _make_args(data_views=["dv_123"], git_commit=True)
+        with patch("cja_auto_sdr.generator.parse_arguments", return_value=args), pytest.raises(SystemExit) as exc:
+            _main_impl()
+
+        assert exc.value.code == 1
+        out = capsys.readouterr().out
+        assert "Could not fetch snapshot data" in out
+        assert "Git snapshot not saved" in out
+        mock_save.assert_not_called()
+        mock_commit.assert_not_called()
+
+    @patch("cja_auto_sdr.generator._cli_option_specified", _mock_cli_option_specified)
+    @patch("cja_auto_sdr.generator.resolve_data_view_names", return_value=(["dv_123"], {}))
+    @patch("cja_auto_sdr.generator.process_single_dataview")
+    @patch("cja_auto_sdr.generator.aggregate_quality_issues", return_value=[])
+    @patch("cja_auto_sdr.generator.append_github_step_summary")
+    @patch("cja_auto_sdr.generator.build_quality_step_summary", return_value="")
+    @patch("cja_auto_sdr.generator.git_repository_state", return_value="repo")
+    @patch("cja_auto_sdr.generator.initialize_cja", return_value=None)
+    @patch("cja_auto_sdr.generator.save_git_friendly_snapshot")
+    @patch("cja_auto_sdr.generator.git_commit_snapshot", return_value=(True, "abc123"))
+    def test_git_commit_required_refetch_without_client_skips_save_and_fails_run(
+        self, mock_commit, mock_save, _init_cja, _state, _bqs, _aghs, _aqi, mock_proc, _resolve, capsys
+    ):
+        """initialize_cja returning a falsy client is a failed re-fetch, not an empty data view."""
+        mock_proc.return_value = self._make_success_result()
+
+        args = _make_args(data_views=["dv_123"], git_commit=True)
+        with patch("cja_auto_sdr.generator.parse_arguments", return_value=args), pytest.raises(SystemExit) as exc:
+            _main_impl()
+
+        assert exc.value.code == 1
+        out = capsys.readouterr().out
+        assert "Git snapshot not saved" in out
+        mock_save.assert_not_called()
+        mock_commit.assert_not_called()
+
+    @patch("cja_auto_sdr.generator._cli_option_specified", _mock_cli_option_specified)
+    @patch("cja_auto_sdr.generator.resolve_data_view_names", return_value=(["dv_123"], {}))
+    @patch("cja_auto_sdr.generator.process_single_dataview")
+    @patch("cja_auto_sdr.generator.aggregate_quality_issues", return_value=[])
+    @patch("cja_auto_sdr.generator.append_github_step_summary")
+    @patch("cja_auto_sdr.generator.build_quality_step_summary", return_value="")
+    @patch("cja_auto_sdr.generator.git_repository_state", return_value="unknown")
+    @patch("cja_auto_sdr.generator.git_init_snapshot_repo", return_value=(True, "Initialized"))
+    @patch("cja_auto_sdr.generator._refetch_git_snapshot_for_commit")
+    @patch("cja_auto_sdr.generator.save_git_friendly_snapshot")
+    @patch("cja_auto_sdr.generator.git_commit_snapshot", return_value=(True, "abc123"))
+    def test_git_commit_unknown_repository_state_never_inits_and_fails_run(
+        self, mock_commit, mock_save, mock_refetch, mock_init, _state, _bqs, _aghs, _aqi, mock_proc, _resolve, capsys
+    ):
+        """An inconclusive repository probe must fail the Git step instead of running git init."""
+        mock_proc.return_value = self._make_success_result()
+
+        args = _make_args(data_views=["dv_123"], git_commit=True)
+        with patch("cja_auto_sdr.generator.parse_arguments", return_value=args), pytest.raises(SystemExit) as exc:
+            _main_impl()
+
+        assert exc.value.code == 1
+        out = capsys.readouterr().out
+        assert "Could not determine whether" in out
+        mock_init.assert_not_called()
+        mock_refetch.assert_not_called()
+        mock_save.assert_not_called()
+        mock_commit.assert_not_called()
 
 
 # =========================================================================

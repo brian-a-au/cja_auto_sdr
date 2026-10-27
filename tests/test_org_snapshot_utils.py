@@ -1870,3 +1870,118 @@ def test_representable_boundary_and_offset_timestamps_remain_dated(timestamp):
     parsed = parse_snapshot_timestamp(timestamp)
     assert parsed is not None and parsed.tzinfo is UTC
     assert snapshot_epoch(timestamp) is not None
+
+
+# ---------------------------------------------------------------------------
+# Scoped (filtered / excluded / limited) org reports are trending-ineligible
+# ---------------------------------------------------------------------------
+
+
+def _complete_org_report_payload(parameters: dict | None = None) -> dict:
+    payload = {
+        "generated_at": "2026-03-01T00:00:00Z",
+        "org_id": "test_org",
+        "report_type": "org_analysis",
+        "summary": {
+            "data_views_total": 2,
+            "data_views_analyzed": 2,
+            "total_unique_components": 4,
+            "similarity_analysis_complete": True,
+            "similarity_analysis_mode": "complete",
+        },
+        "distribution": {
+            "core": {"total": 1},
+            "isolated": {"total": 0},
+        },
+        "data_views": [
+            {"id": "dv_1", "data_view_name": "DV 1", "error": None},
+            {"id": "dv_2", "data_view_name": "DV 2", "error": None},
+        ],
+        "similarity_pairs": [],
+    }
+    if parameters is not None:
+        payload["parameters"] = parameters
+    return payload
+
+
+_UNSCOPED_PARAMETERS = {"filter_pattern": None, "exclude_pattern": None, "limit": None}
+
+
+@pytest.mark.parametrize(
+    "scope_override",
+    [
+        {"filter_pattern": "^Prod"},
+        {"exclude_pattern": "Test|Dev"},
+        {"limit": 5},
+        {"limit": "5"},
+    ],
+)
+def test_scoped_org_report_is_history_ineligible(scope_override):
+    payload = _complete_org_report_payload({**_UNSCOPED_PARAMETERS, **scope_override})
+
+    assessment = org_report_snapshot_history_assessment(payload)
+    assert assessment.eligible is False
+    assert assessment.exclusion_reason == "filtered_scope"
+    assert assessment.fidelity_known is True
+
+
+@pytest.mark.parametrize(
+    "parameters",
+    [
+        None,  # legacy payload without a parameters block
+        {},  # parameters block lacking the scope keys
+        _UNSCOPED_PARAMETERS,
+        {"filter_pattern": "", "exclude_pattern": "  ", "limit": None},
+    ],
+)
+def test_unscoped_org_report_keeps_history_eligibility(parameters):
+    payload = _complete_org_report_payload(parameters)
+
+    assert org_report_snapshot_history_eligible(payload) is True
+    assert org_report_snapshot_history_exclusion_reason(payload) is None
+
+
+def test_limit_that_truncated_data_views_is_history_ineligible():
+    payload = _complete_org_report_payload({**_UNSCOPED_PARAMETERS, "limit": 2})
+    payload["summary"]["total_available_data_views"] = 5
+
+    assert org_report_snapshot_history_exclusion_reason(payload) == "filtered_scope"
+
+
+def test_limit_at_or_above_available_data_views_keeps_history_eligibility():
+    payload = _complete_org_report_payload({**_UNSCOPED_PARAMETERS, "limit": 500})
+    payload["summary"]["total_available_data_views"] = 2
+
+    assert org_report_snapshot_history_eligible(payload) is True
+    assert org_report_snapshot_history_exclusion_reason(payload) is None
+
+
+def test_scoped_org_report_keeps_lower_fidelity_reason_first():
+    payload = _complete_org_report_payload({**_UNSCOPED_PARAMETERS, "filter_pattern": "^Prod"})
+    payload["summary"]["is_sampled"] = True
+
+    assert org_report_snapshot_history_exclusion_reason(payload) == "sampled"
+
+
+def test_scoped_org_report_still_supports_explicit_comparison():
+    payload = _complete_org_report_payload({**_UNSCOPED_PARAMETERS, "limit": 2})
+
+    assessment = org_report_snapshot_comparison_assessment(payload)
+    assert assessment.eligible is True
+    assert assessment.complete_high_similarity_pairs is True
+
+
+def test_scoped_org_report_snapshot_persists_exclusion_reason(tmp_path: Path):
+    import json
+
+    from cja_auto_sdr.org.cache import OrgReportCache
+    from cja_auto_sdr.org.trending import _extract_snapshot_from_json
+
+    payload = _complete_org_report_payload({**_UNSCOPED_PARAMETERS, "exclude_pattern": "Sandbox"})
+    saved = OrgReportCache(cache_dir=tmp_path).save_org_report_snapshot(payload, org_id="test_org")
+
+    persisted = json.loads(Path(saved).read_text(encoding="utf-8"))
+    assert persisted["_snapshot_meta"]["history_eligible"] is False
+    assert persisted["_snapshot_meta"]["history_exclusion_reason"] == "filtered_scope"
+    assert org_report_snapshot_history_exclusion_reason(persisted) == "filtered_scope"
+    assert _extract_snapshot_from_json(payload) is None

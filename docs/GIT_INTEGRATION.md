@@ -473,6 +473,21 @@ git clone --depth 10 git@github.com:brian-a-au/cja-snapshots.git
 
 ## Troubleshooting
 
+### How snapshot commits behave
+
+- Each commit includes only the files for the data view being saved. Other staged or unstaged files in the
+  snapshot repository are left as they are.
+- A snapshot directory inside another Git repository (for example `./sdr-snapshots` inside your project) uses that
+  repository, as before. Because commits are scoped to the snapshot files, your other staged project changes are
+  not included.
+- `--git-init` never overwrites an existing `README.md` or `.gitignore` in the snapshot directory.
+- If Git cannot tell whether the directory is a repository (for example, a timeout), the tool does not run
+  `git init`. The Git step fails and the run exits 1.
+- If `git init` or the commit fails, the run exits 1.
+- If the tool has to fetch the data view again for the snapshot and that fetch fails, nothing is saved or committed
+  and the run exits 1. This prevents a commit that shows every component as removed.
+- If the commit succeeds but the commit SHA cannot be read afterwards, the commit is reported as `unknown`.
+
 ### "Not a Git repository"
 
 ```bash

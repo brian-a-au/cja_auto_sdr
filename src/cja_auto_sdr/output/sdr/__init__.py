@@ -34,6 +34,7 @@ from cja_auto_sdr.core.json_io import write_json_atomic_compatible, write_text_a
 from cja_auto_sdr.core.version import __version__
 from cja_auto_sdr.output.csv_staging import csv_member_name, publish_csv_bundle
 from cja_auto_sdr.output.excel_staging import staged_excel_writer
+from cja_auto_sdr.output.sdr.coverage import SdrCoverage, coverage_section_labels
 
 __all__ = [
     "TYPED_SDR_SCHEMA_VERSION",
@@ -454,6 +455,16 @@ def apply_excel_formatting(
 # ==================== OUTPUT FORMAT WRITERS ====================
 
 
+def empty_section_note(sheet_name: str, section_labels: Mapping[str, str]) -> str:
+    """Text shown for an empty section: its coverage state when known, else generic."""
+    return section_labels.get(sheet_name) or f"No data available for {sheet_name}"
+
+
+def empty_section_placeholder(sheet_name: str, section_labels: Mapping[str, str]) -> pd.DataFrame:
+    """One-cell placeholder frame for an empty Excel sheet."""
+    return pd.DataFrame({"Note": [empty_section_note(sheet_name, section_labels)]})
+
+
 def write_excel_output(
     data_dict: dict[str, pd.DataFrame],
     base_filename: str,
@@ -476,11 +487,12 @@ def write_excel_output(
         logger.info("Generating Excel output...")
 
         excel_file = os.path.join(output_dir, f"{base_filename}.xlsx")
+        section_labels = coverage_section_labels(data_dict)
         with staged_excel_writer(excel_file) as writer:
             format_cache = ExcelFormatCache(writer.book)
             for sheet_name, df in data_dict.items():
                 if df.empty:
-                    placeholder_df = pd.DataFrame({"Note": [f"No data available for {sheet_name}"]})
+                    placeholder_df = empty_section_placeholder(sheet_name, section_labels)
                     apply_excel_formatting(writer, placeholder_df, sheet_name, logger, format_cache)
                 else:
                     apply_excel_formatting(writer, df, sheet_name, logger, format_cache)
@@ -598,10 +610,19 @@ def _shared_json_section(
     return None
 
 
+def _add_coverage_sections(json_data: dict[str, Any], coverage: SdrCoverage | None) -> None:
+    """Append the additive ``collected_components`` and ``coverage`` keys when known."""
+    if coverage is None:
+        return
+    json_data["collected_components"] = list(coverage.collected_components)
+    json_data["coverage"] = coverage.to_json()
+
+
 def build_json_payload(
     data_dict: dict[str, pd.DataFrame],
     metadata_dict: dict[str, Any],
     inventory_objects: dict[str, Any] | None = None,
+    coverage: SdrCoverage | None = None,
 ) -> dict[str, Any]:
     """Build the hierarchical JSON payload for SDR output.
 
@@ -613,6 +634,9 @@ def build_json_payload(
         metadata_dict: Metadata information
         inventory_objects: Optional dict with 'derived'/'calculated'/'segments'
             inventory objects for detailed output using ``to_json()``
+        coverage: Optional run coverage; adds ``collected_components`` and
+            ``coverage``. An excluded family keeps its key as an empty list,
+            so ``collected_components`` tells excluded apart from empty.
 
     Returns:
         JSON-serializable dictionary
@@ -633,6 +657,7 @@ def build_json_payload(
             # For single-record sheets, store as object not array
             json_data["data_view"] = records[0] if records else {}
 
+    _add_coverage_sections(json_data, coverage)
     return json_data
 
 
@@ -679,6 +704,7 @@ def build_typed_json_payload(
     data_view: Mapping[str, Any],
     metadata_dict: Mapping[str, Any],
     inventory_objects: Mapping[str, Any] | None = None,
+    coverage: SdrCoverage | None = None,
 ) -> dict[str, Any]:
     """Build the versioned typed SDR JSON payload (``--json-typed``).
 
@@ -710,6 +736,7 @@ def build_typed_json_payload(
             section, value = _shared_json_section(sheet_name, _frame_records(df), inventory_objects)
             json_data[section] = value
 
+    _add_coverage_sections(json_data, coverage)
     return {"schema_version": TYPED_SDR_SCHEMA_VERSION, **to_native_json(json_data)}
 
 
@@ -735,6 +762,7 @@ def write_json_output(
     logger: logging.Logger,
     inventory_objects: dict[str, Any] | None = None,
     output_path: str | None = None,
+    coverage: SdrCoverage | None = None,
 ) -> str:
     """
     Write data to JSON format with hierarchical structure
@@ -754,7 +782,7 @@ def write_json_output(
     try:
         logger.info("Generating JSON output...")
 
-        json_data = build_json_payload(data_dict, metadata_dict, inventory_objects)
+        json_data = build_json_payload(data_dict, metadata_dict, inventory_objects, coverage=coverage)
 
         # Write JSON file
         json_file = str(output_path) if output_path else os.path.join(output_dir, f"{base_filename}.json")
@@ -970,6 +998,7 @@ def write_html_output(
 
         # Data sections
         section_icons = {
+            "Coverage": "\U0001f9ed",
             "Data Quality": "\U0001f50d",
             "DataView Details": "\U0001f4ca",
             "Metrics": "\U0001f4c8",
@@ -979,12 +1008,19 @@ def write_html_output(
             "Segments": "\U0001f3af",
         }
 
+        section_labels = coverage_section_labels(data_dict)
         for sheet_name, sheet_df in data_dict.items():
+            icon = section_icons.get(sheet_name, "\U0001f4c4")
             if sheet_df.empty:
+                # Keep empty sections visible, labelled with their coverage state.
+                note = html.escape(empty_section_note(sheet_name, section_labels))
+                html_parts.append('<div class="section">')
+                html_parts.append(f"<h2>{icon} {html.escape(sheet_name)}</h2>")
+                html_parts.append(f'<p class="section-state"><em>{note}</em></p>')
+                html_parts.append("</div>")
                 continue
             df = to_display_frame(sheet_df)
 
-            icon = section_icons.get(sheet_name, "\U0001f4c4")
             html_parts.append('<div class="section">')
             html_parts.append(f"<h2>{icon} {html.escape(sheet_name)}</h2>")
 
@@ -1085,13 +1121,15 @@ def escape_markdown(text: Any) -> str:
     return text.strip()
 
 
-def df_to_markdown_table(df: pd.DataFrame, sheet_name: str) -> str:
+def df_to_markdown_table(df: pd.DataFrame, sheet_name: str, empty_message: str | None = None) -> str:
     """Convert DataFrame to markdown table format.
 
     Escaping is column-vectorized via `str.replace()` rather than a per-cell
     `apply(axis=1)` call, for better performance on large DataFrames.
     """
     if df.empty:
+        if empty_message:
+            return f"\n*{escape_markdown(empty_message)}*\n"
         return f"\n*No {sheet_name.lower()} found.*\n"
 
     # Header row
@@ -1177,6 +1215,7 @@ def write_markdown_output(
         md_parts.append("\n---\n")
 
         # Process each sheet
+        section_labels = coverage_section_labels(data_dict)
         for sheet_name, sheet_df in data_dict.items():
             df = to_display_frame(sheet_df)
             md_parts.append(f"## {sheet_name}\n")
@@ -1211,7 +1250,7 @@ def write_markdown_output(
                 md_parts.append("\n</details>\n")
             else:
                 # For smaller tables, show directly
-                md_parts.append(df_to_markdown_table(df, sheet_name))
+                md_parts.append(df_to_markdown_table(df, sheet_name, section_labels.get(sheet_name)))
                 md_parts.append("")
 
             # Add counts

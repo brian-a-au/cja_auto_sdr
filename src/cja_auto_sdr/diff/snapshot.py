@@ -6,7 +6,7 @@ import os
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from cja_auto_sdr.api.fetch import classify_component_payload
+from cja_auto_sdr.api.fetch import classify_component_payload, fetch_component_payload
 from cja_auto_sdr.core.discovery_payloads import (
     TOLERATED_LEGACY_LOOKUP_REASONS,
     PayloadKind,
@@ -160,7 +160,7 @@ class SnapshotManager:
 
         self.logger.info("Fetching metrics...")
         try:
-            raw_metrics = cja.getMetrics(data_view_id, inclType=True, full=True)
+            raw_metrics = fetch_component_payload(cja, "metrics", data_view_id, inclType=True, full=True)
         except Exception as exc:
             raise _annotate_snapshot_failure(exc, stage="metrics_fetch") from exc
 
@@ -187,7 +187,7 @@ class SnapshotManager:
 
         self.logger.info("Fetching dimensions...")
         try:
-            raw_dimensions = cja.getDimensions(data_view_id, inclType=True, full=True)
+            raw_dimensions = fetch_component_payload(cja, "dimensions", data_view_id, inclType=True, full=True)
         except Exception as exc:
             raise _annotate_snapshot_failure(exc, stage="dimensions_fetch") from exc
         dimensions_outcome = classify_component_payload(raw_dimensions)

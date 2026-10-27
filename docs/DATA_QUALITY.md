@@ -246,6 +246,8 @@ To combine with a non-zero exit on quality failures:
 cja_auto_sdr dv_12345 --production --fail-on-quality HIGH
 ```
 
+With `--fail-on-quality`, the report itself records the gate result. The Metadata section gains `Quality Gate Verdict` (`PASS`, `FAIL`, or `NOT_EVALUATED` when validation did not complete) and `Quality Gate Threshold` rows, and the Coverage section's Data Quality row repeats the verdict. See [Coverage and quality status](OUTPUT_FORMATS.md#coverage-and-quality-status).
+
 ## Skipping Validation
 
 For faster processing when validation isn't needed:

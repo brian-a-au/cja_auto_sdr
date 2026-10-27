@@ -965,6 +965,65 @@ def test_force_new_with_no_prior_page_records_no_orphan(tmp_path):
     assert lookup_orphaned_page_ids(reg, "dv1") == []
 
 
+def test_create_records_page_id_before_block_append_so_retry_reuses_page(tmp_path):
+    """A block-append failure after pages.create must not lose the new page id.
+
+    The next run must find the partially filled page in the registry, clear it,
+    and refill it instead of creating a duplicate page.
+    """
+    from cja_auto_sdr.output.notion_registry import get_registry_path, lookup_page_id
+    from cja_auto_sdr.output.writers.notion import create_or_update_page
+
+    reg = get_registry_path(tmp_path)
+    blocks = [{"type": "paragraph", "paragraph": {"rich_text": []}} for _ in range(150)]
+
+    client = MagicMock()
+    client.pages.create.return_value = {"id": "page-partial"}
+    client.blocks.children.append.side_effect = [None, RuntimeError("network drop")]
+
+    with pytest.raises(RuntimeError, match="network drop"):
+        create_or_update_page(client, "parent", "DV — SDR", "dv1", blocks, reg)
+
+    assert lookup_page_id(reg, "dv1") == "page-partial"
+
+    retry_client = MagicMock()
+    retry_client.blocks.children.list.return_value = {
+        "results": [{"id": "stale-block-1"}],
+        "has_more": False,
+    }
+    page_id = create_or_update_page(retry_client, "parent", "DV — SDR", "dv1", blocks, reg)
+
+    assert page_id == "page-partial"
+    retry_client.pages.create.assert_not_called()
+    retry_client.blocks.delete.assert_called_once_with(block_id="stale-block-1")
+    assert retry_client.blocks.children.append.call_count == 2
+
+
+def test_force_new_append_failure_keeps_superseded_page_as_orphan(tmp_path):
+    """With --notion-force-new, a failed append still records the new page and orphans the old one."""
+    from cja_auto_sdr.output.notion_registry import (
+        get_registry_path,
+        lookup_orphaned_page_ids,
+        lookup_page_id,
+        store_page_id,
+    )
+    from cja_auto_sdr.output.writers.notion import create_or_update_page
+
+    reg = get_registry_path(tmp_path)
+    store_page_id(reg, "dv1", "page-old")
+
+    client = MagicMock()
+    client.pages.create.return_value = {"id": "page-new"}
+    client.blocks.children.append.side_effect = RuntimeError("boom")
+
+    blocks = [{"type": "paragraph", "paragraph": {"rich_text": []}}]
+    with pytest.raises(RuntimeError, match="boom"):
+        create_or_update_page(client, "parent", "DV — SDR", "dv1", blocks, reg, force_new=True)
+
+    assert lookup_page_id(reg, "dv1") == "page-new"
+    assert lookup_orphaned_page_ids(reg, "dv1") == ["page-old"]
+
+
 # ---------------------------------------------------------------------------
 # Task 3: prune_notion_orphans tests
 # ---------------------------------------------------------------------------

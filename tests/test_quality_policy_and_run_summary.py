@@ -608,10 +608,13 @@ class TestOpenOutputArtifacts(TestRunSummaryOutput):
                 ],
             ),
         ):
-            main()
+            with pytest.raises(SystemExit) as exc_info:
+                main()
 
+        assert exc_info.value.code == 1
         payload = json.loads(summary_file.read_text())
         self._assert_run_summary_schema(payload)
+        assert payload["exit_code"] == 1
         results_by_id = {result["data_view_id"]: result for result in payload["results"]}
         assert results_by_id["dv_ok"]["output_file"] == "ok.xlsx"
         assert results_by_id["dv_ok"]["output_files"] == ["ok.xlsx", "ok.json", "ok.html"]

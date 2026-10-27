@@ -553,6 +553,7 @@ def _run_batch_mode(
         notion_database_id=getattr(args, "notion_database_id", None) or os.environ.get("NOTION_DATABASE_ID"),
         notion_create_database=getattr(args, "notion_create_database", False),
         json_typed=getattr(args, "json_typed", False),
+        fail_on_quality=getattr(args, "fail_on_quality", None),
     )
 
     results = processor.process_batch(data_views)
@@ -579,7 +580,9 @@ def _run_batch_mode(
         "successful_results": successful_results,
         "quality_report_results": [],
         "processed_results": processed_results,
-        "overall_failure": bool(results["failed"] and not args.continue_on_error),
+        # --continue-on-error keeps processing the remaining data views, but it
+        # never hides failures: any failed data view makes the batch exit 1.
+        "overall_failure": bool(results.get("failed")),
         "processing_failures_detected": bool(results.get("failed")),
         "effective_workers": int(args.workers),
     }
@@ -628,22 +631,38 @@ def _print_single_mode_inventory_summary(
         )
 
 
-def _handle_single_mode_git_commit(args: argparse.Namespace, result: Any) -> None:
+def _handle_single_mode_git_commit(args: argparse.Namespace, result: Any) -> bool:
+    """Run the optional --git-commit step.
+
+    Returns False when the Git step failed and must fail the run (inconclusive
+    repository probe, failed init, failed snapshot re-fetch, or failed commit);
+    True otherwise, including when --git-commit was not requested.
+    """
     generator = _generator_module()
 
     if not getattr(args, "git_commit", False):
-        return
+        return True
 
     print()
     git_dir = Path(getattr(args, "git_dir", "./sdr-snapshots"))
 
-    if not generator.is_git_repository(git_dir):
+    repo_state = generator.git_repository_state(git_dir)
+    if repo_state == "unknown":
+        print(
+            generator.ConsoleColors.error(
+                f"  Git commit failed: Could not determine whether {git_dir} is a Git repository "
+                "(git probe failed or timed out); not initializing or committing.",
+            ),
+        )
+        return False
+
+    if repo_state != "repo":
         print(f"Initializing Git repository at: {git_dir}")
         init_success, init_msg = generator.git_init_snapshot_repo(git_dir)
         if not init_success:
             print(generator.ConsoleColors.error(f"Git init failed: {init_msg}"))
-        else:
-            print(generator.ConsoleColors.success("  Repository initialized"))
+            return False
+        print(generator.ConsoleColors.success("  Repository initialized"))
 
     snapshot = generator.DataViewSnapshot(
         data_view_id=result.data_view_id,
@@ -652,7 +671,7 @@ def _handle_single_mode_git_commit(args: argparse.Namespace, result: Any) -> Non
         dimensions=result.dimensions_data if hasattr(result, "dimensions_data") else [],
     )
 
-    snapshot = generator._refetch_git_snapshot_for_commit(
+    refetched = generator._refetch_git_snapshot_for_commit(
         snapshot=snapshot,
         data_view_id=result.data_view_id,
         config_file=args.config_file,
@@ -660,6 +679,15 @@ def _handle_single_mode_git_commit(args: argparse.Namespace, result: Any) -> Non
         include_calculated_metrics=getattr(args, "include_calculated_metrics", False),
         include_segments_inventory=getattr(args, "include_segments_inventory", False),
     )
+    if refetched is None:
+        print(
+            generator.ConsoleColors.error(
+                "  Git snapshot not saved: component data could not be fetched, and committing an "
+                "empty snapshot would record every metric and dimension as removed.",
+            ),
+        )
+        return False
+    snapshot = refetched
 
     print(f"Saving snapshot to: {git_dir}")
     generator.save_git_friendly_snapshot(
@@ -688,6 +716,8 @@ def _handle_single_mode_git_commit(args: argparse.Namespace, result: Any) -> Non
                 print(generator.ConsoleColors.success("  Pushed to remote"))
     else:
         print(generator.ConsoleColors.error(f"  Git commit failed: {commit_result}"))
+        return False
+    return True
 
 
 def _handle_single_mode_open(args: argparse.Namespace, result: Any) -> None:
@@ -766,8 +796,10 @@ def _run_single_mode(
         notion_database_id=getattr(args, "notion_database_id", None) or os.environ.get("NOTION_DATABASE_ID"),
         notion_create_database=getattr(args, "notion_create_database", False),
         json_typed=getattr(args, "json_typed", False),
+        fail_on_quality=getattr(args, "fail_on_quality", None),
     )
     processed_results = [result]
+    git_step_ok = True
 
     total_runtime = time.monotonic() - processing_start_time
     _note()
@@ -800,7 +832,7 @@ def _run_single_mode(
                     include_calculated=getattr(args, "include_calculated_metrics", False),
                     include_derived=getattr(args, "include_derived_inventory", False),
                 )
-                _handle_single_mode_git_commit(args, result)
+                git_step_ok = _handle_single_mode_git_commit(args, result)
                 _handle_single_mode_open(args, result)
     else:
         successful_results = []
@@ -812,7 +844,7 @@ def _run_single_mode(
         "successful_results": successful_results,
         "quality_report_results": [],
         "processed_results": processed_results,
-        "overall_failure": not result.success,
+        "overall_failure": not result.success or not git_step_ok,
         "processing_failures_detected": not result.success,
     }
 
