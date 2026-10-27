@@ -330,6 +330,10 @@ DATA_QUALITY_COLUMNS: tuple[str, ...] = (
     "Item Name",
     "Issue",
     "Details",
+    "Rule ID",
+    "Component IDs",
+    "Occurrences",
+    "Unaddressable IDs",
 )
 
 # Stable failure identity values used in ProcessingResult and run summaries.

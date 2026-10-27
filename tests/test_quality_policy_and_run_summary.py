@@ -2373,18 +2373,20 @@ class TestRunSummaryTimingHardening:
 # ==================== Quality identity does not change severity counts ====================
 
 
-def test_severity_counts_ignore_rule_identity_fields():
-    issues = [
-        {
-            "Severity": "LOW",
-            "Category": "Missing Descriptions",
-            "Rule ID": "dq.missing_description.v1",
-            "Component IDs": ["a", "b", "c"],
-            "Occurrences": 3,
-            "Unaddressable IDs": 0,
-        },
-        {"Severity": "HIGH", "Category": "Duplicates", "Component IDs": [], "Occurrences": 2},
-    ]
-    counts = count_quality_issues_by_severity(issues)
-    assert counts["LOW"] == 1
-    assert counts["HIGH"] == 1
+def test_collect_data_quality_results_counts_grouped_issue_once():
+    import logging
+
+    import pandas as pd
+
+    from cja_auto_sdr.api.quality import DataQualityChecker
+    from cja_auto_sdr.generator import _collect_data_quality_results
+
+    checker = DataQualityChecker(logging.getLogger("t"), quiet=True)
+    df = pd.DataFrame(
+        {"id": [f"m{i}" for i in range(30)], "name": [f"n{i}" for i in range(30)], "description": [""] * 30},
+    )
+    checker.check_all_quality_issues_optimized(df, "Metrics", ["id", "name"], ["id", "name"])
+    _frame, dq_issues, severity_counts = _collect_data_quality_results(dq_checker=checker, max_issues=0)
+    assert severity_counts["LOW"] == 1
+    assert len(dq_issues) == 1
+    assert len(dq_issues[0]["Component IDs"]) == 30

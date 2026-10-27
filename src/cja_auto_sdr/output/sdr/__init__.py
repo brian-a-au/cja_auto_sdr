@@ -21,6 +21,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
 from cja_auto_sdr.api.quality import DataQualityChecker
@@ -79,7 +80,7 @@ class ExcelFormatCache:
 
 
 def _is_scalar_cell(value: object) -> bool:
-    return value is None or isinstance(value, (str, int, float, bool))
+    return value is None or isinstance(value, (str, int, float, bool, np.generic, pd.Timestamp))
 
 
 def _display_cell(value: object) -> object:

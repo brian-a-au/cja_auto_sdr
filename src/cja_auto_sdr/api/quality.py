@@ -516,6 +516,10 @@ class DataQualityChecker:
                         "Item Name": ["N/A"],
                         "Issue": ["No data quality issues detected"],
                         "Details": ["All validation checks passed successfully"],
+                        "Rule ID": [None],
+                        "Component IDs": [[]],
+                        "Occurrences": [0],
+                        "Unaddressable IDs": [0],
                     },
                 )
 
@@ -563,6 +567,10 @@ class DataQualityChecker:
                     "Item Name": ["N/A"],
                     "Issue": ["Error generating data quality report"],
                     "Details": [str(e)],
+                    "Rule ID": [None],
+                    "Component IDs": [[]],
+                    "Occurrences": [0],
+                    "Unaddressable IDs": [0],
                 },
             )
 

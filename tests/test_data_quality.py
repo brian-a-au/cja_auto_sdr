@@ -342,12 +342,32 @@ def test_cached_issue_without_rule_id_is_normalized():
 def test_cache_returns_independent_component_id_lists():
     cache = ValidationCache()
     df = _metrics_df(n=3)
-    first = _identity_checker(cache)
-    first.check_all_quality_issues_optimized(df, "Metrics", REQ, CRIT)
-    first.issues[0]["Component IDs"].append("mutated")
+    _identity_checker(cache).check_all_quality_issues_optimized(df, "Metrics", REQ, CRIT)
     second = _identity_checker(cache)
-    second.check_all_quality_issues_optimized(df, "Metrics", REQ, CRIT)
-    assert "mutated" not in _by_category(second, "Missing Descriptions")[0]["Component IDs"]
+    second.check_all_quality_issues_optimized(df, "Metrics", REQ, CRIT)  # cache hit
+    assert cache._hits == 1
+    second.issues[0]["Component IDs"].append("mutated")
+    third = _identity_checker(cache)
+    third.check_all_quality_issues_optimized(df, "Metrics", REQ, CRIT)
+    assert "mutated" not in _by_category(third, "Missing Descriptions")[0]["Component IDs"]
+
+
+def test_data_quality_columns_identical_for_clean_and_issue_runs():
+    from cja_auto_sdr.generator import DATA_QUALITY_COLUMNS, build_json_payload
+
+    clean = _identity_checker()
+    clean_df = clean.get_issues_dataframe()
+    issue = _identity_checker()
+    issue.check_all_quality_issues_optimized(_metrics_df(n=3), "Metrics", REQ, CRIT)
+    issue_df = issue.get_issues_dataframe()
+    assert list(clean_df.columns) == list(issue_df.columns) == list(DATA_QUALITY_COLUMNS)
+    assert clean_df.iloc[0]["Component IDs"] == [] and clean_df.iloc[0]["Occurrences"] == 0
+    assert clean_df.iloc[0]["Rule ID"] is None
+    keys = []
+    for frame in (clean_df, issue_df):
+        payload = build_json_payload({"Data Quality": frame}, {})
+        keys.append(list(payload["data_quality"][0].keys()))
+    assert keys[0] == keys[1] == list(DATA_QUALITY_COLUMNS)
 
 
 def test_severity_counts_unchanged_for_grouped_issue():

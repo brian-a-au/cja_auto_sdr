@@ -541,6 +541,16 @@ class TestQualityIdentityExports:
         assert isinstance(df["ids"][0], list)
         assert df["obj"].tolist() == before["obj"].tolist()
 
+    def test_to_display_frame_joins_numpy_scalars(self):
+        import numpy as np
+
+        from cja_auto_sdr.output.sdr import to_display_frame
+
+        df = pd.DataFrame({"ids": [[np.int64(1), np.int64(2)], [pd.Timestamp("2025-01-01")]]})
+        out = to_display_frame(df)
+        assert out["ids"][0] == "1, 2"
+        assert out["ids"][1] == "2025-01-01 00:00:00"
+
     def test_json_keeps_component_ids_as_list(self, tmp_path, rich_metadata_dict):
         path = write_json_output(_identity_dq_data_dict(), rich_metadata_dict, "t", str(tmp_path), logging.getLogger())
         with open(path) as f:
