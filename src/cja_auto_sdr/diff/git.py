@@ -2,13 +2,24 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import stat
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Literal
 
 from cja_auto_sdr.core.error_policies import RECOVERABLE_GIT_SUBPROCESS_EXCEPTIONS
 from cja_auto_sdr.core.version import __version__
 from cja_auto_sdr.diff.models import DataViewSnapshot, DiffResult
+
+GitRepositoryState = Literal["repo", "not_repo", "unknown"]
+
+# Short SHA placeholder returned when a commit succeeded but its SHA could not be read back.
+UNKNOWN_COMMIT_SHA = "unknown"
+
+# Files written by ``git_init_snapshot_repo``; the initial commit is scoped to exactly these.
+_SNAPSHOT_REPO_SCAFFOLD_FILES = (".gitignore", "README.md")
 
 
 def _snapshot_pathspecs_for_data_view(snapshot_dir: Path, data_view_id: str) -> list[str]:
@@ -26,19 +37,19 @@ def _run_git_command(
     cwd: Path | None = None,
     timeout: int,
     text: bool = True,
+    env: dict[str, str] | None = None,
 ) -> tuple[subprocess.CompletedProcess | None, Exception | None]:
     """Run a git command behind a non-throwing boundary."""
+    run_kwargs: dict = {
+        "cwd": str(cwd) if cwd is not None else None,
+        "capture_output": True,
+        "text": text,
+        "timeout": timeout,
+    }
+    if env is not None:
+        run_kwargs["env"] = env
     try:
-        return (
-            subprocess.run(
-                args,
-                cwd=str(cwd) if cwd is not None else None,
-                capture_output=True,
-                text=text,
-                timeout=timeout,
-            ),
-            None,
-        )
+        return subprocess.run(args, **run_kwargs), None
     except RECOVERABLE_GIT_SUBPROCESS_EXCEPTIONS as exc:
         return None, exc
 
@@ -51,12 +62,58 @@ def _format_git_boundary_error(exc: Exception, *, timeout_message: str, generic_
     return f"{generic_prefix}: {exc!s}"
 
 
-def is_git_repository(path: Path) -> bool:
-    """Check if the given path is inside a Git repository."""
-    result, error = _run_git_command(["git", "rev-parse", "--git-dir"], cwd=path, timeout=10, text=True)
+def git_repository_state(path: Path) -> GitRepositoryState:
+    """Classify ``path`` as the root of a Git work tree, definitely not one, or unknown.
+
+    * ``"repo"`` -- ``path`` is the top level of a Git working tree.
+    * ``"not_repo"`` -- Git confirmed ``path`` is not inside a repository, the path does not
+      exist, or ``path`` is a subdirectory of an enclosing repository (so it is not its own
+      snapshot repository and may be initialized as a nested one).
+    * ``"unknown"`` -- the probe failed (timeout, Git missing, unexpected error). Callers must
+      not initialize a repository on this state.
+    """
+    try:
+        path_mode = path.stat().st_mode
+    except FileNotFoundError:
+        return "not_repo"
+    except OSError:
+        return "unknown"
+    if not stat.S_ISDIR(path_mode):
+        return "not_repo"
+
+    probe_env = os.environ.copy()
+    probe_env["LC_ALL"] = "C"
+    result, error = _run_git_command(
+        ["git", "rev-parse", "--show-toplevel"],
+        cwd=path,
+        timeout=10,
+        text=True,
+        env=probe_env,
+    )
     if error is not None or result is None:
-        return False
-    return result.returncode == 0
+        return "unknown"
+    if result.returncode != 0:
+        stderr = (result.stderr or "").lower()
+        if "not a git repository" in stderr and not os.path.lexists(path / ".git"):
+            return "not_repo"
+        return "unknown"
+
+    toplevel = (result.stdout or "").strip()
+    if not toplevel:
+        return "unknown"
+    try:
+        return "repo" if Path(toplevel).resolve() == path.resolve() else "not_repo"
+    except OSError:
+        return "unknown"
+
+
+def is_git_repository(path: Path) -> bool:
+    """Return True only when ``path`` is the root of a Git working tree.
+
+    Subdirectories of an enclosing repository and inconclusive probes both return False;
+    use :func:`git_repository_state` to tell those cases apart.
+    """
+    return git_repository_state(path) == "repo"
 
 
 def git_get_user_info() -> tuple[str, str]:
@@ -254,7 +311,12 @@ def git_commit_snapshot(
     if result.returncode != 0:
         return False, f"git add failed: {result.stderr}"
 
-    result, error = _run_git_command(["git", "diff", "--cached", "--quiet"], cwd=snapshot_dir, timeout=10, text=False)
+    result, error = _run_git_command(
+        ["git", "diff", "--cached", "--quiet", "--", *pathspecs],
+        cwd=snapshot_dir,
+        timeout=10,
+        text=False,
+    )
     if error is not None:
         return False, _format_git_boundary_error(
             error, timeout_message="Git operation timed out", generic_prefix="Git error"
@@ -264,6 +326,11 @@ def git_commit_snapshot(
     if result.returncode == 0:
         logger.info("No changes to commit (snapshot unchanged)")
         return True, "no_changes"
+    if result.returncode != 1:
+        stderr = result.stderr
+        if isinstance(stderr, bytes):
+            stderr = stderr.decode("utf-8", errors="replace")
+        return False, f"git diff failed: {(stderr or '').strip() or result.returncode}"
 
     commit_message = generate_git_commit_message(
         data_view_id=data_view_id,
@@ -276,7 +343,14 @@ def git_commit_snapshot(
     )
 
     logger.info("Committing snapshot to Git")
-    result, error = _run_git_command(["git", "commit", "-m", commit_message], cwd=snapshot_dir, timeout=30, text=True)
+    # ``--only -- <paths>`` commits just this data view's snapshot paths, leaving any
+    # unrelated staged or unstaged work in the repository untouched.
+    result, error = _run_git_command(
+        ["git", "commit", "--only", "-m", commit_message, "--", *pathspecs],
+        cwd=snapshot_dir,
+        timeout=30,
+        text=True,
+    )
     if error is not None:
         return False, _format_git_boundary_error(
             error, timeout_message="Git operation timed out", generic_prefix="Git error"
@@ -286,14 +360,18 @@ def git_commit_snapshot(
     if result.returncode != 0:
         return False, f"git commit failed: {result.stderr}"
 
+    # The commit already landed; a failed SHA lookup must not turn that into a failure.
     result, error = _run_git_command(["git", "rev-parse", "HEAD"], cwd=snapshot_dir, timeout=10, text=True)
+    commit_sha = UNKNOWN_COMMIT_SHA
     if error is not None:
-        return False, _format_git_boundary_error(
-            error, timeout_message="Git operation timed out", generic_prefix="Git error"
+        logger.warning(
+            "Committed snapshot but could not read commit SHA: %s",
+            _format_git_boundary_error(error, timeout_message="Git operation timed out", generic_prefix="Git error"),
         )
-    if result is None:
-        return False, "Git error: unknown subprocess failure"
-    commit_sha = result.stdout.strip()[:8] if result.returncode == 0 else "unknown"
+    elif result is None:
+        logger.warning("Committed snapshot but could not read commit SHA: unknown subprocess failure")
+    elif result.returncode == 0 and result.stdout.strip():
+        commit_sha = result.stdout.strip()[:8]
 
     logger.info(f"Committed snapshot: {commit_sha}")
 
@@ -326,8 +404,15 @@ def git_init_snapshot_repo(directory: Path, logger: logging.Logger | None = None
     try:
         directory.mkdir(parents=True, exist_ok=True)
 
-        if is_git_repository(directory):
+        state = git_repository_state(directory)
+        if state == "repo":
             return True, "Already a Git repository"
+        if state == "unknown":
+            message = (
+                f"Could not determine whether {directory} is a Git repository; refusing to initialize. "
+                "Check that Git is installed and the directory is accessible."
+            )
+            return False, message
 
         logger.info(f"Initializing Git repository in {directory}")
         result, error = _run_git_command(["git", "init"], cwd=directory, timeout=30, text=True)
@@ -414,7 +499,12 @@ git diff HEAD~1 HEAD -- <data_view_dir>/metrics.json
 Generated by CJA SDR Generator v{__version__}
 """)
 
-        result, error = _run_git_command(["git", "add", "."], cwd=directory, timeout=30, text=True)
+        result, error = _run_git_command(
+            ["git", "add", "--", *_SNAPSHOT_REPO_SCAFFOLD_FILES],
+            cwd=directory,
+            timeout=30,
+            text=True,
+        )
         if error is not None:
             return False, _format_git_boundary_error(
                 error,
@@ -427,7 +517,7 @@ Generated by CJA SDR Generator v{__version__}
             return False, f"git add failed: {result.stderr}"
 
         result, error = _run_git_command(
-            ["git", "commit", "-m", "Initialize SDR snapshot repository"],
+            ["git", "commit", "-m", "Initialize SDR snapshot repository", "--", *_SNAPSHOT_REPO_SCAFFOLD_FILES],
             cwd=directory,
             timeout=30,
             text=True,

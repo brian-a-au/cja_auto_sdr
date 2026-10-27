@@ -630,16 +630,32 @@ def _print_single_mode_inventory_summary(
         )
 
 
-def _handle_single_mode_git_commit(args: argparse.Namespace, result: Any) -> None:
+def _handle_single_mode_git_commit(args: argparse.Namespace, result: Any) -> bool:
+    """Run the optional --git-commit step.
+
+    Returns False when the Git step hit a hard failure that must fail the run
+    (inconclusive repository probe, or a required snapshot re-fetch failed);
+    True otherwise, including when --git-commit was not requested.
+    """
     generator = _generator_module()
 
     if not getattr(args, "git_commit", False):
-        return
+        return True
 
     print()
     git_dir = Path(getattr(args, "git_dir", "./sdr-snapshots"))
 
-    if not generator.is_git_repository(git_dir):
+    repo_state = generator.git_repository_state(git_dir)
+    if repo_state == "unknown":
+        print(
+            generator.ConsoleColors.error(
+                f"  Git commit failed: Could not determine whether {git_dir} is a Git repository "
+                "(git probe failed or timed out); not initializing or committing.",
+            ),
+        )
+        return False
+
+    if repo_state != "repo":
         print(f"Initializing Git repository at: {git_dir}")
         init_success, init_msg = generator.git_init_snapshot_repo(git_dir)
         if not init_success:
@@ -654,7 +670,7 @@ def _handle_single_mode_git_commit(args: argparse.Namespace, result: Any) -> Non
         dimensions=result.dimensions_data if hasattr(result, "dimensions_data") else [],
     )
 
-    snapshot = generator._refetch_git_snapshot_for_commit(
+    refetched = generator._refetch_git_snapshot_for_commit(
         snapshot=snapshot,
         data_view_id=result.data_view_id,
         config_file=args.config_file,
@@ -662,6 +678,15 @@ def _handle_single_mode_git_commit(args: argparse.Namespace, result: Any) -> Non
         include_calculated_metrics=getattr(args, "include_calculated_metrics", False),
         include_segments_inventory=getattr(args, "include_segments_inventory", False),
     )
+    if refetched is None:
+        print(
+            generator.ConsoleColors.error(
+                "  Git snapshot not saved: component data could not be fetched, and committing an "
+                "empty snapshot would record every metric and dimension as removed.",
+            ),
+        )
+        return False
+    snapshot = refetched
 
     print(f"Saving snapshot to: {git_dir}")
     generator.save_git_friendly_snapshot(
@@ -690,6 +715,7 @@ def _handle_single_mode_git_commit(args: argparse.Namespace, result: Any) -> Non
                 print(generator.ConsoleColors.success("  Pushed to remote"))
     else:
         print(generator.ConsoleColors.error(f"  Git commit failed: {commit_result}"))
+    return True
 
 
 def _handle_single_mode_open(args: argparse.Namespace, result: Any) -> None:
@@ -770,6 +796,7 @@ def _run_single_mode(
         json_typed=getattr(args, "json_typed", False),
     )
     processed_results = [result]
+    git_step_ok = True
 
     total_runtime = time.monotonic() - processing_start_time
     _note()
@@ -802,7 +829,7 @@ def _run_single_mode(
                     include_calculated=getattr(args, "include_calculated_metrics", False),
                     include_derived=getattr(args, "include_derived_inventory", False),
                 )
-                _handle_single_mode_git_commit(args, result)
+                git_step_ok = _handle_single_mode_git_commit(args, result)
                 _handle_single_mode_open(args, result)
     else:
         successful_results = []
@@ -814,7 +841,7 @@ def _run_single_mode(
         "successful_results": successful_results,
         "quality_report_results": [],
         "processed_results": processed_results,
-        "overall_failure": not result.success,
+        "overall_failure": not result.success or not git_step_ok,
         "processing_failures_detected": not result.success,
     }
 
