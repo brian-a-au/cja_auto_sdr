@@ -1,0 +1,70 @@
+{
+  "metadata": {
+    "Data View ID": "dv_golden",
+    "Data View Name": "Golden View",
+    "Metrics Count": "2"
+  },
+  "data_view": {
+    "id": "dv_golden",
+    "name": "Golden View",
+    "tags": "[\n  \"a\"\n]"
+  },
+  "metrics": [
+    {
+      "id": "m1",
+      "name": "Page Views",
+      "precision": 0,
+      "isDeleted": false,
+      "definition": "{\n  \"func\": \"sum\"\n}"
+    },
+    {
+      "id": "m2",
+      "name": "Revenue",
+      "precision": 2,
+      "isDeleted": true,
+      "definition": null
+    }
+  ],
+  "dimensions": [
+    {
+      "id": "d1",
+      "description": "Browser",
+      "score": 1.5
+    },
+    {
+      "id": "d2",
+      "description": null,
+      "score": null
+    }
+  ],
+  "data_quality": [
+    {
+      "Severity": "HIGH",
+      "Category": "Duplicates",
+      "Type": "Metrics",
+      "Item Name": "Revenue",
+      "Issue": "Duplicate name",
+      "Details": "Appears 2 times"
+    }
+  ],
+  "derived_fields": {
+    "fields": [
+      {
+        "Status": "No derived fields found for this data view",
+        "Data View ID": "dv_golden"
+      }
+    ]
+  },
+  "calculated_metrics": {
+    "summary": {
+      "total": 1
+    },
+    "metrics": [
+      {
+        "id": "cm1",
+        "complexity": 2.5
+      }
+    ]
+  },
+  "segments": {}
+}
