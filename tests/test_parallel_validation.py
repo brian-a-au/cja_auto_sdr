@@ -304,5 +304,16 @@ class TestParallelValidationIntegration:
         # Verify DataFrame structure
         assert isinstance(issues_df, pd.DataFrame)
         if len(checker.issues) > 0:
-            expected_columns = {"Severity", "Category", "Type", "Item Name", "Issue", "Details"}
+            expected_columns = {
+                "Severity",
+                "Category",
+                "Type",
+                "Item Name",
+                "Issue",
+                "Details",
+                "Rule ID",
+                "Component IDs",
+                "Occurrences",
+                "Unaddressable IDs",
+            }
             assert set(issues_df.columns) == expected_columns

@@ -128,6 +128,26 @@ The Excel output includes a dedicated "Data Quality" sheet with these columns:
 | Item Name | Specific component(s) affected |
 | Issue | Clear description of the problem |
 | Details | Additional context and affected items |
+| Rule ID | Stable, versioned identity of the rule that raised the issue (see below) |
+| Component IDs | IDs of the affected components, sorted and unique. JSON output keeps this as a list. Excel, CSV, HTML and Markdown show it as a comma-separated string |
+| Occurrences | Number of affected rows or values behind the issue |
+| Unaddressable IDs | Number of affected values that have no usable ID (missing, blank, or not a string or integer). IDs are never guessed from names |
+
+### Rule IDs
+
+Each issue carries a rule ID that does not change when a component is renamed or rows are reordered. Use it to track the same finding over time.
+
+| Category | Rule ID |
+|----------|---------|
+| Empty Data | `dq.empty_data.v1` |
+| Missing Fields | `dq.missing_required_fields.v1` |
+| Duplicates | `dq.duplicate_name.v1` |
+| Null Values | `dq.null_critical_field.v1` |
+| Missing Descriptions | `dq.missing_description.v1` |
+| Invalid IDs | `dq.invalid_id.v1` |
+| Any other check | `dq.custom.unknown` |
+
+Versioning rule: a rule's meaning change bumps its `.vN` suffix. A new ID is never reused for a different meaning. Severity counts are unchanged: one grouped issue still counts once, however many components it lists.
 
 ## Example Issues
 

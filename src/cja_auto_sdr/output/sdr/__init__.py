@@ -14,12 +14,14 @@ Also contains the ExcelFormatCache helper class.
 from __future__ import annotations
 
 import html
+import json
 import logging
 import os
 import re
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
 from cja_auto_sdr.api.quality import DataQualityChecker
@@ -77,6 +79,37 @@ class ExcelFormatCache:
         return self._cache[cache_key]
 
 
+def _is_scalar_cell(value: object) -> bool:
+    return value is None or isinstance(value, (str, int, float, bool, np.generic, pd.Timestamp))
+
+
+def _display_cell(value: object) -> object:
+    if isinstance(value, (list, tuple)):
+        if all(_is_scalar_cell(item) for item in value):
+            return ", ".join(str(item) for item in value)
+        return json.dumps(list(value), indent=2, default=str)
+    if isinstance(value, dict):
+        return json.dumps(value, indent=2, default=str)
+    return value
+
+
+def to_display_frame(df: pd.DataFrame) -> pd.DataFrame:
+    """Return a copy of ``df`` that is safe for tabular rendering (xlsx, CSV, HTML, Markdown).
+
+    List-of-scalar cells become ``", "``-joined strings; other dict/list cells become
+    indented JSON text. Other cells are untouched. The input is never mutated, and
+    JSON output must not use this helper.
+    """
+    out = df.copy()
+    for col in out.columns:
+        series = out[col]
+        if series.dtype != object:
+            continue
+        if series.map(lambda v: isinstance(v, (list, tuple, dict))).any():
+            out[col] = series.map(_display_cell)
+    return out
+
+
 def apply_excel_formatting(
     writer,
     df,
@@ -95,6 +128,7 @@ def apply_excel_formatting(
     """
     try:
         logger.info("Formatting sheet: %s", sheet_name)
+        df = to_display_frame(df)
 
         # Calculate row offset for Data Quality sheet (summary section at top)
         summary_rows = 0
@@ -484,7 +518,8 @@ def write_csv_output(
         os.makedirs(csv_dir, exist_ok=True)
 
         # Write each DataFrame to a separate CSV file
-        for sheet_name, df in data_dict.items():
+        for sheet_name, sheet_df in data_dict.items():
+            df = to_display_frame(sheet_df)
             csv_file = os.path.join(csv_dir, f"{sheet_name.replace(' ', '_').lower()}.csv")
             df.to_csv(csv_file, index=False, encoding="utf-8")
             logger.info("  \u2713 Created CSV: %s", os.path.basename(csv_file))
@@ -811,9 +846,10 @@ def write_html_output(
             "Segments": "\U0001f3af",
         }
 
-        for sheet_name, df in data_dict.items():
-            if df.empty:
+        for sheet_name, sheet_df in data_dict.items():
+            if sheet_df.empty:
                 continue
+            df = to_display_frame(sheet_df)
 
             icon = section_icons.get(sheet_name, "\U0001f4c4")
             html_parts.append('<div class="section">')
@@ -1008,7 +1044,8 @@ def write_markdown_output(
         md_parts.append("\n---\n")
 
         # Process each sheet
-        for sheet_name, df in data_dict.items():
+        for sheet_name, sheet_df in data_dict.items():
+            df = to_display_frame(sheet_df)
             md_parts.append(f"## {sheet_name}\n")
 
             # Add special handling for Data Quality sheet
