@@ -18,6 +18,7 @@ from cja_auto_sdr.diff.models import (
     ComponentDiff,
     DiffResult,
     InventoryItemDiff,
+    coverage_rows,
 )
 from cja_auto_sdr.output.diff.common import (
     _get_change_detail,
@@ -132,25 +133,16 @@ def write_diff_csv_output(
                 str(summary.has_changes),
                 summary.total_changes,
                 summary.metadata_changes,
-                "included" if summary.include_metadata else "reported",
+                summary.metadata_policy,
             ],
         }
         pd.DataFrame(metadata_data).to_csv(os.path.join(csv_dir, "metadata.csv"), index=False, encoding="utf-8")
         logger.info("  Created: metadata.csv")
 
         if diff_result.coverage is not None:
-            coverage_items = diff_result.coverage.to_dict().items()
-            pd.DataFrame(
-                {
-                    "Property": [key for key, _ in coverage_items],
-                    "Value": [
-                        "; ".join(str(v) for v in value)
-                        if isinstance(value, list)
-                        else ("" if value is None else value)
-                        for _, value in coverage_items
-                    ],
-                },
-            ).to_csv(os.path.join(csv_dir, "coverage.csv"), index=False, encoding="utf-8")
+            pd.DataFrame(coverage_rows(diff_result.coverage), columns=["Property", "Value"]).to_csv(
+                os.path.join(csv_dir, "coverage.csv"), index=False, encoding="utf-8"
+            )
             logger.info("  Created: coverage.csv")
 
         # Helper function to write diff CSV

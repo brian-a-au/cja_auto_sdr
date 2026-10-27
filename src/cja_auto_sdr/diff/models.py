@@ -272,6 +272,11 @@ class DiffSummary:
         return ", ".join(parts)
 
     @property
+    def metadata_policy(self) -> str:
+        """Metadata policy label: 'included' or 'reported'."""
+        return "included" if self.include_metadata else "reported"
+
+    @property
     def metadata_summary_line(self) -> str:
         """Report line for metadata changes, or '' when there are none."""
         if not self.metadata_changes:
@@ -322,6 +327,17 @@ class DiffCoverage:
             "show_only": list(self.show_only) if self.show_only is not None else None,
             "limitations": list(self.limitations),
         }
+
+
+def coverage_rows(coverage: DiffCoverage) -> list[tuple[str, str]]:
+    """Flatten coverage into (property, value) rows; lists join with '; ', None becomes ''."""
+    rows: list[tuple[str, str]] = []
+    for key, value in coverage.to_dict().items():
+        if isinstance(value, list):
+            rows.append((key, "; ".join(str(v) for v in value)))
+        else:
+            rows.append((key, "" if value is None else str(value)))
+    return rows
 
 
 @dataclass

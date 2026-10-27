@@ -266,8 +266,9 @@ def write_diff_html_output(
 
         if summary.metadata_summary_line:
             html_parts.append(f'<p class="metadata-changes">{_safe_html_escape(summary.metadata_summary_line)}</p>')
-        metadata_policy = "included" if summary.include_metadata else "reported"
-        html_parts.append(f'<p class="metadata-policy">Metadata policy: {_safe_html_escape(metadata_policy)}</p>')
+        html_parts.append(
+            f'<p class="metadata-policy">Metadata policy: {_safe_html_escape(summary.metadata_policy)}</p>',
+        )
 
         if diff_result.coverage is not None:
             coverage_rows = []

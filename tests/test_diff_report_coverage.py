@@ -5,11 +5,12 @@ from __future__ import annotations
 import csv
 import logging
 import os
+from pathlib import Path
 
 import pytest
 from openpyxl import load_workbook
 
-from cja_auto_sdr.diff.models import DiffCoverage, DiffResult, DiffSummary, MetadataDiff
+from cja_auto_sdr.diff.models import DiffCoverage, DiffResult, DiffSummary, MetadataDiff, coverage_rows
 from cja_auto_sdr.output.diff.csv import write_diff_csv_output
 from cja_auto_sdr.output.diff.excel import write_diff_excel_output
 from cja_auto_sdr.output.diff.html import write_diff_html_output
@@ -60,7 +61,7 @@ CASES = [
 @pytest.mark.parametrize(("count", "include", "policy"), CASES)
 def test_html_metadata_line_and_policy(tmp_path, count, include, policy):
     r = _result(metadata_changes=count, include=include, coverage=_coverage(policy))
-    content = open(write_diff_html_output(r, "d", str(tmp_path), logger), encoding="utf-8").read()
+    content = Path(write_diff_html_output(r, "d", str(tmp_path), logger)).read_text(encoding="utf-8")
     assert f"Metadata policy: {policy}" in content
     if count:
         suffix = "(counted)" if include else "(not counted; use --include-metadata-changes)"
@@ -71,7 +72,7 @@ def test_html_metadata_line_and_policy(tmp_path, count, include, policy):
 
 def test_html_coverage_section(tmp_path):
     r = _result(metadata_changes=1, include=False, coverage=_coverage())
-    content = open(write_diff_html_output(r, "d", str(tmp_path), logger), encoding="utf-8").read()
+    content = Path(write_diff_html_output(r, "d", str(tmp_path), logger)).read_text(encoding="utf-8")
     assert "Comparison coverage" in content
     assert "compare_fields" in content
     assert "name, description" in content
@@ -83,7 +84,7 @@ def test_html_coverage_section(tmp_path):
 
 def test_html_no_coverage(tmp_path):
     r = _result(metadata_changes=0, include=False, coverage=None)
-    content = open(write_diff_html_output(r, "d", str(tmp_path), logger), encoding="utf-8").read()
+    content = Path(write_diff_html_output(r, "d", str(tmp_path), logger)).read_text(encoding="utf-8")
     assert "Comparison coverage" not in content
     assert "Metadata policy: reported" in content
 
@@ -139,3 +140,16 @@ def test_excel_no_coverage(tmp_path):
     wb = load_workbook(p)
     assert "Coverage" not in wb.sheetnames
     assert _sheet_rows(p, "Metadata")["Metadata Policy"] == "reported"
+
+
+def test_summary_metadata_policy_property():
+    assert DiffSummary().metadata_policy == "reported"
+    assert DiffSummary(include_metadata=True).metadata_policy == "included"
+
+
+def test_coverage_rows_helper():
+    rows = dict(coverage_rows(_coverage()))
+    assert rows["compare_fields"] == "name; description"
+    assert rows["ignored_fields"] == ""
+    assert rows["show_only"] == ""
+    assert rows["metadata_policy"] == "reported"
