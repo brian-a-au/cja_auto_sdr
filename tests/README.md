@@ -172,6 +172,7 @@ tests/
 ├── test_cli_notion_repair.py        # CLI flag wiring for --notion-repair-database and --notion-print-database-schema
 ├── test_org_analyzer_similarity.py  # Org similarity characterization, streaming parity, thresholds, and dispatch tests
 ├── test_org_writers_csv.py          # Org components-CSV bucket-lookup characterization test
+├── test_csv_staging.py              # Staged CSV bundle publication and completion manifest tests
 ├── test_sdr_markdown_escaping.py    # SDR markdown vectorized cell-escaping characterization test
 ├── test_diff_excel.py               # Diff Excel row-coloring characterization tests
 ├── test_org_snapshot_parse_cache.py # Org snapshot JSON parse-cache characterization test
@@ -181,7 +182,7 @@ tests/
 └── README.md                        # This file
 ```
 
-**Total: 8,969 comprehensive tests**
+**Total: 8,989 comprehensive tests**
 
 ### Test Count Breakdown
 
@@ -190,16 +191,16 @@ tests/
 
 | Category | Tests | Files | Notes |
 |----------|-------|-------|-------|
-| `unit` | 8,838 | 163 | Default primary category for files without explicit integration/e2e/smoke scope |
+| `unit` | 8,858 | 164 | Default primary category for files without explicit integration/e2e/smoke scope |
 | `integration` | 98 | 3 | Cross-module integration suites |
 | `e2e` | 23 | 2 | End-to-end suites with a mocked external boundary |
 | `smoke` | 10 | 1 | Lightweight command-mode coverage |
 | `slow` | 0 | 0 | Overlay marker; these tests are also counted in a primary category |
-| **Primary Total** | **8,969** | **169** | **unit + integration + e2e + smoke** |
+| **Primary Total** | **8,989** | **170** | **unit + integration + e2e + smoke** |
 
 | CI Slice | Tests | Files | Selector |
 |----------|-------|-------|----------|
-| `test-unit` | 8,838 | 163 | `-m "unit and not slow"` |
+| `test-unit` | 8,858 | 164 | `-m "unit and not slow"` |
 | `test-integration` | 121 | 5 | `-m "integration or e2e or slow"` |
 | `smoke-test` | 10 | 1 | `-m smoke` |
 
@@ -261,7 +262,7 @@ tests/
 | `test_output_extraction_contracts.py` | 347 | Extraction contracts for output.diff and output.inventory |
 | `test_malformed_api_responses.py` | 21 | Negative tests for malformed/unexpected API responses |
 | `test_main_entry_points.py` | 45 | main() and _main_impl() entry points, dispatch, run_state, run summary |
-| `test_quality_policy_and_run_summary.py` | 172 | Quality policy functions and run summary/status inference |
+| `test_quality_policy_and_run_summary.py` | 174 | Quality policy functions and run summary/status inference |
 | `test_e2e_integration.py` | 16 | End-to-end integration tests with real pipeline, mocked API boundary |
 | `test_api_client.py` | 39 | API client exception paths and error handling |
 | `test_config_validation.py` | 55 | Configuration validation logic |
@@ -300,7 +301,7 @@ tests/
 | `test_org_cache_branches.py` | 121 | Org cache branch coverage |
 | `test_org_writer_compat_contracts.py` | 116 | Org writer compatibility boundary contract tests |
 | `test_org_writer_coverage.py` | 145 | Org writer edge cases and coverage |
-| `test_output_writer_coverage.py` | 37 | Output writer edge cases and coverage |
+| `test_output_writer_coverage.py` | 39 | Output writer edge cases and coverage |
 | `test_backwards_compat.py` | 34 | Backwards compatibility tests |
 | `test_exception_contracts.py` | 19 | Exception boundary contract tests |
 | `test_update_test_counts.py` | 7 | Test count validation tests |
@@ -372,13 +373,14 @@ tests/
 | `test_cli_notion_repair.py` | 14 | CLI flag wiring for --notion-repair-database and --notion-print-database-schema |
 | `test_org_analyzer_similarity.py` | 42 | Org similarity characterization, streaming parity, thresholds, and dispatch tests |
 | `test_org_writers_csv.py` | 1 | Org components-CSV bucket-lookup characterization test |
+| `test_csv_staging.py` | 16 | Staged CSV bundle publication and completion manifest tests |
 | `test_sdr_markdown_escaping.py` | 4 | SDR markdown vectorized cell-escaping characterization test |
 | `test_diff_excel.py` | 3 | Diff Excel row-coloring characterization tests |
 | `test_org_snapshot_parse_cache.py` | 3 | Org snapshot JSON parse-cache characterization test |
 | `test_diff_snapshot_retention.py` | 81 | Diff snapshot-retention parse-cache characterization test |
 | `test_diff_comparator_normalize.py` | 21 | Diff field-normalization type-fast-path characterization test |
 | `test_logging_diagnostics.py` | 2 | emit_diagnostic isEnabledFor guard characterization tests |
-| **Total** | **8,969** | **Collected via pytest --collect-only** |
+| **Total** | **8,989** | **Collected via pytest --collect-only** |
 
 ## Running Tests
 
@@ -836,7 +838,7 @@ the `tests/README.md` inventory tree or count table.
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (8,969 tests total)
+- [x] Comprehensive test coverage (8,989 tests total)
 - [x] Org-wide analysis tests (test_org_report.py) - 209 tests (including large org scaling, output path aliases, memory warnings, smart cache invalidation)
 - [x] Org-wide analysis integration tests (test_org_report_integration.py) - 42 tests (end-to-end flows, caching, filtering, governance thresholds)
 - [x] Profile management tests (test_profiles.py) - 80 tests
