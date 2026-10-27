@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from pathlib import Path
 
 from cja_auto_sdr.api.resilience import ErrorMessageHelper
@@ -250,7 +251,7 @@ def validate_config_file(config_file: str | Path, logger: logging.Logger) -> boo
         config_path = Path(config_file)
 
         # Check if file exists
-        if not config_path.exists():
+        if not os.path.exists(config_path):
             error_msg = ErrorMessageHelper.get_config_error_message(
                 "file_not_found",
                 details=f"Looking for: {config_path.absolute()}",
@@ -259,7 +260,7 @@ def validate_config_file(config_file: str | Path, logger: logging.Logger) -> boo
             return False
 
         # Check if file is readable
-        if not config_path.is_file():
+        if not os.path.isfile(config_path):
             logger.error("'%s' is not a valid file", config_file)
             return False
 

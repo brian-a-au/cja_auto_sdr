@@ -172,7 +172,7 @@ class OrgReportCache:
 
     def _load_cache(self) -> None:
         """Load cache from disk."""
-        if self.cache_file.exists():
+        if os.path.exists(self.cache_file):
             try:
                 with open(self.cache_file, encoding="utf-8") as f:
                     payload = json.load(f)
@@ -537,7 +537,7 @@ class OrgReportCache:
                 for filepath in sorted(duplicate_paths - kept_paths):
                     with contextlib.suppress(OSError):
                         Path(filepath).unlink()
-                    if not Path(filepath).exists():
+                    if not os.path.exists(filepath):
                         deleted_paths.append(filepath)
 
         return sorted(set(deleted_paths))
@@ -800,5 +800,5 @@ class OrgReportCache:
         return {
             "entries": len(self._cache),
             "cache_file": str(self.cache_file),
-            "cache_size_bytes": self.cache_file.stat().st_size if self.cache_file.exists() else 0,
+            "cache_size_bytes": self.cache_file.stat().st_size if os.path.exists(self.cache_file) else 0,
         }

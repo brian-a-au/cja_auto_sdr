@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
@@ -236,9 +237,9 @@ def org_report_snapshot_dir_paths(snapshot_root: str | Path, org_id: Any = None)
     if org_id is not None:
         return tuple(root / dir_key for dir_key in org_report_snapshot_dir_candidates(org_id))
 
-    if not root.exists() or not root.is_dir():
+    if not os.path.exists(root) or not os.path.isdir(root):
         return ()
-    return tuple(sorted(path for path in root.iterdir() if path.is_dir()))
+    return tuple(sorted(path for path in root.iterdir() if os.path.isdir(path)))
 
 
 def is_org_report_snapshot_root_dir(path: str | Path) -> bool:
@@ -318,7 +319,7 @@ def iter_org_report_snapshot_files(cache_dir: str | Path, org_id: Any = None) ->
     seen_paths: set[str] = set()
 
     for snapshot_dir in org_report_snapshot_search_dirs(cache_dir, org_id=org_id):
-        if not snapshot_dir.exists() or not snapshot_dir.is_dir():
+        if not os.path.exists(snapshot_dir) or not os.path.isdir(snapshot_dir):
             continue
         for snapshot_file in sorted(snapshot_dir.glob("*.json")):
             normalized = snapshot_path_text(snapshot_file)

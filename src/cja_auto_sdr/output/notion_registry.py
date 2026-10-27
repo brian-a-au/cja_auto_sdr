@@ -18,6 +18,7 @@ lock on a sidecar ``.notion_pages.json.lock`` file.
 from __future__ import annotations
 
 import json
+import os
 from contextlib import contextmanager
 from pathlib import Path
 from typing import TypedDict
@@ -105,7 +106,7 @@ def _coerce_entry(raw: object) -> RegistryEntry:
 
 
 def load_registry(path: Path) -> dict[str, RegistryEntry]:
-    if not path.exists():
+    if not os.path.exists(path):
         return {}
     try:
         data = json.loads(path.read_text(encoding="utf-8"))

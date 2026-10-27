@@ -997,3 +997,10 @@ def test_lease_stale_reclaim_does_not_unlink_new_owner_sidecar_on_race(
         assert current is not None
         assert current.lock_id == new_lock_id
         assert metadata_path.exists()
+
+
+class TestReadInfoPathUnsearchableParent:
+    def test_lock_info_under_unsearchable_dir_returns_none(self, unsearchable_dir):
+        from cja_auto_sdr.core.locks.backends import _read_info_path
+
+        assert _read_info_path(unsearchable_dir / "org.lock.info") is None

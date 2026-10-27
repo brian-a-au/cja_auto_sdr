@@ -156,7 +156,7 @@ class JsonFileCredentialLoader(CredentialLoader):
         return f"json:{self.file_path.name}"
 
     def _load_impl(self, _logger: logging.Logger) -> dict[str, Any] | None:
-        if not self.file_path.exists():
+        if not os.path.exists(self.file_path):
             return None
 
         with open(self.file_path, encoding="utf-8") as f:
@@ -178,7 +178,7 @@ class DotenvCredentialLoader(CredentialLoader):
         return f"dotenv:{self.file_path.name}"
 
     def _load_impl(self, _logger: logging.Logger) -> dict[str, Any] | None:
-        if not self.file_path.exists():
+        if not os.path.exists(self.file_path):
             return None
 
         credentials = {}
@@ -270,7 +270,7 @@ class CredentialResolver:
         if creds:
             # Warn if config file also exists
             config_path = Path(config_file)
-            if config_path.exists():
+            if os.path.exists(config_path):
                 self._warn_multiple_sources(config_path)
             return creds, source
 
@@ -365,7 +365,7 @@ class CredentialResolver:
         """
         config_path = Path(config_file)
 
-        if not config_path.exists():
+        if not os.path.exists(config_path):
             self.logger.debug("Config file not found: %s", config_path)
             return None, ""
 

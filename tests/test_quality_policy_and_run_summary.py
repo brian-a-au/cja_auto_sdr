@@ -2498,3 +2498,11 @@ class TestQualityReportListFields:
 
         p = write_quality_report_output(self.ISSUES, "json", None, tmp_path)
         assert json.load(open(p, encoding="utf-8"))[0]["Component IDs"] == ["m1", "m2"]
+
+
+class TestLoadQualityPolicyUnsearchableParent:
+    def test_policy_under_unsearchable_dir_reports_not_found(self, unsearchable_dir):
+        from cja_auto_sdr.api.quality_policy import load_quality_policy
+
+        with pytest.raises(FileNotFoundError, match="Policy file not found"):
+            load_quality_policy(unsearchable_dir / "policy.json")

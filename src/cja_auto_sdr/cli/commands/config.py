@@ -168,7 +168,7 @@ def show_config_status(config_file: str = "config.json", profile: str | None = N
 
     if not config_source:
         config_path = Path(config_file)
-        if config_path.exists():
+        if os.path.exists(config_path):
             config_payload, read_error = _read_config_status_file(config_file, logger)
             if read_error:
                 return _emit_config_status_error(read_error)
@@ -259,17 +259,19 @@ def _check_output_dir_access(output_dir: str | Path) -> tuple[bool, Path, str, P
     """Check whether an output directory is writable now or creatable later."""
     resolved_dir = _resolve_output_dir_path(output_dir)
 
-    if resolved_dir.exists():
-        if not resolved_dir.is_dir():
+    # os.path checks return False instead of raising PermissionError when a
+    # parent directory cannot be searched (Path.exists() raises before 3.14).
+    if os.path.exists(resolved_dir):
+        if not os.path.isdir(resolved_dir):
             return False, resolved_dir, "not_directory", None
         if os.access(resolved_dir, os.W_OK | os.X_OK):
             return True, resolved_dir, "writable", None
         return False, resolved_dir, "not_writable", None
 
     for candidate in resolved_dir.parents:
-        if not candidate.exists():
+        if not os.path.exists(candidate):
             continue
-        if not candidate.is_dir():
+        if not os.path.isdir(candidate):
             return False, resolved_dir, "parent_not_directory", candidate
         if os.access(candidate, os.W_OK | os.X_OK):
             return True, resolved_dir, "creatable", candidate
@@ -427,7 +429,7 @@ def validate_config_only(
         print()
         print("[3/5] Checking configuration file...")
         config_path = Path(config_file)
-        if config_path.exists():
+        if os.path.exists(config_path):
             abs_path = config_path.resolve()
             print(generator.ConsoleColors.success(f"  \u2713 Config file found: {abs_path}"))
             try:

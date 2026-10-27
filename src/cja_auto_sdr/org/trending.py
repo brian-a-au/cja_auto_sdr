@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -325,7 +326,7 @@ def discover_snapshots(
     json_files = list(iter_org_report_snapshot_files(cache_dir, org_id=org_id))
 
     # Include explicit file if provided
-    if explicit_path is not None and explicit_path.is_file() and explicit_path not in json_files:
+    if explicit_path is not None and os.path.isfile(explicit_path) and explicit_path not in json_files:
         json_files.append(explicit_path)
 
     for json_file in json_files:

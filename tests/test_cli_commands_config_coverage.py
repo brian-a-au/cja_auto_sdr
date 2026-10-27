@@ -234,8 +234,8 @@ class TestCheckOutputDirAccessNoExistingParent:
         # Construct a deep path under a non-existing root so all parents are missing
         non_existing_root = tmp_path / "ghost" / "deep" / "path" / "target"
 
-        # Patch .exists() to always return False for all paths
-        with patch("pathlib.Path.exists", return_value=False):
+        # Patch os.path.exists() to always return False for all paths
+        with patch("cja_auto_sdr.cli.commands.config.os.path.exists", return_value=False):
             ok, _resolved, reason, parent = _check_output_dir_access(str(non_existing_root))
 
         assert ok is False
@@ -849,3 +849,20 @@ class TestValidateConfigHintOutput:
         assert "API connection failed: empty or malformed API response" in captured.out
         assert "'content'" not in captured.out
         assert "AEP API" in captured.out
+
+
+class TestConfigCommandsUnsearchableParent:
+    def test_show_config_status_config_under_unsearchable_dir(self, unsearchable_dir, capsys):
+        from cja_auto_sdr.cli.commands.config import show_config_status
+
+        with patch("cja_auto_sdr.generator.load_credentials_from_env", return_value=None):
+            result = show_config_status(config_file=str(unsearchable_dir / "config.json"))
+        assert result is False
+
+    def test_validate_config_only_config_under_unsearchable_dir(self, unsearchable_dir, capsys):
+        from cja_auto_sdr.cli.commands.config import validate_config_only
+
+        with patch("cja_auto_sdr.generator.load_credentials_from_env", return_value=None):
+            result = validate_config_only(config_file=str(unsearchable_dir / "config.json"))
+        assert result is False
+        assert "not found" in capsys.readouterr().out.lower()

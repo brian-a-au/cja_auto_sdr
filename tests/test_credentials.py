@@ -893,3 +893,29 @@ class TestNormalizeScopeTokensNonStringNonIterable:
 
         result = _normalize_scope_tokens(False)
         assert result == ["False"]
+
+
+class TestCredentialLoadersUnsearchableParent:
+    def test_json_loader_impl_returns_none(self, unsearchable_dir):
+        import logging
+
+        from cja_auto_sdr.core.credentials import JsonFileCredentialLoader
+
+        loader = JsonFileCredentialLoader(unsearchable_dir / "config.json")
+        assert loader._load_impl(logging.getLogger("test")) is None
+
+    def test_dotenv_loader_impl_returns_none(self, unsearchable_dir):
+        import logging
+
+        from cja_auto_sdr.core.credentials import DotenvCredentialLoader
+
+        loader = DotenvCredentialLoader(unsearchable_dir / ".env")
+        assert loader._load_impl(logging.getLogger("test")) is None
+
+    def test_try_config_file_returns_no_credentials(self, unsearchable_dir):
+        import logging
+
+        from cja_auto_sdr.core.credentials import CredentialResolver
+
+        resolver = CredentialResolver(logging.getLogger("test"))
+        assert resolver._try_config_file(unsearchable_dir / "config.json") == (None, "")

@@ -892,3 +892,61 @@ class TestListProfilesOrgId:
         by_name = {profile["name"]: profile for profile in data["profiles"]}
         assert by_name["good"]["org_id"] == "GOOD@AdobeOrg"
         assert by_name["bad"]["org_id"] is None
+
+
+class TestProfilesUnsearchableParent:
+    """Profile paths beneath an unsearchable CJA_HOME behave as missing."""
+
+    def test_load_profile_config_json_returns_none(self, unsearchable_dir):
+        from cja_auto_sdr.core.profiles import load_profile_config_json
+
+        assert load_profile_config_json(unsearchable_dir / "prod") is None
+
+    def test_load_profile_dotenv_returns_none(self, unsearchable_dir):
+        from cja_auto_sdr.core.profiles import load_profile_dotenv
+
+        assert load_profile_dotenv(unsearchable_dir / "prod") is None
+
+    def test_read_profile_org_id_returns_none(self, unsearchable_dir):
+        from cja_auto_sdr.core.profiles import _read_profile_org_id
+
+        assert _read_profile_org_id(unsearchable_dir / "prod") is None
+
+    def test_load_profile_credentials_raises_not_found(self, unsearchable_dir):
+        import logging
+
+        from cja_auto_sdr.core.exceptions import ProfileNotFoundError
+        from cja_auto_sdr.core.profiles import load_profile_credentials
+
+        with (
+            patch.dict(os.environ, {"CJA_HOME": str(unsearchable_dir)}),
+            pytest.raises(ProfileNotFoundError),
+        ):
+            load_profile_credentials("prod", logging.getLogger("test"))
+
+    def test_list_profiles_reports_no_profiles(self, unsearchable_dir, capsys):
+        from cja_auto_sdr.core.profiles import list_profiles
+
+        with patch.dict(os.environ, {"CJA_HOME": str(unsearchable_dir)}):
+            list_profiles(output_format="json")
+        assert json.loads(capsys.readouterr().out) == {"profiles": [], "count": 0}
+
+    def test_show_profile_returns_false(self, unsearchable_dir, capsys):
+        from cja_auto_sdr.core.profiles import show_profile
+
+        with patch.dict(os.environ, {"CJA_HOME": str(unsearchable_dir)}):
+            assert show_profile("prod") is False
+
+    def test_load_profile_import_source_raises_not_found(self, unsearchable_dir):
+        from cja_auto_sdr.core.profiles import load_profile_import_source
+
+        with pytest.raises(FileNotFoundError, match="Source not found"):
+            load_profile_import_source(unsearchable_dir / "creds.json")
+
+    def test_import_profile_non_interactive_fails_cleanly(self, unsearchable_dir, tmp_path, capsys):
+        from cja_auto_sdr.core.profiles import import_profile_non_interactive
+
+        source = tmp_path / "creds.json"
+        source.write_text(json.dumps({"org_id": "org@AdobeOrg", "client_id": "abcd1234", "secret": "secret1234"}))
+        with patch.dict(os.environ, {"CJA_HOME": str(unsearchable_dir)}):
+            assert import_profile_non_interactive("prod", source) is False

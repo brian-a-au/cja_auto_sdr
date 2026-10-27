@@ -587,7 +587,7 @@ def _push_to_notion_from_json(
     )
 
     json_path = Path(json_file)
-    if not json_path.exists():
+    if not os.path.exists(json_path):
         _exit_error(f"--push-to-notion: file not found: {json_file}")
 
     try:
