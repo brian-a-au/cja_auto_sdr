@@ -228,7 +228,7 @@ This command:
 
 ```bash
 $ uv run cja_auto_sdr -V
-cja_auto_sdr 3.13.0
+cja_auto_sdr 3.13.1
 ```
 
 > **Source installations:** Run `uv run` commands from the `cja_auto_sdr` repository directory after running `uv sync`. PyPI installations use `cja_auto_sdr` directly from your chosen working directory.

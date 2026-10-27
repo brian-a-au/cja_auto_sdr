@@ -126,17 +126,18 @@ cja_auto_sdr dv_12345 --stats --format csv --output stats.csv
 - Single file: `CJA_DataView_{name}_{id}_SDR.xlsx`
 - Multiple sheets (in order):
   1. Metadata
-  2. Data Quality (color-coded by severity)
-  3. DataView Details
-  4. Metrics
-  5. Dimensions
-  6. Segments (if `--include-segments` specified)
-  7. Derived Fields (if `--include-derived` specified)
-  8. Calculated Metrics (if `--include-calculated` specified)
+  2. Coverage (see [Coverage and quality status](#coverage-and-quality-status))
+  3. Data Quality (color-coded by severity)
+  4. DataView Details
+  5. Metrics (left out with `--dimensions-only`)
+  6. Dimensions (left out with `--metrics-only`)
+  7. Segments (if `--include-segments` specified)
+  8. Derived Fields (if `--include-derived` specified)
+  9. Calculated Metrics (if `--include-calculated` specified)
 
 > **Sheet Ordering:** Inventory sheets (Segments, Derived Fields, Calculated Metrics) appear at the end of the workbook. When multiple are enabled, they appear in the order specified on the command line. For example, `--include-calculated --include-segments` places Calculated Metrics before Segments.
 >
-> **Inventory-Only Mode:** When `--inventory-only` is used, only sheets 6-8 are generated (requires at least one `--include-*` flag).
+> **Inventory-Only Mode:** When `--inventory-only` is used, only sheets 7-9 are generated (requires at least one `--include-*` flag).
 
 **Features:**
 - Conditional formatting for data quality issues
@@ -160,6 +161,7 @@ cja_auto_sdr dv_12345 --stats --format csv --output stats.csv
 - Directory: `{base_name}_csv/`
 - Individual CSV files:
   - `metadata.csv`
+  - `coverage.csv`
   - `data_quality.csv`
   - `dataview_details.csv`
   - `metrics.csv`
@@ -330,6 +332,31 @@ A section is empty (`{}` or `[]`) whenever the default JSON would leave it empty
 **Missing-scalar rule:** `None`, `pd.NA`, `pd.NaT`, NaN, and infinite numbers become `null`. numpy numbers and booleans become plain JSON numbers and booleans, and timestamps become ISO 8601 strings. Strings are never parsed, so a description that happens to look like JSON (`"{\"a\": 1}"`) stays a string. Empty lists and objects stay empty lists and objects. Files and stdout are written as strict JSON (`allow_nan=False`), so the output never contains `NaN` or `Infinity`.
 
 **Known limit:** the metrics and dimensions come from tabular API frames. If a numeric field is missing on some components, pandas stores the whole column as floating point, so an integer such as `1` can appear as `1.0` for the components that do have it.
+
+---
+
+### Coverage and quality status
+
+Every SDR report says what it collected, so an empty section is never confused with a section that was left out or failed. The Excel `Coverage` sheet, the CSV `coverage.csv` file, and the Coverage section in Markdown and HTML have one row per component family and a last row for the data quality audit:
+
+| Column | Content |
+|--------|---------|
+| `Family` | Metrics, Dimensions, Derived Fields, Calculated Metrics, Segments, or Data Quality |
+| `State` | `collected`, `collected_empty`, `excluded`, `not_requested`, or `failed` for a family. `ran`, `skipped`, `failed`, or `not_run` for Data Quality |
+| `Count` | Number of components when the family was collected. Empty otherwise |
+| `Detail` | Plain-language explanation, for example `Excluded from this run (by --metrics-only)` or `Fetch failed: unavailable — not an empty result (...)` |
+
+- `excluded` means `--metrics-only`, `--dimensions-only`, or `--inventory-only` left the family out. The excluded family is left out of the component output in every format.
+- `not_requested` means the matching `--include-*` flag was not given.
+- `failed` means the fetch failed. It is not an empty result.
+- An empty component section prints its coverage state instead of a generic "no data" message. HTML keeps empty sections instead of dropping them.
+- With `--skip-validation`, the Data Quality section says the audit was skipped and why.
+- With `--fail-on-quality`, the Metadata section gains `Quality Gate Verdict` (`PASS`, `FAIL`, or `NOT_EVALUATED`) and `Quality Gate Threshold` rows.
+
+JSON output (default and `--json-typed`) gains two additive top-level keys after the existing ones. The schema version stays `cja-auto-sdr.sdr-typed/1`:
+
+- `collected_components`: the families this run requested, for example `["metrics"]` with `--metrics-only`. A family whose fetch failed is still listed. Excluded families keep their key as an empty list for backward compatibility, so use `collected_components` to tell "excluded" from "empty".
+- `coverage`: `{"families": [{"family", "state", "count", "detail"}, ...], "quality": {"state", "detail", "issue_count", "severity_counts", "gate"}}`. `gate` is `null` unless `--fail-on-quality` was given.
 
 ---
 
