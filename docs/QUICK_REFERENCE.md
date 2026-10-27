@@ -94,6 +94,9 @@ cja_auto_sdr dv_12345 --fail-on-quality HIGH
 
 # Generate standalone quality report only (JSON or CSV)
 cja_auto_sdr dv_12345 --quality-report json --output quality_issues.json
+
+# Typed SDR JSON (nested definitions, booleans, numbers kept native) to stdout
+cja_auto_sdr dv_12345 --format json --json-typed --output -
 ```
 
 > **Quality constraints:** `--fail-on-quality` and `--quality-report` are SDR-only and cannot be used with `--skip-validation`.
@@ -330,6 +333,7 @@ cja_auto_sdr --list-dataviews  # Uses client-a
 | `--output-dir PATH` | Save output to specific directory | All modes |
 | `--output PATH` | Output file path; `-`/`stdout` streams only formats supported by that command family (SDR JSON, discovery/stats JSON/CSV, diff JSON, org-report JSON/console) | All modes |
 | `--format FORMAT` | Output format (see note below) | All modes |
+| `--json-typed` | Versioned typed SDR JSON with native nested values (`schema_version: cja-auto-sdr.sdr-typed/1`); requires `--format json` or `--agent-mode` | SDR only |
 | `--open` | Open generated file(s) in default application | SDR only |
 | `--stats` | Quick statistics only (no full report) | SDR only |
 | `--interactive`, `-i` | Interactively select data views from a numbered list | SDR only |

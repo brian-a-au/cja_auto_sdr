@@ -58,6 +58,13 @@ class TestAgentModeResolution:
         args = parse_arguments(["dv_123", "--agent-mode"])
         assert args.log_format == "json"
 
+    def test_agent_mode_accepts_json_typed(self):
+        """--agent-mode --json-typed keeps the JSON stdout preset and sets the typed flag."""
+        args = parse_arguments(["dv_123", "--agent-mode", "--json-typed"])
+        assert args.json_typed is True
+        assert args.format == "json"
+        assert args.output == "-"
+
     def test_explicit_format_overrides_agent_mode(self):
         args = parse_arguments(["dv_123", "--agent-mode", "--format", "csv"])
         assert args.format == "csv"

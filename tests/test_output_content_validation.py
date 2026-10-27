@@ -772,6 +772,18 @@ class TestTypedJSONPayload:
         assert to_native_json(True) is True
         assert to_native_json(1) == 1
         assert type(to_native_json(1)) is int
+        assert to_native_json(np.datetime64("2025-01-02T03:04:05")) == "2025-01-02T03:04:05"
+        assert to_native_json(np.datetime64("NaT", "ns")) is None
+        assert to_native_json(float("-inf")) is None
+
+    def test_typed_empty_native_frames(self):
+        from cja_auto_sdr.output.sdr import build_typed_json_payload
+
+        inputs = _typed_inputs()
+        inputs["native_frames"] = {"Metrics": pd.DataFrame()}
+        p = build_typed_json_payload(**inputs)
+        assert p["metrics"] == []
+        assert p["dimensions"] == []
 
     def test_legacy_payload_unchanged(self):
         from cja_auto_sdr.output.sdr import build_json_payload

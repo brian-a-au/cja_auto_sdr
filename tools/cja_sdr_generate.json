@@ -13,6 +13,10 @@
         "enum": ["excel", "csv", "json", "html", "markdown", "notion", "all", "reports", "data", "ci"],
         "description": "Output format for the SDR artifact. Supports direct formats plus aliases: 'all' (all formats + console), 'reports' (excel + markdown), 'data' (csv + json), and 'ci' (json + markdown). Use 'notion' to publish directly to a Notion page (requires NOTION_TOKEN and NOTION_PARENT_PAGE_ID env vars and the 'notion' optional extra). When NOTION_DATABASE_ID or notion_database_id is set, also upserts a complete 14-property row in the CJA SDR Registry database. JSON is recommended for machine-readable downstream processing."
       },
+      "json_typed": {
+        "type": "boolean",
+        "description": "Maps to --json-typed. Emit versioned typed SDR JSON (schema_version 'cja-auto-sdr.sdr-typed/1') that keeps nested objects, lists, booleans, and numbers native instead of JSON text. Requires format 'json' (or agent_mode); any other format exits 1 before any API call. Works for file output and stdout. Missing values become null and strings are never parsed."
+      },
       "output": {
         "type": "string",
         "description": "Optional output destination. For single-SDR generation it writes the single-file formats (json, html, markdown, excel) to the given file path, or streams JSON to stdout when set to '-' or 'stdout' with format json; multi-file formats (csv, all) and notion ignore it and auto-name under output_dir. For standalone quality reports, use '-' or 'stdout' for JSON/CSV stdout, or provide a file path for a stable report artifact."

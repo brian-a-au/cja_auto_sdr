@@ -924,3 +924,374 @@ class TestListProfiles:
         assert result is True
         data = json.loads(capsys.readouterr().out)
         assert data["profiles"][0]["sources"] == ["config.json", ".env"]
+
+
+# ==================== --json-typed (typed SDR JSON) ====================
+
+
+_TYPED_METRICS = [
+    {
+        "id": "metrics/m1",
+        "name": "Orders",
+        "type": "int",
+        "fieldDefinition": [{"func": "match", "cases": [1, 2]}],
+        "isDeleted": True,
+        "precision": 1,
+        "description": '{"looks": "json"}',
+        "tags": [],
+    },
+    {
+        "id": "metrics/m2",
+        "name": "Revenue",
+        "type": "currency",
+        "fieldDefinition": {"func": "sum"},
+        "isDeleted": False,
+        "precision": 2,
+        "description": "Revenue total",
+        "tags": ["finance"],
+    },
+]
+_TYPED_DIMENSIONS = [
+    {"id": "dimensions/d1", "name": "Browser", "type": "string", "hasData": True, "sourceFieldId": ["a", "b"]},
+]
+_TYPED_DATAVIEW = {
+    "id": "dv_typed_1",
+    "name": "Typed View",
+    "owner": {"name": "Owner"},
+    "components": ["c1", "c2", "c3"],
+    "settings": {"sessions": [1, 2]},
+    "enabled": True,
+}
+
+
+def _typed_generation_mocks(stack):
+    """Patch API boundaries so process_single_dataview runs offline with typed-sensitive frames."""
+    from unittest.mock import Mock, patch
+
+    import pandas as pd
+
+    stack.enter_context(patch("cja_auto_sdr.generator.setup_logging", return_value=Mock()))
+    stack.enter_context(patch("cja_auto_sdr.generator.initialize_cja", return_value=Mock()))
+    fetcher_cls = stack.enter_context(patch("cja_auto_sdr.generator.ParallelAPIFetcher"))
+    fetcher_cls.return_value.fetch_all_data.side_effect = lambda _dv: (
+        pd.DataFrame([dict(m) for m in _TYPED_METRICS]),
+        pd.DataFrame([dict(d) for d in _TYPED_DIMENSIONS]),
+        dict(_TYPED_DATAVIEW),
+    )
+    dq_cls = stack.enter_context(patch("cja_auto_sdr.generator.DataQualityChecker"))
+    dq_cls.return_value.issues = []
+    dq_cls.return_value.get_issues_dataframe.return_value = pd.DataFrame(
+        columns=["Severity", "Category", "Type", "Item Name", "Issue", "Details"],
+    )
+
+
+def _run_typed_generation(tmp_path, config_file, **kwargs):
+    from contextlib import ExitStack
+
+    from cja_auto_sdr.generator import process_single_dataview
+
+    with ExitStack() as stack:
+        _typed_generation_mocks(stack)
+        return process_single_dataview(
+            data_view_id="dv_typed_1",
+            config_file=config_file,
+            output_dir=str(tmp_path),
+            **kwargs,
+        )
+
+
+def _without_timing_metadata(payload):
+    payload = dict(payload)
+    payload["metadata"] = {k: v for k, v in payload["metadata"].items() if k not in _TIMING_METADATA_KEYS}
+    return payload
+
+
+# Metadata keys whose values depend on wall-clock time; everything else must match.
+_TIMING_METADATA_KEYS = frozenset({"Generated Date & timestamp and timezone"})
+
+
+class TestJsonTypedGeneration:
+    """End-to-end typed JSON through process_single_dataview (offline)."""
+
+    def test_file_typed_payload_preserves_native_values(self, tmp_path, mock_config_file):
+        import json
+
+        target = tmp_path / "typed.json"
+        result = _run_typed_generation(
+            tmp_path, mock_config_file, output_format="json", output_file=str(target), json_typed=True
+        )
+        assert result.success is True
+        payload = json.loads(target.read_text(encoding="utf-8"))
+        assert payload["schema_version"] == "cja-auto-sdr.sdr-typed/1"
+        m1 = payload["metrics"][0]
+        assert m1["fieldDefinition"] == [{"func": "match", "cases": [1, 2]}]
+        assert m1["isDeleted"] is True
+        assert type(m1["precision"]) is int
+        assert m1["description"] == '{"looks": "json"}'
+        assert m1["tags"] == []
+        assert payload["dimensions"][0]["sourceFieldId"] == ["a", "b"]
+        assert payload["data_view"] == _TYPED_DATAVIEW
+        assert set(_TIMING_METADATA_KEYS) <= set(payload["metadata"])
+
+    def test_file_and_stdout_typed_payloads_match(self, tmp_path, mock_config_file, capsys):
+        import json
+
+        file_dir = tmp_path / "file"
+        result = _run_typed_generation(file_dir, mock_config_file, output_format="json", json_typed=True)
+        assert result.success is True
+        file_payload = json.loads(open(result.output_file, encoding="utf-8").read())
+
+        stdout_dir = tmp_path / "stdout"
+        capsys.readouterr()
+        result = _run_typed_generation(
+            stdout_dir, mock_config_file, output_format="json", output_file="-", json_typed=True
+        )
+        assert result.success is True
+        assert result.output_file == "<stdout>"
+        out = capsys.readouterr().out
+        stdout_payload = json.loads(out)
+        assert list(stdout_dir.glob("*.json")) == []
+        assert _without_timing_metadata(file_payload) == _without_timing_metadata(stdout_payload)
+        assert set(file_payload["metadata"]) == set(stdout_payload["metadata"])
+
+    def test_default_json_stays_legacy(self, tmp_path, mock_config_file):
+        import json
+
+        result = _run_typed_generation(tmp_path, mock_config_file, output_format="json")
+        payload = json.loads(open(result.output_file, encoding="utf-8").read())
+        assert "schema_version" not in payload
+        assert payload["metrics"][0]["fieldDefinition"] == json.dumps(_TYPED_METRICS[0]["fieldDefinition"], indent=2)
+        assert payload["data_view"]["components"] == "c1"
+
+    def test_typed_capture_does_not_change_other_writers(self, tmp_path, mock_config_file):
+        """Excel/CSV/HTML/Markdown from the same run are the same with or without typed capture."""
+        import json
+        import re
+
+        import pandas as pd
+
+        def _outputs(run_dir, json_typed):
+            run_dir.mkdir()
+            result = _run_typed_generation(run_dir, mock_config_file, output_format="all", json_typed=json_typed)
+            assert result.success is True
+            files = {Path(p).suffix or "csv": p for p in result.output_files}
+            sheets = pd.read_excel(files[".xlsx"], sheet_name=None)
+            sheets.pop("Metadata")
+            csv_dir = Path(files["csv"])
+            csvs = {p.name: p.read_text() for p in sorted(csv_dir.glob("*.csv")) if p.name != "metadata.csv"}
+            stamp = re.compile(r"\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}[^<|\n]*")
+            html = stamp.sub("", Path(files[".html"]).read_text())
+            md = stamp.sub("", Path(files[".md"]).read_text())
+            data = json.loads(Path(files[".json"]).read_text())
+            return sheets, csvs, html, md, data
+
+        from pathlib import Path
+
+        legacy = _outputs(tmp_path / "legacy", False)
+        typed = _outputs(tmp_path / "typed", True)
+        assert legacy[0].keys() == typed[0].keys()
+        for name, frame in legacy[0].items():
+            pd.testing.assert_frame_equal(frame, typed[0][name])
+        assert legacy[0]["Metrics"]["fieldDefinition"][0] == json.dumps(_TYPED_METRICS[0]["fieldDefinition"], indent=2)
+        assert legacy[1] == typed[1]
+        assert legacy[2] == typed[2]
+        assert legacy[3] == typed[3]
+        assert "schema_version" not in legacy[4]
+        assert typed[4]["schema_version"] == "cja-auto-sdr.sdr-typed/1"
+        assert typed[4]["metrics"][0]["fieldDefinition"] == [{"func": "match", "cases": [1, 2]}]
+
+
+class TestJsonTypedPlumbing:
+    """--json-typed travels from parsed args through single and batch paths."""
+
+    def test_parser_flag(self):
+        from cja_auto_sdr.cli.parser import parse_arguments
+
+        assert parse_arguments(["dv_1"]).json_typed is False
+        assert parse_arguments(["dv_1", "--json-typed", "--format", "json"]).json_typed is True
+
+    def test_parser_help_text(self):
+        from cja_auto_sdr.cli.parser import parse_arguments
+
+        parser = parse_arguments([], return_parser=True)
+        action = next(a for a in parser._actions if "--json-typed" in a.option_strings)
+        assert action.dest == "json_typed"
+        assert action.help == (
+            "Emit versioned typed JSON that keeps nested objects, lists, booleans, "
+            "and numbers native (requires --format json)"
+        )
+
+    def test_batch_worker_args_carry_flag(self, tmp_path):
+        from unittest.mock import patch
+
+        from cja_auto_sdr.pipeline.batch import BatchProcessor
+        from cja_auto_sdr.pipeline.models import ProcessingResult, WorkerArgs
+        from cja_auto_sdr.pipeline.workers import process_single_dataview_worker
+
+        processor = BatchProcessor(output_dir=str(tmp_path), output_format="json", json_typed=True, quiet=True)
+        assert processor.json_typed is True
+
+        captured = {}
+
+        def _fake(dv_id, *, processing_config):
+            captured["config"] = processing_config
+            return ProcessingResult(data_view_id=dv_id, data_view_name="x", success=True, duration=0.0)
+
+        with patch("cja_auto_sdr.generator.process_single_dataview", side_effect=_fake):
+            process_single_dataview_worker(WorkerArgs(data_view_id="dv_1", output_format="json", json_typed=True))
+        assert captured["config"].json_typed is True
+
+        with (
+            patch("cja_auto_sdr.generator.ProcessPoolExecutor") as pool,
+            patch("cja_auto_sdr.generator.as_completed", return_value=[]),
+        ):
+            processor.process_batch(["dv_1"])
+        submitted = [c.args[1] for c in pool.return_value.__enter__.return_value.submit.call_args_list]
+        assert submitted
+        assert all(wa.json_typed is True for wa in submitted)
+
+
+def _run_main(argv_tail):
+    import sys
+    from unittest.mock import patch
+
+    from cja_auto_sdr.generator import _main_impl
+
+    with patch.object(sys, "argv", ["cja_auto_sdr", *argv_tail]):
+        try:
+            _main_impl()
+        except SystemExit as exc:
+            return int(exc.code or 0)
+    return 0
+
+
+class TestJsonTypedCliValidation:
+    """--json-typed requires --format json and is rejected before any API work."""
+
+    @pytest.mark.parametrize(
+        "extra",
+        [
+            ["--format", "excel"],
+            ["--format", "all"],
+            ["--format", "csv"],
+            ["--format", "data"],
+            [],
+        ],
+    )
+    def test_non_json_format_rejected_before_api(self, extra, tmp_path, capsys):
+        from unittest.mock import patch
+
+        with (
+            patch("cja_auto_sdr.generator.resolve_data_view_names") as resolve,
+            patch("cja_auto_sdr.generator.initialize_cja") as init_cja,
+            patch("cja_auto_sdr.generator.process_single_dataview") as process,
+        ):
+            code = _run_main(["dv_typed_1", "--json-typed", "--output-dir", str(tmp_path), *extra])
+        assert code == 1
+        assert "ERROR: --json-typed requires --format json" in capsys.readouterr().err
+        resolve.assert_not_called()
+        init_cja.assert_not_called()
+        process.assert_not_called()
+        assert list(tmp_path.iterdir()) == []
+
+    def test_batch_non_json_format_rejected(self, tmp_path, capsys):
+        from unittest.mock import patch
+
+        with (
+            patch("cja_auto_sdr.generator.resolve_data_view_names") as resolve,
+            patch("cja_auto_sdr.generator.BatchProcessor") as batch,
+        ):
+            code = _run_main(["--batch", "dv_1", "dv_2", "--json-typed", "--format", "excel"])
+        assert code == 1
+        assert "ERROR: --json-typed requires --format json" in capsys.readouterr().err
+        resolve.assert_not_called()
+        batch.assert_not_called()
+
+    def test_agent_mode_streams_typed_json(self, tmp_path, mock_config_file, capsys):
+        import json
+        from contextlib import ExitStack
+        from unittest.mock import patch
+
+        out_dir = tmp_path / "out"
+        out_dir.mkdir()
+
+        with ExitStack() as stack:
+            _typed_generation_mocks(stack)
+            stack.enter_context(
+                patch("cja_auto_sdr.generator.resolve_data_view_names", return_value=(["dv_typed_1"], {}))
+            )
+            code = _run_main(
+                [
+                    "dv_typed_1",
+                    "--agent-mode",
+                    "--json-typed",
+                    "--config-file",
+                    mock_config_file,
+                    "--output-dir",
+                    str(out_dir),
+                ]
+            )
+        assert code == 0
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["schema_version"] == "cja-auto-sdr.sdr-typed/1"
+        assert payload["metrics"][0]["fieldDefinition"] == [{"func": "match", "cases": [1, 2]}]
+        assert list(out_dir.glob("*.json")) == []
+
+    def test_explicit_json_format_accepted(self, tmp_path):
+        from unittest.mock import patch
+
+        from cja_auto_sdr.generator import ProcessingResult
+
+        result = ProcessingResult(
+            data_view_id="dv_typed_1", data_view_name="x", success=True, duration=0.0, output_file="x.json"
+        )
+        with (
+            patch("cja_auto_sdr.generator.resolve_data_view_names", return_value=(["dv_typed_1"], {})),
+            patch("cja_auto_sdr.generator.process_single_dataview", return_value=result) as process,
+        ):
+            code = _run_main(["dv_typed_1", "--json-typed", "--format", "json", "--output-dir", str(tmp_path)])
+        assert code == 0
+        assert process.call_args.kwargs["json_typed"] is True
+        assert process.call_args.kwargs["output_format"] == "json"
+
+    def test_flag_ignored_in_non_sdr_mode(self, capsys):
+        """Like other SDR-only flags, --json-typed does not block non-SDR modes."""
+        code = _run_main(["--exit-codes", "--json-typed"])
+        assert code == 0
+        assert "requires --format json" not in capsys.readouterr().err
+
+
+class TestValidateJsonTypedFormat:
+    """Direct checks for the shared --json-typed format guard."""
+
+    def _args(self, **kwargs):
+        import argparse
+
+        defaults = {"json_typed": True, "format": None, "quality_report": None}
+        defaults.update(kwargs)
+        return argparse.Namespace(**defaults)
+
+    def test_flag_off_is_noop(self):
+        from cja_auto_sdr.generator import _validate_json_typed_format
+
+        _validate_json_typed_format(self._args(json_typed=False, format="excel"))
+
+    def test_json_passes(self):
+        from cja_auto_sdr.generator import _validate_json_typed_format
+
+        _validate_json_typed_format(self._args(format="json"))
+        _validate_json_typed_format(self._args(format="excel"), output_format="json")
+
+    def test_effective_format_override_rejected(self, capsys):
+        """After the wizard picks a format, the effective format decides."""
+        from cja_auto_sdr.generator import _validate_json_typed_format
+
+        with pytest.raises(SystemExit) as exc_info:
+            _validate_json_typed_format(self._args(format="json"), output_format="markdown")
+        assert exc_info.value.code == 1
+        assert "ERROR: --json-typed requires --format json" in capsys.readouterr().err
+
+    def test_quality_report_ignores_flag(self):
+        from cja_auto_sdr.generator import _validate_json_typed_format
+
+        _validate_json_typed_format(self._args(format="excel", quality_report="json"))

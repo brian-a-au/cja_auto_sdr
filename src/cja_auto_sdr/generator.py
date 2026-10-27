@@ -557,6 +557,12 @@ def _exit_error(msg: str) -> NoReturn:
     sys.exit(1)
 
 
+def _validate_json_typed_format(args: argparse.Namespace, *, output_format: str | None = None) -> None:
+    from cja_auto_sdr.cli.execution import validate_json_typed_format as _impl
+
+    _impl(args, output_format=output_format)
+
+
 def _push_to_notion_from_json(
     json_file: str,
     output_dir: str | None = None,
@@ -3027,11 +3033,14 @@ from cja_auto_sdr.output.sdr import (
     ExcelFormatCache,
     apply_excel_formatting,
     build_json_payload,
+    build_typed_json_payload,
+    serialize_typed_json,
     write_csv_output,
     write_excel_output,
     write_html_output,
     write_json_output,
     write_markdown_output,
+    write_typed_json_output,
 )
 
 # ==================== DIFF FILE WRITERS (moved to output/diff/) ====================
@@ -3264,6 +3273,7 @@ def process_single_dataview(
     notion_create_database: bool = False,
     output_file: str | None = None,
     processing_config: ProcessingConfig | None = None,
+    json_typed: bool = False,
 ) -> ProcessingResult:
     """
     Process a single data view and generate SDR in specified format(s)
@@ -3292,6 +3302,7 @@ def process_single_dataview(
         allow_partial: Opt-in exploratory mode to continue on selected fail-closed boundaries (default: False)
         production_mode: Reduce per-issue warning log volume for production runs (default: False)
         batch_id: Optional batch correlation ID for structured logging context (default: None)
+        json_typed: Write versioned typed JSON (native values) for the json format (default: False)
 
     Returns:
         ProcessingResult with processing details including success status, metrics/dimensions count,
@@ -3331,6 +3342,7 @@ def process_single_dataview(
             notion_force_new=notion_force_new,
             notion_database_id=notion_database_id,
             notion_create_database=notion_create_database,
+            json_typed=json_typed,
         )
 
     config_file = processing_config.config_file
@@ -3364,6 +3376,7 @@ def process_single_dataview(
     notion_force_new = processing_config.notion_force_new
     notion_database_id = processing_config.notion_database_id
     notion_create_database = processing_config.notion_create_database
+    json_typed = processing_config.json_typed
     batch_id = processing_config.batch_id
 
     start_time = time.perf_counter()
@@ -3922,6 +3935,13 @@ def process_single_dataview(
                 logger.warning(f"Error formatting JSON cell: {e!s}")
                 return str(value)
 
+        # --json-typed reads metrics/dimensions before display formatting below.
+        # format_json_cell replaces cells with new strings and never mutates the
+        # nested objects, so a frame copy is enough to keep the native values.
+        native_frames: dict[str, pd.DataFrame] = {}
+        if json_typed:
+            native_frames = {"Metrics": metrics.copy(), "Dimensions": dimensions.copy()}
+
         try:
             # Apply JSON formatting to all dataframes
             logger.info("Applying JSON formatting to dataframes...")
@@ -4160,7 +4180,31 @@ def process_single_dataview(
                         "calculated": calculated_inventory_obj,
                         "segments": segments_inventory_obj,
                     }
-                    if stdout_json_output:
+                    if json_typed:
+                        # One typed payload serves both stdout and file output.
+                        typed_payload = build_typed_json_payload(
+                            data_dict=data_dict,
+                            native_frames=native_frames,
+                            data_view=lookup_data if isinstance(lookup_data, dict) else {},
+                            metadata_dict=metadata_dict,
+                            inventory_objects=inventory_objects,
+                        )
+                        if stdout_json_output:
+                            sys.stdout.write(serialize_typed_json(typed_payload))
+                            sys.stdout.write("\n")
+                            sys.stdout.flush()
+                            output_files.append("<stdout>")
+                        else:
+                            output_files.append(
+                                write_typed_json_output(
+                                    typed_payload,
+                                    base_filename,
+                                    output_dir,
+                                    logger,
+                                    output_path=redirect_output_path,
+                                )
+                            )
+                    elif stdout_json_output:
                         # Stream the SDR JSON to stdout for piping (no file written).
                         payload = build_json_payload(data_dict, metadata_dict, inventory_objects)
                         sys.stdout.write(json.dumps(payload, indent=2, ensure_ascii=False))
@@ -7242,6 +7286,10 @@ def _main_impl(run_state: dict[str, Any] | None = None):
             if not args.quiet:
                 print(f"Auto-detected format '{inferred_format}' from output file extension")
     _sync_run_summary_cli_metadata(run_state, args)
+    # The interactive wizard chooses the format later; prepare_sdr_execution_context
+    # repeats this check after the wizard runs.
+    if inferred_mode == RunMode.SDR and not getattr(args, "interactive", False):
+        _validate_json_typed_format(args)
 
     if inferred_mode == RunMode.ORG_REPORT_SNAPSHOTS:
         _handle_org_report_snapshot_cli(args, output_to_stdout=output_to_stdout, run_state=run_state)

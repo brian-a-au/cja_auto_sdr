@@ -16,6 +16,7 @@ __all__ = [
     "execute_sdr_processing_modes",
     "prepare_sdr_execution_context",
     "resolve_inventory_mode_configuration",
+    "validate_json_typed_format",
 ]
 
 
@@ -23,6 +24,22 @@ def _generator_module():
     from cja_auto_sdr import generator as _generator
 
     return _generator
+
+
+def validate_json_typed_format(args: argparse.Namespace, *, output_format: str | None = None) -> None:
+    """Reject --json-typed unless the effective SDR format is exactly json.
+
+    Runs before any CJA client setup or API call. Quality-report runs write
+    their own report rather than SDR JSON, so the flag is ignored there.
+    """
+    if not getattr(args, "json_typed", False) or getattr(args, "quality_report", None):
+        return
+    effective_format = output_format if output_format is not None else getattr(args, "format", None)
+    if (str(effective_format or "").strip().lower() or "excel") != "json":
+        from cja_auto_sdr.core.colors import ConsoleColors
+
+        print(ConsoleColors.error("ERROR: --json-typed requires --format json"), file=sys.stderr)
+        sys.exit(1)
 
 
 def resolve_inventory_mode_configuration(args: argparse.Namespace, *, argv: list[str]) -> list[str]:
@@ -255,6 +272,7 @@ def prepare_sdr_execution_context(
         sdr_format = "json"
     if run_state is not None:
         run_state["output_format"] = quality_report_format if quality_report_only else sdr_format
+    validate_json_typed_format(args, output_format=sdr_format)
 
     if sdr_format == "console" and not quality_report_only:
         print(
@@ -534,6 +552,7 @@ def _run_batch_mode(
         notion_force_new=getattr(args, "notion_force_new", False),
         notion_database_id=getattr(args, "notion_database_id", None) or os.environ.get("NOTION_DATABASE_ID"),
         notion_create_database=getattr(args, "notion_create_database", False),
+        json_typed=getattr(args, "json_typed", False),
     )
 
     results = processor.process_batch(data_views)
@@ -746,6 +765,7 @@ def _run_single_mode(
         notion_force_new=getattr(args, "notion_force_new", False),
         notion_database_id=getattr(args, "notion_database_id", None) or os.environ.get("NOTION_DATABASE_ID"),
         notion_create_database=getattr(args, "notion_create_database", False),
+        json_typed=getattr(args, "json_typed", False),
     )
     processed_results = [result]
 

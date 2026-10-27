@@ -117,6 +117,7 @@ cja-auto-sdr [OPTIONS] DATA_VIEW_ID_OR_NAME [...]
 | `--output-dir PATH` | Output directory for generated files | Current directory (or `OUTPUT_DIR` if set) |
 | `--output PATH` | Output file path. Use `-` or `stdout` to write a command-family-supported format to stdout; SDR generation supports JSON, discovery and stats support JSON/CSV, diff supports JSON, and org-report supports JSON/console. Implies `--quiet` for stdout | - |
 | `--format FORMAT` | Output format (see table below) | excel (SDR), console (diff) |
+| `--json-typed` | Emit versioned typed JSON (`schema_version: cja-auto-sdr.sdr-typed/1`) that keeps nested objects, lists, booleans, and numbers native. SDR generation only; requires `--format json` (or `--agent-mode`, which defaults to JSON on stdout). Any other format exits 1 with `ERROR: --json-typed requires --format json` before any API call. Ignored in other modes. See [OUTPUT_FORMATS.md](OUTPUT_FORMATS.md#typed-json---json-typed) | False |
 | `--stats` | Show quick statistics (metrics/dimensions count) without generating full SDR report | False |
 | `--metrics-only` | Restrict output to metrics (exclude dimensions). Applies to SDR generation and diff comparison | False |
 | `--dimensions-only` | Restrict output to dimensions (exclude metrics). Applies to SDR generation and diff comparison | False |
@@ -806,6 +807,11 @@ cja_auto_sdr dv_12345 --metrics-only
 
 # Generate dimensions-only SDR output
 cja_auto_sdr dv_12345 --dimensions-only
+
+# Typed JSON that keeps nested definitions, booleans, and numbers native
+cja_auto_sdr dv_12345 --format json --json-typed
+cja_auto_sdr dv_12345 --format json --json-typed --output - | jq '.metrics[0]'
+cja_auto_sdr dv_12345 --agent-mode --json-typed
 ```
 
 ### Multiple Data Views
