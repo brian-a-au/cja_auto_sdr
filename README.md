@@ -501,7 +501,7 @@ cja_auto_sdr/
 │   ├── category_rules.py      # File-based test-category rules
 │   ├── conftest.py            # Pytest fixtures and auto-marking
 │   ├── README.md              # Test inventory and execution guide
-│   └── test_*.py              # 114 collected test modules
+│   └── test_*.py              # 175 collected test modules
 ├── sample_outputs/            # Example output files
 │   ├── excel/                 # Sample Excel SDR
 │   ├── csv/                   # Sample CSV output
