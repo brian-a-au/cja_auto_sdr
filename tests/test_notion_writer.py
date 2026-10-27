@@ -1384,3 +1384,70 @@ def test_repair_notion_database_logs_up_to_date_when_clean(monkeypatch):
     assert result.to_add == [] and result.conflicts == []
     info_msgs = " ".join(str(c.args[0]) for c in logger.info.call_args_list)
     assert "up to date" in info_msgs
+
+
+# ---------------------------------------------------------------------------
+# List-valued cells (quality Component IDs, typed JSON fieldDefinition)
+# ---------------------------------------------------------------------------
+
+
+def _all_text(blocks) -> str:
+    import json as _json
+
+    return _json.dumps(blocks, ensure_ascii=False)
+
+
+def test_build_sdr_blocks_renders_list_component_ids():
+    dq = pd.DataFrame(
+        [
+            {"Severity": "HIGH", "Issue": "dup", "Component IDs": ["m1", "m2"]},
+            {"Severity": "LOW", "Issue": "empty", "Component IDs": ["m1"]},
+        ],
+    )
+    text = _all_text(build_sdr_blocks({"Data Quality": dq}, {"Data View ID": "dv_1"}))
+    assert "m1, m2" in text
+    assert "['m1']" not in text
+    assert "Component IDs: m1" in text
+
+
+def test_build_sdr_blocks_handles_list_valued_metrics_column():
+    metrics = pd.DataFrame(
+        [
+            {"id": "m1", "fieldDefinition": [{"func": "x"}, {"func": "y"}]},
+            {"id": "m2", "fieldDefinition": []},
+        ],
+    )
+    blocks = build_sdr_blocks({"Metrics": metrics}, {"Data View ID": "dv_1"})
+    assert "m1" in _all_text(blocks)
+
+
+def test_table_row_and_callout_are_scalar_safe_without_display_frame():
+    dq = pd.DataFrame([{"Severity": "HIGH", "Component IDs": ["a", "b"]}])
+    assert _dq_callout_blocks(dq)
+    assert _table_block(pd.DataFrame({"x": [["a", "b"]]})) is not None
+
+
+def test_push_to_notion_from_typed_json_with_lists(tmp_path):
+    import json as _json
+
+    artifact = tmp_path / "sdr.json"
+    artifact.write_text(
+        _json.dumps(
+            {
+                "metadata": {"Data View ID": "dv_1"},
+                "metrics": [{"id": "m1", "fieldDefinition": [{"func": "x"}]}],
+                "data_quality": [{"Severity": "HIGH", "Issue": "dup", "Component IDs": ["m1", "m2"]}],
+            },
+        ),
+    )
+    from cja_auto_sdr.generator import _push_to_notion_from_json
+
+    captured = {}
+
+    def fake_write(**kwargs):
+        captured["blocks"] = build_sdr_blocks(kwargs["data_dict"], kwargs["metadata_dict"])
+        return True
+
+    with patch("cja_auto_sdr.output.writers.notion.write_notion_output", side_effect=fake_write):
+        _push_to_notion_from_json(str(artifact), output_dir=str(tmp_path))
+    assert "m1, m2" in _all_text(captured["blocks"])

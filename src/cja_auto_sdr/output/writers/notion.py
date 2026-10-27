@@ -166,7 +166,7 @@ def _table_block(df: pd.DataFrame) -> dict | None:
     for _, row in df.iterrows():
         rows.append(
             _table_row_block(
-                [str(row[c]) if not pd.isna(row[c]) else "" for c in cols],
+                [str(row[c]) if not _is_missing(row[c]) else "" for c in cols],
             ),
         )
     return {
@@ -179,6 +179,17 @@ def _table_block(df: pd.DataFrame) -> dict | None:
             "children": rows,
         },
     }
+
+
+def _is_missing(val: object) -> bool:
+    """True for scalar NA values; non-scalar cells (lists, dicts) are never missing."""
+    return pd.api.types.is_scalar(val) and bool(pd.isna(val))
+
+
+def _has_value(val: object) -> bool:
+    if not pd.api.types.is_scalar(val):
+        return bool(val)
+    return bool(val) and not pd.isna(val)
 
 
 def _section_blocks(section_name: str, df: pd.DataFrame) -> list[dict]:
@@ -211,7 +222,7 @@ def _dq_callout_blocks(dq_df: pd.DataFrame) -> list[dict]:
         for col in dq_df.columns:
             if col != "Severity":
                 val = row.get(col, "")
-                if val and not pd.isna(val):
+                if _has_value(val):
                     parts.append(f"{col}: {val}")
         blocks.append(_callout_block(" | ".join(parts), emoji=emoji))
     return blocks
@@ -233,6 +244,9 @@ def build_sdr_blocks(
     data_dict: dict[str, pd.DataFrame],
     metadata_dict: dict,
 ) -> list[dict]:
+    from cja_auto_sdr.output.sdr import to_display_frame
+
+    data_dict = {name: (to_display_frame(df) if df is not None else df) for name, df in data_dict.items()}
     blocks: list[dict] = [_metadata_callout_block(metadata_dict), _divider_block()]
 
     dq_df = data_dict.get("Data Quality")

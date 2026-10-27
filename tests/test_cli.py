@@ -1702,7 +1702,10 @@ class TestQualityGateAndReport:
         write_quality_report_output([], report_format="csv", output=str(output_path), output_dir=tmp_path)
 
         header = output_path.read_text(encoding="utf-8").splitlines()[0]
-        assert header == "Data View ID,Data View Name,Severity,Category,Type,Item Name,Issue,Details"
+        assert (
+            header
+            == "Data View ID,Data View Name,Severity,Category,Type,Item Name,Issue,Details,Rule ID,Component IDs,Occurrences,Unaddressable IDs"
+        )
 
     @patch("cja_auto_sdr.generator.BatchProcessor")
     @patch("cja_auto_sdr.generator.resolve_data_view_names")
