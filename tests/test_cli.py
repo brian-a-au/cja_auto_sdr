@@ -1754,6 +1754,63 @@ class TestQualityGateAndReport:
 
         assert exc_info.value.code == 1
 
+    @patch("cja_auto_sdr.generator.BatchProcessor")
+    @patch("cja_auto_sdr.generator.resolve_data_view_names")
+    def test_batch_continue_on_error_exits_1_when_any_data_view_fails(
+        self,
+        mock_resolve,
+        mock_batch_cls,
+        tmp_path,
+    ):
+        """--continue-on-error keeps processing but must not hide failures: exit 1 and run summary agree."""
+        from cja_auto_sdr.generator import ProcessingResult, main
+
+        mock_resolve.return_value = (["dv_fail", "dv_ok"], {})
+        mock_batch_cls.return_value.process_batch.return_value = {
+            "successful": [
+                ProcessingResult(
+                    data_view_id="dv_ok",
+                    data_view_name="Healthy View",
+                    success=True,
+                    duration=0.1,
+                ),
+            ],
+            "failed": [
+                ProcessingResult(
+                    data_view_id="dv_fail",
+                    data_view_name="Failing View",
+                    success=False,
+                    duration=0.1,
+                    error_message="Failed to write output: disk full",
+                    failure_code="OUTPUT_WRITE_FAILED",
+                ),
+            ],
+            "total": 2,
+            "total_duration": 0.2,
+        }
+
+        summary_file = tmp_path / "run_summary.json"
+        with patch.object(
+            sys,
+            "argv",
+            [
+                "cja_auto_sdr",
+                "dv_fail",
+                "dv_ok",
+                "--batch",
+                "--continue-on-error",
+                "--run-summary-json",
+                str(summary_file),
+            ],
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                main()
+
+        assert exc_info.value.code == 1
+        payload = json.loads(summary_file.read_text())
+        assert payload["exit_code"] == 1
+        assert payload["status"] == "error"
+
     @patch("cja_auto_sdr.generator.append_github_step_summary")
     @patch("cja_auto_sdr.generator.build_quality_step_summary")
     @patch("cja_auto_sdr.generator.BatchProcessor")
@@ -1798,8 +1855,10 @@ class TestQualityGateAndReport:
         }
 
         with patch.object(sys, "argv", ["cja_auto_sdr", "dv_fail", "dv_ok", "--continue-on-error"]):
-            main()
+            with pytest.raises(SystemExit) as exc_info:
+                main()
 
+        assert exc_info.value.code == 1
         mock_build_summary.assert_called_once()
         summary_results = mock_build_summary.call_args.args[0]
         assert len(summary_results) == 2
