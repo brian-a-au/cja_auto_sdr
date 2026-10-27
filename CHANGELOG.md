@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.13.0] - 2026-10-27
+
 ### Added
 
 - **Typed SDR JSON with `--json-typed`:** an opt-in JSON contract for SDR generation that keeps nested objects, lists, booleans, and numbers native instead of turning them into JSON text. The payload starts with `"schema_version": "cja-auto-sdr.sdr-typed/1"`, and `data_view` holds the full data view configuration with complete lists. Missing values become `null`, strings are never parsed, and files and stdout are written as strict JSON. Whole numbers that pandas stored as floats may still appear as floats (a documented limit). It requires `--format json` (or `--agent-mode`). Any other format exits 1 with `ERROR: --json-typed requires --format json` before any API call. Default JSON output is unchanged.
