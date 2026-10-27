@@ -2450,3 +2450,48 @@ class TestCsvBundleFailureAccounting:
         emitted = result.emitted_output_files
         assert any(p.endswith(".xlsx") for p in emitted)
         assert not any(p.endswith("_csv") for p in emitted)
+
+
+class TestQualityReportListFields:
+    ISSUES = [
+        {
+            "Data View ID": "dv_1",
+            "Data View Name": "DV",
+            "Severity": "HIGH",
+            "Category": "Duplicates",
+            "Type": "Metrics",
+            "Item Name": "A",
+            "Issue": "dup",
+            "Details": "d",
+            "Rule ID": "DUP",
+            "Component IDs": ["m1", "m2"],
+            "Occurrences": 2,
+            "Unaddressable IDs": 0,
+        },
+    ]
+
+    def test_csv_renders_ids_joined(self, tmp_path):
+        from cja_auto_sdr.api.quality_policy import write_quality_report_output
+
+        p = write_quality_report_output(self.ISSUES, "csv", None, tmp_path)
+        text = open(p, encoding="utf-8").read()
+        assert "m1, m2" in text
+        assert "['m1'" not in text
+
+    def test_csv_headers_match_empty_and_nonempty(self, tmp_path):
+        from cja_auto_sdr.api.quality_policy import write_quality_report_output
+
+        a = write_quality_report_output(self.ISSUES, "csv", str(tmp_path / "a.csv"), tmp_path)
+        b = write_quality_report_output([], "csv", str(tmp_path / "b.csv"), tmp_path)
+        ha = open(a, encoding="utf-8").readline()
+        hb = open(b, encoding="utf-8").readline()
+        assert ha == hb
+        assert "Component IDs" in ha
+
+    def test_json_keeps_lists(self, tmp_path):
+        import json
+
+        from cja_auto_sdr.api.quality_policy import write_quality_report_output
+
+        p = write_quality_report_output(self.ISSUES, "json", None, tmp_path)
+        assert json.load(open(p, encoding="utf-8"))[0]["Component IDs"] == ["m1", "m2"]

@@ -147,7 +147,7 @@ Each issue carries a rule ID that does not change when a component is renamed or
 | Invalid IDs | `dq.invalid_id.v1` |
 | Any other check | `dq.custom.unknown` |
 
-Versioning rule: a rule's meaning change bumps its `.vN` suffix. A new ID is never reused for a different meaning. Severity counts are unchanged: one grouped issue still counts once, however many components it lists.
+Versioning rule: a rule's meaning change bumps its `.vN` suffix. An existing ID is never reused for a different meaning. Severity counts are unchanged: one grouped issue still counts once, however many components it lists.
 
 ## Example Issues
 

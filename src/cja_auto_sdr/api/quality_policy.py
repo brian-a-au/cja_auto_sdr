@@ -26,6 +26,10 @@ QUALITY_REPORT_PREFERRED_COLUMNS: tuple[str, ...] = (
     "Item Name",
     "Issue",
     "Details",
+    "Rule ID",
+    "Component IDs",
+    "Occurrences",
+    "Unaddressable IDs",
 )
 QUALITY_POLICY_ALLOWED_KEYS: frozenset[str] = frozenset(
     {
@@ -218,6 +222,10 @@ def write_quality_report_output(
         raise ValueError(f"Unsupported quality report format: {report_format}")
 
     issues_df = _build_quality_report_dataframe(issues)
+    if report_format == "csv":
+        from cja_auto_sdr.output.sdr import to_display_frame
+
+        issues_df = to_display_frame(issues_df)
 
     if output_to_stdout:
         if report_format == "json":
