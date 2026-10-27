@@ -585,3 +585,227 @@ class TestQualityIdentityExports:
         )
         assert "a, b" in open(html_path).read()
         assert "| a, b |" in open(md_path).read()
+
+
+# ===================================================================
+# Typed SDR JSON (--json-typed)
+# ===================================================================
+
+_LEGACY_GOLDEN_PATH = os.path.join(os.path.dirname(__file__), "fixtures", "sdr_legacy_payload_golden.json")
+
+
+class _GoldenCalculatedInventory:
+    def to_json(self):
+        return {"summary": {"total": 1}, "metrics": [{"id": "cm1", "complexity": 2.5}]}
+
+
+def _legacy_golden_inputs():
+    """Inputs whose legacy payload is pinned byte-for-byte in the golden fixture."""
+    import numpy as np
+
+    data_dict = {
+        "Metadata": pd.DataFrame({"Property": ["Data View ID"], "Value": ["dv_golden"]}),
+        "Data Quality": pd.DataFrame(
+            [
+                {
+                    "Severity": "HIGH",
+                    "Category": "Duplicates",
+                    "Type": "Metrics",
+                    "Item Name": "Revenue",
+                    "Issue": "Duplicate name",
+                    "Details": "Appears 2 times",
+                }
+            ]
+        ),
+        "DataView Details": pd.DataFrame({"id": ["dv_golden"], "name": ["Golden View"], "tags": ['[\n  "a"\n]']}),
+        "Metrics": pd.DataFrame(
+            [
+                {
+                    "id": "m1",
+                    "name": "Page Views",
+                    "precision": 0,
+                    "isDeleted": False,
+                    "definition": '{\n  "func": "sum"\n}',
+                },
+                {"id": "m2", "name": "Revenue", "precision": 2, "isDeleted": True, "definition": None},
+            ]
+        ),
+        "Dimensions": pd.DataFrame(
+            {
+                "id": pd.array(["d1", "d2"], dtype="string"),
+                "description": pd.array(["Browser", None], dtype="string"),
+                "score": [1.5, np.nan],
+            }
+        ),
+        "Derived Fields": pd.DataFrame(
+            {"Status": ["No derived fields found for this data view"], "Data View ID": ["dv_golden"]}
+        ),
+        "Calculated Metrics": pd.DataFrame({"id": ["cm1"]}),
+    }
+    metadata = {"Data View ID": "dv_golden", "Data View Name": "Golden View", "Metrics Count": "2"}
+    inventory = {"derived": None, "calculated": _GoldenCalculatedInventory(), "segments": None}
+    return data_dict, metadata, inventory
+
+
+_AE5_METRIC = {
+    "id": "m1",
+    "fieldDefinition": [{"func": "match", "cases": [1, 2]}],
+    "isDeleted": True,
+    "precision": 1,
+    "description": '{"looks": "json"}',
+    "tags": [],
+    "settings": {},
+    "extra": None,
+}
+
+
+def _typed_inputs(metric=None, data_view=None):
+    metric = dict(_AE5_METRIC if metric is None else metric)
+    native_metrics = pd.DataFrame([metric])
+    native_dimensions = pd.DataFrame([{"id": "d1", "name": "Browser", "hasData": False, "count": 0}])
+    data_dict = {
+        "Metadata": pd.DataFrame({"Property": ["Data View ID"], "Value": ["dv_typed"]}),
+        "Data Quality": pd.DataFrame(
+            [{"Severity": "LOW", "Category": "Missing", "Type": "Metrics", "Item Name": "m1", "Issue": "x"}]
+        ),
+        "DataView Details": pd.DataFrame({"id": ["dv_typed"]}),
+        # Display-mutated frames: the typed builder must not read these.
+        "Metrics": native_metrics.map(lambda v: json.dumps(v, default=str) if isinstance(v, (list, dict)) else v),
+        "Dimensions": native_dimensions.copy(),
+    }
+    return {
+        "data_dict": data_dict,
+        "native_frames": {"Metrics": native_metrics, "Dimensions": native_dimensions},
+        "data_view": data_view if data_view is not None else {"id": "dv_typed", "name": "Typed"},
+        "metadata_dict": {"Data View ID": "dv_typed"},
+    }
+
+
+class TestTypedJSONPayload:
+    """AE5: typed JSON keeps native values from pre-display frames."""
+
+    def test_typed_payload_preserves_native_types(self):
+        from cja_auto_sdr.output.sdr import TYPED_SDR_SCHEMA_VERSION, build_typed_json_payload
+
+        p = build_typed_json_payload(**_typed_inputs())
+        m = p["metrics"][0]
+        assert m["fieldDefinition"] == [{"func": "match", "cases": [1, 2]}]
+        assert m["isDeleted"] is True
+        assert m["precision"] == 1
+        assert type(m["precision"]) is int
+        assert m["description"] == '{"looks": "json"}'
+        assert m["tags"] == []
+        assert m["settings"] == {}
+        assert m["extra"] is None
+        d = p["dimensions"][0]
+        assert d["hasData"] is False
+        assert d["count"] == 0
+        assert type(d["count"]) is int
+        assert p["schema_version"] == "cja-auto-sdr.sdr-typed/1"
+        assert TYPED_SDR_SCHEMA_VERSION == "cja-auto-sdr.sdr-typed/1"
+
+    def test_typed_payload_key_order_and_shared_sections(self):
+        from cja_auto_sdr.output.sdr import build_json_payload, build_typed_json_payload
+
+        inputs = _typed_inputs()
+        typed = build_typed_json_payload(**inputs)
+        legacy = build_json_payload(inputs["data_dict"], inputs["metadata_dict"])
+        assert list(typed) == ["schema_version", *legacy]
+        for key in ("metadata", "data_quality", "derived_fields", "calculated_metrics", "segments"):
+            assert typed[key] == legacy[key]
+
+    def test_typed_data_view_keeps_full_lists(self):
+        from cja_auto_sdr.output.sdr import build_typed_json_payload
+
+        dv = {"id": "dv_typed", "components": ["a", "b", "c"], "settings": {"x": [1]}, "enabled": True}
+        p = build_typed_json_payload(**_typed_inputs(data_view=dv))
+        assert p["data_view"] == dv
+        assert p["data_view"]["enabled"] is True
+
+    def test_typed_payload_is_strict_json(self):
+        import numpy as np
+
+        from cja_auto_sdr.output.sdr import build_typed_json_payload
+
+        metric = {
+            "id": "m1",
+            "score": np.nan,
+            "weight": np.float64(2.5),
+            "count": np.int64(3),
+            "flag": np.bool_(True),
+            "nested": {"a": float("nan"), "b": [pd.NA, None, float("inf")]},
+            "when": pd.NaT,
+        }
+        p = build_typed_json_payload(**_typed_inputs(metric=metric, data_view={"id": "dv", "x": float("nan")}))
+        text = json.dumps(p, allow_nan=False)
+        m = json.loads(text)["metrics"][0]
+        assert m["score"] is None
+        assert m["weight"] == 2.5
+        assert m["count"] == 3
+        assert m["flag"] is True
+        assert m["nested"] == {"a": None, "b": [None, None, None]}
+        assert m["when"] is None
+        assert p["data_view"]["x"] is None
+
+    def test_typed_sections_absent_when_legacy_omits_them(self):
+        from cja_auto_sdr.output.sdr import build_typed_json_payload
+
+        inputs = _typed_inputs()
+        inputs["data_dict"] = {"Segments": pd.DataFrame({"id": ["s1"]})}
+        p = build_typed_json_payload(**inputs)
+        assert p["metrics"] == []
+        assert p["dimensions"] == []
+        assert p["data_view"] == {}
+        assert p["segments"] == {"segments": [{"id": "s1"}]}
+
+    def test_to_native_json_rules(self):
+        import numpy as np
+
+        from cja_auto_sdr.output.sdr import to_native_json
+
+        assert to_native_json('{"a": 1}') == '{"a": 1}'
+        assert to_native_json((1, np.int32(2))) == [1, 2]
+        assert type(to_native_json(np.int64(7))) is int
+        assert to_native_json({"k": np.float32(0.5)}) == {"k": 0.5}
+        assert to_native_json(np.array([1, 2])) == [1, 2]
+        assert to_native_json(pd.Timestamp("2025-01-01T00:00:00Z")) == "2025-01-01T00:00:00+00:00"
+        assert to_native_json(True) is True
+        assert to_native_json(1) == 1
+        assert type(to_native_json(1)) is int
+        assert to_native_json(np.datetime64("2025-01-02T03:04:05")) == "2025-01-02T03:04:05"
+        assert to_native_json(np.datetime64("NaT", "ns")) is None
+        assert to_native_json(float("-inf")) is None
+
+    def test_typed_empty_native_frames(self):
+        from cja_auto_sdr.output.sdr import build_typed_json_payload
+
+        inputs = _typed_inputs()
+        inputs["native_frames"] = {"Metrics": pd.DataFrame()}
+        p = build_typed_json_payload(**inputs)
+        assert p["metrics"] == []
+        assert p["dimensions"] == []
+
+    def test_legacy_payload_unchanged(self):
+        from cja_auto_sdr.output.sdr import build_json_payload
+
+        data_dict, metadata, inventory = _legacy_golden_inputs()
+        text = json.dumps(build_json_payload(data_dict, metadata, inventory), indent=2, ensure_ascii=False) + "\n"
+        with open(_LEGACY_GOLDEN_PATH, encoding="utf-8") as f:
+            assert text == f.read()
+
+    def test_write_typed_json_output_is_strict_and_matches_payload(self, tmp_path):
+        from cja_auto_sdr.output.sdr import build_typed_json_payload, write_typed_json_output
+
+        payload = build_typed_json_payload(**_typed_inputs())
+        path = write_typed_json_output(payload, "typed", str(tmp_path), logging.getLogger("typed"))
+        assert path == os.path.join(str(tmp_path), "typed.json")
+        with open(path, encoding="utf-8") as f:
+            assert json.load(f) == payload
+
+    def test_write_typed_json_output_rejects_non_finite(self, tmp_path):
+        from cja_auto_sdr.output.sdr import write_typed_json_output
+
+        target = tmp_path / "bad.json"
+        with pytest.raises(ValueError):
+            write_typed_json_output({"x": float("nan")}, "bad", str(tmp_path), logging.getLogger("typed"))
+        assert not target.exists()

@@ -51,5 +51,6 @@ def process_single_dataview_worker(args: WorkerArgs) -> ProcessingResult:
             notion_force_new=args.notion_force_new,
             notion_database_id=args.notion_database_id,
             notion_create_database=args.notion_create_database,
+            json_typed=args.json_typed,
         ),
     )

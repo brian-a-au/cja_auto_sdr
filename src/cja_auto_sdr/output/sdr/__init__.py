@@ -16,10 +16,13 @@ from __future__ import annotations
 import html
 import json
 import logging
+import math
 import os
 import re
+from collections.abc import Mapping
+from datetime import date, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
 import numpy as np
 import pandas as pd
@@ -33,14 +36,19 @@ from cja_auto_sdr.output.csv_staging import csv_member_name, publish_csv_bundle
 from cja_auto_sdr.output.excel_staging import staged_excel_writer
 
 __all__ = [
+    "TYPED_SDR_SCHEMA_VERSION",
     "ExcelFormatCache",
     "apply_excel_formatting",
     "build_json_payload",
+    "build_typed_json_payload",
+    "serialize_typed_json",
+    "to_native_json",
     "write_csv_output",
     "write_excel_output",
     "write_html_output",
     "write_json_output",
     "write_markdown_output",
+    "write_typed_json_output",
 ]
 
 
@@ -538,6 +546,58 @@ def write_csv_output(
         raise
 
 
+TYPED_SDR_SCHEMA_VERSION: Final = "cja-auto-sdr.sdr-typed/1"
+
+# Sheets whose JSON section is identical in the legacy and typed payloads.
+_INVENTORY_SECTIONS: Final = {
+    "Derived Fields": ("derived_fields", "derived", "fields"),
+    "Calculated Metrics": ("calculated_metrics", "calculated", "metrics"),
+    "Segments": ("segments", "segments", "segments"),
+}
+
+
+def _empty_json_payload(metadata_dict: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "metadata": metadata_dict,
+        "data_view": {},
+        "metrics": [],
+        "dimensions": [],
+        "data_quality": [],
+        "derived_fields": {},
+        "calculated_metrics": {},
+        "segments": {},
+    }
+
+
+def _frame_records(df: pd.DataFrame) -> list[dict[str, Any]]:
+    """Convert a frame to records, normalizing pandas missing scalars to ``None``.
+
+    Pandas 3 preserves nullable string columns as NaN in ``to_dict()``, which
+    would otherwise leak non-standard NaN values into JSON.
+    """
+    return df.astype(object).where(df.notna(), None).to_dict(orient="records")
+
+
+def _shared_json_section(
+    sheet_name: str,
+    records: list[dict[str, Any]],
+    inventory_objects: Mapping[str, Any],
+) -> tuple[str, Any] | None:
+    """Return ``(section, value)`` for sheets that legacy and typed SDR JSON build the same way.
+
+    These are ``data_quality`` and the three inventory sections. Inventory
+    sections use the inventory object's ``to_json()`` for detailed output when
+    one is available, and the sheet records otherwise. Other sheets return ``None``.
+    """
+    if sheet_name == "Data Quality":
+        return "data_quality", records
+    if sheet_name in _INVENTORY_SECTIONS:
+        section, inventory_key, records_key = _INVENTORY_SECTIONS[sheet_name]
+        inventory = inventory_objects.get(inventory_key)
+        return section, inventory.to_json() if inventory else {records_key: records}
+    return None
+
+
 def build_json_payload(
     data_dict: dict[str, pd.DataFrame],
     metadata_dict: dict[str, Any],
@@ -557,29 +617,14 @@ def build_json_payload(
     Returns:
         JSON-serializable dictionary
     """
-    json_data: dict[str, Any] = {
-        "metadata": metadata_dict,
-        "data_view": {},
-        "metrics": [],
-        "dimensions": [],
-        "data_quality": [],
-        "derived_fields": {},
-        "calculated_metrics": {},
-        "segments": {},
-    }
-
+    json_data = _empty_json_payload(metadata_dict)
     inventory_objects = inventory_objects or {}
 
-    # Convert DataFrames to JSON-serializable format
     for sheet_name, df in data_dict.items():
-        # Normalize pandas missing scalars before converting to records.
-        # Pandas 3 preserves nullable string columns as NaN in to_dict(),
-        # which would otherwise leak non-standard NaN values into JSON.
-        records = df.astype(object).where(df.notna(), None).to_dict(orient="records")
-
-        # Map to appropriate section
-        if sheet_name == "Data Quality":
-            json_data["data_quality"] = records
+        records = _frame_records(df)
+        shared = _shared_json_section(sheet_name, records, inventory_objects)
+        if shared is not None:
+            json_data[shared[0]] = shared[1]
         elif sheet_name == "Metrics":
             json_data["metrics"] = records
         elif sheet_name == "Dimensions":
@@ -587,26 +632,99 @@ def build_json_payload(
         elif sheet_name == "DataView Details":
             # For single-record sheets, store as object not array
             json_data["data_view"] = records[0] if records else {}
-        elif sheet_name == "Derived Fields":
-            # Use inventory object's to_json() for detailed output if available
-            if inventory_objects.get("derived"):
-                json_data["derived_fields"] = inventory_objects["derived"].to_json()
-            else:
-                json_data["derived_fields"] = {"fields": records}
-        elif sheet_name == "Calculated Metrics":
-            # Use inventory object's to_json() for detailed output if available
-            if inventory_objects.get("calculated"):
-                json_data["calculated_metrics"] = inventory_objects["calculated"].to_json()
-            else:
-                json_data["calculated_metrics"] = {"metrics": records}
-        elif sheet_name == "Segments":
-            # Use inventory object's to_json() for detailed output if available
-            if inventory_objects.get("segments"):
-                json_data["segments"] = inventory_objects["segments"].to_json()
-            else:
-                json_data["segments"] = {"segments": records}
 
     return json_data
+
+
+def to_native_json(value: Any) -> Any:
+    """Recursively convert a value into strict, native JSON-compatible Python data.
+
+    * ``None``, ``pd.NA``, ``pd.NaT``, NaN, and infinite floats become ``None``.
+    * numpy scalars become their Python equivalents (``.item()``); numpy arrays become lists.
+    * dict keys are kept and values converted; lists and tuples become lists.
+    * timestamps become ISO 8601 strings.
+    * strings are returned unchanged and are never parsed.
+    """
+    if value is None or value is pd.NA or value is pd.NaT:
+        return None
+    if isinstance(value, str):
+        return value
+    if isinstance(value, Mapping):
+        return {key: to_native_json(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [to_native_json(item) for item in value]
+    if isinstance(value, np.ndarray):
+        return [to_native_json(item) for item in value.tolist()]
+    if isinstance(value, np.datetime64):
+        return None if np.isnat(value) else pd.Timestamp(value).isoformat()
+    if isinstance(value, np.generic):
+        return to_native_json(value.item())
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    return value
+
+
+def _native_frame_records(df: pd.DataFrame | None) -> list[Any]:
+    if df is None or df.empty:
+        return []
+    return to_native_json(df.to_dict(orient="records"))
+
+
+def build_typed_json_payload(
+    *,
+    data_dict: Mapping[str, pd.DataFrame],
+    native_frames: Mapping[str, pd.DataFrame],
+    data_view: Mapping[str, Any],
+    metadata_dict: Mapping[str, Any],
+    inventory_objects: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build the versioned typed SDR JSON payload (``--json-typed``).
+
+    The payload has the same top-level keys as :func:`build_json_payload`, with
+    ``schema_version`` first. A section is filled only when the legacy builder
+    would fill it (its sheet is present in ``data_dict``), but its values come
+    from native sources:
+
+    * ``data_view`` is the whole raw data view lookup, not a first-row expansion.
+    * ``metrics`` and ``dimensions`` come from ``native_frames`` captured before
+      display formatting, so nested objects, lists, booleans, and numbers stay native.
+    * ``metadata``, ``data_quality``, and the inventory sections are built the
+      same way as the legacy payload.
+
+    The result passes through :func:`to_native_json`, so it is strict JSON.
+    """
+    json_data = _empty_json_payload(metadata_dict)
+
+    if "DataView Details" in data_dict:
+        json_data["data_view"] = dict(data_view or {})
+    if "Metrics" in data_dict:
+        json_data["metrics"] = _native_frame_records(native_frames.get("Metrics"))
+    if "Dimensions" in data_dict:
+        json_data["dimensions"] = _native_frame_records(native_frames.get("Dimensions"))
+
+    inventory_objects = inventory_objects or {}
+    for sheet_name, df in data_dict.items():
+        if sheet_name == "Data Quality" or sheet_name in _INVENTORY_SECTIONS:
+            section, value = _shared_json_section(sheet_name, _frame_records(df), inventory_objects)
+            json_data[section] = value
+
+    return {"schema_version": TYPED_SDR_SCHEMA_VERSION, **to_native_json(json_data)}
+
+
+def _log_json_write_error(logger: logging.Logger, error: BaseException) -> None:
+    if isinstance(error, PermissionError):
+        logger.error("Permission denied creating JSON file: %s", error)
+        logger.error("Check write permissions for the output directory")
+    elif isinstance(error, OSError):
+        logger.error("OS error creating JSON file: %s", error)
+        logger.error("Check disk space and path validity")
+    elif isinstance(error, (TypeError, ValueError)):
+        logger.error("JSON serialization error: %s", error)
+        logger.error("Data contains non-serializable values")
+    else:
+        logger.error(_format_error_msg("creating JSON file", error=error))
 
 
 def write_json_output(
@@ -645,20 +763,37 @@ def write_json_output(
         logger.info("\u2713 JSON file created: %s", json_file)
         return json_file
 
-    except PermissionError as e:
-        logger.error("Permission denied creating JSON file: %s", e)
-        logger.error("Check write permissions for the output directory")
+    except (PermissionError, OSError, TypeError, ValueError, KeyError, AttributeError) as e:
+        _log_json_write_error(logger, e)
         raise
-    except OSError as e:
-        logger.error("OS error creating JSON file: %s", e)
-        logger.error("Check disk space and path validity")
-        raise
-    except (TypeError, ValueError) as e:
-        logger.error("JSON serialization error: %s", e)
-        logger.error("Data contains non-serializable values")
-        raise
-    except (KeyError, AttributeError) as e:
-        logger.error(_format_error_msg("creating JSON file", error=e))
+
+
+def serialize_typed_json(payload: Mapping[str, Any]) -> str:
+    """Serialize a typed SDR payload as strict JSON (NaN and infinity are rejected)."""
+    return json.dumps(payload, indent=2, ensure_ascii=False, allow_nan=False)
+
+
+def write_typed_json_output(
+    payload: Mapping[str, Any],
+    base_filename: str,
+    output_dir: str | Path,
+    logger: logging.Logger,
+    output_path: str | None = None,
+) -> str:
+    """Write a payload from :func:`build_typed_json_payload` to a JSON file.
+
+    The text is serialized with ``allow_nan=False`` before anything is written,
+    so a non-strict payload raises ``ValueError`` and leaves no file behind.
+    """
+    try:
+        logger.info("Generating typed JSON output...")
+        text = serialize_typed_json(payload)
+        json_file = str(output_path) if output_path else os.path.join(output_dir, f"{base_filename}.json")
+        write_text_atomic_compatible(json_file, text)
+        logger.info("\u2713 Typed JSON file created: %s", json_file)
+        return json_file
+    except (PermissionError, OSError, TypeError, ValueError) as e:
+        _log_json_write_error(logger, e)
         raise
 
 

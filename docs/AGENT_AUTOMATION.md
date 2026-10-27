@@ -65,6 +65,20 @@ uv run cja_auto_sdr <dv_id> --format json --run-summary-json -
 `--output -` implies `--quiet`, so stdout contains only the payload and stderr contains any log output.
 Single-SDR generation streams the SDR JSON to stdout when you pass `--format json --output -`; a `--output <file>` path writes the single-file formats (`json`, `html`, `markdown`, `excel`) to that path. Multi-file formats (`csv`, `all`) and `notion` keep auto-naming under `--output-dir`.
 
+### Typed SDR JSON
+
+The default SDR JSON turns nested metric and dimension settings into indented JSON text. Agents that need the real values should add `--json-typed`. The payload starts with `"schema_version": "cja-auto-sdr.sdr-typed/1"` and keeps nested objects, lists, booleans, and numbers native. Missing values become `null`, and strings are never parsed.
+
+```bash
+# Typed SDR JSON on stdout
+uv run cja_auto_sdr dv_abc123 --agent-mode --json-typed
+
+# Typed SDR JSON to a file
+uv run cja_auto_sdr dv_abc123 --format json --json-typed --output ./reports/sdr.json
+```
+
+`--json-typed` needs the effective format to be exactly `json`. Any other format, including `all` and the aliases, exits 1 with `ERROR: --json-typed requires --format json` on stderr before any API call. Check `schema_version` before you read the payload. The full section list is in [OUTPUT_FORMATS.md](OUTPUT_FORMATS.md#typed-json---json-typed).
+
 ### Exit codes
 
 Agents should branch on exit codes rather than parsing human-readable output:
@@ -224,6 +238,7 @@ The top-level `recommended_actions` list is a deduplicated union of all finding-
 | Need                                              | Use                                                 |
 |---------------------------------------------------|-----------------------------------------------------|
 | Direct JSON payload from CLI                      | `--agent-mode` or `--format json --output -`        |
+| SDR JSON with native nested values                | `--agent-mode --json-typed`                         |
 | Structured run metadata (exit code, counts, paths)| `--run-summary-json <file>` (use `-` for stdout)    |
 | Batched SDR/discovery from Python                 | `scripts/orchestrator.py`                           |
 | LLM agent tool calling                            | `tools/*.json` manifests                            |

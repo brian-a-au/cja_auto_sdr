@@ -93,6 +93,9 @@ cja_auto_sdr dv_12345 --format json --output ./reports/sdr.json
 # Stream an SDR as JSON to stdout for piping
 cja_auto_sdr dv_12345 --format json --output - | jq '.metrics'
 
+# Stream versioned typed JSON (native nested values) to stdout
+cja_auto_sdr dv_12345 --format json --json-typed --output - | jq '.schema_version'
+
 # Write to stdout (JSON/CSV only) for piping
 cja_auto_sdr --list-dataviews --output -
 cja_auto_sdr --list-dataviews --output stdout
@@ -297,6 +300,36 @@ const fs = require('fs');
 const data = JSON.parse(fs.readFileSync('CJA_DataView_myview_dv_12345_SDR.json'));
 console.log(`Metrics: ${data.metrics.length}`);
 ```
+
+#### Typed JSON (`--json-typed`)
+
+The default JSON keeps the shape shown above. In that shape, nested metric and dimension settings (for example a `fieldDefinition` array) arrive as indented JSON text, and the `data_view` section is a first-row view of the data view settings. That default does not change.
+
+Add `--json-typed` to get a versioned contract that keeps those values native instead. It works only for SDR generation with `--format json` (or `--agent-mode`, which defaults to JSON on stdout). With any other format, including `all` and the aliases, the run exits 1 with `ERROR: --json-typed requires --format json` before any API call. File output and `--output -` stdout use the same payload builder, so both carry the same content.
+
+```bash
+cja_auto_sdr dv_12345 --format json --json-typed
+cja_auto_sdr dv_12345 --format json --json-typed --output - | jq '.metrics[0].fieldDefinition'
+cja_auto_sdr dv_12345 --agent-mode --json-typed
+```
+
+**Typed sections** (same top-level keys as the default JSON, with `schema_version` first):
+
+| Key | Content |
+|-----|---------|
+| `schema_version` | Always `"cja-auto-sdr.sdr-typed/1"`. A breaking change to the typed contract gets a new version. |
+| `metadata` | Same object as the default JSON. |
+| `data_view` | The whole data view configuration as returned by the API, with nested objects and full lists (not a first-row expansion). |
+| `metrics` | One object per metric, read before display formatting. Nested objects, lists, booleans, and numbers stay native. |
+| `dimensions` | One object per dimension, read the same way as `metrics`. |
+| `data_quality` | Same records as the default JSON. |
+| `derived_fields`, `calculated_metrics`, `segments` | Same content as the default JSON (inventory `to_json()` output, or sheet records when no inventory object exists). |
+
+A section is empty (`{}` or `[]`) whenever the default JSON would leave it empty, for example `metrics` and `dimensions` with `--inventory-only`.
+
+**Missing-scalar rule:** `None`, `pd.NA`, `pd.NaT`, NaN, and infinite numbers become `null`. numpy numbers and booleans become plain JSON numbers and booleans, and timestamps become ISO 8601 strings. Strings are never parsed, so a description that happens to look like JSON (`"{\"a\": 1}"`) stays a string. Empty lists and objects stay empty lists and objects. Files and stdout are written as strict JSON (`allow_nan=False`), so the output never contains `NaN` or `Infinity`.
+
+**Known limit:** the metrics and dimensions come from tabular API frames. If a numeric field is missing on some components, pandas stores the whole column as floating point, so an integer such as `1` can appear as `1.0` for the components that do have it.
 
 ---
 

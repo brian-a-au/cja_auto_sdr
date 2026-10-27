@@ -493,6 +493,13 @@ Requirements:
     )
 
     parser.add_argument(
+        "--json-typed",
+        action="store_true",
+        dest="json_typed",
+        help="Emit versioned typed JSON that keeps nested objects, lists, booleans, and numbers native (requires --format json)",
+    )
+
+    parser.add_argument(
         "--dry-run",
         "--validate-only",
         action="store_true",
