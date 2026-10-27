@@ -291,7 +291,7 @@ jobs:
           /tmp/pip-venv/bin/python --version
           /tmp/pip-venv/bin/cja_auto_sdr --version
           help_output="$(/tmp/pip-venv/bin/python -m cja_auto_sdr --help)"
-          echo "$help_output" | head -5
+          head -5 <<<"$help_output"
           if ! grep -q -- "-m cja_auto_sdr" <<<"$help_output"; then
             echo "::error::'python -m cja_auto_sdr --help' did not report the module program name" >&2
             exit 1
