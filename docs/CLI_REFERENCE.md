@@ -107,7 +107,7 @@ cja-auto-sdr [OPTIONS] DATA_VIEW_ID_OR_NAME [...]
 |--------|-------------|---------|
 | `--batch` | Enable batch processing; multiple data view arguments also trigger batch processing automatically | False |
 | `--workers N` | Number of parallel workers (1-256), or `auto` for automatic detection based on CPU cores and workload complexity | auto |
-| `--continue-on-error` | Continue if a data view fails | False |
+| `--continue-on-error` | Continue if a data view fails. The run still exits 1 when any data view failed | False |
 | `--skip-validation` | Skip data quality validation (20-30% faster) | False |
 
 ### Output

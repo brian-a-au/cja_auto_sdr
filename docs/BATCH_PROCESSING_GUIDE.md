@@ -45,7 +45,7 @@ cja_auto_sdr --batch dv_12345 dv_67890 dv_abcde dv_11111 --workers 8
 | `--log-format FORMAT` | Log output format: `text` or `json` (for Splunk/ELK/CloudWatch) | text |
 | `--output-dir PATH` | Output directory for generated files | Current directory |
 | `--config-file PATH` | Path to CJA configuration file (ignored if `--profile` used) | config.json |
-| `--continue-on-error` | Continue processing if one data view fails | Stop on first error |
+| `--continue-on-error` | Continue processing if one data view fails. The run still exits 1 when any data view failed | Stop on first error |
 | `--log-level LEVEL` | Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL) | INFO |
 | `--enable-cache` | Enable validation result caching | Disabled |
 | `--clear-cache` | Clear cache before processing (use with --enable-cache) | - |
