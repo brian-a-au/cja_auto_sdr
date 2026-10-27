@@ -143,7 +143,7 @@ cja-auto-sdr [OPTIONS] DATA_VIEW_ID_OR_NAME [...]
 
 An exception inside a validation check or worker fails the run with `DQ_VALIDATION_RUNTIME_FAILED` (exit 1), even if other checks already found quality issues. With `--allow-partial`, the report marks validation as failed and the run summary records `data_quality_validation_runtime_failed`; incomplete findings are not presented as completed validation or cached as a successful result.
 
-> **Run summary observability:** Failed SDR results include stable `failure_code` and `failure_reason` fields, top-level `failure_rollups.by_code` / `failure_rollups.by_reason` counts, additive `output_files` alongside compatibility `output_file`, and per-result `partial_output` / `partial_reasons` for `--allow-partial` runs.
+> **Run summary observability:** Failed SDR results include stable `failure_code` and `failure_reason` fields, top-level `failure_rollups.by_code` / `failure_rollups.by_reason` counts, additive `output_files` alongside compatibility `output_file`, and per-result `partial_output` / `partial_reasons` for `--allow-partial` runs, and per-result `inventory_statuses` (`completed` or `failed` for each requested optional inventory).
 >
 > **Artifact compatibility:** When `output_files` is present, `output_file` remains the primary artifact for backward compatibility and is listed first in the emitted artifact order.
 >

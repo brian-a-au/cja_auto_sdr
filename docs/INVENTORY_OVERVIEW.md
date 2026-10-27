@@ -273,6 +273,15 @@ cja_auto_sdr dv_12345 \
     --include-derived
 ```
 
+## Inventory Status in SDR Output
+
+When an SDR run requests an optional inventory, the output records whether the operation finished:
+
+- `completed`: the inventory operation finished. The result may be empty, in which case the sheet says "No ... found for this data view". `completed` does not mean every upstream record parsed; per-record completeness is not tracked yet.
+- `failed`: collection failed (including a missing inventory module). The sheet or JSON section says "... inventory unavailable" with the note "Inventory collection failed; see logs. This is not an empty result." Treat the contents as unknown, not empty.
+
+Status appears as `Derived Fields Inventory Status`, `Calculated Metrics Inventory Status` and `Segments Inventory Status` metadata rows (only for requested inventories) and as per-result `inventory_statuses` in the run summary. A failed optional inventory does not change partial reasons or exit codes.
+
 ## Quick Reference Links
 
 - [Calculated Metrics Inventory](./CALCULATED_METRICS_INVENTORY.md)

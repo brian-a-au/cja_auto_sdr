@@ -271,6 +271,36 @@ from cja_auto_sdr.org.writers.notion import write_org_report_notion as _write_or
 
 PARALLEL_INVENTORY_MIN_TASKS = 2
 
+# Operation status of optional SDR inventories. "completed" means the inventory
+# operation finished (its result may legitimately be empty); it does not claim every
+# upstream record parsed. "failed" means collection failed and the result is unknown.
+INVENTORY_STATUS_COMPLETED = "completed"
+INVENTORY_STATUS_FAILED = "failed"
+INVENTORY_STATUS_NOT_REQUESTED = "not_requested"
+_INVENTORY_STATUS_KEYS = ("derived", "calculated", "segments")
+_INVENTORY_STATUS_METADATA_LABELS = {
+    "derived": "Derived Fields Inventory Status",
+    "calculated": "Calculated Metrics Inventory Status",
+    "segments": "Segments Inventory Status",
+}
+_INVENTORY_UNAVAILABLE_LABELS = {
+    "derived": "Derived field",
+    "calculated": "Calculated metrics",
+    "segments": "Segments",
+}
+
+
+def _inventory_unavailable_frame(key: str, data_view_id: str) -> pd.DataFrame:
+    """Placeholder for an inventory whose collection failed (unknown, not empty)."""
+    return pd.DataFrame(
+        {
+            "Status": [f"{_INVENTORY_UNAVAILABLE_LABELS[key]} inventory unavailable"],
+            "Data View ID": [data_view_id],
+            "Note": ["Inventory collection failed; see logs. This is not an empty result."],
+        },
+    )
+
+
 # ==================== OUTPUT WRITER PROTOCOL ====================
 
 
@@ -1180,6 +1210,7 @@ def _build_sdr_metadata_dataframe(
     segments_inventory_obj: Any,
     calculated_inventory_obj: Any,
     derived_inventory_obj: Any,
+    inventory_statuses: Mapping[str, str] | None = None,
 ) -> pd.DataFrame:
     """Build the metadata DataFrame for SDR artifacts."""
     metric_types = metrics["type"].value_counts().to_dict() if not metrics.empty and "type" in metrics.columns else {}
@@ -1311,6 +1342,12 @@ def _build_sdr_metadata_dataframe(
                 derived_elevated,
             ],
         )
+
+    for key in _INVENTORY_STATUS_KEYS:
+        status = (inventory_statuses or {}).get(key, INVENTORY_STATUS_NOT_REQUESTED)
+        if status != INVENTORY_STATUS_NOT_REQUESTED:
+            metadata_properties.append(_INVENTORY_STATUS_METADATA_LABELS[key])
+            metadata_values.append(status)
 
     return pd.DataFrame({"Property": metadata_properties, "Value": metadata_values})
 
@@ -2303,6 +2340,7 @@ def _processing_result_to_summary(result: ProcessingResult) -> dict[str, Any]:
         "failure_reason": failure_reason,
         "partial_output": result.partial_output,
         "partial_reasons": result.partial_reasons,
+        "inventory_statuses": dict(result.inventory_statuses),
         "file_size_bytes": result.file_size_bytes,
         "segments_count": result.segments_count,
         "segments_high_complexity": result.segments_high_complexity,
@@ -3681,6 +3719,8 @@ def process_single_dataview(
         calculated_inventory_obj = None  # Store inventory object for JSON output
         segments_inventory_df = pd.DataFrame()
         segments_inventory_obj = None  # Store inventory object for JSON output
+        # Requested inventories only; set from the coordinator thread in _assign_inventory_result.
+        inventory_statuses: dict[str, str] = dict.fromkeys(_INVENTORY_STATUS_KEYS, INVENTORY_STATUS_NOT_REQUESTED)
 
         # Collect enabled inventory tasks — closures defined conditionally.
         # The shared logger is intentional; stdlib logging is thread-safe, but
@@ -3789,7 +3829,9 @@ def process_single_dataview(
             nonlocal calculated_inventory_obj, calculated_metrics_df
             nonlocal segments_inventory_obj, segments_inventory_df
             if payload is None:
+                inventory_statuses[key] = INVENTORY_STATUS_FAILED
                 return
+            inventory_statuses[key] = INVENTORY_STATUS_COMPLETED
             if key == "derived":
                 derived_inventory_obj, derived_inventory_df = payload
             elif key == "calculated":
@@ -3862,6 +3904,7 @@ def process_single_dataview(
                 segments_inventory_obj=segments_inventory_obj,
                 calculated_inventory_obj=calculated_inventory_obj,
                 derived_inventory_obj=derived_inventory_obj,
+                inventory_statuses=inventory_statuses,
             )
             logger.info("Metadata created successfully")
         except (KeyError, TypeError, ValueError) as e:
@@ -3940,6 +3983,8 @@ def process_single_dataview(
         # Add derived field inventory if available or placeholder if flag was used
         if not derived_inventory_df.empty:
             data_dict["Derived Fields"] = derived_inventory_df
+        elif inventory_statuses["derived"] == INVENTORY_STATUS_FAILED:
+            data_dict["Derived Fields"] = _inventory_unavailable_frame("derived", data_view_id)
         elif include_derived_inventory:
             data_dict["Derived Fields"] = pd.DataFrame(
                 {
@@ -3952,6 +3997,8 @@ def process_single_dataview(
         # Add calculated metrics inventory if available or placeholder if flag was used
         if not calculated_metrics_df.empty:
             data_dict["Calculated Metrics"] = calculated_metrics_df
+        elif inventory_statuses["calculated"] == INVENTORY_STATUS_FAILED:
+            data_dict["Calculated Metrics"] = _inventory_unavailable_frame("calculated", data_view_id)
         elif include_calculated_metrics:
             data_dict["Calculated Metrics"] = pd.DataFrame(
                 {
@@ -3964,6 +4011,8 @@ def process_single_dataview(
         # Add segments inventory if available or placeholder if flag was used
         if not segments_inventory_df.empty:
             data_dict["Segments"] = segments_inventory_df
+        elif inventory_statuses["segments"] == INVENTORY_STATUS_FAILED:
+            data_dict["Segments"] = _inventory_unavailable_frame("segments", data_view_id)
         elif include_segments_inventory:
             data_dict["Segments"] = pd.DataFrame(
                 {
@@ -4075,6 +4124,8 @@ def process_single_dataview(
                                 df, name, flag_enabled = inventory_sheets[inv_type]
                                 if not df.empty:
                                     sheets_to_write.append((df, name))
+                                elif inventory_statuses[inv_type] == INVENTORY_STATUS_FAILED:
+                                    sheets_to_write.append((_inventory_unavailable_frame(inv_type, data_view_id), name))
                                 elif flag_enabled:
                                     # Add placeholder when flag was used but no data found
                                     placeholder_df = pd.DataFrame(
@@ -4287,6 +4338,11 @@ def process_single_dataview(
                 calculated_metrics_high_complexity=calculated_metrics_high_complexity,
                 derived_fields_count=derived_fields_count,
                 derived_fields_high_complexity=derived_fields_high_complexity,
+                inventory_statuses={
+                    key: status
+                    for key, status in inventory_statuses.items()
+                    if status != INVENTORY_STATUS_NOT_REQUESTED
+                },
             )
 
         except PermissionError as e:
