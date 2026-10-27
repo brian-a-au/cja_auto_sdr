@@ -20,6 +20,7 @@ from cja_auto_sdr.generator import DataQualityChecker
 
 _PERF_REGRESSION_FACTOR = 1.5
 _PERF_ABSOLUTE_OVERHEAD_SECONDS = 0.001
+_TIMING_RUNS = 5
 
 
 def _build_perf_logger() -> logging.Logger:
@@ -439,11 +440,11 @@ class TestOptimizedValidationPerformance:
                 },
             )
 
-            # Run 3 times and take median to reduce variance
+            # Run _TIMING_RUNS times (interleaved) and take the minimum, the least noise-sensitive estimate
             orig_times = []
             opt_times = []
             repetitions = max(1, 10000 // size)
-            for _ in range(3):
+            for _ in range(_TIMING_RUNS):
                 orig_times.append(
                     _measure_runtime(
                         lambda: _run_original_validation(df, logger, required_fields, null_fields),
@@ -457,10 +458,10 @@ class TestOptimizedValidationPerformance:
                     ),
                 )
 
-            times_original.append(sorted(orig_times)[1])  # Median
-            times_optimized.append(sorted(opt_times)[1])  # Median
+            times_original.append(min(orig_times))
+            times_optimized.append(min(opt_times))
 
-        print("\nScaling Comparison (median of 3 runs):")
+        print(f"\nScaling Comparison (best of {_TIMING_RUNS} runs):")
         for i, size in enumerate(sizes):
             improvement = ((times_original[i] - times_optimized[i]) / times_original[i]) * 100
             print(

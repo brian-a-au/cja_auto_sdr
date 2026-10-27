@@ -18,6 +18,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from cja_auto_sdr.api.cache import ValidationCache
 from cja_auto_sdr.generator import DataQualityChecker
 
+_TIMING_RUNS = 5
+_PARALLEL_ABSOLUTE_OVERHEAD_SECONDS = 0.05
+
 
 class TestParallelValidation:
     """Test parallel validation functionality"""
@@ -145,15 +148,15 @@ class TestParallelValidation:
         """Verify parallel validation performs reasonably (may have overhead on small datasets)"""
         logger = logging.getLogger("test")
 
-        # Run multiple iterations for more stable timing
-        iterations = 3
+        # Interleave sequential and parallel runs and compare the best of each
+        iterations = _TIMING_RUNS
         seq_times = []
         par_times = []
 
         for _ in range(iterations):
             # Sequential timing
             seq_checker = DataQualityChecker(logger)
-            seq_start = time.time()
+            seq_start = time.perf_counter()
             seq_checker.check_all_quality_issues_optimized(
                 large_metrics_df,
                 "Metrics",
@@ -166,11 +169,11 @@ class TestParallelValidation:
                 ["id", "name", "type"],
                 ["id", "name", "description"],
             )
-            seq_times.append(time.time() - seq_start)
+            seq_times.append(time.perf_counter() - seq_start)
 
             # Parallel timing
             par_checker = DataQualityChecker(logger)
-            par_start = time.time()
+            par_start = time.perf_counter()
             par_checker.check_all_parallel(
                 metrics_df=large_metrics_df,
                 dimensions_df=large_dimensions_df,
@@ -178,19 +181,20 @@ class TestParallelValidation:
                 dimensions_required_fields=["id", "name", "type"],
                 critical_fields=["id", "name", "description"],
             )
-            par_times.append(time.time() - par_start)
+            par_times.append(time.perf_counter() - par_start)
 
-        # Use average times
-        seq_duration = sum(seq_times) / len(seq_times)
-        par_duration = sum(par_times) / len(par_times)
+        # Minimum is the least noise-sensitive estimate of real cost
+        seq_duration = min(seq_times)
+        par_duration = min(par_times)
 
         speedup = seq_duration / par_duration if par_duration > 0 else 0
-        print(f"\nSpeedup: {speedup:.2f}x (Sequential: {seq_duration:.3f}s, Parallel: {par_duration:.3f}s)")
+        print(f"\nSpeedup: {speedup:.2f}x (Sequential best: {seq_duration:.3f}s, Parallel best: {par_duration:.3f}s)")
 
-        # Verify parallel doesn't add excessive overhead (within 200% of sequential)
-        # Note: For small datasets (milliseconds), thread overhead and progress bar (tqdm) may exceed benefits
+        # Verify parallel doesn't add excessive overhead (within 200% of sequential, or a small
+        # absolute allowance for millisecond-scale runs where thread and tqdm setup dominate).
         # Real performance gains are seen with larger, more complex data views (seconds)
-        assert par_duration < seq_duration * 3.0, (
+        max_allowed = max(seq_duration * 3.0, seq_duration + _PARALLEL_ABSOLUTE_OVERHEAD_SECONDS)
+        assert par_duration <= max_allowed, (
             f"Parallel adds excessive overhead: seq={seq_duration:.3f}s, par={par_duration:.3f}s (>200% slower)"
         )
 
