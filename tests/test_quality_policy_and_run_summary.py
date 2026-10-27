@@ -129,6 +129,7 @@ class TestRunSummaryOutput:
             "failure_reason",
             "partial_output",
             "partial_reasons",
+            "inventory_statuses",
             "file_size_bytes",
             "segments_count",
             "segments_high_complexity",

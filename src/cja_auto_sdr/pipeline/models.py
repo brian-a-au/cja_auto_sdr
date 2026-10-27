@@ -52,6 +52,7 @@ class ProcessingResult:
     calculated_metrics_high_complexity: int = 0
     derived_fields_count: int = 0
     derived_fields_high_complexity: int = 0
+    inventory_statuses: dict[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         """Normalize output and partial-run observability fields."""
