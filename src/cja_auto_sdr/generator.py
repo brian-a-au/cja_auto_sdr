@@ -34,6 +34,7 @@ from tqdm import tqdm
 from xlsxwriter.exceptions import XlsxWriterException
 
 from cja_auto_sdr.api.fetch import classify_component_payload as _classify_component_payload
+from cja_auto_sdr.api.fetch import fetch_component_payload as _fetch_validated_component_payload
 from cja_auto_sdr.api.quality_policy import (
     QUALITY_POLICY_ALLOWED_KEYS,
     QUALITY_REPORT_PREFERRED_COLUMNS,
@@ -3152,14 +3153,16 @@ def process_inventory_summary(
         def _build_derived_inventory_summary() -> Any:
             from cja_auto_sdr.inventory.derived_fields import DerivedFieldInventoryBuilder
 
-            raw_metrics = cja.getMetrics(data_view_id, inclType=True, full=True)
+            raw_metrics = _fetch_validated_component_payload(cja, "metrics", data_view_id, inclType=True, full=True)
             metrics_outcome = _classify_component_payload(raw_metrics)
             if metrics_outcome.status == "failed":
                 raise RuntimeError(
                     f"metrics fetch returned error payload ({metrics_outcome.reason}): {metrics_outcome.error_message}"
                 )
 
-            raw_dimensions = cja.getDimensions(data_view_id, inclType=True, full=True)
+            raw_dimensions = _fetch_validated_component_payload(
+                cja, "dimensions", data_view_id, inclType=True, full=True
+            )
             dimensions_outcome = _classify_component_payload(raw_dimensions)
             if dimensions_outcome.status == "failed":
                 raise RuntimeError(

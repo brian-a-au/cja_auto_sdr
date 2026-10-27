@@ -12,7 +12,12 @@ import cjapy
 import pandas as pd
 from tqdm import tqdm
 
-from cja_auto_sdr.api.resilience import CircuitBreaker, _is_upstream_failure_payload, make_api_call_with_retry
+from cja_auto_sdr.api.resilience import (
+    CircuitBreaker,
+    _extract_http_status_code_from_result,
+    _is_upstream_failure_payload,
+    make_api_call_with_retry,
+)
 from cja_auto_sdr.api.tuning import APIWorkerTuner
 from cja_auto_sdr.core.config import APITuningConfig
 from cja_auto_sdr.core.constants import TQDM_BAR_FORMAT
@@ -25,6 +30,180 @@ from cja_auto_sdr.core.exceptions import CircuitBreakerOpen
 from cja_auto_sdr.core.perf import PerformanceTracker
 
 API_FETCH_TASK_COUNT = 3  # metrics + dimensions + dataview
+
+# Component list endpoints whose cjapy wrappers turn API error bodies into empty
+# DataFrames (``pd.DataFrame(res.get("content", []))``). Maps component label to
+# the cjapy method name.
+_VALIDATED_COMPONENT_METHODS: dict[str, str] = {"metrics": "getMetrics", "dimensions": "getDimensions"}
+_PAGE_ERROR_KEYS = frozenset({"error", "errorcode", "error_code", "errordescription", "error_description"})
+
+
+class ComponentFetchFailure(dict):
+    """Canonical error payload for a component list fetch the API rejected.
+
+    A ``dict`` so the retry/circuit-breaker layer can still read ``statusCode``
+    and the generic payload classifiers see an explicit ``error`` key.
+    """
+
+    @property
+    def reason(self) -> str:
+        return str(self.get("reason", "error_payload"))
+
+    @property
+    def message(self) -> str:
+        return str(self.get("message", ""))
+
+
+class _ComponentPageError(Exception):
+    """Internal signal raised from inside cjapy's pagination loop."""
+
+    def __init__(self, failure: ComponentFetchFailure):
+        super().__init__(failure.message)
+        self.failure = failure
+
+
+def _component_page_failure(page: Any, *, component: str, data_view_id: str) -> ComponentFetchFailure | None:
+    """Return a failure payload when a raw component page is not a valid list response."""
+    reason = ""
+    detail = ""
+    error_code: Any = None
+    status_code: int | None = None
+
+    if not isinstance(page, dict):
+        reason = "non_mapping_page"
+        detail = f"unexpected {type(page).__name__} response"
+    else:
+        lowered = {str(key).strip().casefold(): value for key, value in page.items()}
+        error_code = lowered.get("errorcode", lowered.get("error_code"))
+        status_code = _extract_http_status_code_from_result(page)
+        detail = str(
+            lowered.get("message")
+            or lowered.get("errordescription")
+            or lowered.get("error_description")
+            or lowered.get("error")
+            or "",
+        )
+        content = page.get("content")
+        if set(lowered) & _PAGE_ERROR_KEYS:
+            reason = "error_payload"
+        elif status_code is not None and status_code >= 400:
+            reason = "http_status"
+        elif not isinstance(content, list):
+            reason = "missing_content"
+            detail = detail or "response has no 'content' list"
+        else:
+            for index, row in enumerate(content):
+                row_id = row.get("id") if isinstance(row, dict) else None
+                if not isinstance(row_id, str) or not row_id.strip():
+                    reason = "row_missing_id"
+                    detail = f"row {index} has no non-empty string 'id'"
+                    break
+
+    if not reason:
+        return None
+
+    parts = []
+    if status_code is not None:
+        parts.append(f"HTTP {status_code}")
+    if error_code is not None:
+        parts.append(f"errorCode {error_code}")
+    if detail:
+        parts.append(detail)
+    message = f"{component} fetch failed for data view {data_view_id}: {'; '.join(parts) or reason}"
+    failure = ComponentFetchFailure(
+        error=message,
+        message=message,
+        reason=reason,
+        endpoint=component,
+        dataViewId=data_view_id,
+    )
+    if error_code is not None:
+        failure["errorCode"] = error_code
+    if status_code is not None:
+        failure["statusCode"] = status_code
+    return failure
+
+
+class _ValidatingConnector:
+    """Connector proxy that validates every raw component page cjapy requests."""
+
+    def __init__(self, connector: Any, *, component: str, data_view_id: str):
+        self._connector = connector
+        self._component = component
+        self._data_view_id = data_view_id
+
+    def getData(self, *args: Any, **kwargs: Any) -> Any:
+        page = self._connector.getData(*args, **kwargs)
+        failure = _component_page_failure(page, component=self._component, data_view_id=self._data_view_id)
+        if failure is not None:
+            raise _ComponentPageError(failure)
+        return page
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._connector, name)
+
+
+class _ValidatingClientView:
+    """Read-through view of a cjapy client that swaps in a validating connector."""
+
+    def __init__(self, cja: Any, connector: _ValidatingConnector):
+        self._cja = cja
+        self.connector = connector
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._cja, name)
+
+
+def _native_cjapy_method(cja: Any, method_name: str) -> Callable[..., Any] | None:
+    """Return cjapy's own (unpatched) method function when ``cja`` is a real client."""
+    native_cls = getattr(cjapy, "CJA", None)
+    native_func = getattr(native_cls, method_name, None) if isinstance(native_cls, type) else None
+    if native_func is None or not isinstance(cja, native_cls):
+        return None
+    bound = getattr(cja, method_name, None)
+    if getattr(bound, "__func__", None) is not native_func:
+        return None
+    connector = getattr(cja, "connector", None)
+    if not callable(getattr(connector, "getData", None)):
+        return None
+    return native_func
+
+
+def fetch_component_payload(
+    cja: Any,
+    component: str,
+    data_view_id: str,
+    *,
+    inclType: Any = True,
+    full: bool = True,
+) -> Any:
+    """Fetch metrics or dimensions, surfacing API error bodies as failures.
+
+    For a real ``cjapy.CJA`` client this runs cjapy's own method (same params,
+    pagination, and DataFrame construction) over a connector proxy that validates
+    every raw page. An error body, a page without a ``content`` list, or a row
+    without an ``id`` returns a :class:`ComponentFetchFailure` instead of an empty
+    DataFrame. A genuine ``content: []`` still yields an empty DataFrame.
+
+    Any other client (test doubles, patched methods) is called directly and its
+    result returned unchanged for the existing payload classifiers.
+    """
+    method_name = _VALIDATED_COMPONENT_METHODS.get(component)
+    if method_name is None:
+        raise ValueError(f"Unsupported component for validated fetch: {component!r}")
+
+    native_func = _native_cjapy_method(cja, method_name)
+    if native_func is None:
+        return getattr(cja, method_name)(data_view_id, inclType=inclType, full=full)
+
+    view = _ValidatingClientView(
+        cja,
+        _ValidatingConnector(cja.connector, component=component, data_view_id=data_view_id),
+    )
+    try:
+        return native_func(view, data_view_id, inclType=inclType, full=full)
+    except _ComponentPageError as exc:
+        return exc.failure
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,6 +219,15 @@ class ComponentFetchOutcome:
 
 def classify_component_payload(payload: Any) -> ComponentFetchOutcome:
     """Classify a cjapy component payload into a fetch outcome."""
+    if isinstance(payload, ComponentFetchFailure):
+        return ComponentFetchOutcome(
+            frame=pd.DataFrame(),
+            status="failed",
+            reason=payload.reason,
+            error_message=payload.message,
+            item_count=None,
+        )
+
     if isinstance(payload, pd.DataFrame):
         if payload.empty:
             return ComponentFetchOutcome(
@@ -347,7 +535,9 @@ class ParallelAPIFetcher:
 
             # Use retry for transient network errors with circuit breaker support
             metrics = self._timed_api_call(
-                self.cja.getMetrics,
+                fetch_component_payload,
+                self.cja,
+                "metrics",
                 data_view_id,
                 inclType=True,
                 full=True,
@@ -390,7 +580,9 @@ class ParallelAPIFetcher:
 
             # Use retry for transient network errors with circuit breaker support
             dimensions = self._timed_api_call(
-                self.cja.getDimensions,
+                fetch_component_payload,
+                self.cja,
+                "dimensions",
                 data_view_id,
                 inclType=True,
                 full=True,
