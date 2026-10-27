@@ -42,8 +42,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
+      fail-fast: false
       matrix:
-        python-version: ["3.14"]
+        python-version: ["3.11", "3.14"]
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.3.0
@@ -65,8 +66,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
+      fail-fast: false
       matrix:
-        python-version: ["3.14"]
+        python-version: ["3.11", "3.12", "3.13", "3.14", "3.15"]
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.3.0
@@ -77,13 +79,21 @@ jobs:
           prune-cache: false
       - name: Sync dependencies
         run: uv sync --locked --dev --extra clustering
-      - name: Run unit tests with coverage (95% gate applies to this slice)
+      - name: Run unit tests (95% coverage gate applies on Python 3.14)
         shell: bash
+        env:
+          PYTHON_VERSION: ${{ matrix.python-version }}
         run: |
           set -o pipefail
+          # Coverage is measured once, on 3.14. Keep the whole-package
+          # --cov=cja_auto_sdr form; dotted module paths break numpy imports.
+          cov_args=()
+          if [ "$PYTHON_VERSION" = "3.14" ]; then
+            cov_args=(--cov=cja_auto_sdr --cov-report=term --cov-fail-under=95)
+          fi
           uv run --locked pytest tests/ -v --tb=short \
             -m "unit and not slow" -n auto \
-            --cov=cja_auto_sdr --cov-report=term --cov-fail-under=95 \
+            "${cov_args[@]}" \
             --durations=25 | tee /tmp/test-unit.log
           {
             echo "### test-unit slowest tests"
@@ -97,7 +107,7 @@ jobs:
         # the current values in the PR's Checks tab without scraping logs.
         # `success()` keeps the output honest — no metrics emitted on a
         # failed run.
-        if: ${{ success() }}
+        if: ${{ success() && matrix.python-version == '3.14' }}
         shell: bash
         run: |
           # Coverage % from the `TOTAL` row of pytest-cov's term report
@@ -133,8 +143,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
+      fail-fast: false
       matrix:
-        python-version: ["3.14"]
+        python-version: ["3.11", "3.14"]
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.3.0
@@ -161,8 +172,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
+      fail-fast: false
       matrix:
-        python-version: ["3.14"]
+        python-version: ["3.11", "3.14"]
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.3.0
@@ -182,9 +194,10 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        python-version: ["3.14"]
+        python-version: ["3.11", "3.14"]
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.3.0
@@ -242,6 +255,49 @@ jobs:
           /tmp/no-extras-venv/bin/python -m cja_auto_sdr --version
           /tmp/no-extras-venv/bin/python -c "import cja_auto_sdr; import cja_auto_sdr.output.writers.notion as _n; print('module loads:', _n.__name__)"
 
+  pip-install-smoke:
+    # Install the wheel with plain pip on the Python 3.11 floor, the way a user
+    # on a locked-down machine without uv would. pip resolves numpy and pandas
+    # from PyPI itself here, not from uv.lock.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          python-version: "3.11"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+          prune-cache: false
+      - name: Build wheel
+        run: |
+          rm -f dist/*.whl dist/*.tar.gz
+          uv build --wheel
+      - name: Install wheel with pip into a stdlib venv
+        shell: bash
+        run: |
+          python3_11="$(uv python find 3.11)"
+          "$python3_11" -m venv /tmp/pip-venv
+          wheels=(dist/*.whl)
+          if [ "${#wheels[@]}" -ne 1 ]; then
+            echo "::error::Expected exactly one wheel, found ${#wheels[@]}" >&2
+            exit 1
+          fi
+          /tmp/pip-venv/bin/python -m pip install --upgrade pip
+          /tmp/pip-venv/bin/python -m pip install "${wheels[0]}"
+      - name: CLI starts on Python 3.11
+        shell: bash
+        run: |
+          /tmp/pip-venv/bin/python --version
+          /tmp/pip-venv/bin/cja_auto_sdr --version
+          help_output="$(/tmp/pip-venv/bin/python -m cja_auto_sdr --help)"
+          echo "$help_output" | head -5
+          if ! grep -q -- "-m cja_auto_sdr" <<<"$help_output"; then
+            echo "::error::'python -m cja_auto_sdr --help' did not report the module program name" >&2
+            exit 1
+          fi
+          /tmp/pip-venv/bin/python -c "import numpy, pandas; print('numpy', numpy.__version__, 'pandas', pandas.__version__)"
+
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -271,13 +327,13 @@ jobs:
 
   ci-gate:
     if: always()
-    needs: [test-unit, test-integration, run-summary-contract, smoke-test, no-extras-smoke, build]
+    needs: [test-unit, test-integration, run-summary-contract, smoke-test, no-extras-smoke, pip-install-smoke, build]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Verify all required jobs passed
         # Design note: the check below treats any non-"success" result
-        # (including "skipped") as a failure. This is intentional — all five
+        # (including "skipped") as a failure. This is intentional — all seven
         # required jobs are unconditional. If a job is ever made conditional
         # (with an `if:` guard), its "skipped" result will fail this gate;
         # update the check accordingly if that happens.
@@ -288,6 +344,7 @@ jobs:
             [run-summary-contract]="${{ needs.run-summary-contract.result }}"
             [smoke-test]="${{ needs.smoke-test.result }}"
             [no-extras-smoke]="${{ needs.no-extras-smoke.result }}"
+            [pip-install-smoke]="${{ needs.pip-install-smoke.result }}"
             [build]="${{ needs.build.result }}"
           )
           failed=0
