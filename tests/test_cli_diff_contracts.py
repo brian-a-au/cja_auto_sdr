@@ -1009,7 +1009,7 @@ def test_dispatch_diff_snapshot_records_advisory_rollup_in_run_state() -> None:
 
 
 # ---------------------------------------------------------------------------
-# --include-metadata and coverage reporting
+# --include-metadata-changes and coverage reporting
 # ---------------------------------------------------------------------------
 
 
@@ -1075,8 +1075,13 @@ def test_include_metadata_flag_reaches_every_diff_family(family, tmp_path):
 def test_include_metadata_parser_flag():
     from cja_auto_sdr.cli.parser import parse_arguments
 
-    assert parse_arguments(["--compare-snapshots", "a.json", "b.json"]).include_metadata is False
-    assert parse_arguments(["--compare-snapshots", "a.json", "b.json", "--include-metadata"]).include_metadata is True
+    assert parse_arguments(["--compare-snapshots", "a.json", "b.json"]).include_metadata_changes is False
+    assert (
+        parse_arguments(
+            ["--compare-snapshots", "a.json", "b.json", "--include-metadata-changes"]
+        ).include_metadata_changes
+        is True
+    )
 
 
 def _run_compare_json(tmp_path, capsys, *flags):
@@ -1099,7 +1104,7 @@ def test_diff_json_includes_coverage_and_metadata_count(tmp_path, capsys):
 
 
 def test_include_metadata_changes_exit_code_and_policy(tmp_path, capsys):
-    code, payload = _run_compare_json(tmp_path, capsys, "--include-metadata")
+    code, payload = _run_compare_json(tmp_path, capsys, "--include-metadata-changes")
     assert code == 2
     assert payload["summary"]["metadata_policy"] == "included"
     assert payload["summary"]["has_changes"] is True
@@ -1114,7 +1119,7 @@ def test_warn_threshold_ignores_metadata_only_change(tmp_path):
 
 
 @pytest.mark.parametrize(
-    ("include", "expected"), [(False, "(not counted; use --include-metadata)"), (True, "(counted)")]
+    ("include", "expected"), [(False, "(not counted; use --include-metadata-changes)"), (True, "(counted)")]
 )
 def test_console_report_shows_metadata_line(include, expected):
     import logging
@@ -1137,14 +1142,12 @@ def test_markdown_report_shows_metadata_line(tmp_path):
     source, target = _name_only_snapshots()
     result = DataViewComparator().compare(source, target)
     path = write_diff_markdown_output(result, "d", tmp_path, logging.getLogger("t"))
-    assert "Metadata changes: 1 (not counted; use --include-metadata)" in Path(path).read_text()
+    assert "Metadata changes: 1 (not counted; use --include-metadata-changes)" in Path(path).read_text()
 
 
-def test_include_metadata_rejected_outside_org_and_diff_modes(capsys):
-    from cja_auto_sdr.generator import main
+def test_org_report_include_metadata_flag_is_unchanged():
+    from cja_auto_sdr.cli.parser import parse_arguments
 
-    with patch.object(sys, "argv", ["cja_auto_sdr", "--list-dataviews", "--include-metadata"]):
-        with pytest.raises(SystemExit) as exc_info:
-            main()
-    assert exc_info.value.code != 0
-    assert "--include-metadata is only valid with" in capsys.readouterr().err
+    args = parse_arguments(["--org-report", "--include-metadata"])
+    assert args.org_include_metadata is True
+    assert args.include_metadata_changes is False

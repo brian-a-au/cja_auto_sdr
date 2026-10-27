@@ -276,7 +276,7 @@ class DiffSummary:
             return ""
         if self.include_metadata:
             return f"Metadata changes: {self.metadata_changes} (counted)"
-        return f"Metadata changes: {self.metadata_changes} (not counted; use --include-metadata)"
+        return f"Metadata changes: {self.metadata_changes} (not counted; use --include-metadata-changes)"
 
 
 @dataclass

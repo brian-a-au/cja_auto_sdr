@@ -47,7 +47,7 @@ Use `--ignore-fields` to exclude specific fields from comparison (e.g., ignore d
 
 ### Metadata Changes and Coverage
 
-Data view name, owner, and description changes are always reported (`summary.metadata_changes` in JSON, a `Metadata changes: N` line in console and Markdown output), but by default they do not count as changes: `has_changes`, the exit code, and `--quiet-diff` ignore them. Add `--include-metadata` to count them. Counts of added, removed, and modified components, and `--warn-threshold`, always stay component-only.
+Data view name, owner, and description changes are always reported (`summary.metadata_changes` in JSON, a `Metadata changes: N` line in console and Markdown output), but by default they do not count as changes: `has_changes`, the exit code, and `--quiet-diff` ignore them. Add `--include-metadata-changes` to count them. Counts of added, removed, and modified components, and `--warn-threshold`, always stay component-only.
 
 JSON output also carries a top-level `coverage` object that states what was compared: `compare_fields` (after `--ignore-fields`), `ignored_fields`, `component_types`, `inventories`, `metadata_fields`, `metadata_policy` (`reported` or `included`), `show_only`, and `limitations`. Limitation codes:
 
@@ -673,7 +673,7 @@ To minimize API calls during name resolution, data view listings are cached for 
 | `--metrics-only` | Only compare metrics (exclude dimensions). |
 | `--dimensions-only` | Only compare dimensions (exclude metrics). |
 | `--extended-fields` | Include extended fields (attribution, format, bucketing, etc.). |
-| `--include-metadata` | Count data view name, owner, and description changes as changes for exit codes and change detection (default: reported but not counted). |
+| `--include-metadata-changes` | Count data view name, owner, and description changes as changes for exit codes and change detection (default: reported but not counted). |
 | `--side-by-side` | Show side-by-side comparison view for modified items. |
 | `--no-color` | Disable ANSI color codes in console output (global). |
 | `--quiet-diff` | Suppress output, only return exit code (0=no changes, 2=changes, 3=threshold). |
