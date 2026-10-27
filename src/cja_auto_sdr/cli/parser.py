@@ -13,7 +13,7 @@ import os
 import sys
 from collections.abc import Callable
 
-from cja_auto_sdr.cli.option_resolution import explicit_long_option_dests
+from cja_auto_sdr.cli.option_resolution import explicit_long_option_dests, resolve_long_option_token
 from cja_auto_sdr.core.constants import (
     DEFAULT_AUTO_PRUNE_KEEP_LAST,
     DEFAULT_AUTO_PRUNE_KEEP_SINCE,
@@ -40,6 +40,33 @@ def _configured_long_options(parser: argparse.ArgumentParser) -> frozenset[str]:
             if opt.startswith("--"):
                 options.add(opt)
     return frozenset(options)
+
+
+class _CliArgumentParser(argparse.ArgumentParser):
+    """ArgumentParser that runs earlier actions before rejecting an ambiguous long-option prefix.
+
+    Python 3.11 argparse rejects an ambiguous prefix such as ``--v`` before running any
+    action, so ``--version --v`` fails there but prints the version on newer versions.
+    Parsing the tokens before the first ambiguous prefix gives the newer behavior on every
+    supported version: an earlier ``--help`` or ``--version`` exits, and otherwise the
+    full parse reports the ambiguity as usual.
+    """
+
+    def parse_known_args(self, args=None, namespace=None):
+        arg_list = sys.argv[1:] if args is None else list(args)
+        ambiguous_index = self._first_ambiguous_long_option_index(arg_list)
+        if ambiguous_index is not None:
+            super().parse_known_args(arg_list[:ambiguous_index])
+        return super().parse_known_args(arg_list, namespace)
+
+    def _first_ambiguous_long_option_index(self, arg_list: list[str]) -> int | None:
+        known_long_options = _configured_long_options(self)
+        for index, arg in enumerate(arg_list):
+            if arg == "--":
+                return None
+            if resolve_long_option_token(arg, known_long_options).is_ambiguous:
+                return index
+        return None
 
 
 def _apply_agent_mode_defaults(
@@ -123,7 +150,7 @@ def parse_arguments(
     # older versions print "__main__.py". Resolve it ourselves, as the fast path does.
     from cja_auto_sdr.__main__ import _resolve_program_name
 
-    parser = argparse.ArgumentParser(
+    parser = _CliArgumentParser(
         prog=_resolve_program_name(sys.argv[0]),
         description="CJA SDR Generator - Generate Solution Design Reference for CJA Data Views",
         formatter_class=argparse.RawDescriptionHelpFormatter,

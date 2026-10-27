@@ -746,6 +746,21 @@ class TestFastPathEntryPoint:
         assert _is_fast_path_flag(["prog", "--version", "--v"]) == "--version"
         assert _is_fast_path_flag(["prog", "--version", "--quiet=1"]) == "--version"
 
+    def test_is_fast_path_flag_help_takes_precedence_over_later_ambiguous_prefix(self):
+        from cja_auto_sdr.__main__ import _is_fast_path_flag
+
+        # Python 3.11 argparse rejects ambiguous prefixes before running any action;
+        # the fast path must still match 3.12+ and honor the earlier --help / -V.
+        assert _is_fast_path_flag(["prog", "--help", "--v"]) == "--help"
+        assert _is_fast_path_flag(["prog", "-h", "--v"]) == "--help"
+        assert _is_fast_path_flag(["prog", "-V", "--v"]) == "--version"
+
+    def test_is_fast_path_flag_earlier_parse_error_still_wins_over_version(self):
+        from cja_auto_sdr.__main__ import _is_fast_path_flag
+
+        assert _is_fast_path_flag(["prog", "--v", "--version"]) is None
+        assert _is_fast_path_flag(["prog", "--format", "bogus", "--version", "--v"]) is None
+
     def test_is_fast_path_flag_exit_codes(self):
         from cja_auto_sdr.__main__ import _is_fast_path_flag
 
