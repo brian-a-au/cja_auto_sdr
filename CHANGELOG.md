@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Diff coverage:** diff JSON output now has a top-level `coverage` object that lists the fields compared, ignored fields, component types, inventories, metadata policy, `--show-only` filter, and known limitations. `summary.metadata_changes` and `summary.metadata_policy` are also new. Console and Markdown reports show a `Metadata changes: N` line.
+- **`--include-metadata` for diffs:** counts data view name, owner, and description changes as changes for `has_changes` and exit code 2. By default they are reported but not counted, as before. The same flag still enables metadata collection with `--org-report`; using it with any other mode is now an error.
+
 ### Fixed
 
 - **Derived-field diffs:** `--extended-fields` comparisons now detect changes to a derived field's `fieldDefinition` logic. Object key order is ignored, while rule order and value types are preserved.

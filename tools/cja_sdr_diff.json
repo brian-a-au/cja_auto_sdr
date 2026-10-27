@@ -58,6 +58,10 @@
         "type": "boolean",
         "description": "When true, omit unchanged components from the diff output. Reduces noise for large data views with few changes."
       },
+      "include_metadata": {
+        "type": "boolean",
+        "description": "When true, pass --include-metadata so data view name, owner, and description changes count as changes for the exit code and has_changes. Default: metadata changes are reported in summary.metadata_changes but not counted."
+      },
       "profile": {
         "type": "string",
         "description": "Named credential profile to use. Defaults to the default profile."

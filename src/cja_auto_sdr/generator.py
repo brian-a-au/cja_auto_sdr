@@ -416,6 +416,7 @@ class DiffConfig:
     metrics_only: bool = False
     dimensions_only: bool = False
     extended_fields: bool = False
+    include_metadata: bool = False
     side_by_side: bool = False
     no_color: bool = False
     quiet_diff: bool = False
@@ -453,6 +454,7 @@ class DiffSnapshotConfig:
     metrics_only: bool = False
     dimensions_only: bool = False
     extended_fields: bool = False
+    include_metadata: bool = False
     side_by_side: bool = False
     no_color: bool = False
     quiet_diff: bool = False
@@ -1575,12 +1577,21 @@ def _org_report_snapshot_retention_flags_specified(argv: list[str] | None = None
     )
 
 
+_INCLUDE_METADATA_MODES = frozenset(
+    {RunMode.ORG_REPORT, RunMode.DIFF, RunMode.DIFF_SNAPSHOT, RunMode.COMPARE_SNAPSHOTS}
+)
+
+
 def _validate_org_report_mode_scoped_cli_args(
     args: argparse.Namespace,
     *,
     inferred_mode: RunMode,
 ) -> None:
     """Validate org-report-only CLI flags on the current parsed argv."""
+    if getattr(args, "include_metadata", False) is True and inferred_mode not in _INCLUDE_METADATA_MODES:
+        _exit_error(
+            "--include-metadata is only valid with --org-report, --diff, --diff-snapshot, or --compare-snapshots"
+        )
     for option_spec in org_report_mode_scoped_option_specs():
         _validate_mode_scoped_option(
             option_name=option_spec.option_name,
@@ -6271,6 +6282,7 @@ def handle_diff_command(
     metrics_only: bool = False,
     dimensions_only: bool = False,
     extended_fields: bool = False,
+    include_metadata: bool = False,
     side_by_side: bool = False,
     no_color: bool = False,
     quiet_diff: bool = False,
@@ -6309,6 +6321,7 @@ def handle_diff_command(
         metrics_only=metrics_only,
         dimensions_only=dimensions_only,
         extended_fields=extended_fields,
+        include_metadata=include_metadata,
         side_by_side=side_by_side,
         no_color=no_color,
         quiet_diff=quiet_diff,
@@ -6347,6 +6360,7 @@ def handle_diff_snapshot_command(
     metrics_only: bool = False,
     dimensions_only: bool = False,
     extended_fields: bool = False,
+    include_metadata: bool = False,
     side_by_side: bool = False,
     no_color: bool = False,
     quiet_diff: bool = False,
@@ -6387,6 +6401,7 @@ def handle_diff_snapshot_command(
         metrics_only=metrics_only,
         dimensions_only=dimensions_only,
         extended_fields=extended_fields,
+        include_metadata=include_metadata,
         side_by_side=side_by_side,
         no_color=no_color,
         quiet_diff=quiet_diff,
@@ -6426,6 +6441,7 @@ def handle_compare_snapshots_command(
     metrics_only: bool = False,
     dimensions_only: bool = False,
     extended_fields: bool = False,
+    include_metadata: bool = False,
     side_by_side: bool = False,
     no_color: bool = False,
     quiet_diff: bool = False,
@@ -6456,6 +6472,7 @@ def handle_compare_snapshots_command(
         metrics_only=metrics_only,
         dimensions_only=dimensions_only,
         extended_fields=extended_fields,
+        include_metadata=include_metadata,
         side_by_side=side_by_side,
         no_color=no_color,
         quiet_diff=quiet_diff,
@@ -6986,7 +7003,7 @@ def _dispatch_post_validation_report_modes(
             similarity_max_dvs=getattr(args, "org_similarity_max_dvs", 250),
             force_similarity=getattr(args, "org_force_similarity", False),
             include_component_types=not getattr(args, "no_component_types", False),
-            include_metadata=getattr(args, "org_include_metadata", False),
+            include_metadata=getattr(args, "include_metadata", False),
             include_drift=getattr(args, "org_include_drift", False),
             sample_size=getattr(args, "org_sample_size", None),
             sample_seed=getattr(args, "org_sample_seed", None),

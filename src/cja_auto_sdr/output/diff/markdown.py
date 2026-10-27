@@ -140,6 +140,8 @@ def write_diff_markdown_output(
             md_parts.append("**✓ No differences found.**\n")
         else:
             md_parts.append(f"**Total: {summary.total_summary}**\n")
+        if summary.metadata_summary_line:
+            md_parts.append(f"{summary.metadata_summary_line}\n")
 
         # Metrics changes
         metric_changes = [d for d in diff_result.metric_diffs if d.change_type != ChangeType.UNCHANGED]

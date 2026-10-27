@@ -317,6 +317,7 @@ Drill into individual data view resources. These commands let you inspect a sing
 | `--metrics-only` | Only compare metrics (exclude dimensions) | False |
 | `--dimensions-only` | Only compare dimensions (exclude metrics) | False |
 | `--extended-fields` | Include extended fields (attribution, format, bucketing, etc.) | False |
+| `--include-metadata` | Count data view name, owner, and description changes as changes for exit codes and change detection (default: reported but not counted). Also used by `--org-report` | False |
 | `--side-by-side` | Show side-by-side comparison view for modified items | False |
 | `--no-color` | Disable ANSI color codes in console output (global) | False |
 | `--color-theme THEME` | Color theme for diff output: `default` (green/red) or `accessible` (blue/orange) | default |
@@ -369,7 +370,7 @@ Analyze component usage patterns across all data views in your organization.
 | Option | Description | Default |
 |--------|-------------|---------|
 | `--no-component-types` | Disable component type breakdown (standard vs derived metrics/dimensions) | False |
-| `--include-metadata` | Include data view metadata (owner, creation/modification dates, descriptions) | False |
+| `--include-metadata` | Include data view metadata (owner, creation/modification dates, descriptions). Shared with diff mode, where it counts name/owner/description changes | False |
 | `--include-drift` | Include component drift details showing exact differences between similar DV pairs | False |
 
 #### Sampling Options
@@ -1221,6 +1222,9 @@ cja_auto_sdr --diff dv_12345 dv_67890 --dimensions-only
 
 # Extended field comparison
 cja_auto_sdr --diff dv_12345 dv_67890 --extended-fields
+
+# Treat data view name, owner, or description changes as changes (exit code 2)
+cja_auto_sdr --diff dv_12345 dv_67890 --include-metadata
 
 # Side-by-side view
 cja_auto_sdr --diff dv_12345 dv_67890 --side-by-side

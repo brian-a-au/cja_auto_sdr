@@ -61,7 +61,6 @@ ORG_REPORT_MODE_SCOPED_OPTION_SPECS: tuple[ModeScopedOptionSpec, ...] = (
     ModeScopedOptionSpec("--org-summary", "org_summary", False),
     ModeScopedOptionSpec("--org-verbose", "org_verbose", False),
     ModeScopedOptionSpec("--no-component-types", "no_component_types", False),
-    ModeScopedOptionSpec("--include-metadata", "org_include_metadata", False),
     ModeScopedOptionSpec("--include-drift", "org_include_drift", False),
     ModeScopedOptionSpec("--org-shared-client", "org_shared_client", False),
     ModeScopedOptionSpec(

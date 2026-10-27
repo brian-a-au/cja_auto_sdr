@@ -12,7 +12,8 @@ from dataclasses import dataclass
 from cja_auto_sdr.cli.mode_scoped_options import org_report_mode_scoped_dests
 
 _STANDALONE_FAST_PATH_METADATA_DESTS = frozenset({"agent_mode", "config_file", "format", "output_dir", "profile"})
-_ORG_REPORT_MODE_SCOPED_DESTS = org_report_mode_scoped_dests()
+# include_metadata is shared by org-report and diff modes, so it is mode-scoped but not org-only.
+_ORG_REPORT_MODE_SCOPED_DESTS = org_report_mode_scoped_dests() | {"include_metadata"}
 
 _WRAPPER_EXECUTION_TOLERATED_SEMANTIC_DESTS = frozenset(
     {

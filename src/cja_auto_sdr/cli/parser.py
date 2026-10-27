@@ -804,6 +804,14 @@ Requirements:
     )
 
     diff_group.add_argument(
+        "--include-metadata",
+        action="store_true",
+        help="Count data view name, owner, and description changes as changes for exit codes and change detection "
+        "(default: reported but not counted). With --org-report, include data view metadata "
+        "(owner, creation/modification dates, descriptions)",
+    )
+
+    diff_group.add_argument(
         "--side-by-side",
         action="store_true",
         help="Show side-by-side comparison view for modified items (console and markdown)",
@@ -1194,14 +1202,6 @@ Requirements:
         action="store_true",
         dest="no_component_types",
         help="Disable component type breakdown (standard vs derived metrics/dimensions)",
-    )
-
-    # Metadata
-    org_group.add_argument(
-        "--include-metadata",
-        action="store_true",
-        dest="org_include_metadata",
-        help="Include data view metadata (owner, creation/modification dates, descriptions)",
     )
 
     # Drift detection

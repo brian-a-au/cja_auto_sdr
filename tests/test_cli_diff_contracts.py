@@ -1006,3 +1006,145 @@ def test_dispatch_diff_snapshot_records_advisory_rollup_in_run_state() -> None:
     assert exc_info.value.code == 0
     assert run_state["details"]["advisories"] == {"severity": "INFO", "count": 0}
     assert run_state["resolved_data_views"] == ["dv_target"]
+
+
+# ---------------------------------------------------------------------------
+# --include-metadata and coverage reporting
+# ---------------------------------------------------------------------------
+
+
+def _name_only_snapshots():
+    from cja_auto_sdr.diff.models import DataViewSnapshot
+
+    def make(name):
+        return DataViewSnapshot(
+            data_view_id="dv_1",
+            data_view_name=name,
+            owner="o",
+            description="d",
+            metrics=[{"id": "m1", "name": "M"}],
+            dimensions=[{"id": "d1", "name": "D"}],
+        )
+
+    return make("A"), make("B")
+
+
+def _write_pair(tmp_path):
+    source, target = _name_only_snapshots()
+    paths = []
+    for label, snap in (("source", source), ("target", target)):
+        path = tmp_path / f"{label}.json"
+        path.write_text(json.dumps(snap.to_dict()))
+        paths.append(str(path))
+    return paths
+
+
+def _run_diff_family(family, tmp_path, **kwargs):
+    """Run one diff command entry point on a name-only change; return (success, has_changes, exit_override)."""
+    from cja_auto_sdr.diff.commands import (
+        handle_compare_snapshots_command,
+        handle_diff_command,
+        handle_diff_snapshot_command,
+    )
+
+    source, target = _name_only_snapshots()
+    common = {"quiet": True, "quiet_diff": True, **kwargs}
+    if family == "compare_snapshots":
+        src_file, tgt_file = _write_pair(tmp_path)
+        return handle_compare_snapshots_command(source_file=src_file, target_file=tgt_file, **common)
+    with (
+        patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "config", None)),
+        patch("cja_auto_sdr.generator.cjapy"),
+    ):
+        if family == "diff_snapshot":
+            src_file, _ = _write_pair(tmp_path)
+            with patch("cja_auto_sdr.generator.SnapshotManager.create_snapshot", return_value=target):
+                return handle_diff_snapshot_command(data_view_id="dv_1", snapshot_file=src_file, **common)
+        with patch("cja_auto_sdr.generator.SnapshotManager.create_snapshot", side_effect=[source, target]):
+            return handle_diff_command(source_id="dv_1", target_id="dv_2", **common)
+
+
+@pytest.mark.parametrize("family", ["diff", "diff_snapshot", "compare_snapshots"])
+def test_include_metadata_flag_reaches_every_diff_family(family, tmp_path):
+    success, has_changes, _ = _run_diff_family(family, tmp_path)
+    assert (success, has_changes) == (True, False)
+    success, has_changes, _ = _run_diff_family(family, tmp_path, include_metadata=True)
+    assert (success, has_changes) == (True, True)
+
+
+def test_include_metadata_parser_flag():
+    from cja_auto_sdr.cli.parser import parse_arguments
+
+    assert parse_arguments(["--compare-snapshots", "a.json", "b.json"]).include_metadata is False
+    assert parse_arguments(["--compare-snapshots", "a.json", "b.json", "--include-metadata"]).include_metadata is True
+
+
+def _run_compare_json(tmp_path, capsys, *flags):
+    from cja_auto_sdr.generator import main
+
+    src_file, tgt_file = _write_pair(tmp_path)
+    argv = ["cja_auto_sdr", "--compare-snapshots", src_file, tgt_file, "--agent-mode", *flags]
+    with patch.object(sys, "argv", argv), pytest.raises(SystemExit) as exc_info:
+        main()
+    return exc_info.value.code, json.loads(capsys.readouterr().out)
+
+
+def test_diff_json_includes_coverage_and_metadata_count(tmp_path, capsys):
+    code, payload = _run_compare_json(tmp_path, capsys)
+    assert code == 0
+    assert payload["summary"]["metadata_changes"] == 1
+    assert payload["summary"]["metadata_policy"] == "reported"
+    assert payload["coverage"]["compare_fields"] == ["name", "title", "description", "type", "schemaPath"]
+    assert payload["coverage"]["metadata_policy"] == "reported"
+
+
+def test_include_metadata_changes_exit_code_and_policy(tmp_path, capsys):
+    code, payload = _run_compare_json(tmp_path, capsys, "--include-metadata")
+    assert code == 2
+    assert payload["summary"]["metadata_policy"] == "included"
+    assert payload["summary"]["has_changes"] is True
+
+
+def test_warn_threshold_ignores_metadata_only_change(tmp_path):
+    _, has_changes, exit_override = _run_diff_family(
+        "compare_snapshots", tmp_path, include_metadata=True, warn_threshold=0.0
+    )
+    assert has_changes is True
+    assert exit_override is None
+
+
+@pytest.mark.parametrize(
+    ("include", "expected"), [(False, "(not counted; use --include-metadata)"), (True, "(counted)")]
+)
+def test_console_report_shows_metadata_line(include, expected):
+    import logging
+
+    from cja_auto_sdr.diff.comparator import DataViewComparator
+    from cja_auto_sdr.output.diff.console import write_diff_console_output
+
+    source, target = _name_only_snapshots()
+    result = DataViewComparator(include_metadata=include).compare(source, target)
+    text = write_diff_console_output(result, logging.getLogger("t"), use_color=False)
+    assert f"Metadata changes: 1 {expected}" in text
+
+
+def test_markdown_report_shows_metadata_line(tmp_path):
+    import logging
+
+    from cja_auto_sdr.diff.comparator import DataViewComparator
+    from cja_auto_sdr.output.diff.markdown import write_diff_markdown_output
+
+    source, target = _name_only_snapshots()
+    result = DataViewComparator().compare(source, target)
+    path = write_diff_markdown_output(result, "d", tmp_path, logging.getLogger("t"))
+    assert "Metadata changes: 1 (not counted; use --include-metadata)" in Path(path).read_text()
+
+
+def test_include_metadata_rejected_outside_org_and_diff_modes(capsys):
+    from cja_auto_sdr.generator import main
+
+    with patch.object(sys, "argv", ["cja_auto_sdr", "--list-dataviews", "--include-metadata"]):
+        with pytest.raises(SystemExit) as exc_info:
+            main()
+    assert exc_info.value.code != 0
+    assert "--include-metadata is only valid with" in capsys.readouterr().err

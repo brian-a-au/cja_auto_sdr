@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 
 from cja_auto_sdr.core.version import __version__
-
 
 LIMITATION_SHOW_ONLY_GATE_SCOPE = "show_only_filters_change_detection"
 LIMITATION_THRESHOLD_COMPONENTS_ONLY = "warn_threshold_uses_component_percent_only"
@@ -104,7 +104,7 @@ class DiffSummary:
         """
         return (
             (self.include_metadata and self.metadata_changes > 0)
-            or             self.metrics_added > 0
+            or self.metrics_added > 0
             or self.metrics_removed > 0
             or self.metrics_modified > 0
             or self.dimensions_added > 0
@@ -265,7 +265,18 @@ class DiffSummary:
         if self.total_modified:
             parts.append(f"{self.total_modified} modified")
 
-        return ", ".join(parts) if parts else "No changes"
+        if not parts:
+            return "Metadata changes only"
+        return ", ".join(parts)
+
+    @property
+    def metadata_summary_line(self) -> str:
+        """Report line for metadata changes, or '' when there are none."""
+        if not self.metadata_changes:
+            return ""
+        if self.include_metadata:
+            return f"Metadata changes: {self.metadata_changes} (counted)"
+        return f"Metadata changes: {self.metadata_changes} (not counted; use --include-metadata)"
 
 
 @dataclass
@@ -295,8 +306,8 @@ class DiffCoverage:
     inventories: list[str]
     metadata_policy: str  # "reported" or "included"
     show_only: list[str] | None = None
-    limitations: list[str] = field(default_factory=list)
-    metadata_fields: list[str] = field(default_factory=lambda: ["name", "owner", "description"])
+    limitations: list[str] = dataclass_field(default_factory=list)
+    metadata_fields: list[str] = dataclass_field(default_factory=lambda: ["name", "owner", "description"])
 
     def to_dict(self) -> dict[str, Any]:
         return {
