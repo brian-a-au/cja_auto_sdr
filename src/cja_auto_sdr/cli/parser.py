@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+import sys
 from collections.abc import Callable
 
 from cja_auto_sdr.cli.option_resolution import explicit_long_option_dests
@@ -118,7 +119,12 @@ def parse_arguments(
 
         _bootstrap_dotenv(logging.getLogger(__name__))
 
+    # Python 3.14's argparse reports "python -m cja_auto_sdr" for module runs;
+    # older versions print "__main__.py". Resolve it ourselves, as the fast path does.
+    from cja_auto_sdr.__main__ import _resolve_program_name
+
     parser = argparse.ArgumentParser(
+        prog=_resolve_program_name(sys.argv[0]),
         description="CJA SDR Generator - Generate Solution Design Reference for CJA Data Views",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""

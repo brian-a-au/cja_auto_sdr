@@ -335,7 +335,15 @@ class TestConfigFromEnvCleanup:
         candidate = tmp_path / "cja_env_config_stat_fail.json"
         candidate.write_text("{}", encoding="utf-8")
 
-        with patch("cja_auto_sdr.api.client.Path.stat", side_effect=OSError("stat failed")):
+        real_stat = Path.stat
+
+        def stat_failing_for_candidate(self, *args, **kwargs):
+            # Fail only for the candidate; the temp-directory scan itself needs a real stat().
+            if self == candidate:
+                raise OSError("stat failed")
+            return real_stat(self, *args, **kwargs)
+
+        with patch("cja_auto_sdr.api.client.Path.stat", autospec=True, side_effect=stat_failing_for_candidate):
             next_scan_in = _cleanup_stale_temp_configs(mock_logger)
 
         # No file removed (stat failed), and the candidate is left in place.
