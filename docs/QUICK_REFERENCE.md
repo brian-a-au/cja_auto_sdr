@@ -292,7 +292,7 @@ cja_auto_sdr --org-report --no-component-types
 cja_auto_sdr --org-report --owner-summary
 
 # Include metadata in output
-cja_auto_sdr --org-report --include-metadata-changes
+cja_auto_sdr --org-report --include-metadata
 ```
 
 ## Profile Management (Multi-Org)

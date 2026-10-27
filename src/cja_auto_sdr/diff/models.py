@@ -232,6 +232,8 @@ class DiffSummary:
             parts.append(f"Segments: {', '.join(seg_parts)}")
 
         if not parts:
+            if self.include_metadata and self.metadata_changes > 0:
+                return "Metadata changes only"
             return "No changes detected"
 
         return "; ".join(parts)

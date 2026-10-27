@@ -1110,12 +1110,53 @@ def test_include_metadata_changes_exit_code_and_policy(tmp_path, capsys):
     assert payload["summary"]["has_changes"] is True
 
 
-def test_warn_threshold_ignores_metadata_only_change(tmp_path):
-    _, has_changes, exit_override = _run_diff_family(
-        "compare_snapshots", tmp_path, include_metadata=True, warn_threshold=0.0
+def _mixed_pair(tmp_path):
+    """Ten metrics, one modified (10% component change), plus a data view name change."""
+    from cja_auto_sdr.diff.models import DataViewSnapshot
+
+    paths = []
+    for label, name, changed in (("source", "A", False), ("target", "B", True)):
+        metrics = [{"id": f"m{i}", "name": "M" if not (changed and i == 0) else "M changed"} for i in range(10)]
+        snap = DataViewSnapshot(
+            data_view_id="dv_1", data_view_name=name, owner="o", description="d", metrics=metrics, dimensions=[]
+        )
+        path = tmp_path / f"{label}.json"
+        path.write_text(json.dumps(snap.to_dict()))
+        paths.append(str(path))
+    return paths
+
+
+@pytest.mark.parametrize(("threshold", "expected_exit"), [(50.0, None), (5.0, 3)])
+def test_warn_threshold_uses_component_percent_when_metadata_counted(tmp_path, threshold, expected_exit):
+    from cja_auto_sdr.diff.commands import handle_compare_snapshots_command
+
+    src, tgt = _mixed_pair(tmp_path)
+    _, has_changes, exit_override = handle_compare_snapshots_command(
+        source_file=src,
+        target_file=tgt,
+        quiet=True,
+        quiet_diff=True,
+        include_metadata=True,
+        warn_threshold=threshold,
     )
     assert has_changes is True
-    assert exit_override is None
+    # Component-only change is 10%: 50% threshold is not exceeded, 5% is.
+    assert exit_override == expected_exit
+
+
+def test_summary_text_for_counted_metadata_only_change():
+    from cja_auto_sdr.diff.comparator import DataViewComparator
+    from cja_auto_sdr.output.diff.console import write_diff_console_output
+
+    source, target = _name_only_snapshots()
+    result = DataViewComparator(include_metadata=True).compare(source, target)
+    assert result.summary.natural_language_summary == "Metadata changes only"
+    text = write_diff_console_output(result, summary_only=True, use_color=False)
+    assert "Summary: Metadata changes only" in text
+    assert "No changes detected" not in text
+    # Not counted: wording is unchanged.
+    plain = DataViewComparator().compare(source, target)
+    assert plain.summary.natural_language_summary == "No changes detected"
 
 
 @pytest.mark.parametrize(
