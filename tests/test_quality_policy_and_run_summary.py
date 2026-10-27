@@ -2368,3 +2368,23 @@ class TestRunSummaryTimingHardening:
         assert payload["started_at"] == "2026-04-01T15:29:55+00:00"
         assert payload["ended_at"] == fixed_now.isoformat()
         assert payload["duration_seconds"] == 5.0
+
+
+# ==================== Quality identity does not change severity counts ====================
+
+
+def test_severity_counts_ignore_rule_identity_fields():
+    issues = [
+        {
+            "Severity": "LOW",
+            "Category": "Missing Descriptions",
+            "Rule ID": "dq.missing_description.v1",
+            "Component IDs": ["a", "b", "c"],
+            "Occurrences": 3,
+            "Unaddressable IDs": 0,
+        },
+        {"Severity": "HIGH", "Category": "Duplicates", "Component IDs": [], "Occurrences": 2},
+    ]
+    counts = count_quality_issues_by_severity(issues)
+    assert counts["LOW"] == 1
+    assert counts["HIGH"] == 1

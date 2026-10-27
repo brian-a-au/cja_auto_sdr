@@ -1529,7 +1529,7 @@ uv run cja_auto_sdr dv_123 --agent-mode --run-summary-json run_summary.json
 - **Location**: Specified by `--output-dir`
 - **Sheets** (in order):
   1. Metadata
-  2. Data Quality
+  2. Data Quality (includes `Rule ID`, `Component IDs`, `Occurrences` and `Unaddressable IDs` columns; see [Data Quality](DATA_QUALITY.md))
   3. DataView Details
   4. Metrics
   5. Dimensions

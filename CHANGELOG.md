@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Quality rule identity:** every data quality issue now has a stable `Rule ID` (for example `dq.missing_description.v1`), a sorted list of affected `Component IDs`, an `Occurrences` count and an `Unaddressable IDs` count. These appear as four new trailing columns in the Data Quality output. JSON keeps `Component IDs` as a list. Excel, CSV, HTML and Markdown show it as a comma-separated string. Severity counts are unchanged.
 - **Diff coverage:** diff JSON output now has a top-level `coverage` object that lists the fields compared, ignored fields, component types, inventories, metadata policy, `--show-only` filter, and known limitations. `summary.metadata_changes` and `summary.metadata_policy` are also new. Console and Markdown reports show a `Metadata changes: N` line.
 - **`--include-metadata-changes` for diffs:** counts data view name, owner, and description changes as changes for `has_changes` and exit code 2. By default they are reported but not counted, as before.
 

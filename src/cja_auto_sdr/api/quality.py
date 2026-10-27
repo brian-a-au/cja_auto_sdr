@@ -2,15 +2,58 @@
 
 import logging
 import threading
+from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import ClassVar
+from typing import Any, ClassVar, Final
 
+import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
 from cja_auto_sdr.api.cache import ValidationCache
 from cja_auto_sdr.core.colors import _format_error_msg
 from cja_auto_sdr.core.constants import DEFAULT_VALIDATION_WORKERS, QUALITY_SEVERITY_ORDER, TQDM_BAR_FORMAT
+
+# Stable, versioned rule identities. A rule's meaning change bumps the ``.vN`` suffix.
+QUALITY_RULE_IDS: Final[dict[str, str]] = {
+    "Empty Data": "dq.empty_data.v1",
+    "Missing Fields": "dq.missing_required_fields.v1",
+    "Duplicates": "dq.duplicate_name.v1",
+    "Null Values": "dq.null_critical_field.v1",
+    "Missing Descriptions": "dq.missing_description.v1",
+    "Invalid IDs": "dq.invalid_id.v1",
+}
+CUSTOM_RULE_ID: Final = "dq.custom.unknown"
+
+
+def partition_component_ids(values: Iterable[object]) -> tuple[list[str], int]:
+    """Split values into sorted unique addressable component IDs and an unaddressable count.
+
+    Unaddressable values are None, pandas NA/NaN, empty or whitespace-only strings,
+    booleans, and anything that is not a ``str`` or ``int``. IDs are never derived from names.
+    """
+    addressable: set[str] = set()
+    unaddressable = 0
+    for value in values:
+        if isinstance(value, str):
+            if value.strip():
+                addressable.add(value)
+            else:
+                unaddressable += 1
+        elif isinstance(value, (bool, np.bool_)):
+            unaddressable += 1
+        elif isinstance(value, (int, np.integer)):
+            addressable.add(str(int(value)))
+        else:
+            unaddressable += 1
+    return sorted(addressable), unaddressable
+
+
+def _ids_for_mask(df: pd.DataFrame, mask: Any) -> list[object]:
+    """Return raw id values for the masked rows (empty when there is no id column)."""
+    if "id" not in df.columns:
+        return []
+    return df.loc[mask, "id"].tolist()
 
 
 class DataQualityChecker:
@@ -39,8 +82,25 @@ class DataQualityChecker:
         item_name: str,
         description: str,
         details: str = "",
-    ) -> dict[str, str]:
+        *,
+        rule_id: str | None = None,
+        component_ids: Iterable[object] | None = None,
+        occurrences: int | None = None,
+    ) -> dict[str, Any]:
         """Add a data quality issue to the tracker (thread-safe)"""
+        if component_ids is None:
+            ids: list[str] = []
+            unaddressable = 0
+            default_occurrences = 1
+        else:
+            values = list(component_ids)
+            ids, unaddressable = partition_component_ids(values)
+            default_occurrences = len(values)
+        if occurrences is None:
+            occurrences = default_occurrences
+        elif component_ids is not None:
+            # Occurrences beyond the supplied values have no usable ID.
+            unaddressable += max(0, occurrences - default_occurrences)
         issue = {
             "Severity": severity,
             "Category": category,
@@ -48,6 +108,10 @@ class DataQualityChecker:
             "Item Name": item_name,
             "Issue": description,
             "Details": details,
+            "Rule ID": rule_id if rule_id is not None else QUALITY_RULE_IDS.get(category, CUSTOM_RULE_ID),
+            "Component IDs": ids,
+            "Occurrences": int(occurrences),
+            "Unaddressable IDs": unaddressable,
         }
 
         # Thread-safe append operation
@@ -89,6 +153,8 @@ class DataQualityChecker:
                     item_name=str(name),
                     description=f"Duplicate name found {count} times",
                     details=f"This {item_type.lower()} name appears {count} times in the data view",
+                    component_ids=_ids_for_mask(df, df["name"] == name),
+                    occurrences=int(count),
                 )
         except (KeyError, TypeError, AttributeError, ValueError) as e:
             self.logger.error(_format_error_msg("checking duplicates", item_type, e))
@@ -135,6 +201,8 @@ class DataQualityChecker:
                             item_name=item_names,
                             description=f'Null values in "{field}" field',
                             details=f"{null_count} item(s) missing {field}. Items: {item_names}",
+                            component_ids=_ids_for_mask(df, null_mask),
+                            occurrences=int(null_count),
                         )
         except (KeyError, TypeError, AttributeError, ValueError) as e:
             self.logger.error(_format_error_msg("checking null values", item_type, e))
@@ -161,6 +229,8 @@ class DataQualityChecker:
                     item_name=f"{missing_desc_count} items",
                     description=f"{missing_desc_count} items without descriptions",
                     details=f"Items: {', '.join(str(x) for x in item_names)}",
+                    component_ids=_ids_for_mask(df, missing_desc),
+                    occurrences=int(missing_desc_count),
                 )
         except (KeyError, TypeError, AttributeError, ValueError) as e:
             self.logger.error(_format_error_msg("checking descriptions", item_type, e))
@@ -200,6 +270,8 @@ class DataQualityChecker:
                     item_name=f"{missing_ids_count} items",
                     description=f"{missing_ids_count} items with missing or invalid IDs",
                     details="Items without valid IDs may cause issues in reporting",
+                    component_ids=[],
+                    occurrences=int(missing_ids_count),
                 )
         except (KeyError, TypeError, AttributeError, ValueError) as e:
             self.logger.error(_format_error_msg("checking ID validity", item_type, e))
@@ -220,7 +292,7 @@ class DataQualityChecker:
         try:
             # Check cache first (before any processing)
             cache_key = None
-            local_issues: list[dict[str, str]] = []
+            local_issues: list[dict[str, Any]] = []
 
             def _record_issue(
                 severity: str,
@@ -228,6 +300,8 @@ class DataQualityChecker:
                 item_name: str,
                 description: str,
                 details: str = "",
+                component_ids: Iterable[object] | None = None,
+                occurrences: int | None = None,
             ) -> None:
                 issue = self.add_issue(
                     severity=severity,
@@ -236,9 +310,11 @@ class DataQualityChecker:
                     item_name=item_name,
                     description=description,
                     details=details,
+                    component_ids=component_ids,
+                    occurrences=occurrences,
                 )
                 # Keep a per-call copy so cache writes cannot bleed across concurrent threads.
-                local_issues.append(issue.copy())
+                local_issues.append({**issue, "Component IDs": list(issue["Component IDs"])})
 
             if self.validation_cache is not None:
                 cached_issues, cache_key = self.validation_cache.get(df, item_type, required_fields, critical_fields)
@@ -279,6 +355,11 @@ class DataQualityChecker:
             if "name" in df.columns:
                 duplicates = df["name"].value_counts()
                 duplicates = duplicates[duplicates > 1]
+                ids_by_name = (
+                    df[df["name"].isin(duplicates.index)].groupby("name", sort=False)["id"].agg(list)
+                    if len(duplicates) and "id" in df.columns
+                    else None
+                )
                 for name, count in duplicates.items():
                     _record_issue(
                         severity="HIGH",
@@ -286,6 +367,8 @@ class DataQualityChecker:
                         item_name=str(name),
                         description=f"Duplicate name found {count} times",
                         details=f"This {item_type.lower()} name appears {count} times in the data view",
+                        component_ids=ids_by_name.loc[name] if ids_by_name is not None else [],
+                        occurrences=int(count),
                     )
 
             # Check 4: Vectorized null value checks
@@ -305,6 +388,8 @@ class DataQualityChecker:
                         item_name=item_names,
                         description=f'Null values in "{field}" field',
                         details=f"{null_count} item(s) missing {field}. Items: {item_names}",
+                        component_ids=_ids_for_mask(df, null_mask[field]),
+                        occurrences=int(null_count),
                     )
 
             # Check 5: Vectorized missing descriptions check
@@ -319,6 +404,8 @@ class DataQualityChecker:
                         item_name=f"{missing_desc_count} items",
                         description=f"{missing_desc_count} items without descriptions",
                         details=f"Items: {', '.join(str(x) for x in item_names)}",
+                        component_ids=_ids_for_mask(df, missing_desc),
+                        occurrences=int(missing_desc_count),
                     )
 
             # Check 6: Vectorized ID validity check
@@ -331,6 +418,8 @@ class DataQualityChecker:
                         item_name=f"{missing_ids_count} items",
                         description=f"{missing_ids_count} items with missing or invalid IDs",
                         details="Items without valid IDs may cause issues in reporting",
+                        component_ids=[],
+                        occurrences=int(missing_ids_count),
                     )
 
             if self.logger.isEnabledFor(logging.DEBUG):
@@ -437,7 +526,18 @@ class DataQualityChecker:
             df["Severity"] = df["Severity"].astype(severity_dtype)
 
             # Reorder columns: Severity first for better readability
-            preferred_order = ["Severity", "Category", "Type", "Item Name", "Issue", "Details"]
+            preferred_order = [
+                "Severity",
+                "Category",
+                "Type",
+                "Item Name",
+                "Issue",
+                "Details",
+                "Rule ID",
+                "Component IDs",
+                "Occurrences",
+                "Unaddressable IDs",
+            ]
             existing_cols = [col for col in preferred_order if col in df.columns]
             other_cols = [col for col in df.columns if col not in preferred_order]
             df = df[existing_cols + other_cols]

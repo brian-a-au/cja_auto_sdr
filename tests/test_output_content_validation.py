@@ -499,3 +499,79 @@ class TestCrossFormatConsistency:
             json_data = json.load(f)
 
         assert len(csv_dq) == len(json_data["data_quality"])
+
+
+# ---------------------------------------------------------------------------
+# Quality rule identity in exports
+# ---------------------------------------------------------------------------
+
+
+def _identity_dq_data_dict():
+    return {
+        "Data Quality": pd.DataFrame(
+            [
+                {
+                    "Severity": "LOW",
+                    "Category": "Missing Descriptions",
+                    "Type": "Metrics",
+                    "Item Name": "2 items",
+                    "Issue": "2 items without descriptions",
+                    "Details": "Items: A, B",
+                    "Rule ID": "dq.missing_description.v1",
+                    "Component IDs": ["a", "b"],
+                    "Occurrences": 2,
+                    "Unaddressable IDs": 0,
+                },
+            ],
+        ),
+    }
+
+
+class TestQualityIdentityExports:
+    def test_to_display_frame_joins_lists_and_does_not_mutate(self):
+        from cja_auto_sdr.output.sdr import to_display_frame
+
+        df = pd.DataFrame({"ids": [["a", "b"], []], "obj": [{"k": [1]}, [{"x": 1}]], "n": [1, 2]})
+        before = df.copy(deep=True)
+        out = to_display_frame(df)
+        assert out["ids"].tolist() == ["a, b", ""]
+        assert out["obj"][0] == json.dumps({"k": [1]}, indent=2)
+        assert out["obj"][1] == json.dumps([{"x": 1}], indent=2)
+        assert out["n"].tolist() == [1, 2]
+        assert isinstance(df["ids"][0], list)
+        assert df["obj"].tolist() == before["obj"].tolist()
+
+    def test_json_keeps_component_ids_as_list(self, tmp_path, rich_metadata_dict):
+        path = write_json_output(_identity_dq_data_dict(), rich_metadata_dict, "t", str(tmp_path), logging.getLogger())
+        with open(path) as f:
+            data = json.load(f)
+        assert data["data_quality"][0]["Component IDs"] == ["a", "b"]
+        assert data["data_quality"][0]["Rule ID"] == "dq.missing_description.v1"
+
+    def test_csv_joins_component_ids(self, tmp_path):
+        out = write_csv_output(_identity_dq_data_dict(), "t", str(tmp_path), logging.getLogger())
+        row = pd.read_csv(os.path.join(out, "data_quality.csv")).iloc[0]
+        assert row["Component IDs"] == "a, b"
+        assert row["Rule ID"] == "dq.missing_description.v1"
+
+    def test_excel_data_quality_cell_is_joined(self, tmp_path):
+        path = write_excel_output(_identity_dq_data_dict(), "t", str(tmp_path), logging.getLogger())
+        with zipfile.ZipFile(path) as zf:
+            root = ET.fromstring(zf.read("xl/sharedStrings.xml"))
+        strings = ["".join(t.text or "" for t in si.findall(".//x:t", XLSX_NS)) for si in root.findall("x:si", XLSX_NS)]
+        assert "Component IDs" in strings
+        assert "a, b" in strings
+
+    def test_html_and_markdown_render_joined_ids(self, tmp_path, rich_metadata_dict):
+        html_path = write_html_output(
+            _identity_dq_data_dict(), rich_metadata_dict, "t", str(tmp_path), logging.getLogger()
+        )
+        md_path = write_markdown_output(
+            _identity_dq_data_dict(),
+            rich_metadata_dict,
+            "t",
+            str(tmp_path),
+            logging.getLogger(),
+        )
+        assert "a, b" in open(html_path).read()
+        assert "| a, b |" in open(md_path).read()

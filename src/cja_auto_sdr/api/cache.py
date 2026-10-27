@@ -60,6 +60,19 @@ def _validate_cache_params(max_size: int, ttl_seconds: int) -> None:
         raise ValueError(f"ttl_seconds must be > 0, got {ttl_seconds}")
 
 
+def _normalized_issue_copy(issue: dict) -> dict:
+    """Copy an issue (including list values) and add rule identity defaults if missing."""
+    from cja_auto_sdr.api.quality import CUSTOM_RULE_ID, QUALITY_RULE_IDS
+
+    copied = {key: (list(value) if isinstance(value, list) else value) for key, value in issue.items()}
+    if "Rule ID" not in copied:
+        copied["Rule ID"] = QUALITY_RULE_IDS.get(copied.get("Category", ""), CUSTOM_RULE_ID)
+        copied.setdefault("Component IDs", [])
+        copied.setdefault("Occurrences", 1)
+        copied.setdefault("Unaddressable IDs", 0)
+    return copied
+
+
 class ValidationCache:
     """
     Thread-safe LRU cache for data quality validation results
@@ -182,7 +195,7 @@ class ValidationCache:
                 self.logger.debug("Cache HIT: %s (%s issues)", item_type, len(cached_issues))
 
             # Return deep copy to prevent mutation of cached data
-            return [issue.copy() for issue in cached_issues], cache_key
+            return [_normalized_issue_copy(issue) for issue in cached_issues], cache_key
 
     def put(
         self,
@@ -215,7 +228,7 @@ class ValidationCache:
 
             # Store issues with timestamp
             # Deep copy to prevent external mutation
-            self._cache[cache_key] = ([issue.copy() for issue in issues], now)
+            self._cache[cache_key] = ([_normalized_issue_copy(issue) for issue in issues], now)
             # OrderedDict preserves position on overwrite, so one move_to_end()
             # after assignment is sufficient for both inserts and overwrites.
             self._cache.move_to_end(cache_key)
@@ -450,7 +463,7 @@ class SharedValidationCache:
             self._stats["hits"] = self._stats.get("hits", 0) + 1
 
             # Return copy to prevent mutation
-            return [issue.copy() for issue in cached_issues], cache_key
+            return [_normalized_issue_copy(issue) for issue in cached_issues], cache_key
 
     def _remove_entry(self, cache_key: str) -> bool:
         """Remove key from cache and access metadata (must be called within lock)."""
@@ -540,7 +553,7 @@ class SharedValidationCache:
                 self._ensure_capacity_for_new_entry(now)
 
             # Store issues with timestamp (deep copy for safety)
-            self._cache[cache_key] = ([issue.copy() for issue in issues], now)
+            self._cache[cache_key] = ([_normalized_issue_copy(issue) for issue in issues], now)
             self._access_times[cache_key] = now
 
     def _evict_lru(self, now: float | None = None, access_times_reconciled: bool = False) -> bool:

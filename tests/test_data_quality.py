@@ -178,3 +178,210 @@ class TestDataQualityValidation:
         # Should have both Metrics and Dimensions issues
         assert "Metrics" in issues_df["Type"].values
         assert "Dimensions" in issues_df["Type"].values
+
+
+# ==================== Rule identity and component membership ====================
+
+import pytest  # noqa: E402
+
+from cja_auto_sdr.api.cache import ValidationCache  # noqa: E402
+from cja_auto_sdr.api.quality import (  # noqa: E402
+    CUSTOM_RULE_ID,
+    QUALITY_RULE_IDS,
+    partition_component_ids,
+)
+
+REQ = ["id", "name"]
+CRIT = ["id", "name"]
+
+
+def _identity_checker(cache=None):
+    return DataQualityChecker(logging.getLogger("test_identity"), validation_cache=cache, quiet=True)
+
+
+def _metrics_df(n=30, description="", names=None):
+    return pd.DataFrame(
+        {
+            "id": [f"metrics/m{i:02d}" for i in range(n)],
+            "name": names or [f"Metric {i}" for i in range(n)],
+            "description": [description] * n,
+        },
+    )
+
+
+def _by_category(checker, category):
+    return [i for i in checker.issues if i["Category"] == category]
+
+
+def test_missing_descriptions_lists_all_ids_in_one_issue():
+    df = _metrics_df(n=30)
+    checker = _identity_checker()
+    checker.check_all_quality_issues_optimized(df, "Metrics", REQ, CRIT)
+    [issue] = _by_category(checker, "Missing Descriptions")
+    assert issue["Rule ID"] == "dq.missing_description.v1"
+    assert issue["Component IDs"] == sorted(df["id"])
+    assert issue["Occurrences"] == 30
+    assert issue["Unaddressable IDs"] == 0
+
+
+def test_rename_preserves_rule_and_component_identity():
+    a = _identity_checker()
+    b = _identity_checker()
+    a.check_all_quality_issues_optimized(_metrics_df(n=5), "Metrics", REQ, CRIT)
+    renamed = _metrics_df(n=5, names=[f"Renamed {i}" for i in range(5)])
+    b.check_all_quality_issues_optimized(renamed, "Metrics", REQ, CRIT)
+    [ia] = _by_category(a, "Missing Descriptions")
+    [ib] = _by_category(b, "Missing Descriptions")
+    assert ia["Rule ID"] == ib["Rule ID"]
+    assert ia["Component IDs"] == ib["Component IDs"]
+
+
+def test_row_order_does_not_change_membership():
+    df = _metrics_df(n=10)
+    shuffled = df.sample(frac=1, random_state=3).reset_index(drop=True)
+    a, b = _identity_checker(), _identity_checker()
+    a.check_all_quality_issues_optimized(df, "Metrics", REQ, CRIT)
+    b.check_all_quality_issues_optimized(shuffled, "Metrics", REQ, CRIT)
+    assert (
+        _by_category(a, "Missing Descriptions")[0]["Component IDs"]
+        == _by_category(b, "Missing Descriptions")[0]["Component IDs"]
+    )
+
+
+def test_partition_component_ids_counts_unaddressable():
+    assert partition_component_ids(["b", "a", "a", None, "", "  ", float("nan"), {"x": 1}]) == (["a", "b"], 5)
+
+
+def test_partition_component_ids_bool_unaddressable_and_ints_stringified():
+    assert partition_component_ids([True, 7, False, pd.NA]) == (["7"], 3)
+
+
+def test_legacy_and_optimized_paths_agree_on_rules():
+    df = pd.DataFrame(
+        {
+            "id": ["a", "b", "c", None],
+            "name": ["Dup", "Dup", None, "Solo"],
+            "description": ["", "ok", "ok", None],
+        },
+    )
+    opt = _identity_checker()
+    opt.check_all_quality_issues_optimized(df, "Metrics", REQ, CRIT)
+    legacy = _identity_checker()
+    legacy.check_duplicates(df, "Metrics")
+    legacy.check_null_values(df, "Metrics", CRIT)
+    legacy.check_missing_descriptions(df, "Metrics")
+    legacy.check_id_validity(df, "Metrics")
+
+    def key(issue):
+        return (
+            issue["Category"],
+            issue["Item Name"],
+            issue["Rule ID"],
+            tuple(issue["Component IDs"]),
+            issue["Occurrences"],
+            issue["Unaddressable IDs"],
+        )
+
+    assert sorted(map(key, opt.issues)) == sorted(map(key, legacy.issues))
+    [invalid] = _by_category(opt, "Invalid IDs")
+    assert invalid["Component IDs"] == [] and invalid["Occurrences"] == 1 and invalid["Unaddressable IDs"] == 1
+    [dup] = _by_category(opt, "Duplicates")
+    assert dup["Component IDs"] == ["a", "b"] and dup["Rule ID"] == QUALITY_RULE_IDS["Duplicates"]
+
+
+def test_null_values_membership_and_unaddressable():
+    df = pd.DataFrame({"id": ["a", None, "c"], "name": ["x", "y", None], "description": ["d"] * 3})
+    checker = _identity_checker()
+    checker.check_all_quality_issues_optimized(df, "Metrics", REQ, CRIT)
+    nulls = {i["Item Name"]: i for i in _by_category(checker, "Null Values")}
+    by_desc = {i["Issue"]: i for i in _by_category(checker, "Null Values")}
+    assert len(nulls) == 2
+    assert by_desc['Null values in "name" field']["Component IDs"] == ["c"]
+    assert by_desc['Null values in "id" field']["Unaddressable IDs"] == 1
+
+
+def test_empty_and_missing_fields_have_no_components():
+    checker = _identity_checker()
+    checker.check_all_quality_issues_optimized(pd.DataFrame(), "Metrics", REQ, CRIT)
+    checker.check_all_quality_issues_optimized(pd.DataFrame({"id": ["a"]}), "Dimensions", REQ, CRIT)
+    for issue in checker.issues:
+        assert issue["Component IDs"] == [] and issue["Occurrences"] == 1 and issue["Unaddressable IDs"] == 0
+    assert checker.issues[0]["Rule ID"] == "dq.empty_data.v1"
+    assert checker.issues[1]["Rule ID"] == "dq.missing_required_fields.v1"
+
+
+def test_custom_add_issue_gets_custom_rule():
+    checker = _identity_checker()
+    assert checker.add_issue("LOW", "My Check", "Metrics", "x", "d")["Rule ID"] == CUSTOM_RULE_ID == "dq.custom.unknown"
+    explicit = checker.add_issue("LOW", "My Check", "Metrics", "x", "d", rule_id="dq.mine.v1", component_ids=["a", 3])
+    assert explicit["Rule ID"] == "dq.mine.v1"
+    assert explicit["Component IDs"] == ["3", "a"] and explicit["Occurrences"] == 2
+
+
+def test_cached_issue_without_rule_id_is_normalized():
+    cache = ValidationCache()
+    df = _metrics_df(n=3)
+    _, key = cache.get(df, "Metrics", REQ, CRIT)
+    legacy = {
+        "Severity": "LOW",
+        "Category": "Missing Descriptions",
+        "Type": "Metrics",
+        "Item Name": "3 items",
+        "Issue": "3 items without descriptions",
+        "Details": "x",
+    }
+    cache._cache[key] = ([legacy], __import__("time").monotonic())
+    checker = _identity_checker(cache)
+    checker.check_all_quality_issues_optimized(df, "Metrics", REQ, CRIT)
+    [issue] = checker.issues
+    assert issue["Rule ID"] == "dq.missing_description.v1"
+    assert issue["Component IDs"] == [] and issue["Occurrences"] == 1 and issue["Unaddressable IDs"] == 0
+    assert "Rule ID" not in legacy
+
+
+def test_cache_returns_independent_component_id_lists():
+    cache = ValidationCache()
+    df = _metrics_df(n=3)
+    first = _identity_checker(cache)
+    first.check_all_quality_issues_optimized(df, "Metrics", REQ, CRIT)
+    first.issues[0]["Component IDs"].append("mutated")
+    second = _identity_checker(cache)
+    second.check_all_quality_issues_optimized(df, "Metrics", REQ, CRIT)
+    assert "mutated" not in _by_category(second, "Missing Descriptions")[0]["Component IDs"]
+
+
+def test_severity_counts_unchanged_for_grouped_issue():
+    from cja_auto_sdr.api.quality_policy import count_quality_issues_by_severity
+
+    checker = _identity_checker()
+    checker.check_all_quality_issues_optimized(_metrics_df(n=30), "Metrics", REQ, CRIT)
+    assert count_quality_issues_by_severity(checker.issues)["LOW"] == 1
+
+
+def test_parallel_path_yields_identity_fields():
+    checker = _identity_checker()
+    checker.check_all_parallel(_metrics_df(n=4), _metrics_df(n=2), REQ, REQ, CRIT)
+    assert all(i["Rule ID"] == "dq.missing_description.v1" for i in checker.issues)
+    assert sorted(len(i["Component IDs"]) for i in checker.issues) == [2, 4]
+
+
+def test_issues_dataframe_column_order():
+    checker = _identity_checker()
+    checker.check_all_quality_issues_optimized(_metrics_df(n=3), "Metrics", REQ, CRIT)
+    assert list(checker.get_issues_dataframe().columns) == [
+        "Severity",
+        "Category",
+        "Type",
+        "Item Name",
+        "Issue",
+        "Details",
+        "Rule ID",
+        "Component IDs",
+        "Occurrences",
+        "Unaddressable IDs",
+    ]
+
+
+@pytest.mark.parametrize("bad", [True, 1.5, {"a": 1}])
+def test_partition_rejects_non_str_int(bad):
+    assert partition_component_ids([bad]) == ([], 1)
