@@ -1508,3 +1508,38 @@ def test_recommendation_context_and_normalization_helpers():
     )
     assert flattened["Severity"] == "medium"
     assert "custom_field" in flattened["Extra Details"]
+
+
+@pytest.mark.parametrize("trending_available", [True, False])
+def test_org_report_history_exclusion_note_explains_filtered_scope(trending_available):
+    note = generator._org_report_history_exclusion_note("filtered_scope", trending_available=trending_available)
+
+    assert "--filter, --exclude, or --limit" in note
+    assert "similarity" not in note
+
+
+def test_run_org_report_trending_window_excludes_filtered_scope_from_history(tmp_path: Path, rich_org_report_result):
+    """A --filter/--exclude/--limit run must not mix into a full-org trending window."""
+    snapshot_cache_root = tmp_path / "snapshot-cache"
+    cache = OrgReportCache(cache_dir=snapshot_cache_root)
+    full_report = _history_eligible_result(rich_org_report_result)
+    full_report.timestamp = "2026-01-01T00:00:00+00:00"
+    cache.save_org_report_snapshot(build_org_report_json_data(full_report), org_id=full_report.org_id)
+
+    scoped_report = _history_eligible_result(rich_org_report_result)
+    scoped_report.timestamp = "2026-01-02T00:00:00+00:00"
+    scoped_report.parameters.filter_pattern = "^Prod"
+    saved = cache.save_org_report_snapshot(build_org_report_json_data(scoped_report), org_id=scoped_report.org_id)
+
+    meta = json.loads(Path(saved).read_text(encoding="utf-8"))["_snapshot_meta"]
+    assert meta["history_eligible"] is False
+    assert meta["history_exclusion_reason"] == "filtered_scope"
+
+    snapshots = cache.list_org_report_snapshots(org_id=full_report.org_id)
+    reasons = {snapshot.get("history_exclusion_reason") for snapshot in snapshots}
+    assert reasons == {None, "filtered_scope"}
+
+    from cja_auto_sdr.org.trending import discover_snapshots
+
+    window = discover_snapshots(cache.get_org_report_snapshot_root_dir(), org_id=full_report.org_id)
+    assert [snapshot.timestamp for snapshot in window] == [full_report.timestamp]

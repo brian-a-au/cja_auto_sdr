@@ -19,6 +19,7 @@ ORG_REPORT_SNAPSHOT_ROOT_DIRNAME = "org_report_snapshots"
 _VOLATILE_ORG_REPORT_SNAPSHOT_KEYS = frozenset({"_snapshot_meta", "trending"})
 LEGACY_MISSING_FIDELITY_MARKERS_REASON = "legacy_missing_fidelity_markers"
 INVALID_ORG_REPORT_SNAPSHOT_PAYLOAD_REASON = "invalid_snapshot_payload"
+FILTERED_SCOPE_HISTORY_EXCLUSION_REASON = "filtered_scope"
 
 
 @dataclass(frozen=True)
@@ -408,7 +409,49 @@ def _persisted_org_report_snapshot_history_assessment(
     )
 
 
+def _org_report_snapshot_has_filtered_scope(data: Mapping[str, Any]) -> bool:
+    """Return True when the report ran over a filtered, excluded, or limited subset of data views.
+
+    Snapshots that lack these parameter keys (legacy payloads) are treated as unscoped.
+    """
+    parameters = snapshot_mapping_dict(data.get("parameters", {}))
+    for pattern_key in ("filter_pattern", "exclude_pattern"):
+        pattern = parameters.get(pattern_key)
+        if isinstance(pattern, str) and pattern.strip():
+            return True
+    limit = parameters.get("limit")
+    return limit is not None and not isinstance(limit, bool) and coerce_snapshot_int(limit) is not None
+
+
 def _derived_org_report_snapshot_history_assessment(
+    data: Mapping[str, Any],
+    *,
+    summary: Mapping[str, Any] | None = None,
+    data_view_assessment: OrgReportSnapshotDataViewAssessment | None = None,
+) -> OrgReportSnapshotHistoryAssessment:
+    """Derive history eligibility from the snapshot payload itself.
+
+    Fidelity exclusions (sampling, partial similarity, incomplete rows, legacy
+    markers) take precedence. A full-fidelity report that only covered a
+    filtered, excluded, or limited subset of data views is also excluded, so it
+    never shares a trending window with full-org reports and shows false
+    data-view-count drift.
+    """
+    fidelity = _derived_org_report_snapshot_fidelity_assessment(
+        data,
+        summary=summary,
+        data_view_assessment=data_view_assessment,
+    )
+    if fidelity.eligible and _org_report_snapshot_has_filtered_scope(data):
+        return OrgReportSnapshotHistoryAssessment(
+            eligible=False,
+            exclusion_reason=FILTERED_SCOPE_HISTORY_EXCLUSION_REASON,
+            fidelity_known=True,
+        )
+    return fidelity
+
+
+def _derived_org_report_snapshot_fidelity_assessment(
     data: Mapping[str, Any],
     *,
     summary: Mapping[str, Any] | None = None,
@@ -556,10 +599,14 @@ def _derived_org_report_snapshot_comparison_assessment(
             complete_high_similarity_pairs=False,
         )
 
+    # A filtered scope only removes a snapshot from trending history; within its
+    # own scope the similarity pairs are still complete for explicit comparison.
     return OrgReportSnapshotComparisonAssessment(
         eligible=True,
         exclusion_reason=None,
-        complete_high_similarity_pairs=derived_history.eligible,
+        complete_high_similarity_pairs=(
+            derived_history.eligible or derived_history.exclusion_reason == FILTERED_SCOPE_HISTORY_EXCLUSION_REASON
+        ),
     )
 
 

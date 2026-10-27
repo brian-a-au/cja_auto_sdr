@@ -5729,11 +5729,15 @@ def _org_report_history_exclusion_note(
     trending_available: bool,
 ) -> str:
     """Return a user-facing note for low-fidelity current org-report runs."""
-    base_note = (
-        "Note: Sampled org reports are excluded from persistent trending history."
-        if history_exclusion_reason == "sampled"
-        else "Note: Org reports without full similarity analysis are excluded from persistent trending history."
-    )
+    if history_exclusion_reason == "sampled":
+        base_note = "Note: Sampled org reports are excluded from persistent trending history."
+    elif history_exclusion_reason == "filtered_scope":
+        base_note = (
+            "Note: Org reports scoped with --filter, --exclude, or --limit are excluded from persistent "
+            "trending history."
+        )
+    else:
+        base_note = "Note: Org reports without full similarity analysis are excluded from persistent trending history."
     if trending_available:
         return f"{base_note} Using eligible cached snapshots only."
     return f"{base_note} Fewer than 2 eligible cached snapshots found — trending skipped."
