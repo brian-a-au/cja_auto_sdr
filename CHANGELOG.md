@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Derived-field diffs:** `--extended-fields` comparisons now detect changes to a derived field's `fieldDefinition` logic. Object key order is ignored, while rule order and value types are preserved.
+- **Unavailable inventories in diffs:** when a requested calculated-metric or segment inventory is unavailable, the diff now fails with exit code 1. Before, it reported every item as removed. No snapshot is saved or pruned in that case.
+- **Excel publication:** Excel workbooks are now staged and published only after every sheet renders and the workbook closes. If anything fails, the previous workbook stays unchanged. Hardlinked and non-regular destination files are refused.
+- **Data quality worker failures:** a failed data quality worker now fails the run with `DQ_VALIDATION_RUNTIME_FAILED`, unless `--allow-partial` is given.
+- **Governance checks:** governance gates now report `pass`, `fail` or `not_evaluated` in the additive `governance_checks` output, so a gate that could not run is no longer mistaken for a pass.
+
+### Changed
+
+- **Governance gates with `--fail-on-threshold`:** a requested governance gate that is `not_evaluated` now exits with code 1. This evaluation failure takes precedence over the threshold exit code 2.
+- **CI impact:** three fixes above turn runs that used to succeed into failures: unavailable requested inventories in diffs (exit 1), Excel publication failures, and data quality worker failures. Check CI jobs that run the tool and expect these cases to pass.
+- Update development Ruff to 0.17.1 and certifi to 2026.10.18.
+
 ## [3.12.12] - 2026-10-16
 
 ### Performance
