@@ -4,6 +4,8 @@ This module centralizes all magic numbers, default configurations,
 and schema definitions used throughout the application.
 """
 
+from __future__ import annotations
+
 import os
 from typing import Any
 

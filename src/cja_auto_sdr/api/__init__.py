@@ -9,6 +9,8 @@ Note: Some API components are currently thin wrappers around generator
 to preserve backwards compatibility while modularization progresses.
 """
 
+from __future__ import annotations
+
 from cja_auto_sdr.api.resilience import (
     RETRYABLE_EXCEPTIONS,
     CircuitBreaker,

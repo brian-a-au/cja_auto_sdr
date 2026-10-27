@@ -373,7 +373,7 @@ class DerivedFieldInventoryBuilder:
                 is_na = bool(is_na.all()) if len(is_na) > 0 else True
             else:
                 is_na = bool(is_na)
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             is_na = field_def_str is None
 
         if is_na or field_def_str in ("NaN", "", "null", None):
@@ -592,7 +592,7 @@ class DerivedFieldInventoryBuilder:
         if hasattr(value, "tolist") and not isinstance(value, dict):
             try:
                 return self._normalize_source_type(value.tolist())
-            except TypeError, ValueError:
+            except (TypeError, ValueError):
                 return ""
         return ""
 
@@ -614,7 +614,7 @@ class DerivedFieldInventoryBuilder:
                 return default
             try:
                 return int(value)
-            except TypeError, ValueError, OverflowError:
+            except (TypeError, ValueError, OverflowError):
                 return default
 
         if isinstance(value, str):

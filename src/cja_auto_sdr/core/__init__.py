@@ -8,6 +8,8 @@ This module provides the basic building blocks used throughout the application:
 - Console colors and formatting utilities
 """
 
+from __future__ import annotations
+
 from cja_auto_sdr.core.colors import (
     ANSIColors,
     ConsoleColors,

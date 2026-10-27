@@ -357,7 +357,7 @@ def _extract_retry_after_seconds(err: Exception) -> float | None:
         return None
     try:
         return float(raw)
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return None
 
 

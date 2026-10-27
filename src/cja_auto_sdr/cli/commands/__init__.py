@@ -1,5 +1,7 @@
 """CLI command handlers exposed via lazy forwarding."""
 
+from __future__ import annotations
+
 __all__ = [
     "describe_dataview",
     "generate_sample_config",

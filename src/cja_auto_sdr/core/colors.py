@@ -4,6 +4,8 @@ Provides ANSI color codes for terminal output with auto-detection
 of TTY support and Windows compatibility.
 """
 
+from __future__ import annotations
+
 import os
 import re
 import sys

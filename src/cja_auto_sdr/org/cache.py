@@ -122,7 +122,7 @@ class OrgReportLock:
             return False
         try:
             normalized_pid = int(pid)
-        except TypeError, ValueError, OverflowError:
+        except (TypeError, ValueError, OverflowError):
             return False
         if normalized_pid <= 0:
             return False
@@ -309,7 +309,7 @@ class OrgReportCache:
         )
         try:
             write_json_atomic(file_path, payload, indent=2, ensure_ascii=False)
-        except OSError, TypeError, ValueError:
+        except (OSError, TypeError, ValueError):
             raise
 
         return file_path
@@ -578,7 +578,7 @@ class OrgReportCache:
             fetched_time = datetime.fromisoformat(fetched_at)
             if datetime.now(UTC) - fetched_time > timedelta(hours=max_age_hours):
                 return None
-        except ValueError, TypeError:
+        except (ValueError, TypeError):
             return None
         return entry
 

@@ -1107,7 +1107,7 @@ def escape_markdown(text: Any) -> str:
     try:
         if pd.isna(text):
             return ""
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         # pd.isna returns an array for list-like input; truth-testing it raises.
         pass
     text = str(text)

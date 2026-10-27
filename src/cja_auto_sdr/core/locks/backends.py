@@ -74,7 +74,7 @@ def _write_info_path(path: Path, info: LockInfo) -> None:
         payload = (json.dumps(info.to_dict(), sort_keys=True) + "\n").encode("utf-8")
         _write_all(fd, payload)
         os.fsync(fd)
-    except OSError, TypeError, ValueError:
+    except (OSError, TypeError, ValueError):
         with contextlib.suppress(OSError):
             os.close(fd)
         with contextlib.suppress(OSError):
@@ -97,7 +97,7 @@ def _read_info_path(path: Path) -> LockInfo | None:
     try:
         with open(path, encoding="utf-8") as f:
             data = json.load(f)
-    except OSError, json.JSONDecodeError:
+    except (OSError, json.JSONDecodeError):
         return None
     if not isinstance(data, dict):
         return None
@@ -217,7 +217,7 @@ class LockInfo:
                 backend=str(data.get("backend", "")),
                 version=int(data.get("version", 1)),
             )
-        except KeyError, TypeError, ValueError, OverflowError:
+        except (KeyError, TypeError, ValueError, OverflowError):
             return None
 
     @classmethod
@@ -259,7 +259,7 @@ class LockInfo:
                 continue
             try:
                 return datetime.fromtimestamp(epoch, UTC).isoformat()
-            except OverflowError, OSError, ValueError:
+            except (OverflowError, OSError, ValueError):
                 continue
         return _utcnow_iso()
 
@@ -271,7 +271,7 @@ class LockInfo:
             return None
         try:
             epoch = float(value)
-        except TypeError, ValueError, OverflowError:  # pragma: no cover - value is already int|float
+        except (TypeError, ValueError, OverflowError):  # pragma: no cover - value is already int|float
             return None
         if not math.isfinite(epoch):
             return None
@@ -283,7 +283,7 @@ class LockInfo:
             if value in (None, ""):
                 return default
             return int(value)
-        except TypeError, ValueError, OverflowError:
+        except (TypeError, ValueError, OverflowError):
             return default
 
     @staticmethod
@@ -292,7 +292,7 @@ class LockInfo:
             return None
         try:
             return int(value)
-        except TypeError, ValueError, OverflowError:
+        except (TypeError, ValueError, OverflowError):
             return None
 
 
@@ -309,7 +309,7 @@ def _is_process_running(pid: int) -> bool:
         return False
     try:
         normalized_pid = int(pid)
-    except TypeError, ValueError, OverflowError:
+    except (TypeError, ValueError, OverflowError):
         return False
     if normalized_pid <= 0:
         return False

@@ -109,7 +109,7 @@ def load_registry(path: Path) -> dict[str, RegistryEntry]:
         return {}
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError, OSError, UnicodeDecodeError:
+    except (json.JSONDecodeError, OSError, UnicodeDecodeError):
         return {}
     if not isinstance(data, dict):
         return {}

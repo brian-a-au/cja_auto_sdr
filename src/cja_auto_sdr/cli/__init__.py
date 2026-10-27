@@ -4,6 +4,8 @@
 Other symbols are resolved lazily via ``__getattr__`` to avoid circular imports.
 """
 
+from __future__ import annotations
+
 from cja_auto_sdr.core.lazy import make_getattr
 
 __all__ = [

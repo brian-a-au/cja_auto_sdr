@@ -294,7 +294,7 @@ class SnapshotManager:
                 filepath = os.path.join(directory, filename)
                 try:
                     data = load_json_cached(filepath)
-                except OSError, ValueError:
+                except (OSError, ValueError):
                     continue
                 try:
                     DataViewSnapshot.validate_payload(data)

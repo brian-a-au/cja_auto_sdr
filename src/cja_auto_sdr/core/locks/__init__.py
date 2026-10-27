@@ -4,6 +4,8 @@ This package centralizes lock acquisition/release behavior behind
 backend abstractions so application modules can use a stable API.
 """
 
+from __future__ import annotations
+
 from cja_auto_sdr.core.locks.backends import (
     FcntlFileLockBackend,
     LeaseFileLockBackend,

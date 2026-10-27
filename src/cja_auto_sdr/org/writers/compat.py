@@ -8,6 +8,10 @@ from contextlib import ExitStack, contextmanager, nullcontext
 from contextvars import ContextVar
 from functools import wraps
 from types import MappingProxyType, ModuleType
+from typing import ParamSpec, TypeVar
+
+P = ParamSpec("P")
+R = TypeVar("R")
 
 _OVERRIDE_KEY = tuple[str, str]
 _OVERRIDE_STACK = tuple[object, ...]
@@ -352,7 +356,7 @@ def resolve_override(target_module_name: str, attr_name: str, default: object) -
     return _peek_override(_current_overrides(), _compat_key(target_module_name, attr_name), default)
 
 
-def call_override[**P, R](
+def call_override(
     target_module_name: str,
     attr_name: str,
     default: Callable[P, R],
@@ -364,7 +368,7 @@ def call_override[**P, R](
     return active(*args, **kwargs)
 
 
-def make_override_proxy[**P, R](
+def make_override_proxy(
     target_module_name: str,
     attr_name: str,
     default: Callable[P, R],
@@ -434,7 +438,7 @@ def override_scope(target_module_name: str, overrides: Mapping[str, object]):
         yield
 
 
-def make_compat_wrapper[**P, R](
+def make_compat_wrapper(
     source_module_name: str,
     target: Callable[P, R],
     *,

@@ -1,5 +1,7 @@
 """Git module - Git integration for snapshots."""
 
+from __future__ import annotations
+
 from cja_auto_sdr.diff.git import (
     generate_git_commit_message,
     git_commit_snapshot,

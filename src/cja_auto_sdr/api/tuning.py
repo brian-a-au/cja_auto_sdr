@@ -1,5 +1,7 @@
 """API worker auto-tuning for CJA Auto SDR."""
 
+from __future__ import annotations
+
 import logging
 import threading
 import time

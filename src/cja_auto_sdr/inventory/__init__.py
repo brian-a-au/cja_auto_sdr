@@ -7,6 +7,8 @@ Provides inventory builders for CJA components:
 - Segments
 """
 
+from __future__ import annotations
+
 from cja_auto_sdr.inventory.calculated_metrics import (
     CalculatedMetricsInventory,
     CalculatedMetricsInventoryBuilder,

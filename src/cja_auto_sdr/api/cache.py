@@ -1,5 +1,7 @@
 """Validation caches for CJA Auto SDR."""
 
+from __future__ import annotations
+
 import atexit
 import contextlib
 import hashlib

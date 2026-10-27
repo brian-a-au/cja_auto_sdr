@@ -1,5 +1,7 @@
 """Output writers (current implementations live in generator for compatibility)."""
 
+from __future__ import annotations
+
 from cja_auto_sdr.output.writers.csv import write_csv_output
 from cja_auto_sdr.output.writers.excel import write_excel_output
 from cja_auto_sdr.output.writers.html import write_html_output
