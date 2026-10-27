@@ -317,6 +317,7 @@ Drill into individual data view resources. These commands let you inspect a sing
 | `--metrics-only` | Only compare metrics (exclude dimensions) | False |
 | `--dimensions-only` | Only compare dimensions (exclude metrics) | False |
 | `--extended-fields` | Include extended fields (attribution, format, bucketing, etc.) | False |
+| `--include-metadata-changes` | Count data view name, owner, and description changes as changes for exit codes and change detection (default: reported but not counted) | False |
 | `--side-by-side` | Show side-by-side comparison view for modified items | False |
 | `--no-color` | Disable ANSI color codes in console output (global) | False |
 | `--color-theme THEME` | Color theme for diff output: `default` (green/red) or `accessible` (blue/orange) | default |
@@ -1221,6 +1222,9 @@ cja_auto_sdr --diff dv_12345 dv_67890 --dimensions-only
 
 # Extended field comparison
 cja_auto_sdr --diff dv_12345 dv_67890 --extended-fields
+
+# Treat data view name, owner, or description changes as changes (exit code 2)
+cja_auto_sdr --diff dv_12345 dv_67890 --include-metadata-changes
 
 # Side-by-side view
 cja_auto_sdr --diff dv_12345 dv_67890 --side-by-side

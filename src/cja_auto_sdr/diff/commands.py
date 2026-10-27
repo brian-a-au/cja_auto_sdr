@@ -167,6 +167,7 @@ def handle_diff_command(
     metrics_only: bool = False,
     dimensions_only: bool = False,
     extended_fields: bool = False,
+    include_metadata: bool = False,
     side_by_side: bool = False,
     no_color: bool = False,
     quiet_diff: bool = False,
@@ -206,6 +207,7 @@ def handle_diff_command(
             metrics_only=metrics_only,
             dimensions_only=dimensions_only,
             extended_fields=extended_fields,
+            include_metadata=include_metadata,
             side_by_side=side_by_side,
             no_color=no_color,
             quiet_diff=quiet_diff,
@@ -239,6 +241,7 @@ def handle_diff_command(
     metrics_only = diff_config.metrics_only
     dimensions_only = diff_config.dimensions_only
     extended_fields = diff_config.extended_fields
+    include_metadata = diff_config.include_metadata
     side_by_side = diff_config.side_by_side
     no_color = diff_config.no_color
     quiet_diff = diff_config.quiet_diff
@@ -344,6 +347,7 @@ def handle_diff_command(
             logger,
             ignore_fields=ignore_fields,
             use_extended_fields=extended_fields,
+            include_metadata=include_metadata,
             show_only=show_only,
             metrics_only=metrics_only,
             dimensions_only=dimensions_only,
@@ -418,6 +422,7 @@ def handle_diff_snapshot_command(
     metrics_only: bool = False,
     dimensions_only: bool = False,
     extended_fields: bool = False,
+    include_metadata: bool = False,
     side_by_side: bool = False,
     no_color: bool = False,
     quiet_diff: bool = False,
@@ -459,6 +464,7 @@ def handle_diff_snapshot_command(
             metrics_only=metrics_only,
             dimensions_only=dimensions_only,
             extended_fields=extended_fields,
+            include_metadata=include_metadata,
             side_by_side=side_by_side,
             no_color=no_color,
             quiet_diff=quiet_diff,
@@ -494,6 +500,7 @@ def handle_diff_snapshot_command(
     metrics_only = diff_snapshot_config.metrics_only
     dimensions_only = diff_snapshot_config.dimensions_only
     extended_fields = diff_snapshot_config.extended_fields
+    include_metadata = diff_snapshot_config.include_metadata
     side_by_side = diff_snapshot_config.side_by_side
     no_color = diff_snapshot_config.no_color
     quiet_diff = diff_snapshot_config.quiet_diff
@@ -642,6 +649,7 @@ def handle_diff_snapshot_command(
             logger,
             ignore_fields=ignore_fields,
             use_extended_fields=extended_fields,
+            include_metadata=include_metadata,
             show_only=show_only,
             metrics_only=metrics_only,
             dimensions_only=dimensions_only,
@@ -767,6 +775,7 @@ def handle_compare_snapshots_command(
     metrics_only: bool = False,
     dimensions_only: bool = False,
     extended_fields: bool = False,
+    include_metadata: bool = False,
     side_by_side: bool = False,
     no_color: bool = False,
     quiet_diff: bool = False,
@@ -861,6 +870,7 @@ def handle_compare_snapshots_command(
             logger,
             ignore_fields=ignore_fields,
             use_extended_fields=extended_fields,
+            include_metadata=include_metadata,
             show_only=show_only,
             metrics_only=metrics_only,
             dimensions_only=dimensions_only,

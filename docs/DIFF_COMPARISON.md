@@ -45,6 +45,20 @@ By default, the following fields are compared to detect modifications:
 
 Use `--ignore-fields` to exclude specific fields from comparison (e.g., ignore description changes).
 
+### Metadata Changes and Coverage
+
+Data view name, owner, and description changes are always reported (`summary.metadata_changes` in JSON, a `Metadata changes: N` line in console and Markdown output), but by default they do not count as changes: `has_changes`, the exit code, and `--quiet-diff` ignore them. Add `--include-metadata-changes` to count them. Counts of added, removed, and modified components, and `--warn-threshold`, always stay component-only.
+
+JSON output also carries a top-level `coverage` object that states what was compared: `compare_fields` (after `--ignore-fields`), `ignored_fields`, `component_types`, `inventories`, `metadata_fields`, `metadata_policy` (`reported` or `included`), `show_only`, and `limitations`. Limitation codes:
+
+| Code | Meaning |
+|------|---------|
+| `warn_threshold_uses_component_percent_only` | `--warn-threshold` looks only at the metric and dimension change percent. Always listed. |
+| `show_only_filters_change_detection` | `--show-only` removes filtered change types before change detection, so hidden types do not affect `has_changes` or the exit code. Listed only when `--show-only` is used. |
+| `field_definition_missing_in_snapshot` | `--extended-fields` was used but matched components lack `fieldDefinition` on one or both sides (for example an older snapshot), so derived-field logic changes may not be detected. |
+
+> **Note:** `--show-only` also narrows change detection today. This is documented behavior, not a change.
+
 ### Extended Fields
 
 Use `--extended-fields` to include additional fields in comparison:
@@ -659,6 +673,7 @@ To minimize API calls during name resolution, data view listings are cached for 
 | `--metrics-only` | Only compare metrics (exclude dimensions). |
 | `--dimensions-only` | Only compare dimensions (exclude metrics). |
 | `--extended-fields` | Include extended fields (attribution, format, bucketing, etc.). |
+| `--include-metadata-changes` | Count data view name, owner, and description changes as changes for exit codes and change detection (default: reported but not counted). |
 | `--side-by-side` | Show side-by-side comparison view for modified items. |
 | `--no-color` | Disable ANSI color codes in console output (global). |
 | `--quiet-diff` | Suppress output, only return exit code (0=no changes, 2=changes, 3=threshold). |
@@ -1485,7 +1500,7 @@ The diff comparison feature includes comprehensive unit tests in `tests/test_dif
 | `TestAutoSnapshotCLIArguments` | 10 | --auto-snapshot, --snapshot-dir, --keep-last |
 | `TestGetMostRecentSnapshot` | 5 | Most recent snapshot lookup, filtering |
 
-**Total: 178 tests**
+**Total: 186 tests**
 
 ### Running Tests
 

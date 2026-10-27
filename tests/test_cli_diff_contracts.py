@@ -1006,3 +1006,189 @@ def test_dispatch_diff_snapshot_records_advisory_rollup_in_run_state() -> None:
     assert exc_info.value.code == 0
     assert run_state["details"]["advisories"] == {"severity": "INFO", "count": 0}
     assert run_state["resolved_data_views"] == ["dv_target"]
+
+
+# ---------------------------------------------------------------------------
+# --include-metadata-changes and coverage reporting
+# ---------------------------------------------------------------------------
+
+
+def _name_only_snapshots():
+    from cja_auto_sdr.diff.models import DataViewSnapshot
+
+    def make(name):
+        return DataViewSnapshot(
+            data_view_id="dv_1",
+            data_view_name=name,
+            owner="o",
+            description="d",
+            metrics=[{"id": "m1", "name": "M"}],
+            dimensions=[{"id": "d1", "name": "D"}],
+        )
+
+    return make("A"), make("B")
+
+
+def _write_pair(tmp_path):
+    source, target = _name_only_snapshots()
+    paths = []
+    for label, snap in (("source", source), ("target", target)):
+        path = tmp_path / f"{label}.json"
+        path.write_text(json.dumps(snap.to_dict()))
+        paths.append(str(path))
+    return paths
+
+
+def _run_diff_family(family, tmp_path, **kwargs):
+    """Run one diff command entry point on a name-only change; return (success, has_changes, exit_override)."""
+    from cja_auto_sdr.diff.commands import (
+        handle_compare_snapshots_command,
+        handle_diff_command,
+        handle_diff_snapshot_command,
+    )
+
+    source, target = _name_only_snapshots()
+    common = {"quiet": True, "quiet_diff": True, **kwargs}
+    if family == "compare_snapshots":
+        src_file, tgt_file = _write_pair(tmp_path)
+        return handle_compare_snapshots_command(source_file=src_file, target_file=tgt_file, **common)
+    with (
+        patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "config", None)),
+        patch("cja_auto_sdr.generator.cjapy"),
+    ):
+        if family == "diff_snapshot":
+            src_file, _ = _write_pair(tmp_path)
+            with patch("cja_auto_sdr.generator.SnapshotManager.create_snapshot", return_value=target):
+                return handle_diff_snapshot_command(data_view_id="dv_1", snapshot_file=src_file, **common)
+        with patch("cja_auto_sdr.generator.SnapshotManager.create_snapshot", side_effect=[source, target]):
+            return handle_diff_command(source_id="dv_1", target_id="dv_2", **common)
+
+
+@pytest.mark.parametrize("family", ["diff", "diff_snapshot", "compare_snapshots"])
+def test_include_metadata_flag_reaches_every_diff_family(family, tmp_path):
+    success, has_changes, _ = _run_diff_family(family, tmp_path)
+    assert (success, has_changes) == (True, False)
+    success, has_changes, _ = _run_diff_family(family, tmp_path, include_metadata=True)
+    assert (success, has_changes) == (True, True)
+
+
+def test_include_metadata_parser_flag():
+    from cja_auto_sdr.cli.parser import parse_arguments
+
+    assert parse_arguments(["--compare-snapshots", "a.json", "b.json"]).include_metadata_changes is False
+    assert (
+        parse_arguments(
+            ["--compare-snapshots", "a.json", "b.json", "--include-metadata-changes"]
+        ).include_metadata_changes
+        is True
+    )
+
+
+def _run_compare_json(tmp_path, capsys, *flags):
+    from cja_auto_sdr.generator import main
+
+    src_file, tgt_file = _write_pair(tmp_path)
+    argv = ["cja_auto_sdr", "--compare-snapshots", src_file, tgt_file, "--agent-mode", *flags]
+    with patch.object(sys, "argv", argv), pytest.raises(SystemExit) as exc_info:
+        main()
+    return exc_info.value.code, json.loads(capsys.readouterr().out)
+
+
+def test_diff_json_includes_coverage_and_metadata_count(tmp_path, capsys):
+    code, payload = _run_compare_json(tmp_path, capsys)
+    assert code == 0
+    assert payload["summary"]["metadata_changes"] == 1
+    assert payload["summary"]["metadata_policy"] == "reported"
+    assert payload["coverage"]["compare_fields"] == ["name", "title", "description", "type", "schemaPath"]
+    assert payload["coverage"]["metadata_policy"] == "reported"
+
+
+def test_include_metadata_changes_exit_code_and_policy(tmp_path, capsys):
+    code, payload = _run_compare_json(tmp_path, capsys, "--include-metadata-changes")
+    assert code == 2
+    assert payload["summary"]["metadata_policy"] == "included"
+    assert payload["summary"]["has_changes"] is True
+
+
+def _mixed_pair(tmp_path):
+    """Ten metrics, one modified (10% component change), plus a data view name change."""
+    from cja_auto_sdr.diff.models import DataViewSnapshot
+
+    paths = []
+    for label, name, changed in (("source", "A", False), ("target", "B", True)):
+        metrics = [{"id": f"m{i}", "name": "M" if not (changed and i == 0) else "M changed"} for i in range(10)]
+        snap = DataViewSnapshot(
+            data_view_id="dv_1", data_view_name=name, owner="o", description="d", metrics=metrics, dimensions=[]
+        )
+        path = tmp_path / f"{label}.json"
+        path.write_text(json.dumps(snap.to_dict()))
+        paths.append(str(path))
+    return paths
+
+
+@pytest.mark.parametrize(("threshold", "expected_exit"), [(50.0, None), (5.0, 3)])
+def test_warn_threshold_uses_component_percent_when_metadata_counted(tmp_path, threshold, expected_exit):
+    from cja_auto_sdr.diff.commands import handle_compare_snapshots_command
+
+    src, tgt = _mixed_pair(tmp_path)
+    _, has_changes, exit_override = handle_compare_snapshots_command(
+        source_file=src,
+        target_file=tgt,
+        quiet=True,
+        quiet_diff=True,
+        include_metadata=True,
+        warn_threshold=threshold,
+    )
+    assert has_changes is True
+    # Component-only change is 10%: 50% threshold is not exceeded, 5% is.
+    assert exit_override == expected_exit
+
+
+def test_summary_text_for_counted_metadata_only_change():
+    from cja_auto_sdr.diff.comparator import DataViewComparator
+    from cja_auto_sdr.output.diff.console import write_diff_console_output
+
+    source, target = _name_only_snapshots()
+    result = DataViewComparator(include_metadata=True).compare(source, target)
+    assert result.summary.natural_language_summary == "Metadata changes only"
+    text = write_diff_console_output(result, summary_only=True, use_color=False)
+    assert "Summary: Metadata changes only" in text
+    assert "No changes detected" not in text
+    # Not counted: wording is unchanged.
+    plain = DataViewComparator().compare(source, target)
+    assert plain.summary.natural_language_summary == "No changes detected"
+
+
+@pytest.mark.parametrize(
+    ("include", "expected"), [(False, "(not counted; use --include-metadata-changes)"), (True, "(counted)")]
+)
+def test_console_report_shows_metadata_line(include, expected):
+    import logging
+
+    from cja_auto_sdr.diff.comparator import DataViewComparator
+    from cja_auto_sdr.output.diff.console import write_diff_console_output
+
+    source, target = _name_only_snapshots()
+    result = DataViewComparator(include_metadata=include).compare(source, target)
+    text = write_diff_console_output(result, logging.getLogger("t"), use_color=False)
+    assert f"Metadata changes: 1 {expected}" in text
+
+
+def test_markdown_report_shows_metadata_line(tmp_path):
+    import logging
+
+    from cja_auto_sdr.diff.comparator import DataViewComparator
+    from cja_auto_sdr.output.diff.markdown import write_diff_markdown_output
+
+    source, target = _name_only_snapshots()
+    result = DataViewComparator().compare(source, target)
+    path = write_diff_markdown_output(result, "d", tmp_path, logging.getLogger("t"))
+    assert "Metadata changes: 1 (not counted; use --include-metadata-changes)" in Path(path).read_text()
+
+
+def test_org_report_include_metadata_flag_is_unchanged():
+    from cja_auto_sdr.cli.parser import parse_arguments
+
+    args = parse_arguments(["--org-report", "--include-metadata"])
+    assert args.org_include_metadata is True
+    assert args.include_metadata_changes is False

@@ -388,6 +388,7 @@ cja_auto_sdr --list-dataviews  # Uses client-a
 | Option | Purpose |
 |--------|---------|
 | `--changes-only` | Hide unchanged components, show only differences |
+| `--include-metadata-changes` | Count data view name, owner, and description changes as changes for the exit code (default: reported in `summary.metadata_changes` but not counted) |
 | `--compare-with-prev` | Compare against most recent snapshot in --snapshot-dir |
 | `--list-snapshots` | List snapshots from `--snapshot-dir` (optionally filtered by data view ID) |
 | `--prune-snapshots` | Apply retention policies (`--keep-last`/`--keep-since`) without running diff |

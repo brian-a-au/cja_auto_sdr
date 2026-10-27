@@ -804,6 +804,13 @@ Requirements:
     )
 
     diff_group.add_argument(
+        "--include-metadata-changes",
+        action="store_true",
+        help="Count data view name, owner, and description changes as changes for exit codes and change detection "
+        "(default: reported but not counted)",
+    )
+
+    diff_group.add_argument(
         "--side-by-side",
         action="store_true",
         help="Show side-by-side comparison view for modified items (console and markdown)",

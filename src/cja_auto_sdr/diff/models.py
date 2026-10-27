@@ -2,11 +2,16 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 
 from cja_auto_sdr.core.version import __version__
+
+LIMITATION_SHOW_ONLY_GATE_SCOPE = "show_only_filters_change_detection"
+LIMITATION_THRESHOLD_COMPONENTS_ONLY = "warn_threshold_uses_component_percent_only"
+LIMITATION_DEFINITION_MISSING = "field_definition_missing_in_snapshot"
 
 
 class ChangeType(Enum):
@@ -82,12 +87,24 @@ class DiffSummary:
     segments_removed: int = 0
     segments_modified: int = 0
     segments_unchanged: int = 0
+    # Data view metadata (name/owner/description) change count; never part of total_changes.
+    metadata_changes: int = 0
+    include_metadata: bool = False
+
+    @property
+    def has_metadata_changes(self) -> bool:
+        """Returns True if data view metadata (name, owner, description) changed."""
+        return self.metadata_changes > 0
 
     @property
     def has_changes(self) -> bool:
-        """Returns True if any changes were detected."""
+        """Returns True if any changes were detected.
+
+        Metadata changes count only when ``include_metadata`` is set.
+        """
         return (
-            self.metrics_added > 0
+            (self.include_metadata and self.metadata_changes > 0)
+            or self.metrics_added > 0
             or self.metrics_removed > 0
             or self.metrics_modified > 0
             or self.dimensions_added > 0
@@ -215,6 +232,8 @@ class DiffSummary:
             parts.append(f"Segments: {', '.join(seg_parts)}")
 
         if not parts:
+            if self.include_metadata and self.metadata_changes > 0:
+                return "Metadata changes only"
             return "No changes detected"
 
         return "; ".join(parts)
@@ -248,7 +267,18 @@ class DiffSummary:
         if self.total_modified:
             parts.append(f"{self.total_modified} modified")
 
-        return ", ".join(parts) if parts else "No changes"
+        if not parts:
+            return "Metadata changes only"
+        return ", ".join(parts)
+
+    @property
+    def metadata_summary_line(self) -> str:
+        """Report line for metadata changes, or '' when there are none."""
+        if not self.metadata_changes:
+            return ""
+        if self.include_metadata:
+            return f"Metadata changes: {self.metadata_changes} (counted)"
+        return f"Metadata changes: {self.metadata_changes} (not counted; use --include-metadata-changes)"
 
 
 @dataclass
@@ -269,6 +299,32 @@ class InventoryItemDiff:
 
 
 @dataclass
+class DiffCoverage:
+    """Describes what a diff actually compared, so readers can judge its evidence."""
+
+    compare_fields: list[str]
+    ignored_fields: list[str]
+    component_types: list[str]
+    inventories: list[str]
+    metadata_policy: str  # "reported" or "included"
+    show_only: list[str] | None = None
+    limitations: list[str] = dataclass_field(default_factory=list)
+    metadata_fields: list[str] = dataclass_field(default_factory=lambda: ["name", "owner", "description"])
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "compare_fields": list(self.compare_fields),
+            "ignored_fields": list(self.ignored_fields),
+            "component_types": list(self.component_types),
+            "inventories": list(self.inventories),
+            "metadata_fields": list(self.metadata_fields),
+            "metadata_policy": self.metadata_policy,
+            "show_only": list(self.show_only) if self.show_only is not None else None,
+            "limitations": list(self.limitations),
+        }
+
+
+@dataclass
 class DiffResult:
     """Complete result of a diff comparison."""
 
@@ -283,6 +339,7 @@ class DiffResult:
     # Inventory diffs (optional)
     calc_metrics_diffs: list[InventoryItemDiff] | None = None
     segments_diffs: list[InventoryItemDiff] | None = None
+    coverage: DiffCoverage | None = None
 
     def __post_init__(self):
         if not self.generated_at:

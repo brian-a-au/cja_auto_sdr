@@ -8,9 +8,13 @@ from typing import Any, ClassVar
 import pandas as pd
 
 from cja_auto_sdr.diff.models import (
+    LIMITATION_DEFINITION_MISSING,
+    LIMITATION_SHOW_ONLY_GATE_SCOPE,
+    LIMITATION_THRESHOLD_COMPONENTS_ONLY,
     ChangeType,
     ComponentDiff,
     DataViewSnapshot,
+    DiffCoverage,
     DiffResult,
     DiffSummary,
     InventoryItemDiff,
@@ -124,6 +128,7 @@ class DataViewComparator:
         dimensions_only: bool = False,
         include_calc_metrics: bool = False,
         include_segments: bool = False,
+        include_metadata: bool = False,
     ):
         self.logger = logger or logging.getLogger(__name__)
         self.ignore_fields = set(ignore_fields or [])
@@ -138,6 +143,7 @@ class DataViewComparator:
         self.dimensions_only = dimensions_only
         self.include_calc_metrics = include_calc_metrics
         self.include_segments = include_segments
+        self.include_metadata = include_metadata
 
     def validate_requested_inventories(self, source: DataViewSnapshot, target: DataViewSnapshot) -> None:
         """Reject unavailable requested evidence before comparison or snapshot side effects."""
@@ -200,6 +206,9 @@ class DataViewComparator:
         metadata_diff = self._build_metadata_diff(source, target)
 
         summary = self._build_summary(source, target, metric_diffs, dimension_diffs, calc_metrics_diffs, segments_diffs)
+        summary.metadata_changes = len(metadata_diff.changed_fields or {})
+        summary.include_metadata = self.include_metadata
+        coverage = self._build_coverage(source, target)
 
         self.logger.info("Comparison complete:")
         self.logger.info(f"  Metrics: +{summary.metrics_added} -{summary.metrics_removed} ~{summary.metrics_modified}")
@@ -216,7 +225,65 @@ class DataViewComparator:
             target_label=target_label,
             calc_metrics_diffs=calc_metrics_diffs,
             segments_diffs=segments_diffs,
+            coverage=coverage,
         )
+
+    def _build_coverage(self, source: DataViewSnapshot, target: DataViewSnapshot) -> DiffCoverage:
+        effective_fields = [f for f in self.compare_fields if f not in self.ignore_fields]
+        component_types = []
+        if not self.dimensions_only:
+            component_types.append("metrics")
+        if not self.metrics_only:
+            component_types.append("dimensions")
+        inventories = []
+        if self.include_calc_metrics:
+            inventories.append("calculated_metrics")
+        if self.include_segments:
+            inventories.append("segments")
+
+        limitations = [LIMITATION_THRESHOLD_COMPONENTS_ONLY]
+        if self.show_only:
+            limitations.append(LIMITATION_SHOW_ONLY_GATE_SCOPE)
+        if "fieldDefinition" in effective_fields and self._field_definition_missing(source, target, component_types):
+            limitations.append(LIMITATION_DEFINITION_MISSING)
+
+        return DiffCoverage(
+            compare_fields=effective_fields,
+            ignored_fields=sorted(self.ignore_fields),
+            component_types=component_types,
+            inventories=inventories,
+            metadata_policy="included" if self.include_metadata else "reported",
+            show_only=sorted(self.show_only) if self.show_only else None,
+            limitations=limitations,
+        )
+
+    def _field_definition_missing(
+        self,
+        source: DataViewSnapshot,
+        target: DataViewSnapshot,
+        component_types: list[str],
+    ) -> bool:
+        """True when matched components carry fieldDefinition on one side only, or on neither side."""
+        matched = 0
+        with_definition = 0
+        for kind in component_types:
+            source_map = {c.get("id"): c for c in getattr(source, kind) if c.get("id")}
+            for comp in getattr(target, kind):
+                other = source_map.get(comp.get("id"))
+                if other is None:
+                    continue
+                matched += 1
+                has_source = self._has_definition(other)
+                has_target = self._has_definition(comp)
+                if has_source != has_target:
+                    return True
+                if has_source:
+                    with_definition += 1
+        return matched > 0 and with_definition == 0
+
+    def _has_definition(self, component: dict) -> bool:
+        normalized = self._normalize_field_definition(component.get("fieldDefinition"))
+        return normalized not in (("null",), ("str", ""), ("array", ()), ("object", ()))
 
     def _count_changes(self, diffs: list[InventoryItemDiff] | None) -> str:
         if not diffs:

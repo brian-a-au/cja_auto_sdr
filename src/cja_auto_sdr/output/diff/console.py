@@ -235,6 +235,8 @@ def write_diff_console_output(
             lines.append(f"Summary: {summary.natural_language_summary}")
         else:
             lines.append(ANSIColors.green("No differences found.", c))
+        if summary.metadata_summary_line:
+            lines.append(summary.metadata_summary_line)
         lines.append("=" * 80)
         return "\n".join(lines)
 
@@ -337,7 +339,7 @@ def write_diff_console_output(
             total_parts.append(ANSIColors.red(f"{summary.total_removed} removed", c))
         if summary.total_modified:
             total_parts.append(ANSIColors.yellow(f"{summary.total_modified} modified", c))
-        total_line = ", ".join(total_parts)
+        total_line = ", ".join(total_parts) or "metadata changes only"
         lines.append(ANSIColors.bold(f"Total: {total_line}", c))
         lines.append(
             f"  Metrics: {summary.metrics_added} added, {summary.metrics_removed} removed, {summary.metrics_modified} modified",
@@ -357,6 +359,8 @@ def write_diff_console_output(
                 )
     else:
         lines.append(ANSIColors.green("✓ No differences found", c))
+    if summary.metadata_summary_line:
+        lines.append(summary.metadata_summary_line)
     lines.append("=" * 80)
 
     return "\n".join(lines)
