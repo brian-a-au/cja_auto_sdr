@@ -634,8 +634,8 @@ def _print_single_mode_inventory_summary(
 def _handle_single_mode_git_commit(args: argparse.Namespace, result: Any) -> bool:
     """Run the optional --git-commit step.
 
-    Returns False when the Git step hit a hard failure that must fail the run
-    (inconclusive repository probe, or a required snapshot re-fetch failed);
+    Returns False when the Git step failed and must fail the run (inconclusive
+    repository probe, failed init, failed snapshot re-fetch, or failed commit);
     True otherwise, including when --git-commit was not requested.
     """
     generator = _generator_module()
@@ -661,8 +661,8 @@ def _handle_single_mode_git_commit(args: argparse.Namespace, result: Any) -> boo
         init_success, init_msg = generator.git_init_snapshot_repo(git_dir)
         if not init_success:
             print(generator.ConsoleColors.error(f"Git init failed: {init_msg}"))
-        else:
-            print(generator.ConsoleColors.success("  Repository initialized"))
+            return False
+        print(generator.ConsoleColors.success("  Repository initialized"))
 
     snapshot = generator.DataViewSnapshot(
         data_view_id=result.data_view_id,
@@ -716,6 +716,7 @@ def _handle_single_mode_git_commit(args: argparse.Namespace, result: Any) -> boo
                 print(generator.ConsoleColors.success("  Pushed to remote"))
     else:
         print(generator.ConsoleColors.error(f"  Git commit failed: {commit_result}"))
+        return False
     return True
 
 

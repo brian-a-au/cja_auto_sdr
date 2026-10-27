@@ -782,14 +782,14 @@ class TestGitRepositoryState:
 
         assert git_repository_state(tmp_path / "missing") == "not_repo"
 
-    def test_subdirectory_of_enclosing_repo_is_not_its_own_repo(self, tmp_path):
+    def test_subdirectory_of_enclosing_repo_is_repo(self, tmp_path):
         from cja_auto_sdr.diff.git import git_repository_state
 
         _init_test_repo(tmp_path)
         nested = tmp_path / "sdr-snapshots"
         nested.mkdir()
-        assert git_repository_state(nested) == "not_repo"
-        assert is_git_repository(nested) is False
+        assert git_repository_state(nested) == "repo"
+        assert is_git_repository(nested) is True
 
     @patch("subprocess.run")
     def test_timeout_is_unknown(self, mock_run, tmp_path):
@@ -850,20 +850,34 @@ class TestGitInitSnapshotRepoDiscovery:
         assert "could not determine" in message.lower()
         mock_cmd.assert_not_called()
 
-    def test_nested_inside_enclosing_repo_creates_own_repo(self, tmp_path):
+    def test_inside_enclosing_repo_reuses_it_without_touching_files(self, tmp_path):
         _init_test_repo(tmp_path)
         (tmp_path / "parent.txt").write_text("parent")
         subprocess.run(["git", "add", "parent.txt"], cwd=str(tmp_path), capture_output=True, check=True)
         subprocess.run(["git", "commit", "-m", "parent"], cwd=str(tmp_path), capture_output=True, check=True)
-        nested = tmp_path / "sdr-snapshots"
+        nested = tmp_path / "docs"
+        nested.mkdir()
+        (nested / "README.md").write_text("user readme")
 
         success, message = git_init_snapshot_repo(nested)
 
         assert success is True, message
-        assert message == "Repository initialized"
-        assert Path(_git_stdout(nested, "rev-parse", "--show-toplevel").strip()).resolve() == nested.resolve()
-        # Parent history is untouched.
+        assert message == "Already a Git repository"
+        assert not (nested / ".git").exists()
+        assert (nested / "README.md").read_text() == "user readme"
         assert _git_stdout(tmp_path, "log", "--oneline").count("\n") == 1
+
+    def test_init_keeps_existing_readme_and_gitignore(self, tmp_path):
+        repo_dir = tmp_path / "snapshots"
+        repo_dir.mkdir()
+        (repo_dir / "README.md").write_text("user readme")
+        (repo_dir / ".gitignore").write_text("user ignore\n")
+
+        success, message = git_init_snapshot_repo(repo_dir)
+
+        assert success is True, message
+        assert (repo_dir / "README.md").read_text() == "user readme"
+        assert (repo_dir / ".gitignore").read_text() == "user ignore\n"
 
     def test_initial_commit_only_contains_scaffold_files(self, tmp_path):
         repo_dir = tmp_path / "snapshots"
@@ -914,6 +928,32 @@ class TestGitCommitSnapshotScoping:
         # Unrelated work is preserved: still staged / still modified in the working tree.
         assert _git_stdout(tmp_path, "diff", "--cached", "--name-only").split() == ["notes.txt"]
         assert _git_stdout(tmp_path, "diff", "--name-only").split() == ["tracked.txt"]
+
+    def test_snapshot_dir_inside_project_repo_commits_only_its_files(self, tmp_path):
+        _init_test_repo(tmp_path)
+        (tmp_path / "app.py").write_text("base")
+        subprocess.run(["git", "add", "."], cwd=str(tmp_path), capture_output=True, check=True)
+        subprocess.run(["git", "commit", "-m", "baseline"], cwd=str(tmp_path), capture_output=True, check=True)
+        snapshot_dir = tmp_path / "sdr-snapshots"
+        dv_dir = snapshot_dir / "Target_dv_12345"
+        dv_dir.mkdir(parents=True)
+        (dv_dir / "metrics.json").write_text('{"v": 1}')
+        (tmp_path / "app.py").write_text("staged project change")
+        subprocess.run(["git", "add", "app.py"], cwd=str(tmp_path), capture_output=True, check=True)
+
+        success, result = git_commit_snapshot(
+            snapshot_dir=snapshot_dir,
+            data_view_id="dv_12345",
+            data_view_name="Target",
+            metrics_count=1,
+            dimensions_count=0,
+        )
+
+        assert success is True
+        assert result != "no_changes"
+        committed = _git_stdout(tmp_path, "show", "--name-only", "--pretty=format:", "HEAD").split()
+        assert committed == ["sdr-snapshots/Target_dv_12345/metrics.json"]
+        assert _git_stdout(tmp_path, "diff", "--cached", "--name-only").split() == ["app.py"]
 
     def test_unchanged_view_with_other_staged_files_reports_no_changes(self, tmp_path):
         self._baseline(tmp_path)

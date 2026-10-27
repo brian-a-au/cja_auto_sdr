@@ -412,7 +412,10 @@ def _persisted_org_report_snapshot_history_assessment(
 def _org_report_snapshot_has_filtered_scope(data: Mapping[str, Any]) -> bool:
     """Return True when the report ran over a filtered, excluded, or limited subset of data views.
 
-    Snapshots that lack these parameter keys (legacy payloads) are treated as unscoped.
+    A ``limit`` only narrows scope when it actually cut data views: when the summary shows
+    ``data_views_total`` below ``total_available_data_views``. A limit with no usable summary
+    counts is treated as narrowing. Snapshots that lack these parameter keys (legacy payloads)
+    are treated as unscoped.
     """
     parameters = snapshot_mapping_dict(data.get("parameters", {}))
     for pattern_key in ("filter_pattern", "exclude_pattern"):
@@ -420,7 +423,14 @@ def _org_report_snapshot_has_filtered_scope(data: Mapping[str, Any]) -> bool:
         if isinstance(pattern, str) and pattern.strip():
             return True
     limit = parameters.get("limit")
-    return limit is not None and not isinstance(limit, bool) and coerce_snapshot_int(limit) is not None
+    if limit is None or isinstance(limit, bool) or coerce_snapshot_int(limit) is None:
+        return False
+    summary = snapshot_mapping_dict(data.get("summary", {}))
+    analyzed_total = coerce_snapshot_int(summary.get("data_views_total"))
+    available_total = coerce_snapshot_int(summary.get("total_available_data_views"))
+    if analyzed_total is None or available_total is None:
+        return True
+    return analyzed_total < available_total
 
 
 def _derived_org_report_snapshot_history_assessment(

@@ -83,6 +83,14 @@ class TestFetchComponentPayload:
         assert result.empty
         assert classify_component_payload(result).status == "empty"
 
+    @pytest.mark.parametrize("empty_error", [None, "", [], {}])
+    def test_null_or_empty_error_keys_on_valid_page_are_not_failures(self, empty_error):
+        page = {**_page([{"id": "variables/a"}]), "error": empty_error, "errorCode": empty_error}
+        cja = _native_cja({"/dimensions": [page]})
+        result = fetch_component_payload(cja, "dimensions", DV_ID, inclType=True, full=True)
+        assert isinstance(result, pd.DataFrame)
+        assert list(result["id"]) == ["variables/a"]
+
     @pytest.mark.parametrize(
         ("payload", "expected_reason"),
         [

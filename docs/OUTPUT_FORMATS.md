@@ -351,6 +351,7 @@ Every SDR report says what it collected, so an empty section is never confused w
 - `failed` means the fetch failed. It is not an empty result.
 - An empty component section prints its coverage state instead of a generic "no data" message. HTML keeps empty sections instead of dropping them.
 - With `--skip-validation`, the Data Quality section says the audit was skipped and why.
+- With `--inventory-only`, the standard sections (including Coverage) are left out of Excel, CSV, Markdown, and HTML as before. JSON still carries `coverage`.
 - With `--fail-on-quality`, the Metadata section gains `Quality Gate Verdict` (`PASS`, `FAIL`, or `NOT_EVALUATED`) and `Quality Gate Threshold` rows.
 
 JSON output (default and `--json-typed`) gains two additive top-level keys after the existing ones. The schema version stays `cja-auto-sdr.sdr-typed/1`:

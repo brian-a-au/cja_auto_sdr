@@ -1350,20 +1350,20 @@ class TestGitCommitIntegration:
     @patch("cja_auto_sdr.generator.save_git_friendly_snapshot")
     @patch("cja_auto_sdr.generator.git_commit_snapshot", return_value=(True, "abc1234"))
     def test_git_commit_init_failure(
-        self, _commit, _save, _init, _is_git, _bqs, _aghs, _aqi, mock_proc, _resolve, capsys
+        self, mock_commit, mock_save, _init, _is_git, _bqs, _aghs, _aqi, mock_proc, _resolve, capsys
     ):
-        """Line 15369-15370: git init fails → error message printed."""
+        """Git init fails → error printed, nothing saved or committed, run exits 1."""
         mock_proc.return_value = self._make_success_result()
 
         args = _make_args(data_views=["dv_123"], git_commit=True)
-        with patch("cja_auto_sdr.generator.parse_arguments", return_value=args):
-            try:
-                _main_impl()
-            except SystemExit:
-                pass
+        with patch("cja_auto_sdr.generator.parse_arguments", return_value=args), pytest.raises(SystemExit) as exc:
+            _main_impl()
 
+        assert exc.value.code == 1
         out = capsys.readouterr().out
         assert "Git init failed" in out
+        mock_save.assert_not_called()
+        mock_commit.assert_not_called()
 
     @patch("cja_auto_sdr.generator._cli_option_specified", _mock_cli_option_specified)
     @patch("cja_auto_sdr.generator.resolve_data_view_names", return_value=(["dv_123"], {}))
@@ -1398,16 +1398,14 @@ class TestGitCommitIntegration:
     @patch("cja_auto_sdr.generator.save_git_friendly_snapshot")
     @patch("cja_auto_sdr.generator.git_commit_snapshot", return_value=(False, "merge conflict"))
     def test_git_commit_failure(self, _commit, _save, _is_git, _bqs, _aghs, _aqi, mock_proc, _resolve, capsys):
-        """Line 15441-15442: commit fails → error printed."""
+        """Commit fails → error printed and the run exits 1."""
         mock_proc.return_value = self._make_success_result_with_components()
 
         args = _make_args(data_views=["dv_123"], git_commit=True)
-        with patch("cja_auto_sdr.generator.parse_arguments", return_value=args):
-            try:
-                _main_impl()
-            except SystemExit:
-                pass
+        with patch("cja_auto_sdr.generator.parse_arguments", return_value=args), pytest.raises(SystemExit) as exc:
+            _main_impl()
 
+        assert exc.value.code == 1
         out = capsys.readouterr().out
         assert "Git commit failed" in out
 

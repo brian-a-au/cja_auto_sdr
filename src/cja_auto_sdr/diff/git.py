@@ -63,12 +63,13 @@ def _format_git_boundary_error(exc: Exception, *, timeout_message: str, generic_
 
 
 def git_repository_state(path: Path) -> GitRepositoryState:
-    """Classify ``path`` as the root of a Git work tree, definitely not one, or unknown.
+    """Classify ``path`` as inside a Git work tree, definitely not in one, or unknown.
 
-    * ``"repo"`` -- ``path`` is the top level of a Git working tree.
-    * ``"not_repo"`` -- Git confirmed ``path`` is not inside a repository, the path does not
-      exist, or ``path`` is a subdirectory of an enclosing repository (so it is not its own
-      snapshot repository and may be initialized as a nested one).
+    * ``"repo"`` -- ``path`` is inside a Git working tree, either at its top level or as a
+      subdirectory of an enclosing repository. Snapshot commits are scoped to the data view's
+      own paths, so committing from a subdirectory never sweeps in unrelated work.
+    * ``"not_repo"`` -- Git confirmed ``path`` is not inside a repository, or the path does
+      not exist.
     * ``"unknown"`` -- the probe failed (timeout, Git missing, unexpected error). Callers must
       not initialize a repository on this state.
     """
@@ -98,20 +99,16 @@ def git_repository_state(path: Path) -> GitRepositoryState:
             return "not_repo"
         return "unknown"
 
-    toplevel = (result.stdout or "").strip()
-    if not toplevel:
+    if not (result.stdout or "").strip():
         return "unknown"
-    try:
-        return "repo" if Path(toplevel).resolve() == path.resolve() else "not_repo"
-    except OSError:
-        return "unknown"
+    return "repo"
 
 
 def is_git_repository(path: Path) -> bool:
-    """Return True only when ``path`` is the root of a Git working tree.
+    """Return True when ``path`` is inside a Git working tree.
 
-    Subdirectories of an enclosing repository and inconclusive probes both return False;
-    use :func:`git_repository_state` to tell those cases apart.
+    Inconclusive probes return False; use :func:`git_repository_state` to tell a
+    confirmed non-repository from an unknown result.
     """
     return git_repository_state(path) == "repo"
 
@@ -466,11 +463,14 @@ def git_init_snapshot_repo(directory: Path, logger: logging.Logger | None = None
         if result.returncode != 0:
             return False, f"git config user.email failed: {result.stderr}"
 
+        # Never overwrite files the user already keeps in the directory.
         gitignore = directory / ".gitignore"
-        gitignore.write_text("# CJA SDR Snapshots\n*.log\n*.tmp\n.DS_Store\n")
+        if not gitignore.exists():
+            gitignore.write_text("# CJA SDR Snapshots\n*.log\n*.tmp\n.DS_Store\n")
 
         readme = directory / "README.md"
-        readme.write_text(f"""# CJA SDR Snapshots
+        if not readme.exists():
+            readme.write_text(f"""# CJA SDR Snapshots
 
 This repository contains Solution Design Reference (SDR) snapshots from Adobe Customer Journey Analytics.
 

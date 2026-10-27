@@ -948,8 +948,9 @@ snapshots are now treated as ineligible rather than guessed as complete. Use
 `history_exclusion_reason` for current snapshots, and `cja_auto_sdr --prune-org-report-snapshots ...` to remove
 older entries.
 
-Reports run with `--filter`, `--exclude`, or `--limit` cover only part of the organization, so they are not used as
-trending history. Their `history_exclusion_reason` is `filtered_scope`. Without this rule, a filtered report next to a
+Reports run with `--filter` or `--exclude`, or with a `--limit` that cut data views, cover only part of the
+organization, so they are not used as trending history. A `--limit` at or above the number of available data views
+does not count. Their `history_exclusion_reason` is `filtered_scope`. Without this rule, a filtered report next to a
 full one would show data views as added or removed when they were only left out. You can still compare a filtered
 report directly with `--compare-org-report`.
 

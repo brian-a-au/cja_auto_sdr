@@ -84,7 +84,7 @@ def _component_page_failure(page: Any, *, component: str, data_view_id: str) -> 
             or "",
         )
         content = page.get("content")
-        if set(lowered) & _PAGE_ERROR_KEYS:
+        if any(lowered[key] not in (None, "", [], {}) for key in _PAGE_ERROR_KEYS & set(lowered)):
             reason = "error_payload"
         elif status_code is not None and status_code >= 400:
             reason = "http_status"

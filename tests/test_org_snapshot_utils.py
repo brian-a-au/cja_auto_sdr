@@ -1941,6 +1941,21 @@ def test_unscoped_org_report_keeps_history_eligibility(parameters):
     assert org_report_snapshot_history_exclusion_reason(payload) is None
 
 
+def test_limit_that_truncated_data_views_is_history_ineligible():
+    payload = _complete_org_report_payload({**_UNSCOPED_PARAMETERS, "limit": 2})
+    payload["summary"]["total_available_data_views"] = 5
+
+    assert org_report_snapshot_history_exclusion_reason(payload) == "filtered_scope"
+
+
+def test_limit_at_or_above_available_data_views_keeps_history_eligibility():
+    payload = _complete_org_report_payload({**_UNSCOPED_PARAMETERS, "limit": 500})
+    payload["summary"]["total_available_data_views"] = 2
+
+    assert org_report_snapshot_history_eligible(payload) is True
+    assert org_report_snapshot_history_exclusion_reason(payload) is None
+
+
 def test_scoped_org_report_keeps_lower_fidelity_reason_first():
     payload = _complete_org_report_payload({**_UNSCOPED_PARAMETERS, "filter_pattern": "^Prod"})
     payload["summary"]["is_sampled"] = True
