@@ -2466,7 +2466,7 @@ class TestQualityReportListFields:
             "Rule ID": "DUP",
             "Component IDs": ["m1", "m2"],
             "Occurrences": 2,
-            "Unaddressable IDs": [],
+            "Unaddressable IDs": 0,
         },
     ]
 
