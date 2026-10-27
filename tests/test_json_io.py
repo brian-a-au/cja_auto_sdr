@@ -451,3 +451,27 @@ class TestWriteTextAtomicCompatible:
             os.chmod(out_dir, 0o755)  # noqa: S103
 
         assert out.read_text(encoding="utf-8") == "new content"
+
+
+class TestJsonIoUnsearchableParent:
+    def test_directory_supports_atomic_replace_false(self, unsearchable_dir):
+        from cja_auto_sdr.core.json_io import _directory_supports_atomic_replace
+
+        assert _directory_supports_atomic_replace(unsearchable_dir / "sub") is False
+
+    def test_target_exists_for_compatible_write_false(self, unsearchable_dir):
+        from cja_auto_sdr.core.json_io import _target_exists_for_compatible_write
+
+        target = unsearchable_dir / "out.json"
+        assert _target_exists_for_compatible_write(target, target) is False
+
+    def test_resolve_dest_returns_target_and_parent(self, unsearchable_dir):
+        from cja_auto_sdr.core.json_io import _resolve_dest
+
+        target = unsearchable_dir / "out.json"
+        assert _resolve_dest(target) == (target, unsearchable_dir)
+
+    def test_reject_symlink_destination_does_not_raise(self, unsearchable_dir):
+        from cja_auto_sdr.core.json_io import _reject_symlink_destination
+
+        _reject_symlink_destination(unsearchable_dir / "out.json")

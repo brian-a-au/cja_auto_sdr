@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 __all__ = ["write_json_output"]
 
 from cja_auto_sdr.core.lazy import make_getattr

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 __all__ = ["write_markdown_output"]
 
 from cja_auto_sdr.core.lazy import make_getattr

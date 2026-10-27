@@ -91,7 +91,7 @@ def validate_profile_name(name: str) -> tuple[bool, str | None]:
 def load_profile_config_json(profile_path: Path) -> dict[str, str] | None:
     """Load credentials from profile ``config.json`` when present."""
     config_file = profile_path / "config.json"
-    if not config_file.exists():
+    if not os.path.exists(config_file):
         return None
 
     try:
@@ -109,7 +109,7 @@ def load_profile_config_json(profile_path: Path) -> dict[str, str] | None:
 def load_profile_dotenv(profile_path: Path) -> dict[str, str] | None:
     """Load credentials from a profile ``.env`` file when present."""
     env_file = profile_path / ".env"
-    if not env_file.exists():
+    if not os.path.exists(env_file):
         return None
 
     credentials = {}
@@ -146,14 +146,14 @@ def load_profile_credentials(profile_name: str, logger: logging.Logger) -> dict[
 
     profile_path = generator.get_profile_path(profile_name)
 
-    if not profile_path.exists():
+    if not os.path.exists(profile_path):
         raise ProfileNotFoundError(
             f"Profile '{profile_name}' not found",
             profile_name=profile_name,
             details=f"Expected directory: {profile_path}",
         )
 
-    if not profile_path.is_dir():
+    if not os.path.isdir(profile_path):
         raise ProfileConfigError(
             "Profile path is not a directory",
             profile_name=profile_name,
@@ -197,7 +197,7 @@ def _read_profile_org_id(profile_path: Path) -> str | None:
     org_id: str | None = None
 
     config_file = profile_path / "config.json"
-    if config_file.exists():
+    if os.path.exists(config_file):
         try:
             with open(config_file, encoding="utf-8") as f:
                 data = json.load(f)
@@ -228,7 +228,7 @@ def list_profiles(output_format: str = "table") -> bool:
     generator = _generator_module()
     profiles_dir = generator.get_profiles_dir()
 
-    if not profiles_dir.exists():
+    if not os.path.exists(profiles_dir):
         if output_format == "json":
             print(json.dumps({"profiles": [], "count": 0}, indent=2))
         else:
@@ -245,12 +245,12 @@ def list_profiles(output_format: str = "table") -> bool:
     active_profile = os.environ.get("CJA_PROFILE")
 
     for item in sorted(profiles_dir.iterdir()):
-        if not item.is_dir():
+        if not os.path.isdir(item):
             continue
 
         profile_name = item.name
-        has_config_json = (item / "config.json").exists()
-        has_env = (item / ".env").exists()
+        has_config_json = os.path.exists(item / "config.json")
+        has_env = os.path.exists(item / ".env")
         is_active = profile_name == active_profile
 
         if has_config_json or has_env:
@@ -331,7 +331,7 @@ def add_profile_interactive(profile_name: str) -> bool:
 
     profile_path = generator.get_profile_path(profile_name)
 
-    if profile_path.exists():
+    if os.path.exists(profile_path):
         print(f"Profile '{profile_name}' already exists at: {profile_path}")
         print()
         response = input("Overwrite? [y/N]: ").strip().lower()
@@ -466,15 +466,15 @@ def _parse_env_credentials_content(content: str) -> dict[str, str]:
 def load_profile_import_source(source_file: str | Path) -> dict[str, str]:
     """Load credentials from JSON, ``.env``, or a profile directory."""
     source_path = Path(source_file).expanduser()
-    if not source_path.exists():
+    if not os.path.exists(source_path):
         raise FileNotFoundError(f"Source not found: {source_path}")
 
-    if source_path.is_dir():
+    if os.path.isdir(source_path):
         config_json_path = source_path / "config.json"
         dotenv_path = source_path / ".env"
         merged_credentials: dict[str, str] = {}
 
-        if config_json_path.exists():
+        if os.path.exists(config_json_path):
             with open(config_json_path, encoding="utf-8") as f:
                 config_payload = json.load(f)
             if not isinstance(config_payload, dict):
@@ -483,7 +483,7 @@ def load_profile_import_source(source_file: str | Path) -> dict[str, str]:
                 config_payload = config_payload["credentials"]
             merged_credentials.update(_normalize_import_credentials(config_payload))
 
-        if dotenv_path.exists():
+        if os.path.exists(dotenv_path):
             merged_credentials.update(_parse_env_credentials_content(dotenv_path.read_text(encoding="utf-8")))
 
         if not merged_credentials:
@@ -516,7 +516,7 @@ def import_profile_non_interactive(profile_name: str, source_file: str | Path, o
         return False
 
     profile_path = generator.get_profile_path(profile_name)
-    profile_exists = profile_path.exists()
+    profile_exists = os.path.exists(profile_path)
     if profile_exists and not overwrite:
         print(f"Profile '{profile_name}' already exists at: {profile_path}")
         print("Use --profile-overwrite with --profile-import to replace it.")
@@ -558,7 +558,7 @@ def import_profile_non_interactive(profile_name: str, source_file: str | Path, o
         print(ConsoleColors.error(f"Error writing profile config: {e}"), file=sys.stderr)
         return False
 
-    if profile_exists and (profile_path / ".env").exists():
+    if profile_exists and os.path.exists(profile_path / ".env"):
         print(
             "Warning: Existing .env file was kept and may override imported config.json values when this profile is used.",
         )
@@ -612,9 +612,9 @@ def show_profile(profile_name: str) -> bool:
     print()
 
     sources = []
-    if (profile_path / "config.json").exists():
+    if os.path.exists(profile_path / "config.json"):
         sources.append("config.json")
-    if (profile_path / ".env").exists():
+    if os.path.exists(profile_path / ".env"):
         sources.append(".env")
     print(f"Sources: {', '.join(sources)}")
     print()

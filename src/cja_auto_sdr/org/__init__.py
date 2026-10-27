@@ -21,6 +21,8 @@ Example usage:
     result = analyzer.run_analysis()
 """
 
+from __future__ import annotations
+
 from cja_auto_sdr.org.cache import OrgReportCache, OrgReportLock
 from cja_auto_sdr.org.models import (
     ComponentDistribution,

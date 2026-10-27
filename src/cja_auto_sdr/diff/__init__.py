@@ -1,5 +1,7 @@
 """Diff module - data view comparison and snapshot tooling."""
 
+from __future__ import annotations
+
 from cja_auto_sdr.diff.comparator import DataViewComparator
 from cja_auto_sdr.diff.git import (
     generate_git_commit_message,

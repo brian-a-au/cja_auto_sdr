@@ -498,7 +498,7 @@ class SegmentsInventoryBuilder:
         # Serialize definition to JSON string for full fidelity
         try:
             definition_json_str = json.dumps(definition, separators=(",", ":"))
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             definition_json_str = json.dumps(str(definition))
 
         return SegmentSummary(

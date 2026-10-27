@@ -1500,3 +1500,12 @@ def test_valid_upper_utc_boundary_survives_org_date_retention(tmp_path):
     assert len(discover_snapshots(boundary.parent, org_id="test_org")) == 2
     assert cache.prune_org_report_snapshots(org_id="test_org", keep_since_days=30) == [str(old)]
     assert boundary.exists()
+
+
+class TestDiscoverSnapshotsUnsearchableParent:
+    def test_explicit_file_under_unsearchable_dir_is_skipped(self, unsearchable_dir, tmp_path):
+        from cja_auto_sdr.org.trending import discover_snapshots
+
+        empty = tmp_path / "empty"
+        empty.mkdir()
+        assert discover_snapshots(empty, explicit_file=unsearchable_dir / "report.json") == []

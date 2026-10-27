@@ -74,7 +74,7 @@ def _write_info_path(path: Path, info: LockInfo) -> None:
         payload = (json.dumps(info.to_dict(), sort_keys=True) + "\n").encode("utf-8")
         _write_all(fd, payload)
         os.fsync(fd)
-    except OSError, TypeError, ValueError:
+    except (OSError, TypeError, ValueError):
         with contextlib.suppress(OSError):
             os.close(fd)
         with contextlib.suppress(OSError):
@@ -92,12 +92,12 @@ def _write_info_path(path: Path, info: LockInfo) -> None:
 
 
 def _read_info_path(path: Path) -> LockInfo | None:
-    if not path.exists():
+    if not os.path.exists(path):
         return None
     try:
         with open(path, encoding="utf-8") as f:
             data = json.load(f)
-    except OSError, json.JSONDecodeError:
+    except (OSError, json.JSONDecodeError):
         return None
     if not isinstance(data, dict):
         return None
@@ -217,7 +217,7 @@ class LockInfo:
                 backend=str(data.get("backend", "")),
                 version=int(data.get("version", 1)),
             )
-        except KeyError, TypeError, ValueError, OverflowError:
+        except (KeyError, TypeError, ValueError, OverflowError):
             return None
 
     @classmethod
@@ -259,7 +259,7 @@ class LockInfo:
                 continue
             try:
                 return datetime.fromtimestamp(epoch, UTC).isoformat()
-            except OverflowError, OSError, ValueError:
+            except (OverflowError, OSError, ValueError):
                 continue
         return _utcnow_iso()
 
@@ -271,7 +271,7 @@ class LockInfo:
             return None
         try:
             epoch = float(value)
-        except TypeError, ValueError, OverflowError:  # pragma: no cover - value is already int|float
+        except (TypeError, ValueError, OverflowError):  # pragma: no cover - value is already int|float
             return None
         if not math.isfinite(epoch):
             return None
@@ -283,7 +283,7 @@ class LockInfo:
             if value in (None, ""):
                 return default
             return int(value)
-        except TypeError, ValueError, OverflowError:
+        except (TypeError, ValueError, OverflowError):
             return default
 
     @staticmethod
@@ -292,7 +292,7 @@ class LockInfo:
             return None
         try:
             return int(value)
-        except TypeError, ValueError, OverflowError:
+        except (TypeError, ValueError, OverflowError):
             return None
 
 
@@ -309,7 +309,7 @@ def _is_process_running(pid: int) -> bool:
         return False
     try:
         normalized_pid = int(pid)
-    except TypeError, ValueError, OverflowError:
+    except (TypeError, ValueError, OverflowError):
         return False
     if normalized_pid <= 0:
         return False
@@ -503,7 +503,7 @@ class FcntlFileLockBackend:
                         self._unlock_close_fd(fd)
                         return AcquireResult(status=AcquireStatus.CONTENDED)
                 elif info_outcome.state == "missing":
-                    if info_outcome.source_path is not None or not lock_path.exists():
+                    if info_outcome.source_path is not None or not os.path.exists(lock_path):
                         # Lock path disappeared during validation; retry acquisition.
                         self._unlock_close_fd(fd)
                         continue
@@ -624,14 +624,14 @@ class FcntlFileLockBackend:
                 source = metadata_path if _read_info_path(metadata_path) is not None else lock_path
                 return _ReadInfoOutcome(info=info, state="valid", source_path=source)
 
-            metadata_exists = metadata_path.exists()
+            metadata_exists = os.path.exists(metadata_path)
             legacy_candidate = metadata_path != lock_path and _path_looks_like_json(lock_path)
 
             if not metadata_exists and not legacy_candidate:
                 return _ReadInfoOutcome(info=None, state="missing", source_path=None)
             if attempt < self.metadata_read_retry_attempts:
                 time.sleep(self.metadata_read_retry_sleep_seconds)
-        source = metadata_path if metadata_path.exists() else (lock_path if legacy_candidate else None)
+        source = metadata_path if os.path.exists(metadata_path) else (lock_path if legacy_candidate else None)
         return _ReadInfoOutcome(info=None, state="unreadable", source_path=source)
 
 
@@ -729,7 +729,7 @@ class LeaseFileLockBackend:
                     if (
                         stale_ref == lock_path
                         and _path_looks_like_json(lock_path)
-                        and not _metadata_path(lock_path).exists()
+                        and not os.path.exists(_metadata_path(lock_path))
                     ):
                         pass
                     elif not _is_path_stale_by_mtime(stale_ref, stale_threshold_seconds):
@@ -778,13 +778,13 @@ class LeaseFileLockBackend:
                 source = metadata_path if _read_info_path(metadata_path) is not None else lock_path
                 return _ReadInfoOutcome(info=info, state="valid", source_path=source)
 
-            metadata_exists = metadata_path.exists()
+            metadata_exists = os.path.exists(metadata_path)
             legacy_candidate = metadata_path != lock_path and _path_looks_like_json(lock_path)
             if not metadata_exists and not legacy_candidate:
                 return _ReadInfoOutcome(info=None, state="missing", source_path=None)
             if attempt < self.unreadable_retry_attempts:
                 time.sleep(self.unreadable_retry_sleep_seconds)
-        source = metadata_path if metadata_path.exists() else (lock_path if legacy_candidate else None)
+        source = metadata_path if os.path.exists(metadata_path) else (lock_path if legacy_candidate else None)
         return _ReadInfoOutcome(info=None, state="unreadable", source_path=source)
 
     def release(self, handle: _LeaseLockHandle) -> None:

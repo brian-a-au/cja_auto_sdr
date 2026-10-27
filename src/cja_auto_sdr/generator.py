@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import argparse
 import contextlib
 import csv
@@ -26,7 +28,7 @@ from datetime import UTC, datetime
 from enum import Enum
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, NoReturn, Protocol, runtime_checkable
+from typing import Any, NoReturn, Protocol, TypeAlias, TypeVar, runtime_checkable
 
 import cjapy
 import pandas as pd
@@ -585,7 +587,7 @@ def _push_to_notion_from_json(
     )
 
     json_path = Path(json_file)
-    if not json_path.exists():
+    if not os.path.exists(json_path):
         _exit_error(f"--push-to-notion: file not found: {json_file}")
 
     try:
@@ -1374,7 +1376,10 @@ def _metadata_dataframe_to_dict(metadata_df: pd.DataFrame) -> dict[str, Any]:
     return metadata_df.set_index(metadata_df.columns[0])[metadata_df.columns[1]].to_dict()
 
 
-def _run_optional_inventory_step[T](
+T = TypeVar("T")
+
+
+def _run_optional_inventory_step(
     *,
     logger: Any,
     inventory_label: str,
@@ -1972,7 +1977,7 @@ def _validate_semantic_flag_relationships(
     if _normalize_output_format(getattr(args, "format", None)) == "notion":
         try:
             _workers = int(getattr(args, "workers", 1) or 1)
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             _workers = 1
         if _workers > 1:
             _exit_error(
@@ -2975,7 +2980,7 @@ def validate_data_view(cja: cjapy.CJA, data_view_id: str, logger: logging.Logger
 
         return True
 
-    except KeyboardInterrupt, SystemExit:
+    except (KeyboardInterrupt, SystemExit):
         raise
     except RECOVERABLE_CONFIG_API_EXCEPTIONS as e:  # cjapy API/bootstrap calls
         logger.error("=" * BANNER_WIDTH)
@@ -4638,7 +4643,7 @@ def run_dry_run(data_views: list[str], config_file: str, logger: logging.Logger,
             detail = _describe_unexpected_probe_payload(available_dvs)
             print(f"  ⚠ API connection returned unexpected payload ({detail})")
             available_dvs = []
-    except KeyboardInterrupt, SystemExit:
+    except (KeyboardInterrupt, SystemExit):
         print()
         print(ConsoleColors.warning("Dry-run cancelled."))
         raise
@@ -4689,7 +4694,7 @@ def run_dry_run(data_views: list[str], config_file: str, logger: logging.Logger,
                 raw_dv_info,
                 data_view_id=dv_id,
             )
-        except KeyboardInterrupt, SystemExit:
+        except (KeyboardInterrupt, SystemExit):
             print()
             print(ConsoleColors.warning("Validation cancelled."))
             raise
@@ -5067,8 +5072,8 @@ class NameResolutionDiagnostics:
     resolved_name_by_id: dict[str, str] = field(default_factory=dict)
 
 
-type NameResolutionResult = tuple[list[str], dict[str, list[str]]]
-type NameResolutionResultWithDiagnostics = tuple[list[str], dict[str, list[str]], NameResolutionDiagnostics]
+NameResolutionResult: TypeAlias = tuple[list[str], dict[str, list[str]]]
+NameResolutionResultWithDiagnostics: TypeAlias = tuple[list[str], dict[str, list[str]], NameResolutionDiagnostics]
 
 
 def _build_name_resolution_result(
@@ -6382,7 +6387,7 @@ def run_org_report(
         _status_print(ConsoleColors.error(f"ERROR: Configuration file '{config_file}' not found"))
         return False, False
 
-    except KeyboardInterrupt, SystemExit:
+    except (KeyboardInterrupt, SystemExit):
         if not quiet:
             _status_print()
             _status_print(ConsoleColors.warning("Operation cancelled."))

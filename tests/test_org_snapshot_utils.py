@@ -1985,3 +1985,23 @@ def test_scoped_org_report_snapshot_persists_exclusion_reason(tmp_path: Path):
     assert persisted["_snapshot_meta"]["history_exclusion_reason"] == "filtered_scope"
     assert org_report_snapshot_history_exclusion_reason(persisted) == "filtered_scope"
     assert _extract_snapshot_from_json(payload) is None
+
+
+class TestSnapshotUtilsUnsearchableParent:
+    def test_snapshot_dir_paths_root_under_unsearchable_dir(self, unsearchable_dir):
+        from cja_auto_sdr.org.snapshot_utils import org_report_snapshot_dir_paths
+
+        assert org_report_snapshot_dir_paths(unsearchable_dir / "snapshots") == ()
+
+    def test_snapshot_dir_paths_skips_unstatable_children(self, unsearchable_dir):
+        from cja_auto_sdr.org.snapshot_utils import org_report_snapshot_dir_paths
+
+        unsearchable_dir.chmod(0o755)
+        (unsearchable_dir / "org_a").mkdir()
+        unsearchable_dir.chmod(0o444)
+        assert org_report_snapshot_dir_paths(unsearchable_dir) == ()
+
+    def test_iter_snapshot_files_under_unsearchable_dir(self, unsearchable_dir):
+        from cja_auto_sdr.org.snapshot_utils import iter_org_report_snapshot_files
+
+        assert iter_org_report_snapshot_files(unsearchable_dir / "snapshots") == ()

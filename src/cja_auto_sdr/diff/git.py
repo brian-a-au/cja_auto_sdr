@@ -26,7 +26,9 @@ def _snapshot_pathspecs_for_data_view(snapshot_dir: Path, data_view_id: str) -> 
     """Return repo-relative snapshot paths for a specific data view."""
     suffix = f"_{data_view_id}"
     try:
-        return sorted(child.name for child in snapshot_dir.iterdir() if child.is_dir() and child.name.endswith(suffix))
+        return sorted(
+            child.name for child in snapshot_dir.iterdir() if os.path.isdir(child) and child.name.endswith(suffix)
+        )
     except OSError:
         return []
 
@@ -465,11 +467,11 @@ def git_init_snapshot_repo(directory: Path, logger: logging.Logger | None = None
 
         # Never overwrite files the user already keeps in the directory.
         gitignore = directory / ".gitignore"
-        if not gitignore.exists():
+        if not os.path.exists(gitignore):
             gitignore.write_text("# CJA SDR Snapshots\n*.log\n*.tmp\n.DS_Store\n")
 
         readme = directory / "README.md"
-        if not readme.exists():
+        if not os.path.exists(readme):
             readme.write_text(f"""# CJA SDR Snapshots
 
 This repository contains Solution Design Reference (SDR) snapshots from Adobe Customer Journey Analytics.

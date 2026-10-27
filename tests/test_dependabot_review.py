@@ -45,7 +45,7 @@ def package(name: str, version: str) -> dict:
 def locks() -> tuple[dict, dict]:
     before = {
         "version": 1,
-        "requires-python": ">=3.14",
+        "requires-python": ">=3.11",
         "package": [
             {
                 "name": "cja-auto-sdr",

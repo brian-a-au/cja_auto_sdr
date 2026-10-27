@@ -5,8 +5,8 @@ v3.5.12: Coverage hardening — removes pragma: no cover from 5 lines across
 calculated_metrics.py, segments.py, and derived_fields.py by crafting payloads
 that bypass upstream isinstance filters.
 
-Note: ``except TypeError, ValueError:`` in the source uses PEP 758 bare-comma
-syntax (Python 3.14+), not the legacy Python 2 form — no parentheses required.
+Note: the source writes ``except (TypeError, ValueError):`` with parentheses,
+which every supported Python version (3.11+) accepts.
 """
 
 from __future__ import annotations

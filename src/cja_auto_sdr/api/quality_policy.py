@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -78,7 +79,7 @@ def _parse_boolean_policy_flag(value: Any, *, key: str) -> bool:
 def load_quality_policy(policy_file: str | Path) -> dict[str, Any]:
     """Load and validate quality policy JSON file."""
     policy_path = Path(policy_file).expanduser()
-    if not policy_path.exists():
+    if not os.path.exists(policy_path):
         raise FileNotFoundError(f"Policy file not found: {policy_path}")
 
     with open(policy_path, encoding="utf-8") as f:

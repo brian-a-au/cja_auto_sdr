@@ -448,6 +448,24 @@ def sample_dimensions_df():
 
 
 @pytest.fixture
+def unsearchable_dir(tmp_path):
+    """Directory with its search (execute) bit cleared, so stat() of its children fails with EACCES.
+
+    Before Python 3.14, pathlib's exists()/is_dir()/is_file()/is_symlink() raise PermissionError
+    for paths beneath such a directory. os.path returns False on every supported version.
+    """
+    if os.name == "nt" or (hasattr(os, "getuid") and os.getuid() == 0):
+        pytest.skip("requires POSIX permissions enforced for a non-root user")
+    locked = tmp_path / "unsearchable"
+    locked.mkdir()
+    locked.chmod(0o444)
+    try:
+        yield locked
+    finally:
+        locked.chmod(0o755)
+
+
+@pytest.fixture
 def temp_output_dir(tmp_path):
     """Create a temporary output directory"""
     output_dir = tmp_path / "output"

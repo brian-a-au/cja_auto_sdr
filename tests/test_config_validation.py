@@ -664,3 +664,12 @@ class TestValidateConfigFile:
         assert result is True
         warning_calls = [str(c) for c in logger.warning.call_args_list]
         assert any("sandbox" in w.lower() for w in warning_calls)
+
+
+class TestValidateConfigFileUnsearchableParent:
+    def test_config_under_unsearchable_dir_returns_false(self, unsearchable_dir):
+        import logging
+
+        from cja_auto_sdr.core.config_validation import validate_config_file
+
+        assert validate_config_file(unsearchable_dir / "config.json", logging.getLogger("test")) is False

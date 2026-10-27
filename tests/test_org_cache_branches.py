@@ -1361,3 +1361,11 @@ def test_analyzer_persisted_cache_classifications(tmp_path, case, expected_hits,
         assert len([record for record in caplog.records if "malformed org report cache entry" in record.message]) == 1
         analyzer._validate_cache_entries([listing])
         assert len([record for record in caplog.records if "malformed org report cache entry" in record.message]) == 1
+
+
+class TestOrgReportCacheUnsearchableParent:
+    def test_cache_under_unsearchable_dir_loads_empty(self, unsearchable_dir):
+        from cja_auto_sdr.org.cache import OrgReportCache
+
+        cache = OrgReportCache(cache_dir=unsearchable_dir / "cache")
+        assert cache.get_stats()["cache_size_bytes"] == 0

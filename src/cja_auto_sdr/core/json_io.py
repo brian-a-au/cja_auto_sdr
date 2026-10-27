@@ -21,7 +21,7 @@ _DIRECTORY_FSYNC_BEST_EFFORT_ERRNOS = {
 
 def _reject_symlink_destination(target_path: Path) -> None:
     """Disallow replacing an existing symlink with atomic rename semantics."""
-    if target_path.is_symlink():
+    if os.path.islink(target_path):
         raise OSError(errno.ELOOP, "Refusing to atomically replace symlink destination", str(target_path))
 
 
@@ -111,7 +111,7 @@ def _resolve_dest(target_path: Path) -> tuple[Path, Path]:
     Returns ``(resolved_path, temp_dir)`` where *temp_dir* is the parent of
     the resolved target so the temp file lives on the same filesystem.
     """
-    if target_path.is_symlink():
+    if os.path.islink(target_path):
         resolved = target_path.resolve()
         return resolved, resolved.parent
     return target_path, target_path.parent
@@ -119,7 +119,7 @@ def _resolve_dest(target_path: Path) -> tuple[Path, Path]:
 
 def _directory_supports_atomic_replace(directory: Path) -> bool:
     """Return True when *directory* can accept temp-file creation and replace."""
-    return directory.exists() and os.access(directory, os.W_OK | os.X_OK)
+    return os.path.exists(directory) and os.access(directory, os.W_OK | os.X_OK)
 
 
 def _compatible_tmp_path(directory: Path) -> Path:
@@ -135,9 +135,9 @@ def _cleanup_tmp_path(tmp_path: Path) -> None:
 
 def _target_exists_for_compatible_write(target_path: Path, resolved: Path) -> bool:
     """Return True when the effective destination already exists."""
-    if target_path.is_symlink():
-        return resolved.exists()
-    return target_path.exists()
+    if os.path.islink(target_path):
+        return os.path.exists(resolved)
+    return os.path.exists(target_path)
 
 
 def _write_direct_text_compatible(

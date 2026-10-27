@@ -4,6 +4,8 @@ This module provides error handling, circuit breaker, and retry logic
 for robust API communication.
 """
 
+from __future__ import annotations
+
 import functools
 import logging
 import math
@@ -95,7 +97,7 @@ def _parse_env_numeric(value: str | None, cast: Callable[[str], Any]) -> Any | N
         return None
     try:
         parsed = cast(value)
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return None
     if isinstance(parsed, float) and not math.isfinite(parsed):
         return None
@@ -899,7 +901,7 @@ def retry_with_backoff(
     return decorator
 
 
-def make_api_call_with_retry[T](
+def make_api_call_with_retry(
     api_func: Callable[..., T],
     *args: Any,
     logger: logging.Logger | None = None,

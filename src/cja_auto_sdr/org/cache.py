@@ -122,7 +122,7 @@ class OrgReportLock:
             return False
         try:
             normalized_pid = int(pid)
-        except TypeError, ValueError, OverflowError:
+        except (TypeError, ValueError, OverflowError):
             return False
         if normalized_pid <= 0:
             return False
@@ -172,7 +172,7 @@ class OrgReportCache:
 
     def _load_cache(self) -> None:
         """Load cache from disk."""
-        if self.cache_file.exists():
+        if os.path.exists(self.cache_file):
             try:
                 with open(self.cache_file, encoding="utf-8") as f:
                     payload = json.load(f)
@@ -309,7 +309,7 @@ class OrgReportCache:
         )
         try:
             write_json_atomic(file_path, payload, indent=2, ensure_ascii=False)
-        except OSError, TypeError, ValueError:
+        except (OSError, TypeError, ValueError):
             raise
 
         return file_path
@@ -537,7 +537,7 @@ class OrgReportCache:
                 for filepath in sorted(duplicate_paths - kept_paths):
                     with contextlib.suppress(OSError):
                         Path(filepath).unlink()
-                    if not Path(filepath).exists():
+                    if not os.path.exists(filepath):
                         deleted_paths.append(filepath)
 
         return sorted(set(deleted_paths))
@@ -578,7 +578,7 @@ class OrgReportCache:
             fetched_time = datetime.fromisoformat(fetched_at)
             if datetime.now(UTC) - fetched_time > timedelta(hours=max_age_hours):
                 return None
-        except ValueError, TypeError:
+        except (ValueError, TypeError):
             return None
         return entry
 
@@ -800,5 +800,5 @@ class OrgReportCache:
         return {
             "entries": len(self._cache),
             "cache_file": str(self.cache_file),
-            "cache_size_bytes": self.cache_file.stat().st_size if self.cache_file.exists() else 0,
+            "cache_size_bytes": self.cache_file.stat().st_size if os.path.exists(self.cache_file) else 0,
         }

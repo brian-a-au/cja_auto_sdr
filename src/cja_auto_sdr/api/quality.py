@@ -1,5 +1,7 @@
 """Data quality validation for CJA Auto SDR."""
 
+from __future__ import annotations
+
 import logging
 import threading
 from collections.abc import Iterable
@@ -69,6 +71,8 @@ def _ids_for_mask(df: pd.DataFrame, mask: Any) -> list[object]:
 class DataQualityChecker:
     # Severity levels in priority order (highest to lowest) for proper sorting
     SEVERITY_ORDER: ClassVar[list[str]] = list(QUALITY_SEVERITY_ORDER)
+    # Tie-break order for issue types; other types sort after these
+    TYPE_ORDER: ClassVar[dict[str, int]] = {"Metrics": 0, "Dimensions": 1}
 
     def __init__(
         self,
@@ -556,8 +560,14 @@ class DataQualityChecker:
             other_cols = [col for col in df.columns if col not in preferred_order]
             df = df[existing_cols + other_cols]
 
-            # Sort by severity then by Category alphabetically
-            df = df.sort_values(by=["Severity", "Category"], ascending=[True, True])
+            # Sort by severity, then Category alphabetically, then a fixed Type order.
+            # Parallel validation adds issues in thread-completion order, so without
+            # the Type key the order of ties would change from run to run.
+            type_order = self.TYPE_ORDER
+            df = df.sort_values(
+                by=["Severity", "Category", "Type"],
+                key=lambda col: col.map(type_order).fillna(len(type_order)) if col.name == "Type" else col,
+            )
 
             # Limit to top N issues if max_issues > 0
             if max_issues > 0 and len(df) > max_issues:

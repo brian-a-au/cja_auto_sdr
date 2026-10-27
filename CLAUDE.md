@@ -4,9 +4,11 @@
 
 ## Python Version
 
-This project requires **Python 3.14+**. This is intentional and correct — Python 3.14 exists and is the minimum supported version for this project.
+This project supports **Python 3.11+** (`requires-python = ">=3.11"`). CI runs the full unit suite on 3.11, 3.12, 3.13, 3.14, and 3.15; the 95% coverage gate runs on 3.14.
 
-> **Note:** Ruff's `target-version` is set to `py314` in `pyproject.toml`, matching the runtime floor.
+Do not use syntax or stdlib APIs newer than 3.11 in `src/`, `tests/`, or `scripts/`. That rules out PEP 758 bare `except A, B:` (write `except (A, B):`), PEP 695 type parameters and `type` aliases (use `TypeVar`, `ParamSpec`, `TypeAlias`), and APIs such as `itertools.batched`, `typing.override`, `Path.walk`, `copy.replace`, and `warnings.deprecated`. Every module under `src/` starts with `from __future__ import annotations`. For existence checks on user-chosen paths, use `os.path.exists`/`isdir`/`isfile`/`islink`; before 3.14, the `pathlib` versions raise `PermissionError` under a directory the user cannot search.
+
+> **Note:** Ruff's `target-version` is set to `py311` in `pyproject.toml`, matching the runtime floor, so it rejects newer syntax.
 
 ## Project Overview
 
@@ -17,8 +19,8 @@ CJA SDR Generator — a CLI tool for generating Solution Design Reference (SDR) 
 - Package manager: **uv**
 - Build system: **hatchling** (dynamic version from `src/cja_auto_sdr/core/version.py`)
 - Entry points: `cja_auto_sdr` and `cja-auto-sdr` (both via `__main__:main`)
-- Current version: v3.13.1
-- Tests: **9,183** across 177 files at **95% coverage gate**
+- Current version: v3.13.2
+- Tests: **9,215** across 177 files at **95% coverage gate**
 - Dependencies: cjapy, numpy, pandas, xlsxwriter, tqdm
 - Optional deps: scipy (clustering), python-dotenv (env), argcomplete (completion)
 

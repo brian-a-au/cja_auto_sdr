@@ -4,6 +4,8 @@ All exception classes are designed to provide clear, actionable error messages
 with context about what went wrong and how to fix it.
 """
 
+from __future__ import annotations
+
 
 class CJASDRError(Exception):
     """Base exception for all CJA SDR errors."""

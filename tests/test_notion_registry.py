@@ -211,3 +211,10 @@ def test_exclusive_registry_lock_msvcrt_retries_on_oserror(tmp_path, monkeypatch
     assert state["lock_attempts"] == 2  # one OSError, then a successful retry
     data = json.loads(reg_path.read_text())
     assert data["dv_retry"]["page_id"] == "page-retry"
+
+
+class TestLoadRegistryUnsearchableParent:
+    def test_registry_under_unsearchable_dir_loads_empty(self, unsearchable_dir):
+        from cja_auto_sdr.output.notion_registry import load_registry
+
+        assert load_registry(unsearchable_dir / ".notion_pages.json") == {}

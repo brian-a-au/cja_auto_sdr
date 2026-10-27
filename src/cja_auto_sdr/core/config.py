@@ -5,6 +5,8 @@ and easy testing. They can be created from command-line arguments or
 used directly in code.
 """
 
+from __future__ import annotations
+
 import argparse
 from dataclasses import dataclass, field
 from enum import Enum

@@ -1,5 +1,7 @@
 """Excel formatting helpers (implementation in output/sdr/)."""
 
+from __future__ import annotations
+
 __all__ = ["ExcelFormatCache", "apply_excel_formatting"]
 
 from cja_auto_sdr.core.lazy import make_getattr

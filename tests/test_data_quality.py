@@ -436,3 +436,20 @@ def test_mixed_type_id_column_does_not_raise_and_counts_blank_and_nan():
     for issues in _invalid_id_issue_paths(["a", 1, float("nan"), "  "]):
         [invalid] = issues
         assert invalid["Occurrences"] == 2
+
+
+class TestIssueOrderingIsDeterministic:
+    """Parallel validation adds issues in thread-completion order; output order must not depend on it."""
+
+    @staticmethod
+    def _issue_types(insert_order: list[str]) -> list[str]:
+        checker = DataQualityChecker(logging.getLogger("test_order"), quiet=True)
+        for item_type in insert_order:
+            checker.add_issue("MEDIUM", "Null Values", item_type, "x", "Null values in description")
+            checker.add_issue("LOW", "Missing Descriptions", item_type, "x", "Items without descriptions")
+        return checker.get_issues_dataframe()["Type"].tolist()
+
+    def test_metrics_then_dimensions_regardless_of_insert_order(self):
+        expected = ["Metrics", "Dimensions", "Metrics", "Dimensions"]
+        assert self._issue_types(["Metrics", "Dimensions"]) == expected
+        assert self._issue_types(["Dimensions", "Metrics"]) == expected

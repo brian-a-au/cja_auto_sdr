@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.13.2] - 2026-10-27
+
+This patch lets you install and run the CLI on Python 3.11, 3.12, 3.13, 3.14, and 3.15. Before, it required Python 3.14, so users on machines that could not install 3.14 could not use `pip install cja-auto-sdr`.
+
+### Changed
+
+- **Python 3.11 support:** the minimum Python version is now 3.11 (`requires-python = ">=3.11"`). Report and data output (JSON, CSV, Excel, Markdown, and HTML) is the same on each supported version. The layout of `--help` and the wording of argparse error messages follow the installed Python version. CI runs the full unit suite on Python 3.11 to 3.15, and it installs the wheel with plain `pip` on 3.11 to check that the CLI starts.
+
+### Fixed
+
+- **`--validate-config` crash on folders you cannot search:** on Python versions before 3.14, checking an output directory, config file, profile, cache, or snapshot path under a directory you cannot search raised a `PermissionError` traceback. These checks now report the path as missing or not writable, as they already did on 3.14.
+- **`--validate-config` Python check:** the environment step now accepts Python 3.11 and later instead of failing below 3.14.
+- **`python -m cja_auto_sdr` program name:** `--help`, usage errors, and `--version` now show `python -m cja_auto_sdr` on every Python version. Before, Python 3.11 to 3.13 showed `__main__.py`.
+- **Data quality issue order:** issues with the same severity and category are now always listed with Metrics before Dimensions. Before, the order depended on which validation thread finished first, so two runs of the same data view could produce different JSON, CSV, Excel, Markdown, and HTML output.
+- **Abbreviated options after `--help` or `--version`:** on Python 3.11, `cja_auto_sdr --version --v` failed with an ambiguous option error. It now prints the version, as it does on newer Python versions. The same fix applies to `--help`.
+
 ## [3.13.1] - 2026-10-27
 
 This patch brings the CLI in line with how aa_auto_sdr v1.21.21 to v1.22.0 handles failed fetches, Git snapshot commits, batch failures, and report coverage.

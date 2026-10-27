@@ -102,3 +102,12 @@ def test_push_to_notion_takes_precedence_over_watch():
         watch_data_views=["dv_123"],
     )
     assert _infer_run_mode_enum(args) == RunMode.PUSH_TO_NOTION
+
+
+class TestPushToNotionUnsearchableParent:
+    def test_json_under_unsearchable_dir_reports_not_found(self, unsearchable_dir, capsys):
+        from cja_auto_sdr.generator import _push_to_notion_from_json
+
+        with pytest.raises(SystemExit):
+            _push_to_notion_from_json(str(unsearchable_dir / "report.json"))
+        assert "file not found" in capsys.readouterr().err

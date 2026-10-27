@@ -1,5 +1,7 @@
 """Output writer registry (thin wrapper around generator implementations)."""
 
+from __future__ import annotations
+
 from cja_auto_sdr.output.writers import (
     write_csv_output,
     write_excel_output,

@@ -1,5 +1,7 @@
 """Output module - Output format writers and registries."""
 
+from __future__ import annotations
+
 from cja_auto_sdr.output.excel import ExcelFormatCache, apply_excel_formatting
 from cja_auto_sdr.output.protocols import OutputWriter
 from cja_auto_sdr.output.registry import WRITER_REGISTRY, get_writer

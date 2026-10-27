@@ -4,6 +4,8 @@ This module centralizes all magic numbers, default configurations,
 and schema definitions used throughout the application.
 """
 
+from __future__ import annotations
+
 import os
 from typing import Any
 
@@ -13,6 +15,9 @@ from cja_auto_sdr.core.config import (
     RetryConfig,
     WorkerConfig,
 )
+
+# Minimum supported Python version (keep in sync with requires-python in pyproject.toml)
+MIN_PYTHON_VERSION: tuple[int, int] = (3, 11)
 
 # ==================== FORMAT ALIASES ====================
 
