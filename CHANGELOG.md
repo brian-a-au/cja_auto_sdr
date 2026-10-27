@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The Invalid IDs check now also flags whitespace-only IDs.
 - **Governance gates with `--fail-on-threshold`:** a requested governance gate that is `not_evaluated` now exits with code 1. This evaluation failure takes precedence over the threshold exit code 2.
 - **CI impact:** three fixes below turn runs that used to succeed into failures: unavailable requested inventories in diffs (exit 1), Excel publication failures, and data quality worker failures. Check CI jobs that run the tool and expect these cases to pass.
 - Update development Ruff to 0.17.1 and certifi to 2026.10.18.

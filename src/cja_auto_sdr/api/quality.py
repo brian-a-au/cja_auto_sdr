@@ -49,6 +49,16 @@ def partition_component_ids(values: Iterable[object]) -> tuple[list[str], int]:
     return sorted(addressable), unaddressable
 
 
+def _invalid_id_mask(ids: pd.Series) -> pd.Series:
+    """True where an id is NA/None/NaN or a string that is empty or whitespace-only.
+
+    Non-string scalars (int, float, bool) are not flagged here, unlike
+    ``partition_component_ids``, which also treats floats and bools as unaddressable.
+    """
+    blank = ids.map(lambda v: isinstance(v, str) and not v.strip()).astype(bool)
+    return ids.isna() | blank
+
+
 def _ids_for_mask(df: pd.DataFrame, mask: Any) -> list[object]:
     """Return raw id values for the masked rows (empty when there is no id column)."""
     if "id" not in df.columns:
@@ -261,7 +271,7 @@ class DataQualityChecker:
                 self.logger.warning("'id' column not found in %s", item_type)
                 return
 
-            missing_ids_count = (df["id"].isna() | (df["id"] == "")).sum()
+            missing_ids_count = _invalid_id_mask(df["id"]).sum()
             if missing_ids_count > 0:
                 self.add_issue(
                     severity="HIGH",
@@ -410,7 +420,7 @@ class DataQualityChecker:
 
             # Check 6: Vectorized ID validity check
             if "id" in df.columns:
-                missing_ids_count = (df["id"].isna() | (df["id"] == "")).sum()
+                missing_ids_count = _invalid_id_mask(df["id"]).sum()
                 if missing_ids_count > 0:
                     _record_issue(
                         severity="HIGH",

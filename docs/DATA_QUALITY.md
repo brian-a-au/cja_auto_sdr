@@ -66,7 +66,9 @@ The generator performs six core automated validation checks on your CJA componen
 |--------|---------|
 | Severity | HIGH |
 | Impact | Components cannot be referenced properly in reports |
-| Example | ID field is empty or contains invalid characters |
+| Example | ID field is missing, empty, or whitespace-only |
+
+This check flags only missing values and empty or whitespace-only strings, while the `Unaddressable IDs` count in the rule identity fields also counts floats and booleans as unaddressable.
 
 ### No-Issue Summary Row
 
