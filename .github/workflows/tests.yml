@@ -296,6 +296,16 @@ jobs:
             echo "::error::'python -m cja_auto_sdr --help' did not report the module program name" >&2
             exit 1
           fi
+          # --help goes through the fast path; a usage error reaches the full parser.
+          set +e
+          /tmp/pip-venv/bin/python -m cja_auto_sdr --bogus-flag >/dev/null 2>/tmp/usage-error.txt
+          usage_status=$?
+          set -e
+          tail -1 /tmp/usage-error.txt
+          if [ "$usage_status" -ne 2 ] || ! grep -q -- "-m cja_auto_sdr: error:" /tmp/usage-error.txt; then
+            echo "::error::Full parser usage error did not exit 2 with the module program name" >&2
+            exit 1
+          fi
           /tmp/pip-venv/bin/python -c "import numpy, pandas; print('numpy', numpy.__version__, 'pandas', pandas.__version__)"
 
   build:

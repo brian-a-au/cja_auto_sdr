@@ -15,7 +15,7 @@ This patch lets you install and run the CLI on Python 3.11, 3.12, 3.13, 3.14, an
 
 ### Changed
 
-- **Python 3.11 support:** the minimum Python version is now 3.11 (`requires-python = ">=3.11"`). The output of every command is the same on each supported version. CI runs the full unit suite on Python 3.11 to 3.15, and it installs the wheel with plain `pip` on 3.11 to check that the CLI starts.
+- **Python 3.11 support:** the minimum Python version is now 3.11 (`requires-python = ">=3.11"`). Report and data output (JSON, CSV, Excel, Markdown, and HTML) is the same on each supported version. The layout of `--help` and the wording of argparse error messages follow the installed Python version. CI runs the full unit suite on Python 3.11 to 3.15, and it installs the wheel with plain `pip` on 3.11 to check that the CLI starts.
 
 ### Fixed
 

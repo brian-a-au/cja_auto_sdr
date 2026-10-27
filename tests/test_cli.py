@@ -755,6 +755,14 @@ class TestFastPathEntryPoint:
         assert _is_fast_path_flag(["prog", "-h", "--v"]) == "--help"
         assert _is_fast_path_flag(["prog", "-V", "--v"]) == "--version"
 
+    def test_full_parser_prog_uses_module_name_for_main_py_argv0(self):
+        """`python -m cja_auto_sdr` must not show `__main__.py` on Python 3.11 to 3.13."""
+        from cja_auto_sdr.cli.parser import parse_arguments
+
+        with patch.object(sys, "argv", ["/site-packages/cja_auto_sdr/__main__.py"]):
+            parser = parse_arguments(return_parser=True, enable_autocomplete=False)
+        assert parser.prog.endswith(" -m cja_auto_sdr")
+
     def test_is_fast_path_flag_earlier_parse_error_still_wins_over_version(self):
         from cja_auto_sdr.__main__ import _is_fast_path_flag
 
