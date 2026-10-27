@@ -117,7 +117,7 @@ cja-auto-sdr [OPTIONS] DATA_VIEW_ID_OR_NAME [...]
 | `--output-dir PATH` | Output directory for generated files | Current directory (or `OUTPUT_DIR` if set) |
 | `--output PATH` | Output file path. Use `-` or `stdout` to write a command-family-supported format to stdout; SDR generation supports JSON, discovery and stats support JSON/CSV, diff supports JSON, and org-report supports JSON/console. Implies `--quiet` for stdout | - |
 | `--format FORMAT` | Output format (see table below) | excel (SDR), console (diff) |
-| `--json-typed` | Emit versioned typed JSON (`schema_version: cja-auto-sdr.sdr-typed/1`) that keeps nested objects, lists, booleans, and numbers native. SDR generation only; requires `--format json` (or `--agent-mode`, which defaults to JSON on stdout). Any other format exits 1 with `ERROR: --json-typed requires --format json` before any API call. Ignored in other modes. See [OUTPUT_FORMATS.md](OUTPUT_FORMATS.md#typed-json---json-typed) | False |
+| `--json-typed` | Emit versioned typed JSON (`schema_version: cja-auto-sdr.sdr-typed/1`) that keeps nested objects, lists, booleans, and numbers native. SDR generation only; requires `--format json` (or `--agent-mode`, which defaults to JSON on stdout). Any other format exits 1 with `ERROR: --json-typed requires --format json` before any API call. Ignored in other modes, and has no effect with `--quality-report`. See [OUTPUT_FORMATS.md](OUTPUT_FORMATS.md#typed-json---json-typed) | False |
 | `--stats` | Show quick statistics (metrics/dimensions count) without generating full SDR report | False |
 | `--metrics-only` | Restrict output to metrics (exclude dimensions). Applies to SDR generation and diff comparison | False |
 | `--dimensions-only` | Restrict output to dimensions (exclude metrics). Applies to SDR generation and diff comparison | False |
@@ -144,7 +144,7 @@ cja-auto-sdr [OPTIONS] DATA_VIEW_ID_OR_NAME [...]
 
 An exception inside a validation check or worker fails the run with `DQ_VALIDATION_RUNTIME_FAILED` (exit 1), even if other checks already found quality issues. With `--allow-partial`, the report marks validation as failed and the run summary records `data_quality_validation_runtime_failed`; incomplete findings are not presented as completed validation or cached as a successful result.
 
-> **Run summary observability:** Failed SDR results include stable `failure_code` and `failure_reason` fields, top-level `failure_rollups.by_code` / `failure_rollups.by_reason` counts, additive `output_files` alongside compatibility `output_file`, and per-result `partial_output` / `partial_reasons` for `--allow-partial` runs, and per-result `inventory_statuses` (`completed` or `failed` for each requested optional inventory).
+> **Run summary observability:** Run summaries include: stable `failure_code` and `failure_reason` fields on failed SDR results; top-level `failure_rollups.by_code` and `failure_rollups.by_reason` counts; additive `output_files` alongside the compatibility `output_file`; per-result `partial_output` and `partial_reasons` for `--allow-partial` runs; and per-result `inventory_statuses` (`completed` or `failed` for each requested optional inventory).
 >
 > **Artifact compatibility:** When `output_files` is present, `output_file` remains the primary artifact for backward compatibility and is listed first in the emitted artifact order.
 >

@@ -11,12 +11,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Typed SDR JSON with `--json-typed`:** an opt-in JSON contract for SDR generation that keeps nested objects, lists, booleans, and numbers native instead of turning them into JSON text. The payload starts with `"schema_version": "cja-auto-sdr.sdr-typed/1"`, and `data_view` holds the full data view configuration with complete lists. Missing values become `null`, strings are never parsed, and files and stdout are written as strict JSON. It requires `--format json` (or `--agent-mode`). Any other format exits 1 with `ERROR: --json-typed requires --format json` before any API call. Default JSON output is unchanged.
+- **Typed SDR JSON with `--json-typed`:** an opt-in JSON contract for SDR generation that keeps nested objects, lists, booleans, and numbers native instead of turning them into JSON text. The payload starts with `"schema_version": "cja-auto-sdr.sdr-typed/1"`, and `data_view` holds the full data view configuration with complete lists. Missing values become `null`, strings are never parsed, and files and stdout are written as strict JSON. Whole numbers that pandas stored as floats may still appear as floats (a documented limit). It requires `--format json` (or `--agent-mode`). Any other format exits 1 with `ERROR: --json-typed requires --format json` before any API call. Default JSON output is unchanged.
 - **Staged CSV bundles with a completion manifest:** `--format csv` now writes all sections to a hidden staging directory and publishes them together, ending with `_manifest.json` (file name, sheet, SHA-256, row count, and byte size for each file). If a section fails to render, the previous bundle is left untouched. Files that are not part of the new run are never deleted. Duplicate or unsafe section names now raise an output error.
-- **Quality rule identity:** every data quality issue now has a stable `Rule ID` (for example `dq.missing_description.v1`), a sorted list of affected `Component IDs`, an `Occurrences` count and an `Unaddressable IDs` count. These appear as four new trailing columns in the Data Quality output. JSON keeps `Component IDs` as a list. Excel, CSV, HTML and Markdown show it as a comma-separated string. Severity counts are unchanged.
+- **Quality rule identity:** every data quality issue now has a stable `Rule ID` (for example `dq.missing_description.v1`), a sorted list of affected `Component IDs`, an `Occurrences` count and an `Unaddressable IDs` count. These appear as four new trailing columns in the Data Quality output. JSON keeps `Component IDs` as a list. Excel, CSV, HTML, Markdown and Notion show it as a comma-separated string. `--quality-report` json and csv output gain the same four fields (JSON keeps the list, CSV joins it). Severity counts are unchanged.
 - **Diff coverage:** diff JSON output now has a top-level `coverage` object that lists the fields compared, ignored fields, component types, inventories, metadata policy, `--show-only` filter, and known limitations. `summary.metadata_changes` and `summary.metadata_policy` are also new. Console and Markdown reports show a `Metadata changes: N` line.
 - **Inventory operation status:** SDR runs now record whether each requested optional inventory (`--include-derived`, `--include-calculated-metrics`, `--include-segments`) was `completed` or `failed`. The status appears as `... Inventory Status` metadata rows and as `inventory_statuses` on each run summary result. A failed inventory now renders as "... inventory unavailable" with a note that it is not an empty result, instead of "No ... found". An inventory that finished with no items still says "No ... found for this data view". `completed` means the operation finished, not that every upstream record parsed. Partial reasons and exit codes are unchanged.
 - **`--include-metadata-changes` for diffs:** counts data view name, owner, and description changes as changes for `has_changes` and exit code 2. By default they are reported but not counted, as before.
+
+### Changed
+
+- **Governance gates with `--fail-on-threshold`:** a requested governance gate that is `not_evaluated` now exits with code 1. This evaluation failure takes precedence over the threshold exit code 2.
+- **CI impact:** three fixes above turn runs that used to succeed into failures: unavailable requested inventories in diffs (exit 1), Excel publication failures, and data quality worker failures. Check CI jobs that run the tool and expect these cases to pass.
+- Update development Ruff to 0.17.1 and certifi to 2026.10.18.
 
 ### Fixed
 
@@ -26,12 +32,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Excel publication:** Excel workbooks are now staged and published only after every sheet renders and the workbook closes. If anything fails, the previous workbook stays unchanged. Hardlinked and non-regular destination files are refused.
 - **Data quality worker failures:** a failed data quality worker now fails the run with `DQ_VALIDATION_RUNTIME_FAILED`, unless `--allow-partial` is given.
 - **Governance checks:** governance gates now report `pass`, `fail` or `not_evaluated` in the additive `governance_checks` output, so a gate that could not run is no longer mistaken for a pass.
-
-### Changed
-
-- **Governance gates with `--fail-on-threshold`:** a requested governance gate that is `not_evaluated` now exits with code 1. This evaluation failure takes precedence over the threshold exit code 2.
-- **CI impact:** three fixes above turn runs that used to succeed into failures: unavailable requested inventories in diffs (exit 1), Excel publication failures, and data quality worker failures. Check CI jobs that run the tool and expect these cases to pass.
-- Update development Ruff to 0.17.1 and certifi to 2026.10.18.
 
 ## [3.12.12] - 2026-10-16
 
