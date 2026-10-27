@@ -160,6 +160,8 @@ An exception inside a validation check or worker fails the run with `DQ_VALIDATI
 >
 > **Failure code registry:** Stable `failure_code` values are documented in [FAILURE_CODES.md](FAILURE_CODES.md).
 
+> **CSV bundles:** `--format csv` writes `{base_name}_csv/` through a staging directory and finishes with `_manifest.json` (file names, sheet names, SHA-256, row counts, byte sizes). Consumers should trust `_manifest.json`, not directory contents. Concurrent writes to one bundle are unsupported, and multi-file replacement is not atomic. See [OUTPUT_FORMATS.md](OUTPUT_FORMATS.md#2-csv-format).
+
 **Format Availability by Mode:**
 
 | Format | SDR Generation | Diff Comparison | Org-Wide Analysis | Discovery |

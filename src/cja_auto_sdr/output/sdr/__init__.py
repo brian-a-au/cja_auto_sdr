@@ -29,6 +29,7 @@ from cja_auto_sdr.core.colors import _format_error_msg
 from cja_auto_sdr.core.exceptions import OutputError
 from cja_auto_sdr.core.json_io import write_json_atomic_compatible, write_text_atomic_compatible
 from cja_auto_sdr.core.version import __version__
+from cja_auto_sdr.output.csv_staging import csv_member_name, publish_csv_bundle
 from cja_auto_sdr.output.excel_staging import staged_excel_writer
 
 __all__ = [
@@ -513,16 +514,13 @@ def write_csv_output(
     try:
         logger.info("Generating CSV output...")
 
-        # Create subdirectory for CSV files
         csv_dir = os.path.join(output_dir, f"{base_filename}_csv")
-        os.makedirs(csv_dir, exist_ok=True)
 
-        # Write each DataFrame to a separate CSV file
-        for sheet_name, sheet_df in data_dict.items():
-            df = to_display_frame(sheet_df)
-            csv_file = os.path.join(csv_dir, f"{sheet_name.replace(' ', '_').lower()}.csv")
-            df.to_csv(csv_file, index=False, encoding="utf-8")
-            logger.info("  \u2713 Created CSV: %s", os.path.basename(csv_file))
+        # Stage every section, then publish members and the completion manifest together
+        display_frames = {sheet_name: to_display_frame(sheet_df) for sheet_name, sheet_df in data_dict.items()}
+        publish_csv_bundle(display_frames, csv_dir)
+        for sheet_name in display_frames:
+            logger.info("  \u2713 Created CSV: %s", csv_member_name(sheet_name))
 
         logger.info("CSV files created in: %s", csv_dir)
         return csv_dir

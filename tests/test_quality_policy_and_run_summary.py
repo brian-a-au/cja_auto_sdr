@@ -2390,3 +2390,62 @@ def test_collect_data_quality_results_counts_grouped_issue_once():
     assert severity_counts["LOW"] == 1
     assert len(dq_issues) == 1
     assert len(dq_issues[0]["Component IDs"]) == 30
+
+
+class TestCsvBundleFailureAccounting:
+    """A failed CSV bundle must not be reported as an emitted output."""
+
+    @staticmethod
+    def _run(tmp_path: Path, output_format: str):
+        import pandas as pd
+
+        from cja_auto_sdr.generator import process_single_dataview
+
+        metrics = pd.DataFrame([{"id": "m1", "name": "M", "type": "standard", "description": "", "title": "M"}])
+        dims = pd.DataFrame([{"id": "d1", "name": "D", "type": "string", "description": "", "title": "D"}])
+        dv_info = {"id": "dv_test_12345", "name": "Test DV", "owner": {"name": "O"}, "description": ""}
+        logger = Mock()
+        logger.handlers = []
+        fetcher = Mock()
+        fetcher.fetch_all_data.return_value = (metrics, dims, dv_info)
+        checker = Mock()
+        checker.issues = []
+        checker.get_issues_dataframe.return_value = pd.DataFrame(
+            columns=["Severity", "Category", "Type", "Item Name", "Issue", "Details"]
+        )
+        original = pd.DataFrame.to_csv
+        calls = {"n": 0}
+
+        def flaky(self, *args, **kwargs):
+            calls["n"] += 1
+            if calls["n"] == 2:
+                raise OSError("disk full")
+            return original(self, *args, **kwargs)
+
+        with (
+            patch("cja_auto_sdr.generator.setup_logging", return_value=logger),
+            patch("cja_auto_sdr.generator.initialize_cja", return_value=Mock()),
+            patch("cja_auto_sdr.generator.ParallelAPIFetcher", return_value=fetcher),
+            patch("cja_auto_sdr.generator.DataQualityChecker", return_value=checker),
+            patch.object(pd.DataFrame, "to_csv", flaky),
+        ):
+            return process_single_dataview(
+                data_view_id="dv_test_12345",
+                config_file=str(tmp_path / "config.json"),
+                output_dir=str(tmp_path),
+                output_format=output_format,
+            )
+
+    def test_csv_failure_reports_failure_and_excludes_csv_dir(self, tmp_path):
+        result = self._run(tmp_path, "csv")
+        assert result.success is False
+        assert result.failure_code == "OUTPUT_WRITE_FAILED"
+        assert not any(p.endswith("_csv") for p in result.emitted_output_files)
+        assert not list(tmp_path.glob("*_csv/_manifest.json"))
+
+    def test_all_format_csv_failure_still_lists_completed_excel(self, tmp_path):
+        result = self._run(tmp_path, "all")
+        assert result.success is False
+        emitted = result.emitted_output_files
+        assert any(p.endswith(".xlsx") for p in emitted)
+        assert not any(p.endswith("_csv") for p in emitted)

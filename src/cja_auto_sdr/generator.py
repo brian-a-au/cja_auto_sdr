@@ -4304,6 +4304,7 @@ def process_single_dataview(
                 data_view_name=dv_name,
                 success=False,
                 error_message=f"Permission denied: {e!s}",
+                output_files=list(output_files),
                 failure_code=FAILURE_CODE_OUTPUT_PERMISSION_DENIED,
                 failure_reason="output_permission_denied",
             )
@@ -4322,6 +4323,7 @@ def process_single_dataview(
                 data_view_name=dv_name,
                 success=False,
                 error_message=str(e),
+                output_files=list(output_files),
                 failure_code=FAILURE_CODE_OUTPUT_WRITE_FAILED,
                 failure_reason=f"output_write_failed:{type(e).__name__}",
             )

@@ -46,12 +46,12 @@ def _patch_sdr_writer(name: str, exc: Exception):
 
 class TestWriteCsvOutputErrors:
     def test_permission_error(self, tmp_path: Path) -> None:
-        with patch("os.makedirs", side_effect=PermissionError("denied")):
+        with patch("pathlib.Path.mkdir", side_effect=PermissionError("denied")):
             with pytest.raises(PermissionError):
                 write_csv_output(_sample_data(), "test", str(tmp_path), logger)
 
     def test_os_error(self, tmp_path: Path) -> None:
-        with patch("os.makedirs", side_effect=OSError("disk full")):
+        with patch("pathlib.Path.mkdir", side_effect=OSError("disk full")):
             with pytest.raises(OSError, match="disk full"):
                 write_csv_output(_sample_data(), "test", str(tmp_path), logger)
 
@@ -505,3 +505,32 @@ def test_output_writer_branches_cover_remaining_value_and_attribute_errors(
         pytest.raises(TypeError, match="bad markdown"),
     ):
         write_markdown_output(data, {"Generated At": "2026-03-19"}, "md", str(tmp_path), logger)
+
+
+# ---------------------------------------------------------------------------
+# write_csv_output staged bundle + run accounting
+# ---------------------------------------------------------------------------
+
+
+class TestWriteCsvOutputBundle:
+    def test_returns_csv_dir_and_writes_manifest(self, tmp_path: Path) -> None:
+        result = write_csv_output(_sample_data(), "base", str(tmp_path), logger)
+        assert result == str(tmp_path / "base_csv")
+        assert (Path(result) / "_manifest.json").exists()
+        assert (Path(result) / "sheet1.csv").exists()
+
+    def test_second_section_failure_raises_and_writes_no_manifest(self, tmp_path: Path) -> None:
+        data = {"A": pd.DataFrame({"x": [1]}), "B": pd.DataFrame({"y": [2]})}
+        original = pd.DataFrame.to_csv
+        calls = {"n": 0}
+
+        def flaky(self, *args, **kwargs):
+            calls["n"] += 1
+            if calls["n"] == 2:
+                raise OSError("disk full")
+            return original(self, *args, **kwargs)
+
+        with patch.object(pd.DataFrame, "to_csv", flaky):
+            with pytest.raises(OSError, match="disk full"):
+                write_csv_output(data, "base", str(tmp_path), logger)
+        assert not (tmp_path / "base_csv" / "_manifest.json").exists()
