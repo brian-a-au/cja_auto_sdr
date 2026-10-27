@@ -110,7 +110,10 @@ def build_diff_json_data(
             "total_removed": summary.total_removed,
             "total_modified": summary.total_modified,
             "total_summary": summary.total_summary,
+            "metadata_changes": summary.metadata_changes,
+            "metadata_policy": "included" if summary.include_metadata else "reported",
         },
+        "coverage": diff_result.coverage.to_dict() if diff_result.coverage is not None else None,
         "metric_diffs": [_serialize_component_diff(d) for d in metric_diffs],
         "dimension_diffs": [_serialize_component_diff(d) for d in dimension_diffs],
     }

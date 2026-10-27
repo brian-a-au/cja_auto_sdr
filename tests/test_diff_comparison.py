@@ -3649,3 +3649,94 @@ class TestGetMostRecentSnapshot:
         assert summer is not None
         assert winter.hour == 20  # PST (UTC-8)
         assert summer.hour == 19  # PDT (UTC-7)
+
+
+# ==================== Coverage and metadata policy ====================
+
+
+def _snap(name="A", owner="o", description="d", metrics=None, dimensions=None):
+    return DataViewSnapshot(
+        data_view_id="dv_x",
+        data_view_name=name,
+        owner=owner,
+        description=description,
+        metrics=metrics if metrics is not None else [{"id": "metrics/m", "name": "M", "type": "int"}],
+        dimensions=dimensions if dimensions is not None else [{"id": "dimensions/d", "name": "D", "type": "string"}],
+    )
+
+
+def test_name_only_change_counts_metadata_but_not_default_gate():
+    result = DataViewComparator().compare(_snap(name="A"), _snap(name="B"))
+    assert result.summary.metadata_changes == 1
+    assert result.summary.has_metadata_changes is True
+    assert result.summary.has_changes is False
+    assert result.coverage.metadata_policy == "reported"
+
+
+def test_include_metadata_makes_name_only_change_a_change():
+    result = DataViewComparator(include_metadata=True).compare(_snap(name="A"), _snap(name="B"))
+    assert result.summary.has_changes is True
+    assert result.summary.total_changes == 0
+    assert result.coverage.metadata_policy == "included"
+
+
+@pytest.mark.parametrize("field", ["owner", "description"])
+def test_owner_and_description_changes_counted(field):
+    result = DataViewComparator().compare(_snap(), _snap(**{field: "changed"}))
+    assert result.summary.metadata_changes == 1
+    assert result.summary.has_changes is False
+
+
+def test_coverage_reports_effective_fields():
+    from cja_auto_sdr.diff.models import LIMITATION_THRESHOLD_COMPONENTS_ONLY
+
+    comparator = DataViewComparator(use_extended_fields=True, ignore_fields=["description"], metrics_only=True)
+    c = comparator.compare(_snap(), _snap()).coverage
+    assert "fieldDefinition" in c.compare_fields and "description" not in c.compare_fields
+    assert c.ignored_fields == ["description"] and c.component_types == ["metrics"]
+    assert c.metadata_fields == ["name", "owner", "description"]
+    assert LIMITATION_THRESHOLD_COMPONENTS_ONLY in c.limitations
+    assert c.to_dict()["show_only"] is None
+
+
+def test_show_only_records_gate_scope_limitation():
+    from cja_auto_sdr.diff.models import LIMITATION_SHOW_ONLY_GATE_SCOPE
+
+    default = DataViewComparator().compare(_snap(), _snap()).coverage
+    assert LIMITATION_SHOW_ONLY_GATE_SCOPE not in default.limitations
+    c = DataViewComparator(show_only=["added"]).compare(_snap(), _snap()).coverage
+    assert LIMITATION_SHOW_ONLY_GATE_SCOPE in c.limitations
+    assert c.show_only == ["added"]
+
+
+def test_extended_fields_flag_missing_definitions():
+    from cja_auto_sdr.diff.models import LIMITATION_DEFINITION_MISSING
+
+    with_def = [{"id": "dimensions/d", "name": "D", "fieldDefinition": [{"func": "raw-field"}]}]
+    without = [{"id": "dimensions/d", "name": "D"}]
+    one_side = DataViewComparator(use_extended_fields=True).compare(
+        _snap(dimensions=with_def),
+        _snap(dimensions=without),
+    )
+    assert LIMITATION_DEFINITION_MISSING in one_side.coverage.limitations
+    both_present = DataViewComparator(use_extended_fields=True).compare(
+        _snap(dimensions=with_def),
+        _snap(dimensions=with_def),
+    )
+    assert LIMITATION_DEFINITION_MISSING not in both_present.coverage.limitations
+    not_extended = DataViewComparator().compare(_snap(dimensions=with_def), _snap(dimensions=without))
+    assert LIMITATION_DEFINITION_MISSING not in not_extended.coverage.limitations
+
+
+def test_diff_result_without_coverage_serializes():
+    from cja_auto_sdr.output.diff.json import build_diff_json_data
+
+    result = DataViewComparator().compare(_snap(), _snap())
+    bare = DiffResult(
+        summary=result.summary,
+        metadata_diff=result.metadata_diff,
+        metric_diffs=[],
+        dimension_diffs=[],
+    )
+    assert bare.coverage is None
+    assert build_diff_json_data(bare)["coverage"] is None
