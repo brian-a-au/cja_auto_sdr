@@ -128,6 +128,7 @@ class WorkerArgs:
     notion_database_id: str | None = None
     notion_create_database: bool = False
     json_typed: bool = False
+    fail_on_quality: str | None = None
 
 
 @dataclass(frozen=True)
@@ -166,6 +167,7 @@ class ProcessingConfig:
     notion_database_id: str | None = None
     notion_create_database: bool = False
     json_typed: bool = False
+    fail_on_quality: str | None = None
     output_file: str | None = None
 
 
@@ -206,3 +208,4 @@ class BatchConfig:
     notion_database_id: str | None = None
     notion_create_database: bool = False
     json_typed: bool = False
+    fail_on_quality: str | None = None

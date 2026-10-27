@@ -65,6 +65,7 @@ class BatchProcessor:
         notion_database_id: str | None = None,
         notion_create_database: bool = False,
         json_typed: bool = False,
+        fail_on_quality: str | None = None,
         batch_config: BatchConfig | None = None,
     ):
         generator = _generator_module()
@@ -104,6 +105,7 @@ class BatchProcessor:
                 notion_database_id=notion_database_id,
                 notion_create_database=notion_create_database,
                 json_typed=json_typed,
+                fail_on_quality=fail_on_quality,
             )
 
         self.config_file = batch_config.config_file
@@ -139,6 +141,7 @@ class BatchProcessor:
         self.notion_database_id = batch_config.notion_database_id
         self.notion_create_database = batch_config.notion_create_database
         self.json_typed = batch_config.json_typed
+        self.fail_on_quality = batch_config.fail_on_quality
         self.batch_id = str(uuid.uuid4())[:8]
         base_logger = generator.setup_logging(batch_mode=True, log_level=self.log_level, log_format=self.log_format)
         self.logger = generator.with_log_context(base_logger, run_mode="batch", batch_id=self.batch_id)
@@ -214,6 +217,7 @@ class BatchProcessor:
                 notion_database_id=self.notion_database_id,
                 notion_create_database=self.notion_create_database,
                 json_typed=self.json_typed,
+                fail_on_quality=self.fail_on_quality,
             )
             for dv_id in data_view_ids
         ]

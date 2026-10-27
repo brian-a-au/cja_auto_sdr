@@ -1217,8 +1217,13 @@ def _build_sdr_metadata_dataframe(
     calculated_inventory_obj: Any,
     derived_inventory_obj: Any,
     inventory_statuses: Mapping[str, str] | None = None,
+    quality_gate_rows: Iterable[tuple[str, str]] = (),
 ) -> pd.DataFrame:
-    """Build the metadata DataFrame for SDR artifacts."""
+    """Build the metadata DataFrame for SDR artifacts.
+
+    ``quality_gate_rows`` (from the run coverage) adds the ``--fail-on-quality``
+    verdict and threshold after the data quality summary when a gate was requested.
+    """
     metric_types = metrics["type"].value_counts().to_dict() if not metrics.empty and "type" in metrics.columns else {}
     metric_summary = [f"{type_}: {count}" for type_, count in metric_types.items()]
 
@@ -1274,6 +1279,9 @@ def _build_sdr_metadata_dataframe(
         dq_issues_value,
         dq_summary_value,
     ]
+    for gate_property, gate_value in quality_gate_rows:
+        metadata_properties.append(gate_property)
+        metadata_values.append(gate_value)
 
     normalized_partial_output, normalized_partial_reasons = _normalize_partial_state(False, partial_reasons)
     if normalized_partial_output:
@@ -3034,6 +3042,7 @@ from cja_auto_sdr.output.sdr import (
     apply_excel_formatting,
     build_json_payload,
     build_typed_json_payload,
+    empty_section_placeholder,
     serialize_typed_json,
     write_csv_output,
     write_excel_output,
@@ -3042,6 +3051,7 @@ from cja_auto_sdr.output.sdr import (
     write_markdown_output,
     write_typed_json_output,
 )
+from cja_auto_sdr.output.sdr.coverage import coverage_section_labels
 
 # ==================== DIFF FILE WRITERS (moved to output/diff/) ====================
 # - write_diff_json_output -> output.diff.json
@@ -3274,6 +3284,7 @@ def process_single_dataview(
     output_file: str | None = None,
     processing_config: ProcessingConfig | None = None,
     json_typed: bool = False,
+    fail_on_quality: str | None = None,
 ) -> ProcessingResult:
     """
     Process a single data view and generate SDR in specified format(s)
@@ -3303,6 +3314,7 @@ def process_single_dataview(
         production_mode: Reduce per-issue warning log volume for production runs (default: False)
         batch_id: Optional batch correlation ID for structured logging context (default: None)
         json_typed: Write versioned typed JSON (native values) for the json format (default: False)
+        fail_on_quality: --fail-on-quality threshold, reported as the SDR's quality gate verdict (default: None)
 
     Returns:
         ProcessingResult with processing details including success status, metrics/dimensions count,
@@ -3343,6 +3355,7 @@ def process_single_dataview(
             notion_database_id=notion_database_id,
             notion_create_database=notion_create_database,
             json_typed=json_typed,
+            fail_on_quality=fail_on_quality,
         )
 
     config_file = processing_config.config_file
@@ -3377,6 +3390,7 @@ def process_single_dataview(
     notion_database_id = processing_config.notion_database_id
     notion_create_database = processing_config.notion_create_database
     json_typed = processing_config.json_typed
+    fail_on_quality = processing_config.fail_on_quality
     batch_id = processing_config.batch_id
 
     start_time = time.perf_counter()
@@ -3883,6 +3897,31 @@ def process_single_dataview(
                 )
                 _assign_inventory_result(key, payload)
 
+        # Per-family coverage and quality status, rendered by every SDR format.
+        from cja_auto_sdr.output.sdr.coverage import COVERAGE_SHEET_NAME, build_sdr_coverage
+
+        sdr_coverage = build_sdr_coverage(
+            metrics_count=len(metrics),
+            dimensions_count=len(dimensions),
+            metrics_only=metrics_only,
+            dimensions_only=dimensions_only,
+            inventory_only=execution_policy.inventory_only_omits_standard_sections,
+            fetch_statuses=fetch_statuses,
+            inventory_statuses=inventory_statuses,
+            inventory_counts={
+                "derived": len(derived_inventory_df),
+                "calculated": len(calculated_metrics_df),
+                "segments": len(segments_inventory_df),
+            },
+            validation_status=validation_status,
+            validation_status_detail=validation_status_detail,
+            dq_issues=dq_issues,
+            fail_on_quality=fail_on_quality,
+        )
+        # --metrics-only / --dimensions-only leave the other family out of every format.
+        include_metrics_section = "metrics" in sdr_coverage.collected_components
+        include_dimensions_section = "dimensions" in sdr_coverage.collected_components
+
         # Data processing
         logger.info("=" * BANNER_WIDTH)
         logger.info("Processing data for Excel export")
@@ -3918,6 +3957,7 @@ def process_single_dataview(
                 calculated_inventory_obj=calculated_inventory_obj,
                 derived_inventory_obj=derived_inventory_obj,
                 inventory_statuses=inventory_statuses,
+                quality_gate_rows=sdr_coverage.quality.metadata_rows(),
             )
             logger.info("Metadata created successfully")
         except (KeyError, TypeError, ValueError) as e:
@@ -3994,11 +4034,14 @@ def process_single_dataview(
         else:
             data_dict = {
                 "Metadata": metadata_df,
+                COVERAGE_SHEET_NAME: sdr_coverage.to_frame(),
                 "Data Quality": data_quality_df,
                 "DataView Details": lookup_df,
-                "Metrics": metrics,
-                "Dimensions": dimensions,
             }
+            if include_metrics_section:
+                data_dict["Metrics"] = metrics
+            if include_dimensions_section:
+                data_dict["Dimensions"] = dimensions
 
         # Add derived field inventory if available or placeholder if flag was used
         if not derived_inventory_df.empty:
@@ -4122,14 +4165,15 @@ def process_single_dataview(
                             sheets_to_write.extend(
                                 [
                                     (metadata_df, "Metadata"),
+                                    (data_dict[COVERAGE_SHEET_NAME], COVERAGE_SHEET_NAME),
                                     (data_quality_df, "Data Quality"),
                                 ],
                             )
                             sheets_to_write.append((lookup_df, "DataView"))
                             # Add component sheets based on filters
-                            if not dimensions_only:
+                            if include_metrics_section:
                                 sheets_to_write.append((metrics, "Metrics"))
-                            if not metrics_only:
+                            if include_dimensions_section:
                                 sheets_to_write.append((dimensions, "Dimensions"))
 
                         # Add inventory sheets at the end, ordered by CLI argument order
@@ -4159,10 +4203,11 @@ def process_single_dataview(
                                     )
                                     sheets_to_write.append((placeholder_df, name))
 
+                        section_labels = coverage_section_labels(data_dict)
                         for sheet_data, sheet_name in sheets_to_write:
                             if sheet_data.empty:
                                 logger.warning(f"Sheet {sheet_name} is empty, creating placeholder")
-                                placeholder_df = pd.DataFrame({"Note": [f"No data available for {sheet_name}"]})
+                                placeholder_df = empty_section_placeholder(sheet_name, section_labels)
                                 apply_excel_formatting(writer, placeholder_df, sheet_name, logger, format_cache)
                             else:
                                 apply_excel_formatting(writer, sheet_data, sheet_name, logger, format_cache)
@@ -4188,6 +4233,7 @@ def process_single_dataview(
                             data_view=lookup_data if isinstance(lookup_data, dict) else {},
                             metadata_dict=metadata_dict,
                             inventory_objects=inventory_objects,
+                            coverage=sdr_coverage,
                         )
                         if stdout_json_output:
                             sys.stdout.write(serialize_typed_json(typed_payload))
@@ -4206,7 +4252,7 @@ def process_single_dataview(
                             )
                     elif stdout_json_output:
                         # Stream the SDR JSON to stdout for piping (no file written).
-                        payload = build_json_payload(data_dict, metadata_dict, inventory_objects)
+                        payload = build_json_payload(data_dict, metadata_dict, inventory_objects, coverage=sdr_coverage)
                         sys.stdout.write(json.dumps(payload, indent=2, ensure_ascii=False))
                         sys.stdout.write("\n")
                         sys.stdout.flush()
@@ -4220,6 +4266,7 @@ def process_single_dataview(
                             logger,
                             inventory_objects,
                             output_path=redirect_output_path,
+                            coverage=sdr_coverage,
                         )
                         output_files.append(json_output)
 
