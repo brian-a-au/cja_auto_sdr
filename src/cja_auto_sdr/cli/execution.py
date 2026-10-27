@@ -579,7 +579,9 @@ def _run_batch_mode(
         "successful_results": successful_results,
         "quality_report_results": [],
         "processed_results": processed_results,
-        "overall_failure": bool(results["failed"] and not args.continue_on_error),
+        # --continue-on-error keeps processing the remaining data views, but it
+        # never hides failures: any failed data view makes the batch exit 1.
+        "overall_failure": bool(results.get("failed")),
         "processing_failures_detected": bool(results.get("failed")),
         "effective_workers": int(args.workers),
     }
