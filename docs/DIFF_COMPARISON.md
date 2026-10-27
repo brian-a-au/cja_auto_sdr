@@ -59,6 +59,8 @@ JSON output also carries a top-level `coverage` object that states what was comp
 
 > **Note:** `--show-only` also narrows change detection today. This is documented behavior, not a change.
 
+HTML, CSV, and Excel reports show the same information. All three always state the metadata policy (`reported` or `included`), even when there are no metadata changes. The HTML summary also shows the `Metadata changes: N` line and a "Comparison coverage" table. CSV output adds `metadata_changes` and `metadata_policy` rows to `metadata.csv` and writes a `coverage.csv` file (`Property,Value`, list values joined with `; `). Excel output adds `Metadata Changes` and `Metadata Policy` rows to the `Metadata` sheet and a `Coverage` sheet after it. When a result has no coverage (for example one built from an older snapshot), the coverage table, `coverage.csv`, and `Coverage` sheet are left out.
+
 ### Extended Fields
 
 Use `--extended-fields` to include additional fields in comparison:

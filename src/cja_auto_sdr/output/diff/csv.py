@@ -18,6 +18,7 @@ from cja_auto_sdr.diff.models import (
     ComponentDiff,
     DiffResult,
     InventoryItemDiff,
+    coverage_rows,
 )
 from cja_auto_sdr.output.diff.common import (
     _get_change_detail,
@@ -120,6 +121,8 @@ def write_diff_csv_output(
                 "generated_at",
                 "has_changes",
                 "total_changes",
+                "metadata_changes",
+                "metadata_policy",
             ],
             "Value": [
                 meta.source_id,
@@ -129,10 +132,18 @@ def write_diff_csv_output(
                 diff_result.generated_at,
                 str(summary.has_changes),
                 summary.total_changes,
+                summary.metadata_changes,
+                summary.metadata_policy,
             ],
         }
         pd.DataFrame(metadata_data).to_csv(os.path.join(csv_dir, "metadata.csv"), index=False, encoding="utf-8")
         logger.info("  Created: metadata.csv")
+
+        if diff_result.coverage is not None:
+            pd.DataFrame(coverage_rows(diff_result.coverage), columns=["Property", "Value"]).to_csv(
+                os.path.join(csv_dir, "coverage.csv"), index=False, encoding="utf-8"
+            )
+            logger.info("  Created: coverage.csv")
 
         # Helper function to write diff CSV
         def write_diff_csv(diffs: list[ComponentDiff], filename: str):

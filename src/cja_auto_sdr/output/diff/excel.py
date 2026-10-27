@@ -18,6 +18,7 @@ from cja_auto_sdr.diff.models import (
     ComponentDiff,
     DiffResult,
     InventoryItemDiff,
+    coverage_rows,
 )
 from cja_auto_sdr.output.diff.common import (
     _get_change_detail,
@@ -126,6 +127,8 @@ def write_diff_excel_output(
                     "Generated At",
                     "Has Changes",
                     "Total Changes",
+                    "Metadata Changes",
+                    "Metadata Policy",
                 ],
                 "Value": [
                     meta.source_id,
@@ -135,10 +138,17 @@ def write_diff_excel_output(
                     diff_result.generated_at,
                     str(summary.has_changes),
                     summary.total_changes,
+                    summary.metadata_changes,
+                    summary.metadata_policy,
                 ],
             }
             metadata_df = pd.DataFrame(metadata_data)
             metadata_df.to_excel(writer, sheet_name="Metadata", index=False)
+
+            if diff_result.coverage is not None:
+                pd.DataFrame(coverage_rows(diff_result.coverage), columns=["Property", "Value"]).to_excel(
+                    writer, sheet_name="Coverage", index=False
+                )
 
             # Helper function to write diff sheet
             def write_diff_sheet(diffs: list[ComponentDiff], sheet_name: str):
