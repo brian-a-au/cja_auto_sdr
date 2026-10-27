@@ -120,6 +120,8 @@ def write_diff_csv_output(
                 "generated_at",
                 "has_changes",
                 "total_changes",
+                "metadata_changes",
+                "metadata_policy",
             ],
             "Value": [
                 meta.source_id,
@@ -129,10 +131,27 @@ def write_diff_csv_output(
                 diff_result.generated_at,
                 str(summary.has_changes),
                 summary.total_changes,
+                summary.metadata_changes,
+                "included" if summary.include_metadata else "reported",
             ],
         }
         pd.DataFrame(metadata_data).to_csv(os.path.join(csv_dir, "metadata.csv"), index=False, encoding="utf-8")
         logger.info("  Created: metadata.csv")
+
+        if diff_result.coverage is not None:
+            coverage_items = diff_result.coverage.to_dict().items()
+            pd.DataFrame(
+                {
+                    "Property": [key for key, _ in coverage_items],
+                    "Value": [
+                        "; ".join(str(v) for v in value)
+                        if isinstance(value, list)
+                        else ("" if value is None else value)
+                        for _, value in coverage_items
+                    ],
+                },
+            ).to_csv(os.path.join(csv_dir, "coverage.csv"), index=False, encoding="utf-8")
+            logger.info("  Created: coverage.csv")
 
         # Helper function to write diff CSV
         def write_diff_csv(diffs: list[ComponentDiff], filename: str):

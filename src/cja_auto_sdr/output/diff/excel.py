@@ -126,6 +126,8 @@ def write_diff_excel_output(
                     "Generated At",
                     "Has Changes",
                     "Total Changes",
+                    "Metadata Changes",
+                    "Metadata Policy",
                 ],
                 "Value": [
                     meta.source_id,
@@ -135,10 +137,26 @@ def write_diff_excel_output(
                     diff_result.generated_at,
                     str(summary.has_changes),
                     summary.total_changes,
+                    summary.metadata_changes,
+                    "included" if summary.include_metadata else "reported",
                 ],
             }
             metadata_df = pd.DataFrame(metadata_data)
             metadata_df.to_excel(writer, sheet_name="Metadata", index=False)
+
+            if diff_result.coverage is not None:
+                coverage_items = diff_result.coverage.to_dict().items()
+                pd.DataFrame(
+                    {
+                        "Property": [key for key, _ in coverage_items],
+                        "Value": [
+                            "; ".join(str(v) for v in value)
+                            if isinstance(value, list)
+                            else ("" if value is None else value)
+                            for _, value in coverage_items
+                        ],
+                    },
+                ).to_excel(writer, sheet_name="Coverage", index=False)
 
             # Helper function to write diff sheet
             def write_diff_sheet(diffs: list[ComponentDiff], sheet_name: str):

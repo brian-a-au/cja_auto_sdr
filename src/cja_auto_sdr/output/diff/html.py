@@ -264,6 +264,28 @@ def write_diff_html_output(
         else:
             html_parts.append(f'<p class="total-changes">Total changes: {summary.total_changes}</p>')
 
+        if summary.metadata_summary_line:
+            html_parts.append(f'<p class="metadata-changes">{_safe_html_escape(summary.metadata_summary_line)}</p>')
+        metadata_policy = "included" if summary.include_metadata else "reported"
+        html_parts.append(f'<p class="metadata-policy">Metadata policy: {_safe_html_escape(metadata_policy)}</p>')
+
+        if diff_result.coverage is not None:
+            coverage_rows = []
+            for key, value in diff_result.coverage.to_dict().items():
+                if value is None or value == []:
+                    display = "\u2014"
+                elif isinstance(value, list):
+                    display = ", ".join(str(v) for v in value)
+                else:
+                    display = str(value)
+                coverage_rows.append(
+                    f"<tr><td>{_safe_html_escape(key)}</td><td>{_safe_html_escape(display)}</td></tr>",
+                )
+            html_parts.append(
+                '<h2>Comparison coverage</h2>\n<table class="summary-table">\n'
+                "<tr><th>Property</th><th>Value</th></tr>\n" + "\n".join(coverage_rows) + "\n</table>",
+            )
+
         # Helper function to generate diff table
         def generate_diff_table(diffs: list[ComponentDiff], title: str):
             changes = [d for d in diffs if d.change_type != ChangeType.UNCHANGED]
