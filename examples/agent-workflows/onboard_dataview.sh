@@ -72,6 +72,8 @@ mkdir -p "$REPORT_DIR" "$SNAPSHOT_DIR"
 
 RUN_SUMMARY_FILE="$REPORT_DIR/${DATA_VIEW_ID}_run_summary.json"
 
+# Optional: add --json-typed after --agent-mode if you later read nested fields
+# (such as fieldDefinition) from this JSON. See docs/OUTPUT_FORMATS.md.
 capture_command_output SDR_EXIT SDR_OUTPUT \
     uv run cja_auto_sdr "$DATA_VIEW_ID" --agent-mode \
         --output-dir "$REPORT_DIR" \

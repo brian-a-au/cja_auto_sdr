@@ -77,6 +77,8 @@ uv run cja_auto_sdr <dv_id> \
   --fail-on-quality HIGH
 ```
 
+**Tip: read nested fields as native JSON.** If you read nested fields such as `fieldDefinition`, or the full data view settings, from a single data view SDR, add `--json-typed` to `--format json` (or `--agent-mode`). Without it, those values arrive as JSON-encoded strings. The typed output sets `schema_version` to `cja-auto-sdr.sdr-typed/1`. See [OUTPUT_FORMATS.md](../OUTPUT_FORMATS.md#typed-json---json-typed) for the full contract.
+
 ## Success Criteria
 
 - Exit code 0 means the default org-report run completed.

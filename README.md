@@ -283,6 +283,7 @@ cja_auto_sdr "Production Analytics"
 | Quick inventory stats | `cja_auto_sdr dv_12345 --include-all-inventory --inventory-summary` |
 | Fail on quality issues >= HIGH | `cja_auto_sdr dv_12345 --fail-on-quality HIGH` |
 | Standalone quality report | `cja_auto_sdr dv_12345 --quality-report json --output -` |
+| Typed SDR JSON for automation | `cja_auto_sdr dv_12345 --format json --json-typed --output -` |
 | **Output Formats** | |
 | Export as Excel (default) | `cja_auto_sdr dv_12345 --format excel` |
 | Export as CSV | `cja_auto_sdr dv_12345 --format csv` |
