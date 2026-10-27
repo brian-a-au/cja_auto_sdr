@@ -590,7 +590,7 @@ class TestGitCommitSnapshotEdgeCases:
 class TestGitInitSnapshotRepo:
     """Lines 292-362: git_init_snapshot_repo failures."""
 
-    @patch("cja_auto_sdr.diff.git.is_git_repository", return_value=False)
+    @patch("cja_auto_sdr.diff.git.git_repository_state", return_value="not_repo")
     @patch("cja_auto_sdr.diff.git.subprocess.run")
     def test_git_init_fails(self, mock_run, mock_is_git, tmp_path):
         mock_run.return_value = MagicMock(returncode=1, stderr="init error")
@@ -598,7 +598,7 @@ class TestGitInitSnapshotRepo:
         assert ok is False
         assert "git init failed" in msg
 
-    @patch("cja_auto_sdr.diff.git.is_git_repository", return_value=False)
+    @patch("cja_auto_sdr.diff.git.git_repository_state", return_value="not_repo")
     @patch("cja_auto_sdr.diff.git.git_get_user_info", return_value=("User", "user@e.com"))
     @patch("cja_auto_sdr.diff.git.subprocess.run")
     def test_git_config_user_name_fails(self, mock_run, mock_user_info, mock_is_git, tmp_path):
@@ -624,7 +624,7 @@ class TestGitInitSnapshotRepo:
         assert ok is False
         assert "user.name failed" in msg
 
-    @patch("cja_auto_sdr.diff.git.is_git_repository", return_value=False)
+    @patch("cja_auto_sdr.diff.git.git_repository_state", return_value="not_repo")
     @patch("cja_auto_sdr.diff.git.git_get_user_info", return_value=("User", "user@e.com"))
     @patch("cja_auto_sdr.diff.git.subprocess.run")
     def test_git_config_user_email_fails(self, mock_run, mock_user_info, mock_is_git, tmp_path):
@@ -648,7 +648,7 @@ class TestGitInitSnapshotRepo:
         assert ok is False
         assert "user.email failed" in msg
 
-    @patch("cja_auto_sdr.diff.git.is_git_repository", return_value=False)
+    @patch("cja_auto_sdr.diff.git.git_repository_state", return_value="not_repo")
     @patch("cja_auto_sdr.diff.git.git_get_user_info", return_value=("User", "user@e.com"))
     @patch("cja_auto_sdr.diff.git.subprocess.run")
     def test_git_add_in_init_fails(self, mock_run, mock_user_info, mock_is_git, tmp_path):
@@ -676,7 +676,7 @@ class TestGitInitSnapshotRepo:
         assert ok is False
         assert "git add failed" in msg
 
-    @patch("cja_auto_sdr.diff.git.is_git_repository", return_value=False)
+    @patch("cja_auto_sdr.diff.git.git_repository_state", return_value="not_repo")
     @patch("cja_auto_sdr.diff.git.git_get_user_info", return_value=("User", "user@e.com"))
     @patch("cja_auto_sdr.diff.git.subprocess.run")
     def test_git_commit_in_init_fails(self, mock_run, mock_user_info, mock_is_git, tmp_path):
@@ -706,7 +706,7 @@ class TestGitInitSnapshotRepo:
         assert ok is False
         assert "git commit failed" in msg
 
-    @patch("cja_auto_sdr.diff.git.is_git_repository", return_value=False)
+    @patch("cja_auto_sdr.diff.git.git_repository_state", return_value="not_repo")
     @patch("cja_auto_sdr.diff.git.subprocess.run")
     def test_generic_exception_in_init(self, mock_run, mock_is_git, tmp_path):
         mock_run.side_effect = OSError("disk full")
@@ -907,7 +907,7 @@ class TestGitMiscBranches:
 
         with (
             patch("cja_auto_sdr.diff.git.git_get_user_info", return_value=("User", "")),
-            patch("cja_auto_sdr.diff.git.is_git_repository", return_value=False),
+            patch("cja_auto_sdr.diff.git.git_repository_state", return_value="not_repo"),
             patch("subprocess.run") as mock_run,
         ):
             mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
@@ -1114,7 +1114,7 @@ class TestGitRemainingLineCoverage:
 
     def test_init_snapshot_repo_already_a_git_repository(self, tmp_path):
         """Line 330: short-circuits when the directory is already a Git repo."""
-        with patch("cja_auto_sdr.diff.git.is_git_repository", return_value=True):
+        with patch("cja_auto_sdr.diff.git.git_repository_state", return_value="repo"):
             ok, msg = git_init_snapshot_repo(tmp_path)
 
         assert ok is True

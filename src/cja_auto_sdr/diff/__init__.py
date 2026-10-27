@@ -6,6 +6,7 @@ from cja_auto_sdr.diff.git import (
     git_commit_snapshot,
     git_get_user_info,
     git_init_snapshot_repo,
+    git_repository_state,
     is_git_repository,
     save_git_friendly_snapshot,
 )
@@ -34,6 +35,7 @@ __all__ = [
     "git_commit_snapshot",
     "git_get_user_info",
     "git_init_snapshot_repo",
+    "git_repository_state",
     "is_git_repository",
     "parse_retention_period",
     "save_git_friendly_snapshot",

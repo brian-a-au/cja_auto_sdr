@@ -238,7 +238,7 @@ class TestGitCommitSnapshotRevParseFailures:
     @patch("cja_auto_sdr.diff.git.is_git_repository", return_value=True)
     @patch("cja_auto_sdr.diff.git._run_git_command")
     def test_rev_parse_raises_boundary_error(self, mock_cmd, _mock_repo, _mock_paths, tmp_path):
-        """L290-293: rev-parse returns (None, error) → (False, formatted message)."""
+        """rev-parse error after a landed commit → success with unknown SHA."""
         exc = subprocess.TimeoutExpired(cmd="git", timeout=10)
 
         mock_cmd.side_effect = [
@@ -256,14 +256,14 @@ class TestGitCommitSnapshotRevParseFailures:
             dimensions_count=1,
         )
 
-        assert success is False
-        assert "timed out" in message.lower()
+        assert success is True
+        assert message == "unknown"
 
     @patch("cja_auto_sdr.diff.git._snapshot_pathspecs_for_data_view", return_value=["dv_dir_dv_123"])
     @patch("cja_auto_sdr.diff.git.is_git_repository", return_value=True)
     @patch("cja_auto_sdr.diff.git._run_git_command")
     def test_rev_parse_returns_none_result(self, mock_cmd, _mock_repo, _mock_paths, tmp_path):
-        """L294-295: rev-parse returns (None, None) → (False, unknown failure)."""
+        """rev-parse (None, None) after a landed commit → success with unknown SHA."""
         mock_cmd.side_effect = [
             (_make_ok(), None),  # git add
             (self._diff_result_with_changes(), None),  # git diff --cached
@@ -279,8 +279,8 @@ class TestGitCommitSnapshotRevParseFailures:
             dimensions_count=1,
         )
 
-        assert success is False
-        assert "unknown subprocess failure" in message
+        assert success is True
+        assert message == "unknown"
 
 
 # ---------------------------------------------------------------------------
@@ -417,7 +417,7 @@ class TestGitInitSnapshotRepoInitFailures:
     """Verify error paths during the git-init step."""
 
     @patch("cja_auto_sdr.diff.git.git_get_user_info", return_value=("Bot", ""))
-    @patch("cja_auto_sdr.diff.git.is_git_repository", return_value=False)
+    @patch("cja_auto_sdr.diff.git.git_repository_state", return_value="not_repo")
     @patch("cja_auto_sdr.diff.git._run_git_command")
     def test_git_init_returns_none_result(self, mock_cmd, _mock_repo, _mock_user, tmp_path):
         """L340-341: git init returns (None, None) → unknown subprocess failure."""
@@ -429,7 +429,7 @@ class TestGitInitSnapshotRepoInitFailures:
         assert "unknown subprocess failure" in message
 
     @patch("cja_auto_sdr.diff.git.git_get_user_info", return_value=("Bot", ""))
-    @patch("cja_auto_sdr.diff.git.is_git_repository", return_value=False)
+    @patch("cja_auto_sdr.diff.git.git_repository_state", return_value="not_repo")
     @patch("cja_auto_sdr.diff.git._run_git_command")
     def test_git_init_raises_boundary_error(self, mock_cmd, _mock_repo, _mock_user, tmp_path):
         """L334-339: git init returns (None, error) → formatted boundary error."""
@@ -451,7 +451,7 @@ class TestGitInitSnapshotRepoConfigNameFailures:
     """Verify error paths during git config user.name."""
 
     @patch("cja_auto_sdr.diff.git.git_get_user_info", return_value=("Bot", ""))
-    @patch("cja_auto_sdr.diff.git.is_git_repository", return_value=False)
+    @patch("cja_auto_sdr.diff.git.git_repository_state", return_value="not_repo")
     @patch("cja_auto_sdr.diff.git._run_git_command")
     def test_config_name_raises_boundary_error(self, mock_cmd, _mock_repo, _mock_user, tmp_path):
         """L356-361: git config user.name returns (None, error)."""
@@ -467,7 +467,7 @@ class TestGitInitSnapshotRepoConfigNameFailures:
         assert "timed out" in message.lower()
 
     @patch("cja_auto_sdr.diff.git.git_get_user_info", return_value=("Bot", ""))
-    @patch("cja_auto_sdr.diff.git.is_git_repository", return_value=False)
+    @patch("cja_auto_sdr.diff.git.git_repository_state", return_value="not_repo")
     @patch("cja_auto_sdr.diff.git._run_git_command")
     def test_config_name_returns_none_result(self, mock_cmd, _mock_repo, _mock_user, tmp_path):
         """L362-363: git config user.name returns (None, None)."""
@@ -491,7 +491,7 @@ class TestGitInitSnapshotRepoConfigEmailFailures:
     """Verify error paths during git config user.email."""
 
     @patch("cja_auto_sdr.diff.git.git_get_user_info", return_value=("Bot", ""))
-    @patch("cja_auto_sdr.diff.git.is_git_repository", return_value=False)
+    @patch("cja_auto_sdr.diff.git.git_repository_state", return_value="not_repo")
     @patch("cja_auto_sdr.diff.git._run_git_command")
     def test_config_email_raises_boundary_error(self, mock_cmd, _mock_repo, _mock_user, tmp_path):
         """L373-378: git config user.email returns (None, error)."""
@@ -508,7 +508,7 @@ class TestGitInitSnapshotRepoConfigEmailFailures:
         assert "timed out" in message.lower()
 
     @patch("cja_auto_sdr.diff.git.git_get_user_info", return_value=("Bot", ""))
-    @patch("cja_auto_sdr.diff.git.is_git_repository", return_value=False)
+    @patch("cja_auto_sdr.diff.git.git_repository_state", return_value="not_repo")
     @patch("cja_auto_sdr.diff.git._run_git_command")
     def test_config_email_returns_none_result(self, mock_cmd, _mock_repo, _mock_user, tmp_path):
         """L379-380: git config user.email returns (None, None)."""
@@ -533,7 +533,7 @@ class TestGitInitSnapshotRepoAddFailures:
     """Verify error paths during the git-add step inside init."""
 
     @patch("cja_auto_sdr.diff.git.git_get_user_info", return_value=("Bot", "bot@local"))
-    @patch("cja_auto_sdr.diff.git.is_git_repository", return_value=False)
+    @patch("cja_auto_sdr.diff.git.git_repository_state", return_value="not_repo")
     @patch("cja_auto_sdr.diff.git._run_git_command")
     def test_git_add_raises_boundary_error(self, mock_cmd, _mock_repo, _mock_user, tmp_path):
         """L418-423: git add returns (None, error) during init."""
@@ -551,7 +551,7 @@ class TestGitInitSnapshotRepoAddFailures:
         assert "timed out" in message.lower()
 
     @patch("cja_auto_sdr.diff.git.git_get_user_info", return_value=("Bot", "bot@local"))
-    @patch("cja_auto_sdr.diff.git.is_git_repository", return_value=False)
+    @patch("cja_auto_sdr.diff.git.git_repository_state", return_value="not_repo")
     @patch("cja_auto_sdr.diff.git._run_git_command")
     def test_git_add_returns_none_result(self, mock_cmd, _mock_repo, _mock_user, tmp_path):
         """L424-425: git add returns (None, None) during init."""
@@ -577,7 +577,7 @@ class TestGitInitSnapshotRepoInitialCommitFailures:
     """Verify error paths during the initial git-commit step inside init."""
 
     @patch("cja_auto_sdr.diff.git.git_get_user_info", return_value=("Bot", "bot@local"))
-    @patch("cja_auto_sdr.diff.git.is_git_repository", return_value=False)
+    @patch("cja_auto_sdr.diff.git.git_repository_state", return_value="not_repo")
     @patch("cja_auto_sdr.diff.git._run_git_command")
     def test_initial_commit_raises_boundary_error(self, mock_cmd, _mock_repo, _mock_user, tmp_path):
         """L435-440: initial commit returns (None, error) during init."""
@@ -596,7 +596,7 @@ class TestGitInitSnapshotRepoInitialCommitFailures:
         assert "timed out" in message.lower()
 
     @patch("cja_auto_sdr.diff.git.git_get_user_info", return_value=("Bot", "bot@local"))
-    @patch("cja_auto_sdr.diff.git.is_git_repository", return_value=False)
+    @patch("cja_auto_sdr.diff.git.git_repository_state", return_value="not_repo")
     @patch("cja_auto_sdr.diff.git._run_git_command")
     def test_initial_commit_returns_none_result(self, mock_cmd, _mock_repo, _mock_user, tmp_path):
         """L441-442: initial commit returns (None, None) during init."""
@@ -622,7 +622,7 @@ class TestGitInitSnapshotRepoInitialCommitFailures:
 class TestGitInitSnapshotRepoOSErrorCatchAll:
     """Verify OSError during directory creation is caught and returned as tuple."""
 
-    @patch("cja_auto_sdr.diff.git.is_git_repository", return_value=False)
+    @patch("cja_auto_sdr.diff.git.git_repository_state", return_value="not_repo")
     def test_oserror_during_mkdir_returns_failure_tuple(self, _mock_repo, tmp_path):
         """L449-450: OSError (e.g. permission denied on mkdir) returns (False, message)."""
         read_only_parent = tmp_path / "read_only"
@@ -640,7 +640,7 @@ class TestGitInitSnapshotRepoOSErrorCatchAll:
             read_only_parent.chmod(0o755)
 
     @patch("cja_auto_sdr.diff.git.git_get_user_info", return_value=("Bot", "bot@local"))
-    @patch("cja_auto_sdr.diff.git.is_git_repository", return_value=False)
+    @patch("cja_auto_sdr.diff.git.git_repository_state", return_value="not_repo")
     @patch("cja_auto_sdr.diff.git._run_git_command")
     def test_oserror_during_gitignore_write_returns_failure_tuple(self, mock_cmd, _mock_repo, _mock_user, tmp_path):
         """L449-450: OSError while writing .gitignore is caught as OSError catch-all."""

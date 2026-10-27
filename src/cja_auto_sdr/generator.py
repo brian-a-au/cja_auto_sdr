@@ -1406,8 +1406,14 @@ def _refetch_git_snapshot_for_commit(
     profile: str | None,
     include_calculated_metrics: bool,
     include_segments_inventory: bool,
-) -> DataViewSnapshot:
-    """Best-effort snapshot re-fetch used by optional --git-commit flow."""
+) -> DataViewSnapshot | None:
+    """Snapshot re-fetch used by the optional --git-commit flow.
+
+    Returns the re-fetched snapshot, or the original snapshot when only optional
+    inventory enrichment failed. Returns ``None`` when the snapshot had no
+    component data and the re-fetch failed: saving that empty snapshot would
+    record every component as removed, so callers must not save or commit it.
+    """
     needs_fetch = not snapshot.metrics and not snapshot.dimensions
     needs_inventory = include_calculated_metrics or include_segments_inventory
     if not (needs_fetch or needs_inventory):
@@ -1428,9 +1434,12 @@ def _refetch_git_snapshot_for_commit(
                 include_calculated_metrics=include_calculated_metrics,
                 include_segments=include_segments_inventory,
             )
+        print(ConsoleColors.warning("  Could not fetch snapshot data: CJA client initialization failed"))
     except RECOVERABLE_GIT_SNAPSHOT_REFETCH_EXCEPTIONS as e:
         print(ConsoleColors.warning(f"  Could not fetch snapshot data: {e}"))
         _print_api_hint(e, file=sys.stdout)
+    if needs_fetch:
+        return None
     return snapshot
 
 
@@ -2637,6 +2646,7 @@ from cja_auto_sdr.diff.git import (
     git_commit_snapshot,
     git_get_user_info,
     git_init_snapshot_repo,
+    git_repository_state,
     is_git_repository,
     save_git_friendly_snapshot,
 )

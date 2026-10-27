@@ -435,7 +435,7 @@ class TestGitInitSnapshotRepo:
         assert "dimensions.json" in content
 
     @patch("cja_auto_sdr.diff.git.git_get_user_info", return_value=("Test User", "test@example.com"))
-    @patch("cja_auto_sdr.diff.git.is_git_repository", return_value=False)
+    @patch("cja_auto_sdr.diff.git.git_repository_state", return_value="not_repo")
     @patch("cja_auto_sdr.diff.git.subprocess.run")
     def test_init_fails_when_git_add_fails(self, mock_run, _mock_is_repo, _mock_user_info, tmp_path):
         """Test that git add failures are surfaced during init."""
@@ -451,7 +451,7 @@ class TestGitInitSnapshotRepo:
         assert "git add failed" in message
 
     @patch("cja_auto_sdr.diff.git.git_get_user_info", return_value=("Test User", "test@example.com"))
-    @patch("cja_auto_sdr.diff.git.is_git_repository", return_value=False)
+    @patch("cja_auto_sdr.diff.git.git_repository_state", return_value="not_repo")
     @patch("cja_auto_sdr.diff.git.subprocess.run")
     def test_init_fails_when_git_commit_fails(self, mock_run, _mock_is_repo, _mock_user_info, tmp_path):
         """Test that git commit failures are surfaced during init."""
@@ -467,7 +467,7 @@ class TestGitInitSnapshotRepo:
         assert success is False
         assert "git commit failed" in message
 
-    @patch("cja_auto_sdr.diff.git.is_git_repository", return_value=False)
+    @patch("cja_auto_sdr.diff.git.git_repository_state", return_value="not_repo")
     @patch("cja_auto_sdr.diff.git.subprocess.run")
     def test_init_decode_error_returns_failure_tuple(self, mock_run, _mock_is_repo, tmp_path):
         """Unicode decode failures should preserve non-throwing tuple contract."""
@@ -749,3 +749,250 @@ class TestCLIGitArguments:
             assert args.git_message == "Test message"
         finally:
             sys.argv = original_argv
+
+
+def _init_test_repo(path: Path) -> None:
+    """Create a real Git repository with a deterministic local identity."""
+    path.mkdir(parents=True, exist_ok=True)
+    subprocess.run(["git", "init"], cwd=str(path), capture_output=True, check=True)
+    subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=str(path), capture_output=True, check=True)
+    subprocess.run(["git", "config", "user.name", "Test User"], cwd=str(path), capture_output=True, check=True)
+
+
+def _git_stdout(path: Path, *args: str) -> str:
+    return subprocess.run(["git", *args], cwd=str(path), capture_output=True, text=True, check=True).stdout
+
+
+class TestGitRepositoryState:
+    """Tri-state repository discovery: repo / not_repo / unknown."""
+
+    def test_repo_root_is_repo(self, tmp_path):
+        from cja_auto_sdr.diff.git import git_repository_state
+
+        _init_test_repo(tmp_path)
+        assert git_repository_state(tmp_path) == "repo"
+
+    def test_plain_directory_is_not_repo(self, tmp_path):
+        from cja_auto_sdr.diff.git import git_repository_state
+
+        assert git_repository_state(tmp_path) == "not_repo"
+
+    def test_missing_directory_is_not_repo(self, tmp_path):
+        from cja_auto_sdr.diff.git import git_repository_state
+
+        assert git_repository_state(tmp_path / "missing") == "not_repo"
+
+    def test_subdirectory_of_enclosing_repo_is_not_its_own_repo(self, tmp_path):
+        from cja_auto_sdr.diff.git import git_repository_state
+
+        _init_test_repo(tmp_path)
+        nested = tmp_path / "sdr-snapshots"
+        nested.mkdir()
+        assert git_repository_state(nested) == "not_repo"
+        assert is_git_repository(nested) is False
+
+    @patch("subprocess.run")
+    def test_timeout_is_unknown(self, mock_run, tmp_path):
+        from cja_auto_sdr.diff.git import git_repository_state
+
+        mock_run.side_effect = subprocess.TimeoutExpired(cmd="git", timeout=10)
+        assert git_repository_state(tmp_path) == "unknown"
+        assert is_git_repository(tmp_path) is False
+
+    @patch("subprocess.run")
+    def test_git_missing_is_unknown(self, mock_run, tmp_path):
+        from cja_auto_sdr.diff.git import git_repository_state
+
+        mock_run.side_effect = FileNotFoundError()
+        assert git_repository_state(tmp_path) == "unknown"
+
+    @patch("subprocess.run")
+    def test_unexpected_rev_parse_failure_is_unknown(self, mock_run, tmp_path):
+        from cja_auto_sdr.diff.git import git_repository_state
+
+        mock_run.return_value = subprocess.CompletedProcess([], 128, stdout="", stderr="fatal: permission denied")
+        assert git_repository_state(tmp_path) == "unknown"
+
+    @patch("subprocess.run")
+    def test_not_a_repo_message_with_git_metadata_is_unknown(self, mock_run, tmp_path):
+        from cja_auto_sdr.diff.git import git_repository_state
+
+        (tmp_path / ".git").mkdir()
+        mock_run.return_value = subprocess.CompletedProcess(
+            [], 128, stdout="", stderr="fatal: not a git repository (or any of the parent directories): .git"
+        )
+        assert git_repository_state(tmp_path) == "unknown"
+
+    @patch("subprocess.run")
+    def test_empty_toplevel_is_unknown(self, mock_run, tmp_path):
+        from cja_auto_sdr.diff.git import git_repository_state
+
+        mock_run.return_value = subprocess.CompletedProcess([], 0, stdout="\n", stderr="")
+        assert git_repository_state(tmp_path) == "unknown"
+
+    def test_file_path_is_not_repo(self, tmp_path):
+        from cja_auto_sdr.diff.git import git_repository_state
+
+        target = tmp_path / "file.txt"
+        target.write_text("x")
+        assert git_repository_state(target) == "not_repo"
+
+
+class TestGitInitSnapshotRepoDiscovery:
+    """git_init_snapshot_repo must never init on unknown state and must scope its initial commit."""
+
+    @patch("cja_auto_sdr.diff.git.git_repository_state", return_value="unknown")
+    @patch("cja_auto_sdr.diff.git._run_git_command")
+    def test_unknown_state_refuses_to_init(self, mock_cmd, _mock_state, tmp_path):
+        success, message = git_init_snapshot_repo(tmp_path / "snapshots")
+
+        assert success is False
+        assert "could not determine" in message.lower()
+        mock_cmd.assert_not_called()
+
+    def test_nested_inside_enclosing_repo_creates_own_repo(self, tmp_path):
+        _init_test_repo(tmp_path)
+        (tmp_path / "parent.txt").write_text("parent")
+        subprocess.run(["git", "add", "parent.txt"], cwd=str(tmp_path), capture_output=True, check=True)
+        subprocess.run(["git", "commit", "-m", "parent"], cwd=str(tmp_path), capture_output=True, check=True)
+        nested = tmp_path / "sdr-snapshots"
+
+        success, message = git_init_snapshot_repo(nested)
+
+        assert success is True, message
+        assert message == "Repository initialized"
+        assert Path(_git_stdout(nested, "rev-parse", "--show-toplevel").strip()).resolve() == nested.resolve()
+        # Parent history is untouched.
+        assert _git_stdout(tmp_path, "log", "--oneline").count("\n") == 1
+
+    def test_initial_commit_only_contains_scaffold_files(self, tmp_path):
+        repo_dir = tmp_path / "snapshots"
+        repo_dir.mkdir()
+        (repo_dir / "stray.txt").write_text("not a scaffold file")
+
+        success, message = git_init_snapshot_repo(repo_dir)
+
+        assert success is True, message
+        committed = set(_git_stdout(repo_dir, "show", "--name-only", "--pretty=format:", "HEAD").split())
+        assert committed == {".gitignore", "README.md"}
+        assert "stray.txt" in _git_stdout(repo_dir, "status", "--porcelain")
+
+
+class TestGitCommitSnapshotScoping:
+    """Commit checks and the commit itself must be scoped to the data view's snapshot paths."""
+
+    def _baseline(self, tmp_path: Path) -> Path:
+        _init_test_repo(tmp_path)
+        dv_dir = tmp_path / "Target_dv_12345"
+        dv_dir.mkdir()
+        (dv_dir / "metrics.json").write_text('{"v": 1}')
+        (tmp_path / "notes.txt").write_text("base")
+        (tmp_path / "tracked.txt").write_text("base")
+        subprocess.run(["git", "add", "."], cwd=str(tmp_path), capture_output=True, check=True)
+        subprocess.run(["git", "commit", "-m", "baseline"], cwd=str(tmp_path), capture_output=True, check=True)
+        return dv_dir
+
+    def test_prestaged_unrelated_file_is_not_swept_into_commit(self, tmp_path):
+        dv_dir = self._baseline(tmp_path)
+        (tmp_path / "notes.txt").write_text("staged unrelated change")
+        subprocess.run(["git", "add", "notes.txt"], cwd=str(tmp_path), capture_output=True, check=True)
+        (tmp_path / "tracked.txt").write_text("unstaged unrelated change")
+        (dv_dir / "metrics.json").write_text('{"v": 2}')
+
+        success, result = git_commit_snapshot(
+            snapshot_dir=tmp_path,
+            data_view_id="dv_12345",
+            data_view_name="Target",
+            metrics_count=1,
+            dimensions_count=0,
+        )
+
+        assert success is True
+        assert result != "no_changes"
+        committed = _git_stdout(tmp_path, "show", "--name-only", "--pretty=format:", "HEAD").split()
+        assert committed == ["Target_dv_12345/metrics.json"]
+        # Unrelated work is preserved: still staged / still modified in the working tree.
+        assert _git_stdout(tmp_path, "diff", "--cached", "--name-only").split() == ["notes.txt"]
+        assert _git_stdout(tmp_path, "diff", "--name-only").split() == ["tracked.txt"]
+
+    def test_unchanged_view_with_other_staged_files_reports_no_changes(self, tmp_path):
+        self._baseline(tmp_path)
+        head_before = _git_stdout(tmp_path, "rev-parse", "HEAD")
+        (tmp_path / "notes.txt").write_text("staged unrelated change")
+        subprocess.run(["git", "add", "notes.txt"], cwd=str(tmp_path), capture_output=True, check=True)
+
+        success, result = git_commit_snapshot(
+            snapshot_dir=tmp_path,
+            data_view_id="dv_12345",
+            data_view_name="Target",
+            metrics_count=1,
+            dimensions_count=0,
+        )
+
+        assert success is True
+        assert result == "no_changes"
+        assert _git_stdout(tmp_path, "rev-parse", "HEAD") == head_before
+        assert _git_stdout(tmp_path, "diff", "--cached", "--name-only").split() == ["notes.txt"]
+
+    def test_deleted_snapshot_file_is_committed(self, tmp_path):
+        dv_dir = self._baseline(tmp_path)
+        (dv_dir / "segments.json").write_text("[]")
+        subprocess.run(["git", "add", "."], cwd=str(tmp_path), capture_output=True, check=True)
+        subprocess.run(["git", "commit", "-m", "segments"], cwd=str(tmp_path), capture_output=True, check=True)
+        (dv_dir / "segments.json").unlink()
+
+        success, result = git_commit_snapshot(
+            snapshot_dir=tmp_path,
+            data_view_id="dv_12345",
+            data_view_name="Target",
+            metrics_count=1,
+            dimensions_count=0,
+        )
+
+        assert success is True
+        assert result != "no_changes"
+        assert _git_stdout(tmp_path, "status", "--porcelain") == ""
+
+    @patch("cja_auto_sdr.diff.git._snapshot_pathspecs_for_data_view", return_value=["Target_dv_12345"])
+    @patch("cja_auto_sdr.diff.git.is_git_repository", return_value=True)
+    @patch("cja_auto_sdr.diff.git._run_git_command")
+    def test_diff_cached_unexpected_returncode_is_failure(self, mock_cmd, _mock_repo, _mock_paths, tmp_path):
+        mock_cmd.side_effect = [
+            (subprocess.CompletedProcess([], 0, stdout="", stderr=""), None),
+            (subprocess.CompletedProcess([], 128, stdout=b"", stderr=b"fatal: bad index"), None),
+        ]
+
+        success, message = git_commit_snapshot(
+            snapshot_dir=tmp_path,
+            data_view_id="dv_12345",
+            data_view_name="Target",
+            metrics_count=1,
+            dimensions_count=0,
+        )
+
+        assert success is False
+        assert "git diff failed" in message
+        assert "bad index" in message
+
+    def test_rev_parse_timeout_after_commit_reports_success_with_unknown_sha(self, tmp_path):
+        dv_dir = self._baseline(tmp_path)
+        (dv_dir / "metrics.json").write_text('{"v": 2}')
+        original_run = subprocess.run
+
+        def fake_run(cmd, *args, **kwargs):
+            if cmd == ["git", "rev-parse", "HEAD"]:
+                raise subprocess.TimeoutExpired(cmd=cmd, timeout=10)
+            return original_run(cmd, *args, **kwargs)
+
+        with patch("subprocess.run", side_effect=fake_run):
+            success, result = git_commit_snapshot(
+                snapshot_dir=tmp_path,
+                data_view_id="dv_12345",
+                data_view_name="Target",
+                metrics_count=1,
+                dimensions_count=0,
+            )
+
+        assert success is True
+        assert result == "unknown"
+        assert "dv_12345" in _git_stdout(tmp_path, "log", "--oneline", "-1")
