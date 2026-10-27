@@ -405,3 +405,34 @@ def test_issues_dataframe_column_order():
 @pytest.mark.parametrize("bad", [True, 1.5, {"a": 1}])
 def test_partition_rejects_non_str_int(bad):
     assert partition_component_ids([bad]) == ([], 1)
+
+
+def _invalid_id_issue_paths(ids):
+    df = pd.DataFrame({"id": ids, "name": [f"n{i}" for i in range(len(ids))], "description": ["d"] * len(ids)})
+    opt = _identity_checker()
+    opt.check_all_quality_issues_optimized(df, "Metrics", REQ, CRIT)
+    legacy = _identity_checker()
+    legacy.check_id_validity(df, "Metrics")
+    return _by_category(opt, "Invalid IDs"), _by_category(legacy, "Invalid IDs")
+
+
+def test_whitespace_only_ids_are_invalid_in_both_paths():
+    from cja_auto_sdr.api.quality import partition_component_ids
+
+    ids = ["a", "  ", "", None]
+    for issues in _invalid_id_issue_paths(ids):
+        [invalid] = issues
+        assert invalid["Occurrences"] == 3
+        assert invalid["Unaddressable IDs"] == 3
+    assert partition_component_ids(ids)[1] == 3
+
+
+def test_all_valid_ids_produce_no_invalid_id_issue():
+    for issues in _invalid_id_issue_paths(["a", "b", "c"]):
+        assert issues == []
+
+
+def test_mixed_type_id_column_does_not_raise_and_counts_blank_and_nan():
+    for issues in _invalid_id_issue_paths(["a", 1, float("nan"), "  "]):
+        [invalid] = issues
+        assert invalid["Occurrences"] == 2
