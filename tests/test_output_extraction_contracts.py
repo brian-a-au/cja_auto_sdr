@@ -320,6 +320,7 @@ _OUTPUT_WRITER_SIGNATURES = {
         "logger",
         "inventory_objects",
         "output_path",
+        "coverage",
     ],
     "write_markdown_output": ["data_dict", "metadata_dict", "base_filename", "output_dir", "logger", "output_path"],
 }

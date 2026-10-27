@@ -323,7 +323,7 @@ def test_generator_sheet_order_data_and_formatting(generate, tmp_path, options, 
         assert workbook.testzip() is None
         root = ET.fromstring(workbook.read("xl/workbook.xml"))
         names = [s.attrib["name"] for s in root.findall("x:sheets/x:sheet", ns)]
-        assert names == ["Metadata", "Data Quality", "DataView", *components]
+        assert names == ["Metadata", "Coverage", "Data Quality", "DataView", *components]
         strings = workbook.read("xl/sharedStrings.xml").decode()
         for name in components:
             assert name[:-1] in strings

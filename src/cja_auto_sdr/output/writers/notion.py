@@ -48,6 +48,7 @@ _SECTION_ORDER = [
     "Derived Fields",
 ]
 _SECTION_ICONS = {
+    "Coverage": "🧭",
     "Metrics": "📐",
     "Dimensions": "📏",
     "Segments": "🔖",
@@ -248,6 +249,7 @@ def build_sdr_blocks(
 
     data_dict = {name: (to_display_frame(df) if df is not None else df) for name, df in data_dict.items()}
     blocks: list[dict] = [_metadata_callout_block(metadata_dict), _divider_block()]
+    blocks.extend(_section_blocks("Coverage", data_dict.get("Coverage")))
 
     dq_df = data_dict.get("Data Quality")
     if dq_df is not None and not dq_df.empty:
