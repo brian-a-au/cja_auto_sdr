@@ -24,6 +24,7 @@ import pandas as pd
 from tqdm import tqdm
 
 from cja_auto_sdr.api.client import _normalize_dataview_listing_payload_or_raise
+from cja_auto_sdr.api.fetch import ComponentFetchFailure, fetch_component_payload
 from cja_auto_sdr.core.constants import (
     DEFAULT_ORG_REPORT_WORKERS,
     GOVERNANCE_MAX_OVERLAP_THRESHOLD,
@@ -882,7 +883,9 @@ class OrgComponentAnalyzer:
         try:
             cja = self._get_thread_client()
             # Fetch metrics
-            metrics_df = cja.getMetrics(dv_id, inclType=True, full=True)
+            metrics_df = fetch_component_payload(cja, "metrics", dv_id, inclType=True, full=True)
+            if isinstance(metrics_df, ComponentFetchFailure):
+                raise RuntimeError(metrics_df.message)
             metric_ids = set()
             metric_names = None
             standard_metric_count = 0
@@ -922,7 +925,9 @@ class OrgComponentAnalyzer:
                     standard_metric_count = len(metrics_df) - derived_metric_count
 
             # Fetch dimensions
-            dimensions_df = cja.getDimensions(dv_id, inclType=True, full=True)
+            dimensions_df = fetch_component_payload(cja, "dimensions", dv_id, inclType=True, full=True)
+            if isinstance(dimensions_df, ComponentFetchFailure):
+                raise RuntimeError(dimensions_df.message)
             dimension_ids = set()
             dimension_names = None
             standard_dimension_count = 0
