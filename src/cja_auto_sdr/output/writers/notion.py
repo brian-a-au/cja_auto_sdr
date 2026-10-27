@@ -496,10 +496,12 @@ def create_or_update_page(
 ) -> str:
     """Create a new Notion page or update the existing one for this data view.
 
-    Returns the Notion page ID. On CREATE, the registry entry is written only
-    after a successful block append, so a mid-flight failure leaves the
-    registry unchanged and the next run creates a fresh page. On UPDATE the
-    page ID does not change, so the registry is not rewritten.
+    Returns the Notion page ID. On CREATE, the new page ID is written to the
+    registry right after ``pages.create`` and before any blocks are appended,
+    so a mid-flight append failure leaves a recorded (partially filled) page.
+    The next run takes the UPDATE path, clears that page and refills it,
+    instead of creating a duplicate. On UPDATE the page ID does not change,
+    so the registry is not rewritten.
     """
     existing_page_id = lookup_page_id(registry_path, data_view_id)
 
@@ -514,10 +516,12 @@ def create_or_update_page(
         properties={"title": [{"type": "text", "text": {"content": page_title}}]},
     )
     page_id = page["id"]
-    _append_blocks(client, page_id, blocks)
+    # Record the page before uploading content so a partial upload is retried
+    # in place on the next run rather than leaving an untracked duplicate.
     store_page_id(registry_path, data_view_id, page_id)
     if force_new and existing_page_id and existing_page_id != page_id:
         add_orphaned_page_id(registry_path, data_view_id, existing_page_id)
+    _append_blocks(client, page_id, blocks)
     return page_id
 
 
