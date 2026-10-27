@@ -1828,7 +1828,7 @@ uv sync
 ```bash
 # Remove and recreate venv
 rm -rf .venv
-uv venv --python 3.14
+uv venv
 uv sync
 ```
 
@@ -1879,7 +1879,7 @@ cja_auto_sdr dv_YOUR_DATA_VIEW_ID
 # Remove existing virtual environment
 Remove-Item -Recurse -Force .venv
 
-# Create new virtual environment with Python 3.14 or higher
+# Create new virtual environment with Python 3.11 or higher
 python -m venv .venv
 
 # Activate it

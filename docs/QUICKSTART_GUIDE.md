@@ -32,7 +32,7 @@ Before starting, ensure you have:
 - [ ] **Terminal/Command Line** - Basic familiarity with running commands ([terminal basics guide](https://developer.mozilla.org/en-US/docs/Learn/Tools_and_testing/Understanding_client-side_tools/Command_line))
 - [ ] **20 minutes** - Most time is spent on Adobe Developer Console setup
 
-> **Can't install uv?** You can install from PyPI with pip instead — you'll need Python 3.14+ installed manually ([download Python](https://www.python.org/downloads/)). See [Install from PyPI](#install-from-pypi-recommended) below.
+> **Can't install uv?** You can install from PyPI with pip instead — you'll need Python 3.11+ installed manually ([download Python](https://www.python.org/downloads/)). See [Install from PyPI](#install-from-pypi-recommended) below.
 
 ---
 
@@ -140,13 +140,13 @@ uv 0.x.x
 Install the published [cja-auto-sdr package from PyPI](https://pypi.org/project/cja-auto-sdr/) into an isolated tool environment:
 
 ```bash
-uv tool install --python 3.14 cja-auto-sdr
+uv tool install cja-auto-sdr
 cja_auto_sdr --version
 ```
 
 If uv reports that its executable directory is missing from your `PATH`, run `uv tool update-shell` and restart your terminal.
 
-**Alternative: pip with Python 3.14+**
+**Alternative: pip with Python 3.11+**
 
 Create and activate a virtual environment first:
 
@@ -321,7 +321,7 @@ To enable `.env` file loading, install the `env` extra using the method you chos
 
 ```bash
 # PyPI installation with uv tool
-uv tool install --python 3.14 "cja-auto-sdr[env]"
+uv tool install "cja-auto-sdr[env]"
 
 # PyPI installation with pip (in your activated venv)
 python -m pip install "cja-auto-sdr[env]"

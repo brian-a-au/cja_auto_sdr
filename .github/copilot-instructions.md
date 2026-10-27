@@ -2,7 +2,7 @@
 
 - Read and follow the repository-root `AGENTS.md` before editing. It is the
   authoritative project and tool contract.
-- This is a Python 3.14+ CLI managed with `uv`. Install the development
+- This is a Python 3.11+ CLI managed with `uv`. Install the development
   environment with `uv sync`.
 - Preserve the core safety invariant: Adobe Customer Journey Analytics API
   access is read-only. Never add an SDK or HTTP call that creates, updates, or

@@ -4,7 +4,7 @@ Complete setup instructions for the CJA SDR Generator.
 
 ## System Requirements
 
-- **Python**: Version 3.14 or higher
+- **Python**: Version 3.11 or higher
 - **uv**: Modern Python package manager (recommended)
 - **Operating System**: Windows, macOS, or Linux
 - **Disk Space**: Minimum 100MB for logs and output files
@@ -179,7 +179,7 @@ If you encounter issues with `uv` on Windows (especially NumPy import errors), u
 **Step 1: Verify Python Installation**
 
 ```text
-# Check Python version (must be 3.14+)
+# Check Python version (must be 3.11+)
 python --version
 
 # Verify Python is from python.org, not Microsoft Store
@@ -257,7 +257,7 @@ cja_auto_sdr dv_YOUR_DATA_VIEW_ID
 | NumPy ImportError | Reinstall with `pip install --only-binary :all: numpy` |
 | Permission denied | Run PowerShell as Administrator or use `Set-ExecutionPolicy RemoteSigned` |
 | Module not found | Ensure venv is activated: `.venv\Scripts\activate` |
-| Wrong Python version | Specify Python explicitly: `py -3.14 -m venv .venv` or higher |
+| Wrong Python version | Specify Python explicitly: `py -3.11 -m venv .venv` or higher |
 
 ## Credential Configuration
 
@@ -385,7 +385,7 @@ All dependencies are managed through `pyproject.toml`:
 [project]
 name = "cja-auto-sdr"
 dynamic = ["version"]  # Version read from src/cja_auto_sdr/core/version.py
-requires-python = ">=3.14"
+requires-python = ">=3.11"
 dependencies = [
     "cjapy>=0.2.4.post3",
     "numpy>=2.2.0,!=2.4.0",
@@ -445,7 +445,7 @@ uv sync --extra clustering --extra dev
 python3 --version
 ```
 
-Expected output: `Python 3.14.x` or higher
+Expected output: `Python 3.11.x` or higher
 
 ### Check uv Installation
 
