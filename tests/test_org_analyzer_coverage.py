@@ -1938,12 +1938,12 @@ def _make_scipy_import_error():
 
 
 # ===================================================================
-# 17. __init__ cache clear when config.clear_cache=True (lines 91-92)
+# 17. Cache clear when config.clear_cache=True happens in run_analysis(), not __init__
 # ===================================================================
 
 
 class TestInitCacheClear:
-    """Tests for __init__ cache clear when config.clear_cache=True."""
+    """Tests that the clear_cache=True clear happens inside run_analysis(), not at construction."""
 
     def test_clear_cache_not_applied_at_construction(self, mock_cja, logger):
         """Construction must not clear the shared cache; that waits for the org lock."""
