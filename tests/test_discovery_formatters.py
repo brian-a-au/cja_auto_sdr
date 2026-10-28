@@ -290,6 +290,33 @@ class TestBannerWidth:
 class TestApplyDiscoveryFiltersAndSort:
     """Tests for discovery filtering/sorting helper behavior."""
 
+    @pytest.mark.parametrize(
+        ("filter_pattern", "exclude_pattern", "expected"),
+        [
+            ("^Adobe Store - Prod$", None, ["dv_1"]),
+            ("^Adobe", None, ["dv_1", "dv_2"]),
+            ("Prod$", None, ["dv_1"]),
+            ("^dv_2$", None, ["dv_2"]),
+            ("^Adobe", "Copy\\)$", ["dv_1"]),
+            (None, "^Adobe Store - Prod$", ["dv_2", "dv_3"]),
+        ],
+    )
+    def test_regex_anchors_apply_to_each_field(self, filter_pattern, exclude_pattern, expected):
+        """--filter/--exclude anchors match a field's value, not a blob of every field joined together."""
+        rows = [
+            {"id": "dv_1", "name": "Adobe Store - Prod", "owner": "Ana"},
+            {"id": "dv_2", "name": "Adobe Store - Prod (Copy)", "owner": "Bo"},
+            {"id": "dv_3", "name": "Sandbox", "owner": "Cy"},
+        ]
+        filtered = _apply_discovery_filters_and_sort(
+            rows,
+            filter_pattern=filter_pattern,
+            exclude_pattern=exclude_pattern,
+            searchable_fields=["id", "name", "owner"],
+            default_sort_field="id",
+        )
+        assert [row["id"] for row in filtered] == expected
+
     def test_numeric_sort_uses_numeric_order(self):
         """Numeric values should sort as numbers (2 before 10), not text."""
         rows = [
