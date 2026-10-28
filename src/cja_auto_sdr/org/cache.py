@@ -168,6 +168,10 @@ class OrgReportCache:
         self.cache_file = cache_dir / "org_report_cache.json"
         self.logger = logger or logging.getLogger(__name__)
         self._cache: dict[str, dict[str, Any]] = {}
+        # Pending changes since the last save; _save_cache merges only these into the disk file.
+        self._dirty_ids: set[str] = set()
+        self._removed_ids: set[str] = set()
+        self._cleared = False
         self._load_cache()
 
     def _load_cache(self) -> None:
@@ -257,15 +261,48 @@ class OrgReportCache:
         if invalid_field is not None:
             self.logger.warning("Ignoring malformed org report cache entry for %s: invalid %s", dv_id, invalid_field)
             del self._cache[dv_id]
+            self._removed_ids.add(dv_id)
+            self._dirty_ids.discard(dv_id)
             return None
         return entry
 
-    def _save_cache(self) -> None:
-        """Save cache to disk via atomic write-then-rename."""
+    def _read_disk_entries(self) -> dict[str, dict[str, Any]]:
+        """Read the current cache file, returning {} when missing, unreadable, or malformed."""
+        if not os.path.exists(self.cache_file):
+            return {}
         try:
-            write_json_atomic(self.cache_file, self._cache, indent=2, default=str)
+            with open(self.cache_file, encoding="utf-8") as f:
+                payload = json.load(f)
+        except (OSError, ValueError) as e:
+            self.logger.warning("Failed to load org report cache from %s: %s", self.cache_file, type(e).__name__)
+            return {}
+        if not isinstance(payload, dict):
+            self.logger.warning("Ignoring org report cache with invalid root shape at %s", self.cache_file)
+            return {}
+        return payload
+
+    def _save_cache(self) -> None:
+        """Merge this instance's pending changes into the disk file via atomic write-then-rename.
+
+        The cache file is shared by all orgs, so re-read it and apply only our
+        changes instead of overwriting it with the in-memory dict.
+        """
+        # A short window remains between this read and the replace; accepted risk for a cache.
+        merged = {} if self._cleared else self._read_disk_entries()
+        for dv_id in self._removed_ids:
+            merged.pop(dv_id, None)
+        for dv_id in self._dirty_ids:
+            if dv_id in self._cache:
+                merged[dv_id] = self._cache[dv_id]
+        try:
+            write_json_atomic(self.cache_file, merged, indent=2, default=str)
         except OSError as e:
             self.logger.warning("Failed to save org report cache to %s: %s", self.cache_file, e)
+            return
+        self._cache = merged
+        self._dirty_ids.clear()
+        self._removed_ids.clear()
+        self._cleared = False
 
     @staticmethod
     def _sanitize_org_id(org_id: str | None) -> str:
@@ -683,6 +720,8 @@ class OrgReportCache:
             include_component_types=include_component_types,
             validation_modified=summary.modified,
         )
+        self._dirty_ids.add(summary.data_view_id)
+        self._removed_ids.discard(summary.data_view_id)
         self._save_cache()
 
     def put_many(
@@ -713,6 +752,8 @@ class OrgReportCache:
                     else validation_modified_by_id.get(summary.data_view_id)
                 ),
             )
+            self._dirty_ids.add(summary.data_view_id)
+            self._removed_ids.discard(summary.data_view_id)
         self._save_cache()
 
     def _build_entry(
@@ -761,8 +802,13 @@ class OrgReportCache:
         """
         if dv_id is None:
             self._cache = {}
-        elif dv_id in self._cache:
-            del self._cache[dv_id]
+            self._cleared = True
+            self._dirty_ids.clear()
+            self._removed_ids.clear()
+        else:
+            self._cache.pop(dv_id, None)
+            self._removed_ids.add(dv_id)
+            self._dirty_ids.discard(dv_id)
         self._save_cache()
 
     def has_valid_entry(self, dv_id: str, max_age_hours: int = 24) -> bool:
