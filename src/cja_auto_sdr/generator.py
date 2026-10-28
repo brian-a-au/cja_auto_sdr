@@ -8079,6 +8079,8 @@ def main():
                     ConsoleColors.warning(f"Warning: Failed to write run summary to '{run_summary_output}': {e!s}"),
                     file=sys.stderr,
                 )
+                if exit_code == 0:
+                    raise SystemExit(1) from e
 
 
 if __name__ == "__main__":
