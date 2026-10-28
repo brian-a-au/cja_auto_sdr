@@ -881,7 +881,7 @@ class OrgComponentAnalyzer:
             summaries,
             key=lambda s: (
                 position.get(s.data_view_id, unlisted),
-                s.data_view_id if s.data_view_id not in position else "",
+                str(s.data_view_id) if s.data_view_id not in position else "",
             ),
         )
 

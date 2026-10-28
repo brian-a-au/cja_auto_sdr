@@ -3395,3 +3395,15 @@ def test_nan_name_successful_fetch_uses_unknown_name(mock_cja, logger):
     mock_cja.getDimensions.return_value = pd.DataFrame({"id": ["d1"], "name": ["Browser"]})
     result = analyzer._fetch_data_view_components({"id": "dv_1", "name": float("nan")})
     assert result.data_view_name == "Unknown"
+
+
+def test_order_summaries_unlisted_none_id_mixed_with_string_id(mock_cja, logger):
+    analyzer = _make_analyzer(mock_cja, logger)
+    summaries = [
+        DataViewSummary(data_view_id=None, data_view_name="NoId"),
+        DataViewSummary(data_view_id="dv_x", data_view_name="X"),
+        DataViewSummary(data_view_id="dv_listed", data_view_name="Listed"),
+    ]
+    result = analyzer._order_summaries_by_listing(summaries, [{"id": "dv_listed"}])
+    assert result[0].data_view_id == "dv_listed"
+    assert {s.data_view_id for s in result[1:]} == {None, "dv_x"}
