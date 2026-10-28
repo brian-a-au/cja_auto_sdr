@@ -3369,3 +3369,29 @@ def test_stratified_sample_tolerates_null_names(mock_cja, logger, bad_name):
         {"id": "dv_3", "name": "Dev B"},
     ]
     assert len(analyzer._stratified_sample(dvs, 2)) == 2
+
+
+def test_null_name_error_summary_yields_single_row(mock_cja, logger):
+    analyzer = _make_analyzer(mock_cja, logger)
+    analyzer.cache = None
+    error_summary = DataViewSummary(data_view_id="dv_1", data_view_name="Unknown", error="boom")
+    with patch.object(analyzer, "_fetch_data_view_components", return_value=error_summary):
+        result = analyzer._fetch_all_data_views([{"id": "dv_1", "name": None}])
+    assert [s.data_view_id for s in result] == ["dv_1"]
+
+
+def test_null_name_fetch_failure_uses_unknown_name(mock_cja, logger):
+    analyzer = _make_analyzer(mock_cja, logger)
+    analyzer.cache = None
+    with patch.object(analyzer, "_fetch_data_view_components", side_effect=ValueError("bad")):
+        result = analyzer._fetch_all_data_views([{"id": "dv_1", "name": float("nan")}])
+    assert len(result) == 1
+    assert result[0].data_view_name == "Unknown"
+
+
+def test_nan_name_successful_fetch_uses_unknown_name(mock_cja, logger):
+    analyzer = _make_analyzer(mock_cja, logger)
+    mock_cja.getMetrics.return_value = pd.DataFrame({"id": ["m1"], "name": ["Revenue"]})
+    mock_cja.getDimensions.return_value = pd.DataFrame({"id": ["d1"], "name": ["Browser"]})
+    result = analyzer._fetch_data_view_components({"id": "dv_1", "name": float("nan")})
+    assert result.data_view_name == "Unknown"

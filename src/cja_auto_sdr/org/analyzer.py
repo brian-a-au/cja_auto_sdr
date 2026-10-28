@@ -608,10 +608,10 @@ class OrgComponentAnalyzer:
             return None
 
     @staticmethod
-    def _data_view_name(dv: dict[str, Any]) -> str:
-        """Return the data view name, or "" when it is missing, null, or NaN."""
+    def _data_view_name(dv: dict[str, Any], default: str = "") -> str:
+        """Return the data view name, or ``default`` when it is missing, null, or NaN."""
         name = dv.get("name")
-        return name if isinstance(name, str) else ""
+        return name if isinstance(name, str) else default
 
     def _list_and_filter_data_views(self) -> tuple[list[dict[str, Any]], bool, int]:
         """List all data views and apply filter/exclude/sample patterns.
@@ -824,7 +824,7 @@ class OrgComponentAnalyzer:
                                 pending_cache.append(summary)
 
                             if summary.has_error:
-                                pbar.set_postfix_str(f"✗ {dv.get('name', dv.get('id', '?'))[:20]}")
+                                pbar.set_postfix_str(f"✗ {(self._data_view_name(dv) or str(dv.get('id', '?')))[:20]}")
                             else:
                                 pbar.set_postfix_str(f"✓ {summary.metric_count}m/{summary.dimension_count}d")
                         except LockOwnershipLostError:
@@ -836,7 +836,7 @@ class OrgComponentAnalyzer:
                             summaries.append(
                                 DataViewSummary(
                                     data_view_id=dv.get("id", "unknown"),
-                                    data_view_name=dv.get("name", "Unknown"),
+                                    data_view_name=self._data_view_name(dv, "Unknown"),
                                     error=error_msg,
                                 ),
                             )
@@ -907,7 +907,7 @@ class OrgComponentAnalyzer:
             DataViewSummary with component IDs (and names if include_names=True)
         """
         dv_id = dv.get("id", "")
-        dv_name = dv.get("name", "Unknown")
+        dv_name = self._data_view_name(dv, "Unknown")
         start_time = time.monotonic()
 
         try:
