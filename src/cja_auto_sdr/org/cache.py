@@ -176,20 +176,7 @@ class OrgReportCache:
 
     def _load_cache(self) -> None:
         """Load cache from disk."""
-        if os.path.exists(self.cache_file):
-            try:
-                with open(self.cache_file, encoding="utf-8") as f:
-                    payload = json.load(f)
-            except (OSError, ValueError) as e:
-                # Includes invalid UTF-8/JSON and the JSON integer decoding limit.
-                self.logger.warning("Failed to load org report cache from %s: %s", self.cache_file, type(e).__name__)
-                self._cache = {}
-                return
-            if isinstance(payload, dict):
-                self._cache = payload
-            else:
-                self.logger.warning("Ignoring org report cache with invalid root shape at %s", self.cache_file)
-                self._cache = {}
+        self._cache = self._read_disk_entries()
 
     @staticmethod
     def _entry_validation_error(dv_id: str, entry: Any) -> str | None:
