@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import sys
 import time
 import uuid
 from pathlib import Path
@@ -344,33 +345,42 @@ class BatchProcessor:
             self.logger.info("[%s] Throughput: %.2f views/second", self.batch_id, throughput)
         self.logger.info("=" * generator.BANNER_WIDTH)
 
-        print()
-        print("=" * generator.BANNER_WIDTH)
-        print(generator.ConsoleColors.bold("BATCH PROCESSING SUMMARY"))
-        print("=" * generator.BANNER_WIDTH)
-        print(f"Total data views: {total}")
-        print(f"Successful: {generator.ConsoleColors.success(str(successful_count))}")
+        # --quiet suppresses everything except errors: only failed data views print, on stderr.
+        def _say(*print_args: Any, **print_kwargs: Any) -> None:
+            if not self.quiet:
+                print(*print_args, **print_kwargs)
+
+        failure_stream = sys.stderr if self.quiet else sys.stdout
+
+        _say()
+        _say("=" * generator.BANNER_WIDTH)
+        _say(generator.ConsoleColors.bold("BATCH PROCESSING SUMMARY"))
+        _say("=" * generator.BANNER_WIDTH)
+        _say(f"Total data views: {total}")
+        _say(f"Successful: {generator.ConsoleColors.success(str(successful_count))}")
         if failed_count > 0:
-            print(f"Failed: {generator.ConsoleColors.error(str(failed_count))}")
+            _say(f"Failed: {generator.ConsoleColors.error(str(failed_count))}")
         else:
-            print(f"Failed: {failed_count}")
-        print(f"Success rate: {generator.ConsoleColors.status(success_rate == 100, f'{success_rate:.1f}%')}")
-        print(f"Total output size: {total_size_formatted}")
-        print(f"Total duration: {total_duration:.1f}s")
-        print(f"Average per data view: {avg_duration:.1f}s")
+            _say(f"Failed: {failed_count}")
+        _say(f"Success rate: {generator.ConsoleColors.status(success_rate == 100, f'{success_rate:.1f}%')}")
+        _say(f"Total output size: {total_size_formatted}")
+        _say(f"Total duration: {total_duration:.1f}s")
+        _say(f"Average per data view: {avg_duration:.1f}s")
         if total_duration > 0:
             throughput = total / total_duration
-            print(f"Throughput: {throughput:.2f} views/second")
-        print()
+            _say(f"Throughput: {throughput:.2f} views/second")
+        _say()
 
         if results["successful"]:
-            print(generator.ConsoleColors.success("Successful Data Views:"))
+            _say(generator.ConsoleColors.success("Successful Data Views:"))
             self.logger.info("")
             self.logger.info("Successful Data Views:")
             for result in results["successful"]:
                 size_str = result.file_size_formatted
-                line = f"  {result.data_view_id:20s}  {result.data_view_name:30s}  {size_str:>10s}  {result.duration:5.1f}s"
-                print(generator.ConsoleColors.success("  ✓") + line[3:])
+                line = (
+                    f"{result.data_view_id:20s}  {result.data_view_name:30s}  {size_str:>10s}  {result.duration:5.1f}s"
+                )
+                _say(f"  {generator.ConsoleColors.success('✓')} {line}")
                 self.logger.info(
                     "  ✓ %-20s  %-30s  %10s  %5.1fs",
                     result.data_view_id,
@@ -378,25 +388,25 @@ class BatchProcessor:
                     size_str,
                     result.duration,
                 )
-            print()
+            _say()
             self.logger.info("")
 
         if results["failed"]:
-            print(generator.ConsoleColors.error("Failed Data Views:"))
+            print(generator.ConsoleColors.error("Failed Data Views:"), file=failure_stream)
             self.logger.info("Failed Data Views:")
             for result in results["failed"]:
-                line = f"  {result.data_view_id:20s}  {result.error_message}"
-                print(generator.ConsoleColors.error("  ✗") + line[3:])
+                line = f"{result.data_view_id:20s}  {result.error_message}"
+                print(f"  {generator.ConsoleColors.error('✗')} {line}", file=failure_stream)
                 self.logger.info("  ✗ %-20s  %s", result.data_view_id, result.error_message)
-            print()
+            _say()
             self.logger.info("")
 
-        print("=" * generator.BANNER_WIDTH)
+        _say("=" * generator.BANNER_WIDTH)
         self.logger.info("=" * generator.BANNER_WIDTH)
 
         if total > 0 and total_duration > 0:
             throughput = (total / total_duration) * 60
-            print(f"Throughput: {throughput:.1f} data views per minute")
-            print("=" * generator.BANNER_WIDTH)
+            _say(f"Throughput: {throughput:.1f} data views per minute")
+            _say("=" * generator.BANNER_WIDTH)
             self.logger.info("Throughput: %.1f data views per minute", throughput)
             self.logger.info("=" * generator.BANNER_WIDTH)

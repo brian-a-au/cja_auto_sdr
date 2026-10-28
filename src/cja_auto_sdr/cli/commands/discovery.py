@@ -230,15 +230,20 @@ def _apply_discovery_filters_and_sort(
     filter_re = _compile_discovery_pattern(filter_pattern, option_name="--filter")
     exclude_re = _compile_discovery_pattern(exclude_pattern, option_name="--exclude")
 
-    # Compute per-row searchable blobs once when filter/exclude is requested.
+    # Match each field on its own so ^ and $ anchor to a value such as the name,
+    # not to a blob of every field joined together.
     if filter_re or exclude_re:
         searchable_rows = [
-            (row, " ".join(_to_searchable_text(row.get(field, "")) for field in fields)) for row in filtered_rows
+            (row, [_to_searchable_text(row.get(field, "")) for field in fields]) for row in filtered_rows
         ]
         if filter_re:
-            searchable_rows = [(row, blob) for row, blob in searchable_rows if filter_re.search(blob)]
+            searchable_rows = [
+                (row, texts) for row, texts in searchable_rows if any(filter_re.search(text) for text in texts)
+            ]
         if exclude_re:
-            searchable_rows = [(row, blob) for row, blob in searchable_rows if not exclude_re.search(blob)]
+            searchable_rows = [
+                (row, texts) for row, texts in searchable_rows if not any(exclude_re.search(text) for text in texts)
+            ]
         filtered_rows = [row for row, _ in searchable_rows]
 
     sort_field = default_sort_field

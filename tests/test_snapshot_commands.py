@@ -586,6 +586,81 @@ class TestHandleCompareSnapshotsCommand:
         assert success is True
         assert os.path.exists(diff_out)
 
+    @pytest.mark.parametrize(
+        ("output_format", "signature"),
+        [("json", b"{"), ("markdown", b"#"), ("html", b"<!DOCTYPE html>"), ("excel", b"PK")],
+    )
+    def test_compare_snapshots_diff_output_honored_for_file_formats(self, tmp_path, output_format, signature):
+        """--diff-output names the exact report path for single-file formats, even with another extension."""
+        source = _make_snapshot(data_view_id="dv_A", data_view_name="DV A")
+        target = _make_snapshot(data_view_id="dv_B", data_view_name="DV B", metrics=[])
+        src_file = str(tmp_path / "source.json")
+        tgt_file = str(tmp_path / "target.json")
+        _write_snapshot_file(src_file, source)
+        _write_snapshot_file(tgt_file, target)
+        auto_dir = tmp_path / "auto"
+        diff_out = tmp_path / "reports" / "weekly" / "latest-diff.out"
+
+        success, has_changes, _ = handle_compare_snapshots_command(
+            source_file=src_file,
+            target_file=tgt_file,
+            output_dir=str(auto_dir),
+            diff_output=str(diff_out),
+            quiet=True,
+            quiet_diff=False,
+            output_format=output_format,
+            no_color=True,
+        )
+
+        assert success is True
+        assert has_changes is True
+        assert diff_out.read_bytes().lstrip().startswith(signature)
+        assert set(diff_out.parent.iterdir()) == {diff_out}
+        assert not auto_dir.exists() or not any(auto_dir.iterdir())
+
+    def test_compare_snapshots_diff_output_warns_for_multi_file_format(self, tmp_path, capsys):
+        """CSV writes a directory of files, so --diff-output is reported as ignored instead of dropped silently."""
+        source = _make_snapshot(data_view_id="dv_A", data_view_name="DV A")
+        target = _make_snapshot(data_view_id="dv_B", data_view_name="DV B")
+        src_file = str(tmp_path / "source.json")
+        tgt_file = str(tmp_path / "target.json")
+        _write_snapshot_file(src_file, source)
+        _write_snapshot_file(tgt_file, target)
+        diff_out = tmp_path / "diff.csv"
+
+        success, _, _ = handle_compare_snapshots_command(
+            source_file=src_file,
+            target_file=tgt_file,
+            output_dir=str(tmp_path / "auto"),
+            diff_output=str(diff_out),
+            quiet=True,
+            quiet_diff=False,
+            output_format="csv",
+            no_color=True,
+        )
+
+        assert success is True
+        assert not diff_out.exists()
+        assert any((tmp_path / "auto").iterdir())
+        assert "--diff-output does not apply to --format csv" in capsys.readouterr().err
+
+    def test_diff_report_rejects_ambiguous_staged_output(self, tmp_path):
+        """A render that produces no single report raises OutputError and leaves no staging directory."""
+        from cja_auto_sdr.core.exceptions import OutputError
+        from cja_auto_sdr.diff.commands import _write_diff_report
+
+        target = tmp_path / "out" / "diff.json"
+        with pytest.raises(OutputError, match="Expected one json diff report, found 0"):
+            _write_diff_report(
+                lambda _directory: None,
+                output_format="json",
+                output_dir=str(tmp_path / "auto"),
+                diff_output=str(target),
+                quiet=True,
+                output_to_stdout=False,
+            )
+        assert list(target.parent.iterdir()) == []
+
     def test_compare_snapshots_general_exception(self, tmp_path, capsys):
         """General exception returns failure tuple."""
         src_file = str(tmp_path / "source.json")

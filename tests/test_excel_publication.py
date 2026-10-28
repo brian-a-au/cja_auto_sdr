@@ -364,3 +364,20 @@ def test_generator_inventory_placeholders_and_argument_order(generate, monkeypat
         strings = workbook.read("xl/sharedStrings.xml").decode()
         assert "No segments found for this data view" in strings
         assert "No calculated metrics found for this data view" in strings
+
+
+def test_writer_creates_missing_output_directory(generate, tmp_path):
+    destination = tmp_path / "new" / "nested" / "report.xlsx"
+    generate("writer", destination)
+    assert destination.read_bytes().startswith(b"PK")
+    assert set(destination.parent.iterdir()) == {destination}
+
+
+def test_generator_creates_missing_output_dir_for_default_excel(generate, tmp_path):
+    output_dir = tmp_path / "new" / "nested"
+    result = generator.process_single_dataview("dv_test", output_dir=str(output_dir), output_format="excel")
+    assert result.success, result.error_message
+    workbooks = list(output_dir.glob("*.xlsx"))
+    assert len(workbooks) == 1
+    assert workbooks[0].read_bytes().startswith(b"PK")
+    assert not list(output_dir.glob(".xlsx-*"))

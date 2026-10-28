@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.13.3] - 2026-10-27
+
+This patch makes several output options do what their documentation says. Excel output works with a new output folder, `--quiet` is quiet in single and batch runs, `--diff-output` names JSON, Markdown, HTML, and Excel diff reports, and regex anchors work in discovery filters.
+
+### Fixed
+
+- **Excel output into a new `--output-dir`:** generating an SDR into an output directory that did not exist yet failed with `No such file or directory` for Excel, the default format, after all API work was done. The Excel writer now creates the directory, as the JSON, CSV, HTML, and Markdown writers already did.
+- **`--quiet` for single data view runs:** `--quiet` now hides the `SUCCESS` summary and the `Total runtime` line, as documented. Before, both still printed, and `--output -` (which implies `--quiet`) sent them to stderr with `Size: 0 B`. Failures still print. Git commits and `--open` still run.
+- **`--diff-output` with file formats:** `--diff-output FILE` now writes JSON, Markdown, HTML, and Excel diff reports to `FILE`, including for `--compare-snapshots` and `--diff-snapshot`. Before, the path was ignored and the report was written under an auto-generated name in `--output-dir`. CSV produces several files, so `--diff-output` still does not apply to it, and the CLI now prints a warning instead of ignoring the path silently.
+- **Duplicate `--show-timings` table:** the performance summary printed twice at the default log level. It now prints once.
+- **`--quiet` for batch runs:** `--batch --quiet` no longer prints the batch summary or the `Total runtime` line. If a data view fails, the failed data views are still listed, now on stderr.
+- **Regex anchors in discovery `--filter` and `--exclude`:** patterns with `^` or `$`, such as `--filter "^Adobe Store - Prod$"`, matched nothing in `--list-dataviews`, `--list-connections`, `--list-datasets`, and the other discovery commands. The pattern ran against every field joined into one string, so `^` met the ID and `$` met the last field. Each field is now matched on its own, so anchors work on the name and on any other searchable field. `--org-report` was not affected.
+- **Batch summary rows:** each row in the "Successful Data Views" and "Failed Data Views" lists dropped the first character of the data view ID (for example `✓v_62ba…`). Rows now show the full ID.
+
 ## [3.13.2] - 2026-10-27
 
 This patch lets you install and run the CLI on Python 3.11, 3.12, 3.13, 3.14, and 3.15. Before, it required Python 3.14, so users on machines that could not install 3.14 could not use `pip install cja-auto-sdr`.

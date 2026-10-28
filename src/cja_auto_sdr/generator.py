@@ -4383,12 +4383,15 @@ def process_single_dataview(
             logger.info("=" * BANNER_WIDTH)
 
             logger.info("Script execution completed successfully")
-            logger.info(perf_tracker.get_summary())
 
-            # Display timing summary on stdout if requested
+            perf_summary = perf_tracker.get_summary()
             if show_timings:
+                # Printed on request, so log at DEBUG to keep an INFO console from showing it twice.
+                logger.debug(perf_summary)
                 # Keep stdout clean when it carries the streamed JSON payload.
-                print(perf_tracker.get_summary(), file=sys.stderr if stdout_json_output else sys.stdout)
+                print(perf_summary, file=sys.stderr if stdout_json_output else sys.stdout)
+            else:
+                logger.info(perf_summary)
 
             duration = time.perf_counter() - start_time
 

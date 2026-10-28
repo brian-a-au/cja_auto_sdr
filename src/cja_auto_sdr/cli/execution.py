@@ -561,8 +561,9 @@ def _run_batch_mode(
     processed_results = successful_results + list(results.get("failed", []))
 
     total_runtime = time.monotonic() - processing_start_time
-    print()
-    print(generator.ConsoleColors.bold(f"Total runtime: {total_runtime:.1f}s"))
+    if not args.quiet:
+        print()
+        print(generator.ConsoleColors.bold(f"Total runtime: {total_runtime:.1f}s"))
 
     if getattr(args, "open", False) and results.get("successful") and not quality_report_only:
         files_to_open = []
@@ -802,43 +803,52 @@ def _run_single_mode(
     git_step_ok = True
 
     total_runtime = time.monotonic() - processing_start_time
-    _note()
+
+    # --quiet (implied by --output -) suppresses the success summary; failures still print.
+    def _summary(*print_args: Any, **print_kwargs: Any) -> None:
+        if not args.quiet:
+            _note(*print_args, **print_kwargs)
+
+    _summary()
     if result.success:
         successful_results = [result]
         if quality_report_only:
-            _note(generator.ConsoleColors.success(f"SUCCESS: Quality validation completed for {result.data_view_name}"))
-            _note(f"  Metrics: {result.metrics_count}, Dimensions: {result.dimensions_count}")
-            _note(f"  Data Quality Issues: {result.dq_issues_count}")
+            _summary(
+                generator.ConsoleColors.success(f"SUCCESS: Quality validation completed for {result.data_view_name}")
+            )
+            _summary(f"  Metrics: {result.metrics_count}, Dimensions: {result.dimensions_count}")
+            _summary(f"  Data Quality Issues: {result.dq_issues_count}")
         else:
-            _note(generator.ConsoleColors.success(f"SUCCESS: SDR generated for {result.data_view_name}"))
+            _summary(generator.ConsoleColors.success(f"SUCCESS: SDR generated for {result.data_view_name}"))
             if len(result.emitted_output_files) > 1:
-                _note(f"  Outputs: {len(result.emitted_output_files)} files")
+                _summary(f"  Outputs: {len(result.emitted_output_files)} files")
                 for file_path in result.emitted_output_files:
-                    _note(f"    - {file_path}")
+                    _summary(f"    - {file_path}")
             else:
-                _note(f"  Output: {result.output_file}")
-            _note(f"  Size: {result.file_size_formatted}")
-            _note(f"  Metrics: {result.metrics_count}, Dimensions: {result.dimensions_count}")
+                _summary(f"  Output: {result.output_file}")
+            _summary(f"  Size: {result.file_size_formatted}")
+            _summary(f"  Metrics: {result.metrics_count}, Dimensions: {result.dimensions_count}")
             if result.dq_issues_count > 0:
-                _note(generator.ConsoleColors.warning(f"  Data Quality Issues: {result.dq_issues_count}"))
+                _summary(generator.ConsoleColors.warning(f"  Data Quality Issues: {result.dq_issues_count}"))
 
             # Skip human-oriented post-actions when streaming to stdout so the
             # JSON payload on stdout stays clean (there is also no file to open).
             if not stdout_mode:
-                _print_single_mode_inventory_summary(
-                    result,
-                    inventory_order=inventory_order,
-                    include_segments=getattr(args, "include_segments_inventory", False),
-                    include_calculated=getattr(args, "include_calculated_metrics", False),
-                    include_derived=getattr(args, "include_derived_inventory", False),
-                )
+                if not args.quiet:
+                    _print_single_mode_inventory_summary(
+                        result,
+                        inventory_order=inventory_order,
+                        include_segments=getattr(args, "include_segments_inventory", False),
+                        include_calculated=getattr(args, "include_calculated_metrics", False),
+                        include_derived=getattr(args, "include_derived_inventory", False),
+                    )
                 git_step_ok = _handle_single_mode_git_commit(args, result)
                 _handle_single_mode_open(args, result)
     else:
         successful_results = []
         _note(generator.ConsoleColors.error(f"FAILED: {result.error_message}"))
 
-    _note(generator.ConsoleColors.bold(f"Total runtime: {total_runtime:.1f}s"))
+    _summary(generator.ConsoleColors.bold(f"Total runtime: {total_runtime:.1f}s"))
 
     return {
         "successful_results": successful_results,
