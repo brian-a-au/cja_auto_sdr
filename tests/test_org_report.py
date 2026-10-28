@@ -3527,6 +3527,78 @@ class TestNamingAudit:
         date_patterns = [p for p in audit["stale_patterns"] if p["pattern"] == "date_pattern"]
         assert len(date_patterns) == 2
 
+    @staticmethod
+    def _index(names):
+        return {name: ComponentInfo(name, "metric", name=name) for name in names}
+
+    @pytest.mark.parametrize("name", ["Sessions", "Day", "Visits", "Year2024"])
+    def test_single_capitalized_word_is_pascal_case(self, mock_cja, mock_logger, name):
+        """A single capitalized word, e.g., the standard 'Sessions', is PascalCase."""
+        analyzer = OrgComponentAnalyzer(mock_cja, OrgReportConfig(audit_naming=True), mock_logger)
+
+        audit = analyzer._audit_naming_conventions(self._index([name]))
+
+        assert audit["case_styles"]["PascalCase"] == 1
+        assert audit["case_styles"]["other"] == 0
+
+    def test_standard_component_names_have_no_other_style(self, mock_cja, mock_logger):
+        """Standard data view names all get a case style."""
+        analyzer = OrgComponentAnalyzer(mock_cja, OrgReportConfig(audit_naming=True), mock_logger)
+        names = ["Sessions", "People", "Visits", "Day", "Page Views", "Bounce Rate"]
+
+        audit = analyzer._audit_naming_conventions(self._index(names))
+
+        assert audit["case_styles"]["other"] == 0
+        assert audit["case_styles"]["PascalCase"] == len(names)
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "Revenue/visit",  # punctuation, not one word
+            "Occurrences <= 7",  # spaces and symbols with one capital
+            "Bounces (all)",  # spaces and punctuation with one capital
+            "Ñandú",  # capitalized but not ASCII
+            "other",  # lowercase with no capitals
+        ],
+    )
+    def test_names_that_are_not_one_ascii_word_stay_other(self, mock_cja, mock_logger, name):
+        analyzer = OrgComponentAnalyzer(mock_cja, OrgReportConfig(audit_naming=True), mock_logger)
+
+        audit = analyzer._audit_naming_conventions(self._index([name]))
+
+        assert audit["case_styles"]["other"] == 1
+        assert audit["case_styles"]["PascalCase"] == 0
+
+    def test_all_caps_with_punctuation_keeps_existing_pascal_case_result(self, mock_cja, mock_logger):
+        """'AM/PM' has a second capital, so the existing check counts it as PascalCase.
+
+        aa_auto_sdr sends all caps names to "other"; this tool does not have that guard.
+        """
+        analyzer = OrgComponentAnalyzer(mock_cja, OrgReportConfig(audit_naming=True), mock_logger)
+
+        audit = analyzer._audit_naming_conventions(self._index(["AM/PM"]))
+
+        assert audit["case_styles"]["PascalCase"] == 1
+
+    def test_single_words_count_against_dominant_snake_case(self, mock_cja, mock_logger):
+        """Single capitalized words now count as PascalCase, so they mix with a snake_case data view.
+
+        Before the fix these names were "other", which the recommendation ignores, so this
+        data view got no naming recommendation.
+        """
+        analyzer = OrgComponentAnalyzer(mock_cja, OrgReportConfig(audit_naming=True), mock_logger)
+        snake_names = [f"page_view_{i}" for i in range(10)]
+        single_words = ["Sessions", "People", "Visits", "Day", "Week", "Month"]
+
+        audit = analyzer._audit_naming_conventions(self._index(snake_names + single_words))
+
+        assert audit["case_styles"]["snake_case"] == 10
+        assert audit["case_styles"]["PascalCase"] == 6
+        assert audit["case_styles"]["other"] == 0
+        recommendations = [r for r in audit["recommendations"] if r["type"] == "naming_inconsistency"]
+        assert len(recommendations) == 1
+        assert "Dominant style is snake_case, but 6 components use different styles" in recommendations[0]["message"]
+
 
 class TestOwnerSummary:
     """Test Feature 5: Owner/team summary"""
