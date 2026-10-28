@@ -36,6 +36,8 @@ def staged_excel_writer(destination: str | Path) -> Iterator[pd.ExcelWriter]:
                 f"Excel destination has multiple hard links: {destination}. Choose an unlinked file path."
             )
 
+    # Match the other SDR writers, which create a missing output directory.
+    target.parent.mkdir(parents=True, exist_ok=True)
     staging_dir = Path(tempfile.mkdtemp(prefix=".xlsx-", dir=target.parent))
     staged = staging_dir / "workbook.xlsx"
     try:

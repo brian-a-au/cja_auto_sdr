@@ -1534,6 +1534,62 @@ class TestProcessSingleDataviewTimingsAndSummary:
         assert "Traceback" not in captured.out
         assert any(marker in captured.out for marker in ("PERFORMANCE SUMMARY", "No performance metrics collected"))
 
+    @pytest.mark.parametrize(("show_timings", "expected_level"), [(True, logging.DEBUG), (False, logging.INFO)])
+    @patch("cja_auto_sdr.generator.setup_logging")
+    @patch("cja_auto_sdr.generator.initialize_cja")
+    @patch("cja_auto_sdr.generator.ParallelAPIFetcher")
+    @patch("cja_auto_sdr.generator.DataQualityChecker")
+    @patch("cja_auto_sdr.generator.apply_excel_formatting")
+    @patch("pandas.ExcelWriter")
+    def test_perf_summary_logged_below_console_level_when_printed(
+        self,
+        mock_excel_writer,
+        mock_apply_formatting,
+        mock_dq_checker_class,
+        mock_fetcher_class,
+        mock_init_cja,
+        mock_setup_logging,
+        show_timings,
+        expected_level,
+        mock_config_file,
+        temp_output_dir,
+        sample_metrics_df,
+        sample_dimensions_df,
+        sample_dataview_info,
+        capsys,
+    ):
+        """--show-timings prints the summary, so logging it at INFO would show it twice on the console."""
+        mock_logger, _, _ = _configure_standard_mocks(
+            mock_setup_logging,
+            mock_init_cja,
+            mock_fetcher_class,
+            mock_dq_checker_class,
+            mock_excel_writer,
+            sample_metrics_df,
+            sample_dimensions_df,
+            sample_dataview_info,
+        )
+
+        result = process_single_dataview(
+            data_view_id="dv_test_12345",
+            config_file=mock_config_file,
+            output_dir=temp_output_dir,
+            show_timings=show_timings,
+            skip_validation=True,
+        )
+
+        assert result.success is True
+        markers = ("PERFORMANCE SUMMARY", "No performance metrics collected")
+        levels = [
+            level
+            for level, method in ((logging.DEBUG, mock_logger.debug), (logging.INFO, mock_logger.info))
+            for entry in method.call_args_list
+            if entry.args and any(marker in str(entry.args[0]) for marker in markers)
+        ]
+        assert levels == [expected_level]
+        printed = capsys.readouterr().out
+        assert any(marker in printed for marker in markers) is show_timings
+
 
 # ============================================================================
 # Tests: File writing exception handlers (6000-6011)

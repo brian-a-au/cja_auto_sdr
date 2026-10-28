@@ -6,11 +6,15 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
 import sys
+import tempfile
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from cja_auto_sdr.core.exceptions import OutputError
 from cja_auto_sdr.core.json_io import write_text_atomic_compatible
 from cja_auto_sdr.diff.snapshot import _annotate_snapshot_failure
 
@@ -29,6 +33,56 @@ def _generator_module():
     from cja_auto_sdr import generator as _generator
 
     return _generator
+
+
+# Diff formats that render exactly one file, so --diff-output can name it.
+_SINGLE_FILE_DIFF_FORMATS = frozenset({"json", "markdown", "html", "excel"})
+
+
+def _write_diff_report(
+    render: Callable[[str | Path], str | None],
+    *,
+    output_format: str,
+    output_dir: str | Path,
+    diff_output: str | None,
+    quiet: bool,
+    output_to_stdout: bool,
+) -> None:
+    """Render a diff report, honoring ``--diff-output`` for every format that can.
+
+    Console and PR-comment output is text and is copied to ``diff_output``.
+    Single-file reports render into a staging directory beside ``diff_output``
+    and move into place, so the requested path is used even when its
+    extension differs from the format. Multi-file formats keep auto-named
+    output under ``output_dir`` and say so on stderr.
+    """
+    if diff_output and not output_to_stdout and output_format in _SINGLE_FILE_DIFF_FORMATS:
+        destination = Path(diff_output)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        staging_dir = Path(tempfile.mkdtemp(prefix=".diff-", dir=destination.parent))
+        try:
+            render(staging_dir)
+            rendered = [path for path in staging_dir.iterdir() if path.is_file()]
+            if len(rendered) != 1:
+                raise OutputError(f"Expected one {output_format} diff report, found {len(rendered)}")
+            os.replace(rendered[0], destination)
+        finally:
+            shutil.rmtree(staging_dir, ignore_errors=True)
+        if not quiet:
+            print(f"Diff output written to: {diff_output}")
+        return
+
+    output_content = render(output_dir)
+    if diff_output and output_content:
+        write_text_atomic_compatible(diff_output, output_content)
+        if not quiet:
+            print(f"Diff output written to: {diff_output}")
+    elif diff_output and not output_to_stdout:
+        print(
+            f"Warning: --diff-output does not apply to --format {output_format} (it produces multiple files); "
+            f"wrote the report under {output_dir} instead.",
+            file=sys.stderr,
+        )
 
 
 def _populate_diff_advisory_rollup(
@@ -373,24 +427,27 @@ def handle_diff_command(
         if not quiet_diff:
             effective_format = "pr-comment" if format_pr_comment else output_format
             base_filename = f"diff_{source_id}_{target_id}_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}"
-            output_content = generator.write_diff_output(
-                diff_result,
-                effective_format,
-                base_filename,
-                output_dir,
-                logger,
-                changes_only,
-                summary_only,
-                side_by_side,
-                use_color=generator.ConsoleColors.is_enabled() and not no_color,
-                group_by_field=group_by_field,
-                group_by_field_limit=group_by_field_limit,
+            _write_diff_report(
+                lambda directory: generator.write_diff_output(
+                    diff_result,
+                    effective_format,
+                    base_filename,
+                    directory,
+                    logger,
+                    changes_only,
+                    summary_only,
+                    side_by_side,
+                    use_color=generator.ConsoleColors.is_enabled() and not no_color,
+                    group_by_field=group_by_field,
+                    group_by_field_limit=group_by_field_limit,
+                    output_to_stdout=output_to_stdout,
+                ),
+                output_format=effective_format,
+                output_dir=output_dir,
+                diff_output=diff_output,
+                quiet=quiet,
                 output_to_stdout=output_to_stdout,
             )
-            if diff_output and output_content:
-                write_text_atomic_compatible(diff_output, output_content)
-                if not quiet:
-                    print(f"Diff output written to: {diff_output}")
             if not quiet and output_format != "console" and not output_to_stdout:
                 print()
                 print(generator.ConsoleColors.success("Diff report generated successfully"))
@@ -715,24 +772,27 @@ def handle_diff_snapshot_command(
         if not quiet_diff:
             effective_format = "pr-comment" if format_pr_comment else output_format
             base_filename = f"diff_{data_view_id}_snapshot_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}"
-            output_content = generator.write_diff_output(
-                diff_result,
-                effective_format,
-                base_filename,
-                output_dir,
-                logger,
-                changes_only,
-                summary_only,
-                side_by_side,
-                use_color=generator.ConsoleColors.is_enabled() and not no_color,
-                group_by_field=group_by_field,
-                group_by_field_limit=group_by_field_limit,
+            _write_diff_report(
+                lambda directory: generator.write_diff_output(
+                    diff_result,
+                    effective_format,
+                    base_filename,
+                    directory,
+                    logger,
+                    changes_only,
+                    summary_only,
+                    side_by_side,
+                    use_color=generator.ConsoleColors.is_enabled() and not no_color,
+                    group_by_field=group_by_field,
+                    group_by_field_limit=group_by_field_limit,
+                    output_to_stdout=output_to_stdout,
+                ),
+                output_format=effective_format,
+                output_dir=output_dir,
+                diff_output=diff_output,
+                quiet=quiet,
                 output_to_stdout=output_to_stdout,
             )
-            if diff_output and output_content:
-                write_text_atomic_compatible(diff_output, output_content)
-                if not quiet:
-                    print(f"Diff output written to: {diff_output}")
             if not quiet and output_format != "console" and not output_to_stdout:
                 print()
                 print(generator.ConsoleColors.success("Diff report generated successfully"))
@@ -900,24 +960,27 @@ def handle_compare_snapshots_command(
             source_base = Path(source_file).stem
             target_base = Path(target_file).stem
             base_filename = f"diff_{source_base}_vs_{target_base}_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}"
-            output_content = generator.write_diff_output(
-                diff_result,
-                effective_format,
-                base_filename,
-                output_dir,
-                logger,
-                changes_only,
-                summary_only,
-                side_by_side,
-                use_color=generator.ConsoleColors.is_enabled() and not no_color,
-                group_by_field=group_by_field,
-                group_by_field_limit=group_by_field_limit,
+            _write_diff_report(
+                lambda directory: generator.write_diff_output(
+                    diff_result,
+                    effective_format,
+                    base_filename,
+                    directory,
+                    logger,
+                    changes_only,
+                    summary_only,
+                    side_by_side,
+                    use_color=generator.ConsoleColors.is_enabled() and not no_color,
+                    group_by_field=group_by_field,
+                    group_by_field_limit=group_by_field_limit,
+                    output_to_stdout=output_to_stdout,
+                ),
+                output_format=effective_format,
+                output_dir=output_dir,
+                diff_output=diff_output,
+                quiet=quiet,
                 output_to_stdout=output_to_stdout,
             )
-            if diff_output and output_content:
-                write_text_atomic_compatible(diff_output, output_content)
-                if not quiet:
-                    print(f"Diff output written to: {diff_output}")
             if not quiet and output_format != "console" and not output_to_stdout:
                 print()
                 print(generator.ConsoleColors.success("Diff report generated successfully"))

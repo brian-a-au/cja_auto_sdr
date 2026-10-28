@@ -36,11 +36,11 @@
       },
       "output": {
         "type": "string",
-        "description": "Use '-' or 'stdout' to emit JSON diff output on stdout. For console output or when format_pr_comment is true, use diff_output to capture the rendered text in a named file. File-writing formats ('json', 'markdown', 'html', 'excel', 'csv') create auto-named artifacts under output_dir."
+        "description": "Use '-' or 'stdout' to emit JSON diff output on stdout. To write the diff to a named file instead, use diff_output: it captures console text and format_pr_comment output, and names the 'json', 'markdown', 'html', or 'excel' report. Without diff_output, file-writing formats ('json', 'markdown', 'html', 'excel', 'csv') create auto-named artifacts under output_dir."
       },
       "diff_output": {
         "type": "string",
-        "description": "Named file path for inline-text diff output only. Currently applies to 'console' output and to PR-comment mode when format_pr_comment is true; JSON, Markdown, HTML, Excel, and CSV formats ignore this path and write auto-named artifacts under output_dir."
+        "description": "Named file path for the diff. Captures the rendered text for 'console' output and for PR-comment mode when format_pr_comment is true. For 'json', 'markdown', 'html', and 'excel', the report is written to this exact path instead of an auto-named artifact under output_dir. 'csv' writes several files, so it ignores this path, writes auto-named artifacts under output_dir, and prints a warning on stderr."
       },
       "output_dir": {
         "type": "string",

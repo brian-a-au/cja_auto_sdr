@@ -329,7 +329,7 @@ Drill into individual data view resources. These commands let you inspect a sing
 | `--warn-threshold PERCENT` | Exit with code 3 if change % exceeds threshold | - |
 | `--group-by-field` | Group changes by field name instead of component | False |
 | `--group-by-field-limit N` | Max items per section in --group-by-field output (0=unlimited) | 10 |
-| `--diff-output FILE` | Write output to file instead of stdout | - |
+| `--diff-output FILE` | Write the diff to `FILE`. Console and PR-comment output is saved as text. JSON, Markdown, HTML, and Excel reports are written to `FILE` instead of an auto-named file in `--output-dir`. Not supported for CSV, which writes several files | - |
 | `--format-pr-comment` | Output in GitHub/GitLab PR comment format | False |
 | `--auto-snapshot` | Automatically save snapshots during diff for audit trail | False |
 | `--auto-prune` | With `--auto-snapshot`, apply default retention (`--keep-last 20` + `--keep-since 30d`) only when both retention flags are omitted | False |

@@ -729,6 +729,47 @@ class TestHandleDiffCommand:
     @patch("cja_auto_sdr.generator.build_diff_step_summary")
     @patch("cja_auto_sdr.generator.write_diff_output")
     @patch("cja_auto_sdr.generator.DataViewComparator")
+    @patch("cja_auto_sdr.generator.SnapshotManager")
+    @patch("cja_auto_sdr.generator.cjapy")
+    @patch("cja_auto_sdr.generator.configure_cjapy")
+    def test_diff_with_diff_output_names_json_report(
+        self, mock_conf, mock_cjapy, mock_sm_cls, mock_comp_cls, mock_write, mock_build, mock_append, tmp_path, capsys
+    ):
+        """--format json --diff-output writes the report to the requested path, not an auto-named file."""
+        mock_conf.return_value = (True, "config_path", {})
+        mock_cjapy.CJA.return_value = MagicMock()
+        mock_sm = MagicMock()
+        mock_sm.create_snapshot.return_value = _make_mock_snapshot()
+        mock_sm_cls.return_value = mock_sm
+        mock_comp = MagicMock()
+        mock_comp.compare.return_value = _make_mock_diff_result(has_changes=True)
+        mock_comp_cls.return_value = mock_comp
+
+        def render(diff_result, output_format, base_filename, output_dir, *args, **kwargs):
+            with open(os.path.join(output_dir, f"{base_filename}.json"), "w") as f:
+                f.write('{"rendered": true}')
+
+        mock_write.side_effect = render
+        auto_dir = tmp_path / "auto"
+        diff_file = tmp_path / "changes.json"
+
+        handle_diff_command(
+            source_id="dv_a",
+            target_id="dv_b",
+            output_format="json",
+            output_dir=str(auto_dir),
+            diff_output=str(diff_file),
+            quiet=False,
+        )
+
+        assert diff_file.read_text() == '{"rendered": true}'
+        assert set(tmp_path.iterdir()) == {diff_file}
+        assert f"Diff output written to: {diff_file}" in capsys.readouterr().out
+
+    @patch("cja_auto_sdr.generator.append_github_step_summary")
+    @patch("cja_auto_sdr.generator.build_diff_step_summary")
+    @patch("cja_auto_sdr.generator.write_diff_output")
+    @patch("cja_auto_sdr.generator.DataViewComparator")
     @patch("cja_auto_sdr.generator.resolve_auto_prune_retention")
     @patch("cja_auto_sdr.generator.SnapshotManager")
     @patch("cja_auto_sdr.generator.cjapy")
