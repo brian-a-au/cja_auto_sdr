@@ -5151,6 +5151,20 @@ def resolve_data_view_names(
 # ==================== LIST HELPERS ====================
 
 
+def _preflight_output_file(output_file: str | None, is_stdout: bool) -> None:
+    """Exit with an error if ``output_file`` is an existing directory (call before destructive work)."""
+    if not is_stdout and output_file and os.path.isdir(output_file):
+        _exit_error(f"Cannot write output to '{output_file}': path is a directory")
+
+
+def _emit_output_or_exit(data: str, output_file: str | None, is_stdout: bool) -> None:
+    """Call ``_emit_output`` and turn an ``OSError`` into a clean error exit."""
+    try:
+        _emit_output(data, output_file, is_stdout)
+    except OSError as e:
+        _exit_error(f"Failed to write output to '{output_file}': {e}")
+
+
 def _emit_output(data: str, output_file: str | None, is_stdout: bool) -> None:
     """Emit output data to a file, stdout pipe, or the console.
 
@@ -6885,6 +6899,7 @@ def _handle_org_report_snapshot_cli(
     snapshot_cache = OrgReportCache()
     org_id = getattr(args, "org_report_snapshot_org", None)
     output_file = getattr(args, "output", None)
+    _preflight_output_file(output_file, output_to_stdout)
 
     if getattr(args, "list_org_report_snapshots", False):
         snapshots = snapshot_cache.list_org_report_snapshots(org_id=org_id)
@@ -6893,20 +6908,23 @@ def _handle_org_report_snapshot_cli(
             output_format = "json"
 
         if output_format == "json":
-            _emit_json_output(
-                {
-                    "snapshot_root": str(snapshot_cache.get_org_report_snapshot_root_dir()),
-                    "org_id": org_id,
-                    "count": len(snapshots),
-                    "snapshots": snapshots,
-                },
-                output_file=output_file,
-                is_stdout=output_to_stdout,
-                contract_label="Org-report snapshot listing output",
-            )
+            try:
+                _emit_json_output(
+                    {
+                        "snapshot_root": str(snapshot_cache.get_org_report_snapshot_root_dir()),
+                        "org_id": org_id,
+                        "count": len(snapshots),
+                        "snapshots": snapshots,
+                    },
+                    output_file=output_file,
+                    is_stdout=output_to_stdout,
+                    contract_label="Org-report snapshot listing output",
+                )
+            except OSError as e:
+                _exit_error(f"Failed to write output to '{output_file}': {e}")
         elif output_format == "csv":
             rows = _build_org_report_snapshot_listing_rows(snapshots)
-            _emit_output(
+            _emit_output_or_exit(
                 _format_as_csv(
                     [
                         "org_id",
@@ -6942,7 +6960,7 @@ def _handle_org_report_snapshot_cli(
                 table_text = (
                     f"\nNo org-report snapshots found in {snapshot_cache.get_org_report_snapshot_root_dir()}.\n"
                 )
-            _emit_output(table_text, output_file, output_to_stdout)
+            _emit_output_or_exit(table_text, output_file, output_to_stdout)
 
         if run_state is not None:
             run_state["output_format"] = output_format
@@ -6961,14 +6979,17 @@ def _handle_org_report_snapshot_cli(
             output_format = "json"
 
         if output_format == "json":
-            _emit_json_output(
-                {"snapshot": snapshot},
-                output_file=output_file,
-                is_stdout=output_to_stdout,
-                contract_label="Org-report snapshot inspection output",
-            )
+            try:
+                _emit_json_output(
+                    {"snapshot": snapshot},
+                    output_file=output_file,
+                    is_stdout=output_to_stdout,
+                    contract_label="Org-report snapshot inspection output",
+                )
+            except OSError as e:
+                _exit_error(f"Failed to write output to '{output_file}': {e}")
         elif output_format == "csv":
-            _emit_output(
+            _emit_output_or_exit(
                 _format_as_csv(
                     [
                         "org_id",
@@ -7010,7 +7031,7 @@ def _handle_org_report_snapshot_cli(
                 if snapshot.get("data_view_names_truncated"):
                     lines.append(f"  ... ({snapshot.get('data_view_names_total', len(preview_names))} total)")
             lines.append("")
-            _emit_output("\n".join(lines), output_file, output_to_stdout)
+            _emit_output_or_exit("\n".join(lines), output_file, output_to_stdout)
 
         if run_state is not None:
             run_state["output_format"] = output_format
@@ -7034,20 +7055,23 @@ def _handle_org_report_snapshot_cli(
         output_format = "json"
 
     if output_format == "json":
-        _emit_json_output(
-            {
-                "snapshot_root": str(snapshot_cache.get_org_report_snapshot_root_dir()),
-                "org_id": org_id,
-                "deleted_count": len(deleted_paths),
-                "deleted_files": deleted_paths,
-                "retention": {"keep_last": effective_keep_last, "keep_since": effective_keep_since},
-            },
-            output_file=output_file,
-            is_stdout=output_to_stdout,
-            contract_label="Org-report snapshot prune output",
-        )
+        try:
+            _emit_json_output(
+                {
+                    "snapshot_root": str(snapshot_cache.get_org_report_snapshot_root_dir()),
+                    "org_id": org_id,
+                    "deleted_count": len(deleted_paths),
+                    "deleted_files": deleted_paths,
+                    "retention": {"keep_last": effective_keep_last, "keep_since": effective_keep_since},
+                },
+                output_file=output_file,
+                is_stdout=output_to_stdout,
+                contract_label="Org-report snapshot prune output",
+            )
+        except OSError as e:
+            _exit_error(f"Failed to write output to '{output_file}': {e}")
     elif output_format == "csv":
-        _emit_output(
+        _emit_output_or_exit(
             _format_as_csv(["filepath"], [{"filepath": path} for path in deleted_paths]), output_file, output_to_stdout
         )
     else:
@@ -7064,7 +7088,7 @@ def _handle_org_report_snapshot_cli(
             lines.extend(["", "Deleted files:"])
             lines.extend([f"  - {Path(path).name}" for path in deleted_paths])
         lines.append("")
-        _emit_output("\n".join(lines), output_file, output_to_stdout)
+        _emit_output_or_exit("\n".join(lines), output_file, output_to_stdout)
 
     if run_state is not None:
         run_state["output_format"] = output_format

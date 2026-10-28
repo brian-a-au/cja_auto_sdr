@@ -1983,3 +1983,92 @@ def test_offline_cli_rejects_unusable_snapshot_with_json_diagnostics(tmp_path, b
     assert diagnostics["details"]["operation_success"] is False
     assert "Invalid snapshot file" in completed.stderr
     assert "AttributeError" not in completed.stderr
+
+
+# ==================== Snapshot --output preflight (B5) ====================
+
+
+def _run_main_offline(monkeypatch, tmp_path, argv):
+    from cja_auto_sdr.generator import main
+
+    for var in ("ORG_ID", "CLIENT_ID", "SECRET", "SCOPES", "SANDBOX", "CJA_PROFILE"):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("sys.argv", ["cja_auto_sdr", *argv])
+    with pytest.raises(SystemExit) as exc:
+        main()
+    return exc.value.code
+
+
+def _make_three_snapshots(snap_dir):
+    from cja_auto_sdr.diff.snapshot import SnapshotManager
+
+    snap_dir.mkdir()
+    manager = SnapshotManager()
+    for day in ("01", "02", "03"):
+        manager.save_snapshot(
+            _make_snapshot(created_at=f"2025-06-{day}T00:00:00+00:00"), str(snap_dir / f"s{day}.json")
+        )
+    return sorted(snap_dir.glob("*.json"))
+
+
+def test_prune_snapshots_output_dir_exits_1_without_deleting(tmp_path, monkeypatch, capsys):
+    snap_dir = tmp_path / "snapshots"
+    files = _make_three_snapshots(snap_dir)
+    assert len(files) == 3
+    out_dir = tmp_path / "outdir"
+    out_dir.mkdir()
+
+    code = _run_main_offline(
+        monkeypatch,
+        tmp_path,
+        [
+            "--prune-snapshots",
+            "--keep-last",
+            "1",
+            "--format",
+            "json",
+            "--snapshot-dir",
+            str(snap_dir),
+            "--output",
+            str(out_dir),
+        ],
+    )
+
+    err = capsys.readouterr().err
+    assert code == 1
+    assert "path is a directory" in err
+    assert "Traceback" not in err
+    assert len(list(snap_dir.glob("*.json"))) == 3
+
+
+def test_list_org_report_snapshots_output_dir_exits_1(tmp_path, monkeypatch, capsys):
+    out_dir = tmp_path / "outdir"
+    out_dir.mkdir()
+
+    code = _run_main_offline(
+        monkeypatch,
+        tmp_path,
+        ["--list-org-report-snapshots", "--format", "json", "--output", str(out_dir)],
+    )
+
+    err = capsys.readouterr().err
+    assert code == 1
+    assert "path is a directory" in err
+    assert "Traceback" not in err
+
+
+def test_list_snapshots_output_new_parent_dir_is_created(tmp_path, monkeypatch):
+    snap_dir = tmp_path / "snapshots"
+    _make_three_snapshots(snap_dir)
+    target = tmp_path / "new" / "sub" / "out.json"
+
+    code = _run_main_offline(
+        monkeypatch,
+        tmp_path,
+        ["--list-snapshots", "--format", "json", "--snapshot-dir", str(snap_dir), "--output", str(target)],
+    )
+
+    assert code == 0
+    assert target.is_file()
