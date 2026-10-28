@@ -58,7 +58,7 @@ src/cja_auto_sdr/
 │   └── commands/
 │       ├── discovery.py     # Central discovery extraction (canonical source)
 │       ├── list.py          # List commands (backwards-compat re-exports)
-│       ├── config.py        # --config, --show-config, --stats
+│       ├── config.py        # --config-status, --validate-config, --sample-config
 │       └── stats.py         # Stats and diagnostics
 │
 ├── core/                    # Utilities, constants & configuration
@@ -164,7 +164,7 @@ src/cja_auto_sdr/
 | Trending | `--trending-window N` | Drift detection over time window |
 | Watch | `--watch <dv_ids...> --interval N` | Continuous monitoring loop |
 | Discovery | `--list-dataviews` etc. | List available resources |
-| Config | `--config`, `--show-config` | Profile/config management |
+| Config | `--config-status`, `--validate-config`, `--profile-*` | Profile/config management |
 | Stats | `--stats` | Diagnostics and statistics |
 
 Fast-path flags (no heavy imports): `--version`/`-V`, `--help`/`-h`, `--exit-codes`, `--explain-exit-code CODE`, `--completion {bash,zsh,fish}`

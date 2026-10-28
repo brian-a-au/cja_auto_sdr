@@ -458,6 +458,57 @@ class TestDispatchInventorySummaryMode:
         # No separator blank line should appear
         assert out == "" or "\n\n" not in out
 
+    @staticmethod
+    def _dispatch(args, data_views, process_result=None):
+        gen = SimpleNamespace(
+            ConsoleColors=_ConsoleColors,
+            process_inventory_summary=MagicMock(return_value=process_result or {}),
+        )
+        with patch("cja_auto_sdr.cli.execution._generator_module", return_value=gen):
+            with pytest.raises(SystemExit) as exc_info:
+                dispatch_inventory_summary_mode(
+                    args,
+                    data_views=data_views,
+                    effective_log_level="INFO",
+                    inventory_order=["segments"],
+                )
+        return exc_info.value.code, gen.process_inventory_summary
+
+    def test_output_path_is_passed_through(self):
+        args = _make_args(format="json", output="out/summary.json")
+
+        code, process = self._dispatch(args, ["dv_1"])
+
+        assert code == 0
+        assert process.call_args.kwargs["output_file"] == "out/summary.json"
+        assert process.call_args.kwargs["output_format"] == "json"
+
+    @pytest.mark.parametrize("stdout_token", ["-", "stdout"])
+    def test_output_stdout_selects_json(self, stdout_token):
+        args = _make_args(format=None, output=stdout_token)
+
+        code, process = self._dispatch(args, ["dv_1"])
+
+        assert code == 0
+        assert process.call_args.kwargs["output_format"] == "json"
+        assert process.call_args.kwargs["output_file"] == stdout_token
+
+    def test_output_with_multiple_data_views_is_rejected(self, capsys):
+        args = _make_args(format="json", output="summary.json")
+
+        code, process = self._dispatch(args, ["dv_1", "dv_2"])
+
+        assert code == 1
+        process.assert_not_called()
+        assert "--output" in capsys.readouterr().err
+
+    def test_failed_summary_exits_1(self):
+        args = _make_args(format=None)
+
+        code, _process = self._dispatch(args, ["dv_missing"], process_result={"error": "not found"})
+
+        assert code == 1
+
 
 class TestExecuteSdrProcessingModesQualityOnly:
     """Tests for execute_sdr_processing_modes() and _run_single_mode() quality-report-only path."""

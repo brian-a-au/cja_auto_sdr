@@ -53,18 +53,35 @@ Important caveats:
 
 ## `run-summary-json` Usage
 
-The `run_summary_json` parameter (CLI: `--run-summary-json <path>`) writes a JSON file after the command completes containing:
+The `run_summary_json` parameter (CLI: `--run-summary-json <path>`) writes a JSON file after the command completes. An abbreviated SDR run looks like this:
 
 ```json
 {
+  "summary_version": "1.1",
+  "tool_version": "3.13.3",
+  "mode": "sdr",
+  "status": "success",
   "exit_code": 0,
+  "started_at": "2026-03-28T10:00:00.000000+00:00",
+  "ended_at": "2026-03-28T10:00:04.200000+00:00",
   "duration_seconds": 4.2,
-  "data_view_id": "dv_abc123",
-  "component_counts": { "metrics": 42, "dimensions": 118 },
-  "quality_issues": 3,
-  "timestamp": "2026-03-28T10:00:00Z"
+  "output_format": "json",
+  "quality_gate_failed": false,
+  "result_counts": { "total": 1, "successful": 1, "failed": 0, "quality_issues": 3 },
+  "results": [
+    {
+      "data_view_id": "dv_abc123",
+      "success": true,
+      "metrics_count": 42,
+      "dimensions_count": 118,
+      "dq_issues_count": 3,
+      "output_file": "./CJA_DataView_Example_dv_abc123_SDR.json"
+    }
+  ]
 }
 ```
+
+Per-data-view counts live in `results[]`, and run totals live in `result_counts`. Other keys (`inputs`, `details`, `failure_rollups`, `environment`, and more) are described in [CLI_REFERENCE.md](../docs/CLI_REFERENCE.md).
 
 This is the recommended integration point for orchestrators and CI systems that need structured outcome data without parsing stdout.
 

@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`--org-report --cluster` with JSON output:** the run crashed with `Object of type int32 is not JSON serializable` for `--format json`, for the `all`, `data`, and `ci` aliases, and for `--output -`, which left partial JSON on stdout. Cluster IDs came from scipy as numpy integers. They are now plain integers, so the JSON report is written. Console, Excel, Markdown, HTML, and CSV output were not affected.
+- **Watch mode stdout:** `--watch` printed its log lines on stdout between the `cja-watch-event/v1` events, so a consumer could not parse stdout as NDJSON. This happened with `--quiet` and with `--log-format json` too. Log lines now go to stderr, and stdout holds only events.
+- **`--quiet` for discovery table output:** `--list-dataviews`, `--list-connections`, `--list-datasets`, `--describe-dataview`, and the `--list-*` commands for one data view still printed the banner, the "Using configuration" line, and "Connecting to CJA API..." under `--quiet`. `--list-dataviews` also printed its usage hints. Table output now shows only the rows. Errors still print, and JSON and CSV output are unchanged.
+- **`--inventory-summary` and `--output`:** `--output PATH` was ignored, so the JSON summary was written under an auto-generated name in `--output-dir`. `--output -` printed nothing on stdout, and `--agent-mode` did the same. The summary is now written to the exact path, and its folder is created. With `--output -`, the JSON summary goes to stdout and log lines go to stderr. `--output` takes one data view, and the CLI exits 1 if more are given.
+- **`--inventory-summary` exit code:** a data view that could not be summarized, e.g., one that does not exist, printed an error but exited 0. It now exits 1.
+- **`--stats --output` into a new folder:** writing JSON or CSV stats to a path in a folder that did not exist failed with `Configuration file '…' not found`, even though the config existed. The folder is now created and the file is written.
+- **`--compare-org-report` errors:** a baseline that was missing, was not valid JSON, or was not eligible for comparison printed an error, but the run exited 0. The org report is still written, and the run now exits 1.
+  - **Behavior change:** CI jobs that pass a baseline path that does not exist yet, e.g., on a first run, now fail. Check that the file exists before you add the flag.
+- **Permission error message:** when an SDR could not be written because of a permission error, the message named the default Excel file, even for JSON and other formats or a custom `--output` path. It now names the file that failed.
+- **Naming audit and all caps names:** `--audit-naming` counted all caps names, e.g., `URL`, `RSID`, or `AM/PM`, as PascalCase. They now count in the `other` style, as in aa_auto_sdr. The PascalCase count and the dominant style can change for data views with many all caps names.
+- **Timing tests under xdist:** the wall-clock comparisons in `test_optimized_validation.py` could fail in a local `pytest -n auto` run while workers competed for CPU. They now skip under xdist. CI still runs them in the serial slow slice.
+
 ## [3.13.3] - 2026-10-28
 
 This patch makes several output options do what their documentation says. Excel output works with a new output folder, `--quiet` is quiet in single and batch runs, `--diff-output` names JSON, Markdown, HTML, and Excel diff reports, and regex anchors work in discovery filters. The naming audit also counts a single capitalized word, e.g., `Sessions`, as PascalCase.

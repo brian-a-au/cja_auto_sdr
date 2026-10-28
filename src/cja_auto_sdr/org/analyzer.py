@@ -1425,7 +1425,8 @@ class OrgComponentAnalyzer:
 
             clusters.append(
                 DataViewCluster(
-                    cluster_id=cluster_id,
+                    # fcluster labels are numpy int32, which json cannot serialize.
+                    cluster_id=int(cluster_id),
                     cluster_name=cluster_name,
                     data_view_ids=dv_ids,
                     data_view_names=dv_names,
@@ -1761,6 +1762,10 @@ class OrgComponentAnalyzer:
             # Detect case style
             if "_" in name and name == name.lower():
                 audit["case_styles"]["snake_case"] += 1
+            elif name == name.upper():
+                # All caps names like 'URL' and 'AM/PM' are neither PascalCase nor
+                # snake_case (matches aa_auto_sdr).
+                audit["case_styles"]["other"] += 1
             elif name and name[0].islower() and any(c.isupper() for c in name):
                 audit["case_styles"]["camelCase"] += 1
             elif name and name[0].isupper() and any(c.isupper() for c in name[1:]):

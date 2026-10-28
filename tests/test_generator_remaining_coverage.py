@@ -493,6 +493,59 @@ class TestDisplayInventorySummaryElevated:
         assert "... and 2 more" in captured.out
 
 
+class TestDisplayInventorySummaryOutput:
+    """--output for --inventory-summary: an exact file path, or JSON on stdout."""
+
+    @staticmethod
+    def _segments_inventory():
+        inv = MagicMock()
+        inv.get_summary.return_value = {
+            "total_segments": 2,
+            "governance": {},
+            "container_types": {},
+            "complexity": {"average": 1.0, "max": 2.0, "high_complexity_count": 0, "elevated_complexity_count": 0},
+        }
+        inv.segments = []
+        return inv
+
+    def test_output_file_writes_exact_path(self, tmp_path):
+        target = tmp_path / "new" / "nested" / "summary.json"
+        auto_dir = tmp_path / "auto"
+        auto_dir.mkdir()
+
+        display_inventory_summary(
+            data_view_id="dv_test",
+            data_view_name="Test DV",
+            segments_inventory=self._segments_inventory(),
+            output_format="json",
+            output_dir=str(auto_dir),
+            output_file=str(target),
+            quiet=True,
+            inventory_order=["segments"],
+        )
+
+        assert json.loads(target.read_text(encoding="utf-8"))["data_view_id"] == "dv_test"
+        assert list(auto_dir.iterdir()) == []
+
+    @pytest.mark.parametrize("stdout_token", ["-", "stdout"])
+    def test_output_stdout_prints_only_json(self, tmp_path, monkeypatch, capsys, stdout_token):
+        monkeypatch.chdir(tmp_path)
+
+        display_inventory_summary(
+            data_view_id="dv_test",
+            data_view_name="Test DV",
+            segments_inventory=self._segments_inventory(),
+            output_format="json",
+            output_file=stdout_token,
+            quiet=True,
+            inventory_order=["segments"],
+        )
+
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["inventories"]["segments"]["total_segments"] == 2
+        assert list(tmp_path.iterdir()) == []
+
+
 # ===========================================================================
 # process_inventory_summary: calc metrics / segments import errors (5097-5112)
 # ===========================================================================

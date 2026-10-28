@@ -151,13 +151,15 @@ def run_watch(args: Any, *, cja: Any | None = None) -> int:
     # watch_cycle_complete, watch_loop_stop) actually reach handlers. _main_impl's
     # `sys.exit(run_watch(args))` bypasses the SDR-path setup_logging() call, so
     # without this the diagnostics get dropped at INFO level — particularly
-    # breaking --log-format json for watch mode.
+    # breaking --log-format json for watch mode. Console logs go to stderr so
+    # stdout stays a pure NDJSON event stream.
     global _logger  # noqa: PLW0603 — module-scope logger refresh after setup_logging
     _logger = setup_logging(
         data_view_id=None,
         batch_mode=True,
         log_level=getattr(args, "log_level", None),
         log_format=getattr(args, "log_format", "text"),
+        stream=sys.stderr,
     )
 
     if cja is None:

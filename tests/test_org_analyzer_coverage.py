@@ -1896,6 +1896,33 @@ class TestComputeClusters:
         assert cluster.size == 2
         assert cluster.cluster_name == "Production"
 
+    def test_cluster_ids_are_json_serializable_ints(self, mock_cja, logger):
+        """fcluster returns numpy int32 labels; cluster_id must be a plain int so JSON output works."""
+        pytest.importorskip("scipy")
+        import dataclasses
+        import json
+
+        config = OrgReportConfig(skip_lock=True, cja_per_thread=False, enable_clustering=True)
+        analyzer = _make_analyzer(mock_cja, logger, config=config)
+        summaries = [
+            DataViewSummary(
+                data_view_id=f"dv{i}",
+                data_view_name=f"View {i}",
+                metric_ids={"m1", f"m{i}"},
+                dimension_ids=set(),
+                metric_count=2,
+                dimension_count=0,
+            )
+            for i in range(3)
+        ]
+
+        result = analyzer._compute_clusters(summaries)
+
+        assert result
+        for cluster in result:
+            assert type(cluster.cluster_id) is int
+        json.dumps([dataclasses.asdict(cluster) for cluster in result])
+
 
 def _make_scipy_import_error():
     """Factory for a side_effect that blocks scipy imports but allows others."""

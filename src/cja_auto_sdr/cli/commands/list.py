@@ -122,14 +122,19 @@ def _run_list_command(
     output_file: str | None = None,
     profile: str | None = None,
     validate_inputs: Callable[[], None] | None = None,
+    quiet: bool = False,
 ) -> bool:
-    """Shared boilerplate for list-* discovery commands."""
+    """Shared boilerplate for list-* discovery commands.
+
+    ``quiet`` drops the banner and progress line from table output; errors still print.
+    """
     is_stdout = output_file in ("-", "stdout")
     is_machine_readable = _is_machine_readable_output(output_format, output_file)
+    show_progress = not is_machine_readable and not quiet
 
     active_profile = _generator.resolve_active_profile(profile)
 
-    if not is_machine_readable:
+    if show_progress:
         print()
         print("=" * _generator.BANNER_WIDTH)
         print(banner_text)
@@ -162,7 +167,7 @@ def _run_list_command(
             return False
         cja = _generator.cjapy.CJA()
 
-        if not is_machine_readable:
+        if show_progress:
             print("Connecting to CJA API...")
 
         output_data = fetch_and_format(cja, is_machine_readable)
@@ -236,6 +241,7 @@ def list_dataviews(
     exclude_pattern: str | None = None,
     limit: int | None = None,
     sort_expression: str | None = None,
+    quiet: bool = False,
 ) -> bool:
     """List all accessible data views and exit."""
     return _run_list_command(
@@ -247,11 +253,13 @@ def list_dataviews(
             exclude_pattern=exclude_pattern,
             limit=limit,
             sort_expression=sort_expression,
+            quiet=quiet,
         ),
         config_file=config_file,
         output_format=output_format,
         output_file=output_file,
         profile=profile,
+        quiet=quiet,
         validate_inputs=lambda: _validate_discovery_query_inputs(
             filter_pattern=filter_pattern,
             exclude_pattern=exclude_pattern,
@@ -266,6 +274,7 @@ def describe_dataview(
     output_format: str = "table",
     output_file: str | None = None,
     profile: str | None = None,
+    quiet: bool = False,
 ) -> bool:
     """Describe a single data view with component counts and exit."""
     return _run_list_command(
@@ -276,6 +285,7 @@ def describe_dataview(
         output_format=output_format,
         output_file=output_file,
         profile=profile,
+        quiet=quiet,
     )
 
 
@@ -290,6 +300,7 @@ def list_metrics(
     exclude_pattern: str | None = None,
     limit: int | None = None,
     sort_expression: str | None = None,
+    quiet: bool = False,
 ) -> bool:
     """List all metrics for a given data view."""
     return _run_list_command(
@@ -308,6 +319,7 @@ def list_metrics(
         output_format=output_format,
         output_file=output_file,
         profile=profile,
+        quiet=quiet,
         validate_inputs=lambda: _validate_discovery_query_inputs(
             filter_pattern=filter_pattern,
             exclude_pattern=exclude_pattern,
@@ -327,6 +339,7 @@ def list_dimensions(
     exclude_pattern: str | None = None,
     limit: int | None = None,
     sort_expression: str | None = None,
+    quiet: bool = False,
 ) -> bool:
     """List all dimensions for a given data view."""
     return _run_list_command(
@@ -345,6 +358,7 @@ def list_dimensions(
         output_format=output_format,
         output_file=output_file,
         profile=profile,
+        quiet=quiet,
         validate_inputs=lambda: _validate_discovery_query_inputs(
             filter_pattern=filter_pattern,
             exclude_pattern=exclude_pattern,
@@ -364,6 +378,7 @@ def list_segments(
     exclude_pattern: str | None = None,
     limit: int | None = None,
     sort_expression: str | None = None,
+    quiet: bool = False,
 ) -> bool:
     """List all segments (filters) for a given data view."""
     return _run_list_command(
@@ -382,6 +397,7 @@ def list_segments(
         output_format=output_format,
         output_file=output_file,
         profile=profile,
+        quiet=quiet,
         validate_inputs=lambda: _validate_discovery_query_inputs(
             filter_pattern=filter_pattern,
             exclude_pattern=exclude_pattern,
@@ -401,6 +417,7 @@ def list_calculated_metrics(
     exclude_pattern: str | None = None,
     limit: int | None = None,
     sort_expression: str | None = None,
+    quiet: bool = False,
 ) -> bool:
     """List all calculated metrics for a given data view."""
     return _run_list_command(
@@ -419,6 +436,7 @@ def list_calculated_metrics(
         output_format=output_format,
         output_file=output_file,
         profile=profile,
+        quiet=quiet,
         validate_inputs=lambda: _validate_discovery_query_inputs(
             filter_pattern=filter_pattern,
             exclude_pattern=exclude_pattern,
@@ -436,6 +454,7 @@ def list_connections(
     exclude_pattern: str | None = None,
     limit: int | None = None,
     sort_expression: str | None = None,
+    quiet: bool = False,
 ) -> bool:
     """List all accessible connections with their datasets and exit."""
     return _run_list_command(
@@ -452,6 +471,7 @@ def list_connections(
         output_format=output_format,
         output_file=output_file,
         profile=profile,
+        quiet=quiet,
         validate_inputs=lambda: _validate_discovery_query_inputs(
             filter_pattern=filter_pattern,
             exclude_pattern=exclude_pattern,
@@ -469,6 +489,7 @@ def list_datasets(
     exclude_pattern: str | None = None,
     limit: int | None = None,
     sort_expression: str | None = None,
+    quiet: bool = False,
 ) -> bool:
     """List all data views with their backing connections and underlying datasets."""
     return _run_list_command(
@@ -485,6 +506,7 @@ def list_datasets(
         output_format=output_format,
         output_file=output_file,
         profile=profile,
+        quiet=quiet,
         validate_inputs=lambda: _validate_discovery_query_inputs(
             filter_pattern=filter_pattern,
             exclude_pattern=exclude_pattern,

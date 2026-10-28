@@ -3091,6 +3091,7 @@ def process_inventory_summary(
     include_calculated: bool = False,
     include_segments: bool = False,
     inventory_order: list[str] | None = None,
+    output_file: str | None = None,
 ) -> dict[str, Any]:
     """
     Process inventory summary mode - fetch inventory data and display statistics.
@@ -3108,11 +3109,19 @@ def process_inventory_summary(
         include_calculated: Include calculated metrics inventory
         include_segments: Include segments inventory
         inventory_order: Order of inventory types as specified in CLI
+        output_file: Exact JSON output path, or "-"/"stdout" to print the JSON
 
     Returns:
         Dictionary with summary statistics
     """
-    base_logger = setup_logging(data_view_id, batch_mode=False, log_level=log_level, log_format=log_format)
+    # Keep stdout clean when the JSON summary streams there.
+    base_logger = setup_logging(
+        data_view_id,
+        batch_mode=False,
+        log_level=log_level,
+        log_format=log_format,
+        stream=sys.stderr if output_file in ("-", "stdout") else None,
+    )
     logger = with_log_context(base_logger, run_mode="inventory_summary", data_view_id=data_view_id)
 
     # Initialize CJA
@@ -3260,6 +3269,7 @@ def process_inventory_summary(
         output_dir=output_dir,
         quiet=quiet,
         inventory_order=inventory_order,
+        output_file=output_file,
     )
 
 
@@ -4458,7 +4468,11 @@ def process_single_dataview(
             )
 
         except PermissionError as e:
-            logger.critical("Permission denied writing to %s. File may be open in another program.", output_path)
+            # output_path is the default Excel name; the exception names the file that actually failed.
+            logger.critical(
+                "Permission denied writing to %s. File may be open in another program.",
+                e.filename or output_path,
+            )
             logger.critical("Please close the file and try again.")
             logger.info("=" * BANNER_WIDTH)
             logger.info("EXECUTION FAILED")
@@ -5331,6 +5345,7 @@ def _run_list_command(
     output_file: str | None = None,
     profile: str | None = None,
     validate_inputs: Callable[[], None] | None = None,
+    quiet: bool = False,
 ) -> bool:
     """Shared boilerplate for list-* discovery commands."""
     from cja_auto_sdr.cli.commands.list import _run_list_command as _impl
@@ -5343,6 +5358,7 @@ def _run_list_command(
         output_format=output_format,
         output_file=output_file,
         profile=profile,
+        quiet=quiet,
         validate_inputs=validate_inputs,
     )
 
@@ -5359,6 +5375,7 @@ def list_dataviews(
     exclude_pattern: str | None = None,
     limit: int | None = None,
     sort_expression: str | None = None,
+    quiet: bool = False,
 ) -> bool:
     """List all accessible data views and exit."""
     from cja_auto_sdr.cli.commands.list import list_dataviews as _impl
@@ -5368,6 +5385,7 @@ def list_dataviews(
         output_format=output_format,
         output_file=output_file,
         profile=profile,
+        quiet=quiet,
         filter_pattern=filter_pattern,
         exclude_pattern=exclude_pattern,
         limit=limit,
@@ -5419,6 +5437,7 @@ def describe_dataview(
     output_format: str = "table",
     output_file: str | None = None,
     profile: str | None = None,
+    quiet: bool = False,
 ) -> bool:
     """Describe a single data view with component counts and exit."""
     from cja_auto_sdr.cli.commands.list import describe_dataview as _impl
@@ -5429,6 +5448,7 @@ def describe_dataview(
         output_format=output_format,
         output_file=output_file,
         profile=profile,
+        quiet=quiet,
     )
 
 
@@ -5446,6 +5466,7 @@ def list_metrics(
     exclude_pattern: str | None = None,
     limit: int | None = None,
     sort_expression: str | None = None,
+    quiet: bool = False,
 ) -> bool:
     """List all metrics for a given data view."""
     from cja_auto_sdr.cli.commands.list import list_metrics as _impl
@@ -5456,6 +5477,7 @@ def list_metrics(
         output_format=output_format,
         output_file=output_file,
         profile=profile,
+        quiet=quiet,
         data_view_name=data_view_name,
         filter_pattern=filter_pattern,
         exclude_pattern=exclude_pattern,
@@ -5478,6 +5500,7 @@ def list_dimensions(
     exclude_pattern: str | None = None,
     limit: int | None = None,
     sort_expression: str | None = None,
+    quiet: bool = False,
 ) -> bool:
     """List all dimensions for a given data view."""
     from cja_auto_sdr.cli.commands.list import list_dimensions as _impl
@@ -5488,6 +5511,7 @@ def list_dimensions(
         output_format=output_format,
         output_file=output_file,
         profile=profile,
+        quiet=quiet,
         data_view_name=data_view_name,
         filter_pattern=filter_pattern,
         exclude_pattern=exclude_pattern,
@@ -5510,6 +5534,7 @@ def list_segments(
     exclude_pattern: str | None = None,
     limit: int | None = None,
     sort_expression: str | None = None,
+    quiet: bool = False,
 ) -> bool:
     """List all segments (filters) for a given data view."""
     from cja_auto_sdr.cli.commands.list import list_segments as _impl
@@ -5520,6 +5545,7 @@ def list_segments(
         output_format=output_format,
         output_file=output_file,
         profile=profile,
+        quiet=quiet,
         data_view_name=data_view_name,
         filter_pattern=filter_pattern,
         exclude_pattern=exclude_pattern,
@@ -5542,6 +5568,7 @@ def list_calculated_metrics(
     exclude_pattern: str | None = None,
     limit: int | None = None,
     sort_expression: str | None = None,
+    quiet: bool = False,
 ) -> bool:
     """List all calculated metrics for a given data view."""
     from cja_auto_sdr.cli.commands.list import list_calculated_metrics as _impl
@@ -5552,6 +5579,7 @@ def list_calculated_metrics(
         output_format=output_format,
         output_file=output_file,
         profile=profile,
+        quiet=quiet,
         data_view_name=data_view_name,
         filter_pattern=filter_pattern,
         exclude_pattern=exclude_pattern,
@@ -5572,6 +5600,7 @@ def list_connections(
     exclude_pattern: str | None = None,
     limit: int | None = None,
     sort_expression: str | None = None,
+    quiet: bool = False,
 ) -> bool:
     """List all accessible connections with their datasets and exit."""
     from cja_auto_sdr.cli.commands.list import list_connections as _impl
@@ -5581,6 +5610,7 @@ def list_connections(
         output_format=output_format,
         output_file=output_file,
         profile=profile,
+        quiet=quiet,
         filter_pattern=filter_pattern,
         exclude_pattern=exclude_pattern,
         limit=limit,
@@ -5600,6 +5630,7 @@ def list_datasets(
     exclude_pattern: str | None = None,
     limit: int | None = None,
     sort_expression: str | None = None,
+    quiet: bool = False,
 ) -> bool:
     """List all data views with their backing connections and underlying datasets."""
     from cja_auto_sdr.cli.commands.list import list_datasets as _impl
@@ -5609,6 +5640,7 @@ def list_datasets(
         output_format=output_format,
         output_file=output_file,
         profile=profile,
+        quiet=quiet,
         filter_pattern=filter_pattern,
         exclude_pattern=exclude_pattern,
         limit=limit,
@@ -6165,8 +6197,10 @@ def run_org_report(
             _status_print(ConsoleColors.warning("No data views found matching criteria"))
             return False, False
 
-        # Handle org-report comparison (Feature 4)
+        # Handle org-report comparison (Feature 4). A requested comparison that
+        # cannot run still writes the report, then fails the run (exit 1).
         comparison = None
+        comparison_failed = False
         if requested_baseline_path is not None:
             try:
                 if not quiet:
@@ -6175,14 +6209,18 @@ def run_org_report(
                 with contextlib.redirect_stdout(status_stream):
                     write_org_report_comparison_console(comparison, console_writer_quiet)
             except FileNotFoundError:
+                comparison_failed = True
                 _status_print(ConsoleColors.error(f"ERROR: Previous report not found: {requested_baseline_path}"))
             except json.JSONDecodeError:
+                comparison_failed = True
                 _status_print(
                     ConsoleColors.error(f"ERROR: Invalid JSON in previous report: {requested_baseline_path}"),
                 )
             except ValueError as exc:
+                comparison_failed = True
                 _status_print(ConsoleColors.error(f"ERROR: {exc}"))
             except RECOVERABLE_API_EXCEPTIONS as e:
+                comparison_failed = True
                 _status_print(ConsoleColors.warning(f"Warning: Could not compare reports: {e}"))
 
         # Trending analysis (v3.4.0)
@@ -6222,7 +6260,7 @@ def run_org_report(
                         _status_print(f"JSON saved to: {file_path}")
             append_github_step_summary(build_org_step_summary(result), logger)
             _populate_org_report_advisory_rollup(runtime_details, result, trending)
-            return not governance_evaluation_failed, result.thresholds_exceeded
+            return not (governance_evaluation_failed or comparison_failed), result.thresholds_exceeded
 
         # Handle format aliases (reports, data, ci)
         if output_format in FORMAT_ALIASES:
@@ -6344,7 +6382,7 @@ def run_org_report(
 
         append_github_step_summary(build_org_step_summary(result), logger)
         _populate_org_report_advisory_rollup(runtime_details, result, trending)
-        return not governance_evaluation_failed, result.thresholds_exceeded
+        return not (governance_evaluation_failed or comparison_failed), result.thresholds_exceeded
 
     except ConcurrentOrgReportError as e:
         _status_print(ConsoleColors.error(f"ERROR: Org report failed: {e!s}"))
@@ -7562,6 +7600,7 @@ def _main_impl(run_state: dict[str, Any] | None = None):
                 exclude_pattern=getattr(args, "org_exclude", None),
                 limit=getattr(args, "org_limit", None),
                 sort_expression=getattr(args, "discovery_sort", None),
+                quiet=getattr(args, "quiet", False),
             )
             if run_state is not None:
                 run_state["output_format"] = list_format
@@ -7665,6 +7704,7 @@ def _main_impl(run_state: dict[str, Any] | None = None):
                     output_format=list_format,
                     output_file=getattr(args, "output", None),
                     profile=getattr(args, "profile", None),
+                    quiet=getattr(args, "quiet", False),
                 )
             else:
                 list_kwargs: dict[str, Any] = {
@@ -7676,6 +7716,7 @@ def _main_impl(run_state: dict[str, Any] | None = None):
                     "exclude_pattern": getattr(args, "org_exclude", None),
                     "limit": getattr(args, "org_limit", None),
                     "sort_expression": getattr(args, "discovery_sort", None),
+                    "quiet": getattr(args, "quiet", False),
                 }
                 if resolved_resource_name is not None:
                     list_kwargs["data_view_name"] = resolved_resource_name

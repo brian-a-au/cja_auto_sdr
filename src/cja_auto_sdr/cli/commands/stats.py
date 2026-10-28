@@ -416,8 +416,7 @@ def show_stats(
             if is_stdout or not output_file:
                 print(output_data)
             else:
-                with open(output_file, "w", encoding="utf-8") as f:
-                    f.write(output_data)
+                generator._emit_output(output_data, output_file, is_stdout)
         elif output_format == "csv":
             lines = ["id,name,owner,metrics,dimensions,total_components"]
             for item in stats_data:
@@ -430,8 +429,7 @@ def show_stats(
             if is_stdout or not output_file:
                 print(output_data)
             else:
-                with open(output_file, "w", encoding="utf-8") as f:
-                    f.write(output_data)
+                generator._emit_output(output_data, output_file, is_stdout)
         else:
             if stats_data:
                 max_id_width = max(len("ID"), *(len(s["id"]) for s in stats_data)) + 2
