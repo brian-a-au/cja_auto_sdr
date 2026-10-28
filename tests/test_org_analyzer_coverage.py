@@ -3338,3 +3338,34 @@ def test_order_summaries_by_listing_puts_unlisted_last_sorted_by_id():
     summaries = [DataViewSummary(i, i) for i in ("z_extra", "b", "a_extra", "a")]
     ordered = OrgComponentAnalyzer._order_summaries_by_listing(summaries, [{"id": "a"}, {"id": "b"}])
     assert [s.data_view_id for s in ordered] == ["a", "b", "a_extra", "z_extra"]
+
+
+# ===================================================================
+# Null data view names (B14)
+# ===================================================================
+
+
+@pytest.mark.parametrize("bad_name", [None, float("nan")])
+def test_filter_and_exclude_tolerate_null_names(mock_cja, logger, bad_name):
+    mock_cja.getDataViews.return_value = [
+        {"id": "dv_1", "name": "Prod"},
+        {"id": "dv_2", "name": bad_name},
+    ]
+    config = OrgReportConfig(filter_pattern="Prod", skip_lock=True, cja_per_thread=False)
+    result, _, _ = _make_analyzer(mock_cja, logger, config=config)._list_and_filter_data_views()
+    assert [dv["id"] for dv in result] == ["dv_1"]
+
+    config = OrgReportConfig(exclude_pattern="Prod", skip_lock=True, cja_per_thread=False)
+    result, _, _ = _make_analyzer(mock_cja, logger, config=config)._list_and_filter_data_views()
+    assert [dv["id"] for dv in result] == ["dv_2"]
+
+
+@pytest.mark.parametrize("bad_name", [None, float("nan")])
+def test_stratified_sample_tolerates_null_names(mock_cja, logger, bad_name):
+    analyzer = _make_analyzer(mock_cja, logger)
+    dvs = [
+        {"id": "dv_1", "name": "Prod A"},
+        {"id": "dv_2", "name": bad_name},
+        {"id": "dv_3", "name": "Dev B"},
+    ]
+    assert len(analyzer._stratified_sample(dvs, 2)) == 2

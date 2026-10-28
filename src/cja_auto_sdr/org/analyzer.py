@@ -607,6 +607,12 @@ class OrgComponentAnalyzer:
             self.logger.warning("Invalid %s pattern: %s", name, e)
             return None
 
+    @staticmethod
+    def _data_view_name(dv: dict[str, Any]) -> str:
+        """Return the data view name, or "" when it is missing, null, or NaN."""
+        name = dv.get("name")
+        return name if isinstance(name, str) else ""
+
     def _list_and_filter_data_views(self) -> tuple[list[dict[str, Any]], bool, int]:
         """List all data views and apply filter/exclude/sample patterns.
 
@@ -638,7 +644,7 @@ class OrgComponentAnalyzer:
         if self.config.filter_pattern:
             pattern = self._validate_regex_pattern(self.config.filter_pattern, "filter")
             if pattern:
-                filtered = [dv for dv in filtered if pattern.search(dv.get("name", ""))]
+                filtered = [dv for dv in filtered if pattern.search(self._data_view_name(dv))]
                 self.logger.info("Filter '%s' matched %s data views", self.config.filter_pattern, len(filtered))
 
         # Apply exclude filter
@@ -646,7 +652,7 @@ class OrgComponentAnalyzer:
             pattern = self._validate_regex_pattern(self.config.exclude_pattern, "exclude")
             if pattern:
                 before = len(filtered)
-                filtered = [dv for dv in filtered if not pattern.search(dv.get("name", ""))]
+                filtered = [dv for dv in filtered if not pattern.search(self._data_view_name(dv))]
                 self.logger.info(
                     "Exclude '%s' removed %s data views", self.config.exclude_pattern, before - len(filtered)
                 )
@@ -689,7 +695,7 @@ class OrgComponentAnalyzer:
         # Group by prefix (first word or chars before common separators)
         groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
         for dv in data_views:
-            name = dv.get("name", "")
+            name = self._data_view_name(dv)
             # Extract prefix: first word or chars before - _ or space
             prefix = name.split()[0] if name.split() else name[:10]
             for sep in ["-", "_", " "]:
