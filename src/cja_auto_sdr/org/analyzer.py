@@ -137,8 +137,9 @@ class OrgComponentAnalyzer:
             stale_threshold_seconds=self.config.lock_stale_threshold_seconds
         )
 
-        # Handle cache clear option
-        if config.clear_cache and self.cache:
+    def _apply_clear_cache_option(self) -> None:
+        """Clear the org cache if requested. Runs only once the org lock is held (or skipped)."""
+        if self.config.clear_cache and self.cache:
             self.cache.invalidate()
             self.logger.info("Cache cleared")
 
@@ -386,6 +387,7 @@ class OrgComponentAnalyzer:
         start_time = time.monotonic()
         timestamp = datetime.now(UTC).isoformat()
         self._assert_lock_healthy()
+        self._apply_clear_cache_option()
 
         # 1. List and filter data views
         self.logger.info("Fetching data view list...")

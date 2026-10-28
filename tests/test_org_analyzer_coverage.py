@@ -1944,19 +1944,52 @@ def _make_scipy_import_error():
 class TestInitCacheClear:
     """Tests for __init__ cache clear when config.clear_cache=True."""
 
-    def test_clear_cache_true_calls_invalidate(self, mock_cja, logger, caplog):
-        """clear_cache=True should call cache.invalidate() and log info."""
+    def test_clear_cache_not_applied_at_construction(self, mock_cja, logger):
+        """Construction must not clear the shared cache; that waits for the org lock."""
         from unittest.mock import MagicMock
 
         config = OrgReportConfig(clear_cache=True, skip_lock=True, cja_per_thread=False)
         mock_cache = MagicMock()
+        OrgComponentAnalyzer(mock_cja, config, logger, org_id="test@Org", cache=mock_cache)
+        mock_cache.invalidate.assert_not_called()
+
+    def test_clear_cache_skipped_when_lock_contended(self, mock_cja, logger, tmp_path):
+        """A run refused by the org lock must not wipe the shared cache."""
+        from functools import partial
+        from unittest.mock import MagicMock, patch
+
+        from cja_auto_sdr.core.exceptions import ConcurrentOrgReportError
+        from cja_auto_sdr.org.cache import OrgReportLock
+
+        config = OrgReportConfig(clear_cache=True, skip_lock=False, cja_per_thread=False)
+        mock_cache = MagicMock()
+        analyzer = OrgComponentAnalyzer(mock_cja, config, logger, org_id="test@Org", cache=mock_cache)
+
+        holder = OrgReportLock("test@Org", lock_dir=tmp_path)
+        with holder:
+            assert holder.acquired
+            with (
+                patch("cja_auto_sdr.org.analyzer.OrgReportLock", partial(OrgReportLock, lock_dir=tmp_path)),
+                pytest.raises(ConcurrentOrgReportError),
+            ):
+                analyzer.run_analysis()
+
+        mock_cache.invalidate.assert_not_called()
+
+    def test_clear_cache_applied_inside_run_with_skip_lock(self, mock_cja, logger, caplog):
+        """With skip_lock=True the cache is still cleared, inside run_analysis()."""
+        from unittest.mock import MagicMock
+
+        config = OrgReportConfig(clear_cache=True, skip_lock=True, cja_per_thread=False)
+        mock_cache = MagicMock()
+        mock_cja.getDataViews.return_value = []
+        analyzer = OrgComponentAnalyzer(mock_cja, config, logger, org_id="test@Org", cache=mock_cache)
 
         with caplog.at_level(logging.INFO):
-            analyzer = OrgComponentAnalyzer(mock_cja, config, logger, org_id="test@Org", cache=mock_cache)
+            analyzer.run_analysis()
 
-        mock_cache.invalidate.assert_called_once()
+        mock_cache.invalidate.assert_called_once_with()
         assert "Cache cleared" in caplog.text
-        assert analyzer.cache is mock_cache
 
     def test_clear_cache_true_no_cache_object_no_error(self, mock_cja, logger):
         """clear_cache=True with cache=None should not raise."""
