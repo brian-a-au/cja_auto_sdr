@@ -9,9 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [3.13.3] - 2026-10-27
+## [3.13.3] - 2026-10-28
 
-This patch makes several output options do what their documentation says. Excel output works with a new output folder, `--quiet` is quiet in single and batch runs, `--diff-output` names JSON, Markdown, HTML, and Excel diff reports, and regex anchors work in discovery filters.
+This patch makes several output options do what their documentation says. Excel output works with a new output folder, `--quiet` is quiet in single and batch runs, `--diff-output` names JSON, Markdown, HTML, and Excel diff reports, and regex anchors work in discovery filters. The naming audit also counts a single capitalized word, e.g., `Sessions`, as PascalCase.
 
 ### Fixed
 
@@ -22,6 +22,8 @@ This patch makes several output options do what their documentation says. Excel 
 - **`--quiet` for batch runs:** `--batch --quiet` no longer prints the batch summary or the `Total runtime` line. If a data view fails, the failed data views are still listed, now on stderr.
 - **Regex anchors in discovery `--filter` and `--exclude`:** patterns with `^` or `$`, such as `--filter "^Adobe Store - Prod$"`, matched nothing in `--list-dataviews`, `--list-connections`, `--list-datasets`, and the other discovery commands. The pattern ran against every field joined into one string, so `^` met the ID and `$` met the last field. Each field is now matched on its own, so anchors work on the name and on any other searchable field. `--org-report` was not affected.
 - **Batch summary rows:** each row in the "Successful Data Views" and "Failed Data Views" lists dropped the first character of the data view ID (for example `✓v_62ba…`). Rows now show the full ID.
+- **Naming audit and single capitalized words:** the `--audit-naming` check in `--org-report` now counts a single capitalized word as PascalCase, e.g., `Sessions` or `Day`. Before, it counted a name as PascalCase only when the name had a second capital letter, e.g., `Page Views`. Most standard component names are a single capitalized word, so the audit reported them in the `other` style. A large `other` count could change which style the audit picked as the dominant style. A name counts under the new rule when it starts with an uppercase letter and has only ASCII letters and digits. Names with spaces or punctuation and only one capital letter still count as `other`, e.g., `Occurrences <= 7`.
+  - **Behavior change:** the "Mixed naming conventions" recommendation does not count names in the `other` style. Single capitalized words now count as PascalCase, so in a data view where snake_case is the dominant style, they count against it. Such a data view can now get this recommendation when it did not before. This result is correct, because those names use a different style from the snake_case names.
 
 ## [3.13.2] - 2026-10-27
 

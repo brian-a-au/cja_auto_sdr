@@ -1765,6 +1765,10 @@ class OrgComponentAnalyzer:
                 audit["case_styles"]["camelCase"] += 1
             elif name and name[0].isupper() and any(c.isupper() for c in name[1:]):
                 audit["case_styles"]["PascalCase"] += 1
+            elif name and name[0].isupper() and name.isascii() and name.isalnum():
+                # A single capitalized word (standard names like 'Sessions', 'Day') is valid
+                # PascalCase; without this every data view reports its standard names as "other".
+                audit["case_styles"]["PascalCase"] += 1
             else:
                 audit["case_styles"]["other"] += 1
 
