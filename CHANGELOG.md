@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.13.3] - 2026-10-27
+
+This patch makes several output options do what their documentation says. Excel output works with a new output folder, `--quiet` is quiet in single and batch runs, `--diff-output` names JSON, Markdown, HTML, and Excel diff reports, and regex anchors work in discovery filters.
+
 ### Fixed
 
 - **Excel output into a new `--output-dir`:** generating an SDR into an output directory that did not exist yet failed with `No such file or directory` for Excel, the default format, after all API work was done. The Excel writer now creates the directory, as the JSON, CSV, HTML, and Markdown writers already did.
