@@ -771,7 +771,7 @@ class OrgComponentAnalyzer:
             to_fetch = data_views
 
         if not to_fetch:
-            return summaries
+            return self._order_summaries_by_listing(summaries, data_views)
 
         pending_cache: list[DataViewSummary] = []
         # Bind validation evidence to the listing that scheduled these fetches,
@@ -855,7 +855,29 @@ class OrgComponentAnalyzer:
                 validation_modified_by_id=validation_modified_by_id,
             )
 
-        return summaries
+        return self._order_summaries_by_listing(summaries, data_views)
+
+    @staticmethod
+    def _order_summaries_by_listing(
+        summaries: list[DataViewSummary],
+        data_views: list[dict[str, Any]],
+    ) -> list[DataViewSummary]:
+        """Order summaries by data view listing position (unlisted IDs last, by ID).
+
+        Fetches complete in thread-completion order and cache hits come first;
+        downstream "first encountered wins" logic needs a stable order.
+        """
+        position: dict[str, int] = {}
+        for index, dv in enumerate(data_views):
+            position.setdefault(dv.get("id", ""), index)
+        unlisted = len(position)
+        return sorted(
+            summaries,
+            key=lambda s: (
+                position.get(s.data_view_id, unlisted),
+                s.data_view_id if s.data_view_id not in position else "",
+            ),
+        )
 
     def _get_thread_client(self):
         if not self.config.cja_per_thread:

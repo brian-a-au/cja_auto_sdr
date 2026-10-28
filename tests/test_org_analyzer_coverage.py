@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 import re
 import sys
+import time
 import types
 from unittest.mock import Mock, patch
 
@@ -3316,3 +3317,24 @@ def test_normal_completion_returns_all_summaries(mock_cja, logger):
         summaries = analyzer._fetch_all_data_views(dvs)
 
     assert sorted(s.data_view_id for s in summaries) == sorted(dv["id"] for dv in dvs)
+
+
+def test_fetch_all_returns_listing_order_not_completion_order(mock_cja, logger):
+    def fetch(dv):
+        time.sleep(0.2 if dv["id"] == "dv_prod" else 0.0)
+        return DataViewSummary(dv["id"], dv["id"], metric_ids={"metrics/revenue"})
+
+    analyzer = OrgComponentAnalyzer(
+        mock_cja,
+        OrgReportConfig(skip_lock=True, use_cache=False, cja_per_thread=False, quiet=True),
+        logger,
+    )
+    with patch.object(analyzer, "_fetch_data_view_components", side_effect=fetch):
+        result = analyzer._fetch_all_data_views([{"id": "dv_prod", "name": "p"}, {"id": "dv_stage", "name": "s"}])
+    assert [s.data_view_id for s in result] == ["dv_prod", "dv_stage"]
+
+
+def test_order_summaries_by_listing_puts_unlisted_last_sorted_by_id():
+    summaries = [DataViewSummary(i, i) for i in ("z_extra", "b", "a_extra", "a")]
+    ordered = OrgComponentAnalyzer._order_summaries_by_listing(summaries, [{"id": "a"}, {"id": "b"}])
+    assert [s.data_view_id for s in ordered] == ["a", "b", "a_extra", "z_extra"]
