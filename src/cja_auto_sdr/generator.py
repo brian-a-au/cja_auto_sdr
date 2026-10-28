@@ -6221,7 +6221,7 @@ def run_org_report(
                 _status_print(ConsoleColors.error(f"ERROR: {exc}"))
             except RECOVERABLE_API_EXCEPTIONS as e:
                 comparison_failed = True
-                _status_print(ConsoleColors.warning(f"Warning: Could not compare reports: {e}"))
+                _status_print(ConsoleColors.error(f"ERROR: Could not compare reports: {e}"))
 
         # Trending analysis (v3.4.0)
         trending = None

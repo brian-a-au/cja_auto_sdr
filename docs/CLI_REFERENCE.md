@@ -429,7 +429,7 @@ Requested gates appear in JSON `governance_checks` and run-summary `details.gove
 |--------|-------------|---------|
 | `--org-stats` | Quick summary stats only - skips similarity matrix and clustering for faster results | False |
 | `--audit-naming` | Detect naming pattern inconsistencies (snake_case vs camelCase, stale prefixes, etc.) | False |
-| `--compare-org-report PREV.json` | Compare current org-report to a previous JSON report for trending/drift analysis. If the baseline is missing, is not valid JSON, or is not eligible for comparison, the report is still written and the run exits 1 | - |
+| `--compare-org-report PREV.json` | Compare current org-report to a previous JSON report for trending/drift analysis. If the baseline is missing, cannot be read, is not valid JSON, or is not eligible for comparison, the report is still written and the run exits 1 | - |
 | `--trending-window [N]` | Show trending across the last N cached org-report snapshots (default: 10). Renders in all output formats. | None |
 | `--list-org-report-snapshots` | List cached org-report snapshots from the persistent trending history store | False |
 | `--inspect-org-report-snapshot FILE` | Inspect one cached org-report snapshot JSON, including history eligibility metadata, without running a fresh org-report | - |

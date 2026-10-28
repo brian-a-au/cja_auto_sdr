@@ -976,7 +976,7 @@ def test_run_org_report_comparison_os_error_still_writes_report_then_fails(
     assert exceeded is False
     mock_console.assert_called_once()
     out = capsys.readouterr().out
-    assert "Warning: Could not compare reports: permission denied" in out
+    assert "ERROR: Could not compare reports: permission denied" in out
 
 
 def test_run_org_report_comparison_ineligible_legacy_baseline_still_writes_report_then_fails(
