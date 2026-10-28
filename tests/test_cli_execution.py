@@ -810,3 +810,49 @@ class TestSingleModeQuietSummary:
         output, _, _ = self._run(quiet=True, success=False)
         assert "FAILED: Something failed" in capsys.readouterr().out
         assert output["overall_failure"] is True
+
+
+class TestBatchModeQuietRuntime:
+    """--quiet hides the batch runtime line; the summary itself is covered in test_batch_processor."""
+
+    @pytest.mark.parametrize("quiet", [False, True])
+    def test_total_runtime_respects_quiet(self, quiet, capsys):
+        from cja_auto_sdr.cli.execution import _run_batch_mode
+
+        args = _make_args(
+            quiet=quiet,
+            batch=True,
+            workers=2,
+            continue_on_error=False,
+            show_timings=False,
+            cache_size=100,
+            cache_ttl=300,
+            max_issues=10,
+            clear_cache=False,
+        )
+        gen = SimpleNamespace(
+            ConsoleColors=_ConsoleColors,
+            BatchProcessor=MagicMock(
+                return_value=SimpleNamespace(process_batch=MagicMock(return_value={"successful": [], "failed": []}))
+            ),
+            _result_output_paths=MagicMock(return_value=[]),
+        )
+
+        with patch("cja_auto_sdr.cli.execution._generator_module", return_value=gen):
+            _run_batch_mode(
+                args,
+                data_views=["dv_1", "dv_2"],
+                effective_log_level="INFO",
+                sdr_format="json",
+                processing_start_time=0.0,
+                workers_auto=False,
+                quality_report_only=False,
+                inventory_order=[],
+                api_tuning_config=None,
+                circuit_breaker_config=None,
+            )
+
+        out = capsys.readouterr().out
+        assert ("Total runtime:" in out) is not quiet
+        if quiet:
+            assert out == ""

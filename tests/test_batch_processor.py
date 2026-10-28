@@ -675,6 +675,56 @@ class TestBatchProcessorPrintSummary:
         mock_print.assert_called()
 
     @patch("cja_auto_sdr.generator.setup_logging")
+    def test_print_summary_rows_keep_full_data_view_id(
+        self, mock_setup_logging, mock_config_file, temp_output_dir, successful_result, failed_result, capsys
+    ):
+        """Summary rows show the whole data view ID after the status mark."""
+        mock_setup_logging.return_value = Mock()
+        processor = BatchProcessor(config_file=mock_config_file, output_dir=temp_output_dir)
+
+        processor.print_summary(
+            {"successful": [successful_result], "failed": [failed_result], "total": 2, "total_duration": 7.0}
+        )
+
+        out = capsys.readouterr().out
+        assert f"✓ {successful_result.data_view_id}" in out
+        assert f"✗ {failed_result.data_view_id}" in out
+
+    @patch("cja_auto_sdr.generator.setup_logging")
+    def test_print_summary_quiet_success_prints_nothing(
+        self, mock_setup_logging, mock_config_file, temp_output_dir, successful_result, capsys
+    ):
+        """--quiet suppresses the batch summary when every data view succeeds."""
+        mock_setup_logging.return_value = Mock()
+        processor = BatchProcessor(config_file=mock_config_file, output_dir=temp_output_dir, quiet=True)
+
+        processor.print_summary({"successful": [successful_result], "failed": [], "total": 1, "total_duration": 5.0})
+
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert captured.err == ""
+
+    @patch("cja_auto_sdr.generator.setup_logging")
+    def test_print_summary_quiet_reports_only_failures_on_stderr(
+        self, mock_setup_logging, mock_config_file, temp_output_dir, successful_result, failed_result, capsys
+    ):
+        """--quiet keeps errors visible: failed data views go to stderr, nothing else prints."""
+        mock_setup_logging.return_value = Mock()
+        processor = BatchProcessor(config_file=mock_config_file, output_dir=temp_output_dir, quiet=True)
+
+        processor.print_summary(
+            {"successful": [successful_result], "failed": [failed_result], "total": 2, "total_duration": 7.0}
+        )
+
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert "Failed Data Views:" in captured.err
+        assert f"✗ {failed_result.data_view_id}" in captured.err
+        assert failed_result.error_message in captured.err
+        assert "SUMMARY" not in captured.err
+        assert successful_result.data_view_id not in captured.err
+
+    @patch("cja_auto_sdr.generator.setup_logging")
     @patch("builtins.print")
     def test_print_summary_calculates_total_file_size(
         self,

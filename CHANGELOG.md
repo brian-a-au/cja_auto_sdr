@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`--quiet` for single data view runs:** `--quiet` now hides the `SUCCESS` summary and the `Total runtime` line, as documented. Before, both still printed, and `--output -` (which implies `--quiet`) sent them to stderr with `Size: 0 B`. Failures still print. Git commits and `--open` still run.
 - **`--diff-output` with file formats:** `--diff-output FILE` now writes JSON, Markdown, HTML, and Excel diff reports to `FILE`, including for `--compare-snapshots` and `--diff-snapshot`. Before, the path was ignored and the report was written under an auto-generated name in `--output-dir`. CSV produces several files, so `--diff-output` still does not apply to it, and the CLI now prints a warning instead of ignoring the path silently.
 - **Duplicate `--show-timings` table:** the performance summary printed twice at the default log level. It now prints once.
+- **`--quiet` for batch runs:** `--batch --quiet` no longer prints the batch summary or the `Total runtime` line. If a data view fails, the failed data views are still listed, now on stderr.
+- **Batch summary rows:** each row in the "Successful Data Views" and "Failed Data Views" lists dropped the first character of the data view ID (for example `✓v_62ba…`). Rows now show the full ID.
 
 ## [3.13.2] - 2026-10-27
 

@@ -561,8 +561,9 @@ def _run_batch_mode(
     processed_results = successful_results + list(results.get("failed", []))
 
     total_runtime = time.monotonic() - processing_start_time
-    print()
-    print(generator.ConsoleColors.bold(f"Total runtime: {total_runtime:.1f}s"))
+    if not args.quiet:
+        print()
+        print(generator.ConsoleColors.bold(f"Total runtime: {total_runtime:.1f}s"))
 
     if getattr(args, "open", False) and results.get("successful") and not quality_report_only:
         files_to_open = []
