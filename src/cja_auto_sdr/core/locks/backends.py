@@ -687,7 +687,21 @@ class LeaseFileLockBackend:
     def acquire_result(self, lock_path: Path, stale_threshold_seconds: int) -> AcquireResult:
         lock_path.parent.mkdir(parents=True, exist_ok=True)
         lock_id = str(uuid.uuid4())
+        # Register before the lock file exists: the bootstrap sidecar carries our
+        # PID, and a concurrent in-process contender must not treat it as stale.
+        with _HELD_LEASE_LOCK_IDS_GUARD:
+            _HELD_LEASE_LOCK_IDS.add(lock_id)
+        acquired = False
+        try:
+            result = self._acquire_with_lock_id(lock_path, stale_threshold_seconds, lock_id)
+            acquired = result.status == AcquireStatus.ACQUIRED
+            return result
+        finally:
+            if not acquired:
+                with _HELD_LEASE_LOCK_IDS_GUARD:
+                    _HELD_LEASE_LOCK_IDS.discard(lock_id)
 
+    def _acquire_with_lock_id(self, lock_path: Path, stale_threshold_seconds: int, lock_id: str) -> AcquireResult:
         for _ in range(self.acquire_attempts):
             try:
                 fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_RDWR, 0o600)
@@ -707,8 +721,6 @@ class LeaseFileLockBackend:
                         os.close(fd)
                     self._safe_unlink_sidecar_if_owned(lock_path, expected_lock_id=lock_id)
                     continue
-                with _HELD_LEASE_LOCK_IDS_GUARD:
-                    _HELD_LEASE_LOCK_IDS.add(lock_id)
                 return AcquireResult(
                     status=AcquireStatus.ACQUIRED,
                     handle=_LeaseLockHandle(lock_path=lock_path, fd=fd, lock_id=lock_id),

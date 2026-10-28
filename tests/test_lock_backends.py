@@ -479,6 +479,46 @@ def test_lease_lock_held_in_this_process_is_not_stolen(tmp_path: Path) -> None:
     backend.release(first.handle)
 
 
+def test_lease_lock_mid_acquire_is_not_stolen_by_in_process_contender(tmp_path: Path) -> None:
+    lock_path = tmp_path / "org.lock"
+    first = LeaseFileLockBackend()
+    second = LeaseFileLockBackend()
+    original_stat = first._stat_inode
+    in_window = threading.Event()
+    proceed = threading.Event()
+
+    def paused_stat(path: Path):
+        result = original_stat(path)
+        in_window.set()
+        proceed.wait(5)
+        return result
+
+    first._stat_inode = paused_stat  # type: ignore[method-assign]
+    results: dict[str, object] = {}
+    thread = threading.Thread(target=lambda: results.update(a=first.acquire_result(lock_path, 3600)))
+    thread.start()
+    try:
+        assert in_window.wait(5)
+        contender = second.acquire_result(lock_path, 3600)
+    finally:
+        proceed.set()
+        thread.join(5)
+
+    assert contender.status == AcquireStatus.CONTENDED
+    held = results["a"]
+    assert held.status == AcquireStatus.ACQUIRED
+    first.release(held.handle)
+
+
+def test_lease_failed_acquire_does_not_leave_lock_id_registered(tmp_path: Path) -> None:
+    before = set(backends_module._HELD_LEASE_LOCK_IDS)
+    backend = LeaseFileLockBackend()
+    with patch.object(backends_module, "_write_info_path", side_effect=OSError("boom")):
+        result = backend.acquire_result(tmp_path / "org.lock", 60)
+    assert result.status == AcquireStatus.METADATA_ERROR
+    assert set(backends_module._HELD_LEASE_LOCK_IDS) == before
+
+
 def test_lock_info_from_dict_rejects_modern_bool_pid() -> None:
     payload = _build_lock_info("modern-bool-pid").to_dict()
     payload["pid"] = True
