@@ -1259,8 +1259,12 @@ def test_legacy_validation_uses_existing_modified_without_new_token(tmp_path, ca
     summary.modified = cached_modified
     cache.put(summary, include_metadata=True)
     # Model the pre-patch on-disk cache schema.
-    cache._cache["dv_legacy"].pop("validation_modified", None)
-    cache._save_cache()
+    cache_file = tmp_path / "org_report_cache.json"
+    payload = json.loads(cache_file.read_text())
+    payload["dv_legacy"].pop("validation_modified", None)
+    cache_file.write_text(json.dumps(payload))
+    # Prove the legacy fallback is what gets exercised.
+    assert "validation_modified" not in json.loads(cache_file.read_text())["dv_legacy"]
     reloaded = OrgReportCache(tmp_path)
     retrieved = reloaded.get("dv_legacy", current_modified="2024-01-15T10:00:00Z")
     if cached_modified:
