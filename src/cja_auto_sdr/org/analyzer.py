@@ -836,7 +836,7 @@ class OrgComponentAnalyzer:
                             )
                         pbar.update(1)
                         self._assert_lock_healthy()
-        except LockOwnershipLostError:
+        except BaseException:  # Intentional: any exit (incl. KeyboardInterrupt) must cancel queued fetches.
             fail_closed_shutdown = True
             self._cancel_futures_best_effort(futures)
             raise

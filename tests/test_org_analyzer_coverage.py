@@ -3259,3 +3259,60 @@ def test_compact_cluster_cohesion_preserves_distance_round_trip(mock_cja, logger
     clusters = analyzer._compute_clusters(summaries, precomputed=precomputed)
     assert clusters is not None
     assert clusters[0].cohesion_score == 0.0062
+
+
+# ---------------------------------------------------------------------------
+# _fetch_all_data_views interrupt / completion handling
+# ---------------------------------------------------------------------------
+
+
+def _fetch_test_config() -> OrgReportConfig:
+    return OrgReportConfig(skip_lock=True, use_cache=False, cja_per_thread=False, quiet=True)
+
+
+def test_keyboard_interrupt_cancels_queued_fetches(mock_cja, logger):
+    import time
+
+    from cja_auto_sdr.org import analyzer as analyzer_module
+
+    started: list[str] = []
+
+    def slow_fetch(dv):
+        started.append(dv["id"])
+        time.sleep(0.05)
+        return DataViewSummary(dv["id"], dv["id"])
+
+    analyzer = OrgComponentAnalyzer(mock_cja, _fetch_test_config(), logger)
+    dvs = [{"id": f"dv_{i}", "name": f"dv {i}"} for i in range(100)]
+    calls = {"n": 0}
+    real_wait = analyzer_module.wait
+
+    def interrupting_wait(*args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 2:
+            raise KeyboardInterrupt
+        return real_wait(*args, **kwargs)
+
+    with (
+        patch.object(analyzer, "_fetch_data_view_components", side_effect=slow_fetch),
+        patch("cja_auto_sdr.org.analyzer.wait", side_effect=interrupting_wait),
+        pytest.raises(KeyboardInterrupt),
+    ):
+        analyzer._fetch_all_data_views(dvs)
+
+    # Only the in-flight batch (at most a few waves of 10 workers) may start.
+    assert len(started) < 100
+
+
+def test_normal_completion_returns_all_summaries(mock_cja, logger):
+    analyzer = OrgComponentAnalyzer(mock_cja, _fetch_test_config(), logger)
+    dvs = [{"id": f"dv_{i}", "name": f"dv {i}"} for i in range(20)]
+
+    with patch.object(
+        analyzer,
+        "_fetch_data_view_components",
+        side_effect=lambda dv: DataViewSummary(dv["id"], dv["name"]),
+    ):
+        summaries = analyzer._fetch_all_data_views(dvs)
+
+    assert sorted(s.data_view_id for s in summaries) == sorted(dv["id"] for dv in dvs)
