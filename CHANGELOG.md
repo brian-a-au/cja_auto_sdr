@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.13.4] - 2026-10-28
+
+This patch fixes more places where output did not match the documentation. `--org-report --cluster` no longer crashes with JSON output, `--watch` keeps stdout to NDJSON events, `--quiet` discovery tables show only rows, and `--inventory-summary` honors `--output`. `--stats --output` creates a missing folder, and a `--compare-org-report` baseline that cannot be compared now fails the run with exit 1 after the report is written.
+
 ### Fixed
 
 - **`--org-report --cluster` with JSON output:** the run crashed with `Object of type int32 is not JSON serializable` for `--format json`, for the `all`, `data`, and `ci` aliases, and for `--output -`, which left partial JSON on stdout. Cluster IDs came from scipy as numpy integers. They are now plain integers, so the JSON report is written. Console, Excel, Markdown, HTML, and CSV output were not affected.
