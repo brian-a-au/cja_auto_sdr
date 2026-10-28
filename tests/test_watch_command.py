@@ -149,9 +149,7 @@ def test_run_watch_no_phantom_cycle_when_signal_arrives_during_sleep(MockRunner,
 
     assert exit_code == 0
     captured = capsys.readouterr()
-    # Filter for NDJSON event lines only — setup_logging now writes startup banner
-    # to stdout in non-quiet mode, which would otherwise inflate the count.
-    event_lines = [line for line in captured.out.split("\n") if line.strip().startswith("{")]
+    event_lines = [line for line in captured.out.split("\n") if line.strip()]
     assert len(event_lines) == 1, f"expected 1 NDJSON event, got {len(event_lines)}: {event_lines}"
     assert '"type":"baseline"' in event_lines[0]
     assert '"type":"change"' not in "\n".join(event_lines)
@@ -200,6 +198,44 @@ def test_run_watch_initializes_logging_before_emitting_diagnostics(mock_setup_lo
     assert kwargs["log_level"] == "DEBUG"
     assert kwargs["log_format"] == "json"
     assert kwargs["batch_mode"] is True
+
+
+@pytest.mark.parametrize("log_format", ["text", "json"])
+@patch("cja_auto_sdr.cli.commands.watch.WatchCycleRunner")
+def test_run_watch_stdout_is_only_ndjson_events(MockRunner, log_format, capsys, tmp_path, monkeypatch):
+    """Log lines go to stderr so stdout stays a pure cja-watch-event/v1 stream."""
+    monkeypatch.chdir(tmp_path)
+    runner = MockRunner.return_value
+    runner.run_cycle.return_value = iter(
+        [
+            BaselineEvent(
+                ts="2026-05-11T00:00:00Z",
+                cycle=1,
+                data_view_id="dv_abc",
+                snapshot_id="s1",
+                component_counts={},
+            ),
+        ]
+    )
+    args = MagicMock()
+    args.watch_data_views = ["dv_abc"]
+    args.watch_interval = "1h"
+    args.watch_threshold = 1
+    args.log_level = "INFO"
+    args.log_format = log_format
+
+    _stop_requested.set()
+    try:
+        run_watch(args, cja=MagicMock())
+    finally:
+        _stop_requested.clear()
+
+    captured = capsys.readouterr()
+    lines = [line for line in captured.out.splitlines() if line.strip()]
+    assert lines, "expected the baseline event on stdout"
+    for line in lines:
+        assert json.loads(line)["schema"] == "cja-watch-event/v1", line
+    assert "watch_loop_start" in captured.err
 
 
 @patch("cja_auto_sdr.cli.commands.watch.WatchCycleRunner")

@@ -7,6 +7,7 @@ files.  Extracted from generator.py; the orchestration function
 
 from __future__ import annotations
 
+import json
 import re
 from datetime import UTC, datetime
 from pathlib import Path
@@ -26,6 +27,7 @@ def display_inventory_summary(
     output_dir: str | Path = ".",
     quiet: bool = False,
     inventory_order: list[str] | None = None,
+    output_file: str | None = None,
 ) -> dict[str, Any]:
     """
     Display inventory summary statistics without generating full inventory sheets.
@@ -40,6 +42,7 @@ def display_inventory_summary(
         output_dir: Directory for JSON output
         quiet: Suppress console output
         inventory_order: Order of inventory types as specified in CLI (default: ['segments', 'calculated', 'derived'])
+        output_file: Exact JSON output path, or "-"/"stdout" to print the JSON (default: auto-named in output_dir)
 
     Returns:
         Dictionary with summary statistics
@@ -201,9 +204,14 @@ def display_inventory_summary(
             print()
 
     # JSON output
-    if output_format in ("json", "all"):
-        safe_name = re.sub(r"[^\w\-]", "_", data_view_name)[:50]
-        json_path = Path(output_dir) / f"{safe_name}_inventory_summary.json"
+    if output_format in ("json", "all") and output_file in ("-", "stdout"):
+        print(json.dumps(summary, indent=2, ensure_ascii=True, default=str))
+    elif output_format in ("json", "all"):
+        if output_file:
+            json_path = Path(output_file)
+        else:
+            safe_name = re.sub(r"[^\w\-]", "_", data_view_name)[:50]
+            json_path = Path(output_dir) / f"{safe_name}_inventory_summary.json"
         write_json_atomic_compatible(
             json_path,
             summary,

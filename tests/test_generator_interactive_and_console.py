@@ -398,7 +398,7 @@ def test_run_org_report_cache_and_comparison_error_paths(tmp_path: Path, rich_or
         patch("cja_auto_sdr.generator.OrgReportCache") as mock_cache_cls,
         patch("cja_auto_sdr.generator.OrgComponentAnalyzer") as mock_analyzer_cls,
         patch("cja_auto_sdr.generator.compare_org_reports", side_effect=FileNotFoundError),
-        patch("cja_auto_sdr.generator.write_org_report_console"),
+        patch("cja_auto_sdr.generator.write_org_report_console") as mock_console,
         patch("cja_auto_sdr.generator.build_org_step_summary", return_value="summary"),
         patch("cja_auto_sdr.generator.append_github_step_summary"),
     ):
@@ -420,8 +420,10 @@ def test_run_org_report_cache_and_comparison_error_paths(tmp_path: Path, rich_or
             quiet=False,
         )
 
-    assert ok is True
+    # The report is still written, then the missing baseline fails the run.
+    assert ok is False
     assert exceeded is False
+    mock_console.assert_called_once()
 
 
 def test_run_org_report_trending_window_uses_persistent_snapshot_cache(tmp_path: Path, rich_org_report_result):
@@ -941,7 +943,9 @@ def test_run_org_report_without_trending_window_leaves_output_unchanged(tmp_path
     assert "trending" not in payload
 
 
-def test_run_org_report_comparison_os_error_is_non_fatal(tmp_path: Path, rich_org_report_result, capsys):
+def test_run_org_report_comparison_os_error_still_writes_report_then_fails(
+    tmp_path: Path, rich_org_report_result, capsys
+):
     result = rich_org_report_result
     config = OrgReportConfig(compare_org_report="previous.json")
 
@@ -968,14 +972,14 @@ def test_run_org_report_comparison_os_error_is_non_fatal(tmp_path: Path, rich_or
             quiet=False,
         )
 
-    assert ok is True
+    assert ok is False
     assert exceeded is False
     mock_console.assert_called_once()
     out = capsys.readouterr().out
-    assert "Warning: Could not compare reports: permission denied" in out
+    assert "ERROR: Could not compare reports: permission denied" in out
 
 
-def test_run_org_report_comparison_ineligible_legacy_baseline_is_non_fatal(
+def test_run_org_report_comparison_ineligible_legacy_baseline_still_writes_report_then_fails(
     tmp_path: Path, rich_org_report_result, capsys
 ):
     result = rich_org_report_result
@@ -1019,7 +1023,7 @@ def test_run_org_report_comparison_ineligible_legacy_baseline_is_non_fatal(
             quiet=False,
         )
 
-    assert ok is True
+    assert ok is False
     assert exceeded is False
     mock_console.assert_called_once()
     out = capsys.readouterr().out

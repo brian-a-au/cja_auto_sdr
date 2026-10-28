@@ -119,13 +119,28 @@ def dispatch_inventory_summary_mode(
     """Handle ``--inventory-summary`` mode and exit."""
     generator = _generator_module()
 
-    summary_format = args.format if args.format in ("json", "all") else "console"
+    output_file = getattr(args, "output", None)
+    if output_file and len(data_views) > 1:
+        print(
+            generator.ConsoleColors.error(
+                "ERROR: --output with --inventory-summary takes one data view; use --output-dir for several."
+            ),
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    # Stdout output is always the JSON summary.
+    if output_file in ("-", "stdout"):
+        summary_format = "json"
+    else:
+        summary_format = args.format if args.format in ("json", "all") else "console"
     if run_state is not None:
         run_state["output_format"] = summary_format
         run_state["details"] = {"operation_success": True}
 
+    failed = False
     for index, dv_id in enumerate(data_views):
-        generator.process_inventory_summary(
+        summary = generator.process_inventory_summary(
             data_view_id=dv_id,
             config_file=args.config_file,
             output_dir=args.output_dir,
@@ -138,11 +153,16 @@ def dispatch_inventory_summary_mode(
             include_calculated=getattr(args, "include_calculated_metrics", False),
             include_segments=getattr(args, "include_segments_inventory", False),
             inventory_order=inventory_order,
+            output_file=output_file,
         )
+        if isinstance(summary, dict) and "error" in summary:
+            failed = True
         if index < len(data_views) - 1:
             print()
 
-    sys.exit(0)
+    if failed and run_state is not None:
+        run_state["details"] = {"operation_success": False}
+    sys.exit(1 if failed else 0)
 
 
 def _confirm_large_batch(args: argparse.Namespace, *, data_views: list[str]) -> None:

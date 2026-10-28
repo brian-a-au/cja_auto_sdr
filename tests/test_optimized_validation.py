@@ -340,11 +340,15 @@ class TestOptimizedVsOriginalValidation:
 
 
 @pytest.mark.slow
+@pytest.mark.skipif(
+    "PYTEST_XDIST_WORKER" in os.environ,
+    reason="wall-clock comparisons flake when xdist workers compete for CPU; CI runs them in the serial slow slice",
+)
 class TestOptimizedValidationPerformance:
     """Test performance improvements of optimized validation.
 
-    These assertions compare short wall-clock timings and are more stable in
-    the serial slow slice than in the xdist-driven unit gate.
+    These assertions compare short wall-clock timings, so they only run serially
+    (the CI slow slice); an `-n auto` run skips them.
     """
 
     def test_optimized_is_faster_than_original(self):

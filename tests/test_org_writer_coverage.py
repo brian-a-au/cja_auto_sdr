@@ -2099,8 +2099,11 @@ class TestRunOrgReport:
             quiet=False,
         )
 
-        # Should still succeed (comparison failure is non-fatal)
-        assert success is True
+        # The report is still written, but a requested comparison that cannot run fails the run.
+        assert success is False
+        captured = capsys.readouterr()
+        assert "ERROR: Previous report not found" in captured.out
+        assert "ORG-WIDE COMPONENT ANALYSIS REPORT" in captured.out
 
     @patch("cja_auto_sdr.generator.append_github_step_summary")
     @patch("cja_auto_sdr.generator.build_org_step_summary", return_value="summary")
@@ -2130,7 +2133,8 @@ class TestRunOrgReport:
             quiet=False,
         )
 
-        assert success is True
+        assert success is False
+        assert "ERROR: Invalid JSON in previous report" in capsys.readouterr().out
 
     @patch("cja_auto_sdr.generator.append_github_step_summary")
     @patch("cja_auto_sdr.generator.build_org_step_summary", return_value="summary")

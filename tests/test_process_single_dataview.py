@@ -643,6 +643,53 @@ class TestProcessSingleDataviewFailures:
         assert result.partial_reasons == ["required_endpoints_failed:metrics"]
         assert "Permission denied" in result.error_message
 
+    @patch("cja_auto_sdr.generator.write_json_output")
+    @patch("cja_auto_sdr.generator.DataQualityChecker")
+    @patch("cja_auto_sdr.generator.setup_logging")
+    @patch("cja_auto_sdr.generator.initialize_cja")
+    @patch("cja_auto_sdr.generator.ParallelAPIFetcher")
+    def test_permission_error_names_the_file_that_failed(
+        self,
+        mock_fetcher_class,
+        mock_init_cja,
+        mock_setup_logging,
+        mock_dq_checker_class,
+        mock_write_json,
+        mock_config_file,
+        temp_output_dir,
+        sample_metrics_df,
+        sample_dimensions_df,
+        sample_dataview_info,
+    ):
+        """The permission message names the JSON path, not the default Excel file name."""
+        mock_logger = Mock()
+        mock_setup_logging.return_value = mock_logger
+        mock_init_cja.return_value = Mock()
+        mock_fetcher = Mock()
+        mock_fetcher.fetch_all_data.return_value = (sample_metrics_df, sample_dimensions_df, sample_dataview_info)
+        mock_fetcher.get_fetch_statuses.return_value = {}
+        mock_fetcher_class.return_value = mock_fetcher
+        mock_dq_checker = Mock()
+        mock_dq_checker.issues = []
+        mock_dq_checker.get_issues_dataframe.return_value = pd.DataFrame(
+            columns=["Severity", "Category", "Type", "Item Name", "Issue", "Details"],
+        )
+        mock_dq_checker_class.return_value = mock_dq_checker
+        target = os.path.join(temp_output_dir, "locked", "report.json")
+        mock_write_json.side_effect = PermissionError(13, "Permission denied", target)
+
+        result = process_single_dataview(
+            data_view_id="dv_test_12345",
+            config_file=mock_config_file,
+            output_dir=temp_output_dir,
+            output_format="json",
+        )
+
+        assert result.success is False
+        messages = [call.args[0] % call.args[1:] for call in mock_logger.critical.call_args_list]
+        assert any(target in message for message in messages), messages
+        assert not any(".xlsx" in message for message in messages), messages
+
     @patch("cja_auto_sdr.inventory.segments.SegmentsInventoryBuilder")
     @patch("cja_auto_sdr.inventory.calculated_metrics.CalculatedMetricsInventoryBuilder")
     @patch("cja_auto_sdr.generator.write_csv_output")

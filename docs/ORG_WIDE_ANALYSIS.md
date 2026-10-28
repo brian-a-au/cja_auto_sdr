@@ -730,6 +730,8 @@ cja_auto_sdr --org-report --audit-naming
 # - Stale patterns (test, old, temp, dates)
 ```
 
+All caps names, e.g., `URL` or `AM/PM`, count in the `other` style, not as PascalCase.
+
 ### Trending/Drift Report
 
 Compare org-reports over time to detect changes.
@@ -751,6 +753,9 @@ cja_auto_sdr --org-report --compare-org-report baseline.json
 `--compare-org-report` expects a full-fidelity baseline. Pre-v3.4 JSON reports that do not include
 snapshot-fidelity markers are treated as ineligible because the old format cannot distinguish full
 similarity runs from `--skip-similarity`/`--org-stats` baselines reliably.
+
+If the baseline cannot be compared (the file is missing, is not valid JSON, or is not eligible),
+the CLI prints an error, still writes the org report, and exits 1.
 
 #### CI/CD Trending Example
 

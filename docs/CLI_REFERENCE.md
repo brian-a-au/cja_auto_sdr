@@ -94,7 +94,7 @@ cja-auto-sdr [OPTIONS] DATA_VIEW_ID_OR_NAME [...]
 | `-V, --version` | Show program version and exit | - |
 | `--exit-codes` | Display exit code reference and exit | - |
 | `--explain-exit-code CODE` | Print human-readable explanation for an integer exit code (meaning, common causes, automation guidance) and exit 0. When combined with `--run-summary-json -`, explanation goes to stderr so stdout stays machine-parseable | - |
-| `-q, --quiet` | Suppress output except errors | False |
+| `-q, --quiet` | Suppress output except errors. Discovery and `--stats` table output keep their rows and drop the banner, progress lines, and usage hints | False |
 | `--open` | Open generated file(s) in default application after creation | False |
 | `--show-timings` | Display performance timing breakdown after processing | False |
 | `--config-json` | Output `--config-status` as machine-readable JSON (for scripting and CI/CD) | False |
@@ -115,7 +115,7 @@ cja-auto-sdr [OPTIONS] DATA_VIEW_ID_OR_NAME [...]
 | Option | Description | Default |
 |--------|-------------|---------|
 | `--output-dir PATH` | Output directory for generated files | Current directory (or `OUTPUT_DIR` if set) |
-| `--output PATH` | Output file path. Use `-` or `stdout` to write a command-family-supported format to stdout; SDR generation supports JSON, discovery and stats support JSON/CSV, diff supports JSON, and org-report supports JSON/console. Implies `--quiet` for stdout | - |
+| `--output PATH` | Output file path. Use `-` or `stdout` to write a command-family-supported format to stdout; SDR generation and `--inventory-summary` support JSON, discovery and stats support JSON/CSV, diff supports JSON, and org-report supports JSON/console. Implies `--quiet` for stdout | - |
 | `--format FORMAT` | Output format (see table below) | excel (SDR), console (diff) |
 | `--json-typed` | Emit versioned typed JSON (`schema_version: cja-auto-sdr.sdr-typed/1`) that keeps nested objects, lists, booleans, and numbers native. SDR generation only; requires `--format json` (or `--agent-mode`, which defaults to JSON on stdout). Any other format exits 1 with `ERROR: --json-typed requires --format json` before any API call. Ignored in other modes, and has no effect with `--quality-report`. See [OUTPUT_FORMATS.md](OUTPUT_FORMATS.md#typed-json---json-typed) | False |
 | `--stats` | Show quick statistics (metrics/dimensions count) without generating full SDR report | False |
@@ -429,7 +429,7 @@ Requested gates appear in JSON `governance_checks` and run-summary `details.gove
 |--------|-------------|---------|
 | `--org-stats` | Quick summary stats only - skips similarity matrix and clustering for faster results | False |
 | `--audit-naming` | Detect naming pattern inconsistencies (snake_case vs camelCase, stale prefixes, etc.) | False |
-| `--compare-org-report PREV.json` | Compare current org-report to a previous JSON report for trending/drift analysis | - |
+| `--compare-org-report PREV.json` | Compare current org-report to a previous JSON report for trending/drift analysis. If the baseline is missing, cannot be read, is not valid JSON, or is not eligible for comparison, the report is still written and the run exits 1 | - |
 | `--trending-window [N]` | Show trending across the last N cached org-report snapshots (default: 10). Renders in all output formats. | None |
 | `--list-org-report-snapshots` | List cached org-report snapshots from the persistent trending history store | False |
 | `--inspect-org-report-snapshot FILE` | Inspect one cached org-report snapshot JSON, including history eligibility metadata, without running a fresh org-report | - |
@@ -490,7 +490,7 @@ Requested gates appear in JSON `governance_checks` and run-summary `details.gove
 | `--include-derived` | Include derived field inventory in output. Adds a "Derived Fields" sheet/section with complexity scores, functions used, and logic summaries. **SDR mode only** (not diff—see note below). | False |
 | `--include-calculated` | Include calculated metrics inventory in output. Adds a "Calculated Metrics" sheet/section with complexity scores, formula summaries, and metric references. Works in SDR and snapshot diff modes (same data view only—see note). | False |
 | `--inventory-only` | Output only inventory sheets (Segments, Derived Fields, Calculated Metrics). Skips standard SDR sheets (Metadata, Data Quality, DataView Details, Metrics, Dimensions). Requires at least one `--include-*` flag. SDR mode only. | False |
-| `--inventory-summary` | Display quick inventory statistics without generating full output files. Shows counts, complexity distribution, governance metadata, and high-complexity warnings. Requires at least one `--include-*` flag. Cannot be used with `--inventory-only`. | False |
+| `--inventory-summary` | Display quick inventory statistics without generating full output files. Shows counts, complexity distribution, governance metadata, and high-complexity warnings. Requires at least one `--include-*` flag. Cannot be used with `--inventory-only`. With `--format json`, `--output PATH` writes the summary to that path and `--output -` prints it to stdout; `--output` takes one data view. Exits 1 if a data view cannot be summarized. | False |
 | `--include-all-inventory` | Enable all inventory options with smart mode detection. SDR mode enables `--include-segments`, `--include-calculated`, and `--include-derived`. Snapshot/diff modes (`--snapshot`, `--diff-snapshot`, `--compare-snapshots`, `--compare-with-prev`) enable only `--include-segments` and `--include-calculated`. | False |
 
 > **Sheet Ordering:** Inventory sheets appear at the end of the output. When multiple are enabled, they appear in the order specified on the command line. For example, `--include-calculated --include-segments` places Calculated Metrics before Segments.
@@ -616,7 +616,7 @@ Foreground loop that fetches, snapshots, and diffs one or more data views on a r
 
 #### NDJSON Event Schema: `cja-watch-event/v1`
 
-All events are emitted on stdout, one JSON object per line, with a trailing newline.
+All events are emitted on stdout, one JSON object per line, with a trailing newline. Log lines go to stderr, so stdout holds only events.
 
 **Common envelope fields:**
 

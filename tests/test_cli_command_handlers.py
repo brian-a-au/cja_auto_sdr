@@ -1471,6 +1471,29 @@ class TestMainImplDiscoveryFormatRouting:
         assert mock_list_dv.call_args.kwargs["output_format"] == "csv"
         assert mock_list_dv.call_args.kwargs["output_file"] == "-"
 
+    @pytest.mark.parametrize(
+        ("argv", "target"),
+        [
+            (["--list-dataviews"], "list_dataviews"),
+            (["--list-connections"], "list_connections"),
+            (["--list-datasets"], "list_datasets"),
+            (["--list-metrics", "dv_abc"], "list_metrics"),
+            (["--describe-dataview", "dv_abc"], "describe_dataview"),
+        ],
+    )
+    @patch("cja_auto_sdr.generator._cli_option_specified", _mock_cli_option_specified)
+    @patch("cja_auto_sdr.generator.configure_cjapy")
+    def test_discovery_passes_quiet_through(self, _mock_conf, argv, target):
+        """--quiet reaches every discovery command so table output drops its banner."""
+        with patch(f"cja_auto_sdr.generator.{target}", return_value=True) as mock_fn:
+            with pytest.raises(SystemExit) as exc_info:
+                with patch("cja_auto_sdr.generator.parse_arguments") as mock_pa:
+                    mock_pa.return_value = parse_arguments([*argv, "--quiet"])
+                    _main_impl(run_state={"mode": "unknown", "details": {}})
+
+        assert exc_info.value.code == 0
+        assert mock_fn.call_args.kwargs["quiet"] is True
+
     @patch("cja_auto_sdr.generator._cli_option_specified", _mock_cli_option_specified)
     @patch("cja_auto_sdr.generator.list_dataviews")
     @patch("cja_auto_sdr.generator.configure_cjapy")

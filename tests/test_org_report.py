@@ -3569,16 +3569,15 @@ class TestNamingAudit:
         assert audit["case_styles"]["other"] == 1
         assert audit["case_styles"]["PascalCase"] == 0
 
-    def test_all_caps_with_punctuation_keeps_existing_pascal_case_result(self, mock_cja, mock_logger):
-        """'AM/PM' has a second capital, so the existing check counts it as PascalCase.
-
-        aa_auto_sdr sends all caps names to "other"; this tool does not have that guard.
-        """
+    @pytest.mark.parametrize("name", ["AM/PM", "URL", "RSID", "PAGE_VIEWS", "ORDERS 2024"])
+    def test_all_caps_names_are_other(self, mock_cja, mock_logger, name):
+        """All caps names are neither PascalCase nor snake_case, matching aa_auto_sdr."""
         analyzer = OrgComponentAnalyzer(mock_cja, OrgReportConfig(audit_naming=True), mock_logger)
 
-        audit = analyzer._audit_naming_conventions(self._index(["AM/PM"]))
+        audit = analyzer._audit_naming_conventions(self._index([name]))
 
-        assert audit["case_styles"]["PascalCase"] == 1
+        assert audit["case_styles"]["other"] == 1
+        assert audit["case_styles"]["PascalCase"] == 0
 
     def test_single_words_count_against_dominant_snake_case(self, mock_cja, mock_logger):
         """Single capitalized words now count as PascalCase, so they mix with a snake_case data view.

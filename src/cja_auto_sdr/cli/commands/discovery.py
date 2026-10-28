@@ -1183,8 +1183,12 @@ def _fetch_dataviews(
     exclude_pattern: str | None = None,
     limit: int | None = None,
     sort_expression: str | None = None,
+    quiet: bool = False,
 ) -> Callable:
-    """Return a fetch_and_format callback for list_dataviews."""
+    """Return a fetch_and_format callback for list_dataviews.
+
+    ``quiet`` drops the usage hints after the table.
+    """
 
     def _inner(cja: Any, is_machine_readable: bool) -> str | None:
         # Local imports to avoid circular dependency: generator -> discovery -> generator
@@ -1235,6 +1239,8 @@ def _fetch_dataviews(
             columns=["id", "name", "owner"],
             col_labels=["ID", "Name", "Owner"],
         )
+        if quiet:
+            return table
         # Derive total width from the first separator line in the rendered table
         table_lines = table.split("\n")
         total_width = max(

@@ -223,6 +223,27 @@ class TestShowStatsFunction:
         assert lines[0] == "id,name,owner,metrics,dimensions,total_components"
         assert len(lines) == 2  # Header + 1 data row
 
+    @pytest.mark.parametrize("output_format", ["json", "csv"])
+    @patch("cja_auto_sdr.generator.cjapy")
+    def test_show_stats_output_file_creates_missing_folder(self, mock_cjapy, output_format, tmp_path):
+        """--output into a folder that does not exist writes the file (it once reported a missing config)."""
+        mock_cja = MagicMock()
+        mock_cjapy.CJA.return_value = mock_cja
+        mock_cja.getDataView.return_value = {"name": "Test View", "owner": {"name": "Owner"}}
+        mock_cja.getMetrics.return_value = [{"id": f"m{i}"} for i in range(10)]
+        mock_cja.getDimensions.return_value = [{"id": f"d{i}"} for i in range(5)]
+        target = tmp_path / "new" / "nested" / f"stats.{output_format}"
+
+        with patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "mock", None)):
+            result = show_stats(["dv_12345"], output_format=output_format, output_file=str(target), quiet=True)
+
+        assert result is True
+        text = target.read_text(encoding="utf-8")
+        if output_format == "json":
+            assert json.loads(text)["count"] == 1
+        else:
+            assert text.splitlines()[0] == "id,name,owner,metrics,dimensions,total_components"
+
     @patch("cja_auto_sdr.generator.cjapy")
     def test_show_stats_table_output(self, mock_cjapy):
         """Test show_stats with table format"""
@@ -314,6 +335,45 @@ class TestListDataviewsFunction:
         data = json.loads(output)
         assert data["count"] == 0
         assert data["dataViews"] == []
+
+    @pytest.mark.parametrize("quiet", [False, True])
+    @patch("cja_auto_sdr.generator.cjapy")
+    def test_list_dataviews_table_quiet_keeps_rows_only(self, mock_cjapy, quiet):
+        """--quiet table output keeps the rows and drops the banner, progress line, and usage hints."""
+        mock_cja = MagicMock()
+        mock_cjapy.CJA.return_value = mock_cja
+        mock_cja.getDataViews.return_value = [{"id": "dv_1", "name": "View 1", "owner": {"name": "Owner 1"}}]
+
+        captured_output = StringIO()
+        with patch("sys.stdout", captured_output):
+            with patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "mock", None)):
+                result = list_dataviews(output_format="table", quiet=quiet)
+
+        assert result is True
+        output = captured_output.getvalue()
+        assert "dv_1" in output
+        for chrome in ("LISTING ACCESSIBLE DATA VIEWS", "Using configuration:", "Connecting to CJA API", "Usage:"):
+            assert (chrome in output) is not quiet, chrome
+
+    @patch("cja_auto_sdr.generator.cjapy")
+    def test_run_list_command_quiet_suppresses_banner(self, mock_cjapy):
+        """The shared runner (and its generator compat wrapper) honor quiet for every list command."""
+        from cja_auto_sdr.generator import _run_list_command
+
+        mock_cjapy.CJA.return_value = MagicMock()
+        captured_output = StringIO()
+        with patch("sys.stdout", captured_output):
+            with patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "mock", None)):
+                result = _run_list_command(
+                    banner_text="LISTING THINGS",
+                    command_name="list_things",
+                    fetch_and_format=lambda _cja, _machine: "ROW 1",
+                    output_format="table",
+                    quiet=True,
+                )
+
+        assert result is True
+        assert captured_output.getvalue().strip() == "ROW 1"
 
 
 class TestCombinedFeatures:
