@@ -191,6 +191,7 @@ Use `--explain-exit-code CODE` to get a human-readable explanation of any exit c
   ```json
   {"error": "Configuration error: Missing credentials", "error_type": "configuration_error"}
   ```
+  `output_error` means the requested output file could not be written (for example, `--output` points at a directory or an unwritable path).
 - `--run-summary-json -` writes a structured run summary to stdout regardless of output format.
 - `--explain-exit-code CODE --run-summary-json -` writes the explanation to stderr and the run-summary JSON to stdout, keeping both streams independently parseable.
 - Wrapper note: `scripts/orchestrator.py` is a higher-level JSON wrapper and always emits its own success/error envelope to stdout so callers can parse one stream. The stderr contract above applies to direct `cja_auto_sdr` CLI invocations.

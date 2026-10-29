@@ -180,7 +180,17 @@ def _run_list_command(
 
         output_data = fetch_and_format(cja, is_machine_readable)
         if output_data is not None:
-            _generator._emit_output(output_data, output_file, is_stdout)
+            try:
+                _generator._emit_output(output_data, output_file, is_stdout)
+            except OSError as e:
+                # Only the local write is wrapped: requests.ConnectionError is also an OSError.
+                _emit_discovery_error(
+                    f"Failed to write output to '{output_file}': {e!s}",
+                    is_machine_readable=is_machine_readable,
+                    error_type="output_error",
+                    human_to_stderr=False,
+                )
+                return False
 
         return True
 

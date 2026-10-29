@@ -702,3 +702,15 @@ def test_list_dataviews_json_stderr_is_only_json_without_credentials(tmp_path, m
     err_lines = [line for line in capsys.readouterr().err.splitlines() if line.strip()]
     assert err_lines
     assert all(json.loads(line) for line in err_lines)
+
+
+@patch("cja_auto_sdr.generator.configure_cjapy")
+@patch("cja_auto_sdr.generator.cjapy")
+def test_discovery_output_to_directory_is_output_error(mock_cjapy, mock_configure, tmp_path, capsys) -> None:
+    mock_configure.return_value = (True, "config", None)
+    mock_cjapy.CJA.return_value.getDataViews.return_value = [{"id": "dv_1", "name": "Alpha", "owner": {"name": "A"}}]
+
+    assert generator.list_dataviews(output_format="json", output_file=str(tmp_path)) is False
+
+    last_line = capsys.readouterr().err.strip().splitlines()[-1]
+    assert json.loads(last_line)["error_type"] == "output_error"
