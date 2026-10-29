@@ -82,7 +82,7 @@ class TestWriteJsonOutputErrors:
     def test_serialization_error(self, tmp_path: Path) -> None:
         import json
 
-        with patch.object(json, "dump", side_effect=TypeError("not serializable")):
+        with patch.object(json, "dumps", side_effect=TypeError("not serializable")):
             with pytest.raises(TypeError):
                 write_json_output(_sample_data(), _sample_metadata(), "test", str(tmp_path), logger)
 

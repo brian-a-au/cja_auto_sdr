@@ -43,6 +43,26 @@ def _fsync_directory(directory: Path) -> None:
             os.close(dir_fd)
 
 
+def _dumps_json_text(
+    payload: Any,
+    *,
+    indent: int | None,
+    ensure_ascii: bool,
+    sort_keys: bool,
+    default: Callable[[Any], Any] | None,
+    trailing_newline: bool,
+) -> str:
+    """Serialize with ``json.dumps`` (C encoder on 3.13+) before any file is opened or truncated."""
+    text = json.dumps(
+        payload,
+        indent=indent,
+        ensure_ascii=ensure_ascii,
+        sort_keys=sort_keys,
+        default=default,
+    )
+    return text + "\n" if trailing_newline else text
+
+
 def write_json_atomic(
     path: str | Path,
     payload: Any,
@@ -55,6 +75,14 @@ def write_json_atomic(
     trailing_newline: bool = False,
 ) -> Path:
     """Persist JSON atomically, rejecting existing target symlinks and fsyncing the parent dir."""
+    text = _dumps_json_text(
+        payload,
+        indent=indent,
+        ensure_ascii=ensure_ascii,
+        sort_keys=sort_keys,
+        default=default,
+        trailing_newline=trailing_newline,
+    )
     target_path = Path(path)
     target_path.parent.mkdir(parents=True, exist_ok=True)
     _reject_symlink_destination(target_path)
@@ -69,16 +97,7 @@ def write_json_atomic(
                 os.fchmod(fd, file_mode)
             with os.fdopen(fd, "w", encoding="utf-8") as f:
                 fd = -1
-                json.dump(
-                    payload,
-                    f,
-                    indent=indent,
-                    ensure_ascii=ensure_ascii,
-                    sort_keys=sort_keys,
-                    default=default,
-                )
-                if trailing_newline:
-                    f.write("\n")
+                f.write(text)
                 f.flush()
                 os.fsync(f.fileno())
         finally:
@@ -169,17 +188,16 @@ def _write_direct_json_compatible(
     trailing_newline: bool,
 ) -> None:
     """Write JSON directly to preserve inode-backed overwrite semantics."""
+    text = _dumps_json_text(
+        payload,
+        indent=indent,
+        ensure_ascii=ensure_ascii,
+        sort_keys=sort_keys,
+        default=default,
+        trailing_newline=trailing_newline,
+    )
     with open(path, "w", encoding="utf-8") as f:
-        json.dump(
-            payload,
-            f,
-            indent=indent,
-            ensure_ascii=ensure_ascii,
-            sort_keys=sort_keys,
-            default=default,
-        )
-        if trailing_newline:
-            f.write("\n")
+        f.write(text)
         f.flush()
         os.fsync(f.fileno())
 
@@ -198,17 +216,16 @@ def _stage_json_write(
     trailing_newline: bool,
 ) -> None:
     """Write JSON content to a staged temp file and fsync it."""
+    text = _dumps_json_text(
+        payload,
+        indent=indent,
+        ensure_ascii=ensure_ascii,
+        sort_keys=sort_keys,
+        default=default,
+        trailing_newline=trailing_newline,
+    )
     with open(tmp_path, "w", encoding="utf-8") as f:
-        json.dump(
-            payload,
-            f,
-            indent=indent,
-            ensure_ascii=ensure_ascii,
-            sort_keys=sort_keys,
-            default=default,
-        )
-        if trailing_newline:
-            f.write("\n")
+        f.write(text)
         f.flush()
         os.fsync(f.fileno())
 

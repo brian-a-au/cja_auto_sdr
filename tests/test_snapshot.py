@@ -396,11 +396,10 @@ class TestSaveSnapshot:
         )
         original_contents = filepath.read_text(encoding="utf-8")
 
-        def _failing_dump(payload, file_obj, *args, **kwargs):
-            file_obj.write('{"partial": ')
+        def _failing_dumps(payload, *args, **kwargs):
             raise OSError("disk full")
 
-        monkeypatch.setattr(json_io.json, "dump", _failing_dump)
+        monkeypatch.setattr(json_io.json, "dumps", _failing_dumps)
 
         with pytest.raises(OSError, match="disk full"):
             manager.save_snapshot(sample_snapshot, str(filepath))

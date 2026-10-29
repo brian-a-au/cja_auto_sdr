@@ -432,7 +432,7 @@ def test_save_org_report_snapshot_failed_write_does_not_leave_partial_json(tmp_p
     }
     snapshot_dir = cache.get_org_report_snapshot_dir("org@test.example")
 
-    with patch("cja_auto_sdr.org.cache.json.dump", side_effect=OSError("disk full")):
+    with patch("cja_auto_sdr.org.cache.json.dumps", side_effect=OSError("disk full")):
         with pytest.raises(OSError, match="disk full"):
             cache.save_org_report_snapshot(report)
 

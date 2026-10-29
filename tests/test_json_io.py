@@ -321,10 +321,25 @@ class TestWriteJsonAtomicCompatible:
 
         assert json.loads(out.read_text(encoding="utf-8")) == {"new": True}
 
+    def test_serialization_error_leaves_existing_file_untouched(self, tmp_path):
+        target = tmp_path / "out.json"
+        target.write_text('{"keep": true}')
+        with pytest.raises(TypeError):
+            write_json_atomic_compatible(target, {"bad": object()})
+        assert json.loads(target.read_text()) == {"keep": True}
+        assert list(tmp_path.glob(".*tmp")) == []
+
+    def test_output_bytes_identical_to_json_dump(self, tmp_path):
+        payload = {"a": [1, 2.5, None, "é"], "b": {"nested": True}}
+        write_json_atomic(tmp_path / "x.json", payload, indent=2, ensure_ascii=False, trailing_newline=True)
+        assert (tmp_path / "x.json").read_text(encoding="utf-8") == (
+            json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
+        )
+
     def test_temp_cleanup_on_failure(self, tmp_path):
         out = tmp_path / "fail.json"
         with (
-            patch("cja_auto_sdr.core.json_io.json.dump", side_effect=TypeError("boom")),
+            patch("cja_auto_sdr.core.json_io.json.dumps", side_effect=TypeError("boom")),
             pytest.raises(TypeError, match="boom"),
         ):
             write_json_atomic_compatible(out, {"bad": object()})
