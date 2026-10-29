@@ -396,10 +396,10 @@ class TestSaveSnapshot:
         )
         original_contents = filepath.read_text(encoding="utf-8")
 
-        def _failing_dumps(payload, *args, **kwargs):
+        def _failing_fsync(fd):
             raise OSError("disk full")
 
-        monkeypatch.setattr(json_io.json, "dumps", _failing_dumps)
+        monkeypatch.setattr(json_io.os, "fsync", _failing_fsync)
 
         with pytest.raises(OSError, match="disk full"):
             manager.save_snapshot(sample_snapshot, str(filepath))

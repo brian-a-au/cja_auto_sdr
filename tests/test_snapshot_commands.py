@@ -349,10 +349,10 @@ class TestHandleSnapshotCommand:
         )
         original_contents = out_file.read_text(encoding="utf-8")
 
-        def _failing_dumps(payload, *args, **kwargs):
+        def _failing_fsync(fd):
             raise OSError("disk full")
 
-        monkeypatch.setattr(json_io.json, "dumps", _failing_dumps)
+        monkeypatch.setattr(json_io.os, "fsync", _failing_fsync)
 
         result = handle_snapshot_command(
             data_view_id="dv_123",

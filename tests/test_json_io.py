@@ -339,10 +339,10 @@ class TestWriteJsonAtomicCompatible:
     def test_temp_cleanup_on_failure(self, tmp_path):
         out = tmp_path / "fail.json"
         with (
-            patch("cja_auto_sdr.core.json_io.json.dumps", side_effect=TypeError("boom")),
-            pytest.raises(TypeError, match="boom"),
+            patch("cja_auto_sdr.core.json_io.os.fsync", side_effect=OSError("disk full")),
+            pytest.raises(OSError, match="disk full"),
         ):
-            write_json_atomic_compatible(out, {"bad": object()})
+            write_json_atomic_compatible(out, {"ok": True})
 
         # No temp files should remain
         remaining = list(tmp_path.glob(".*tmp"))
