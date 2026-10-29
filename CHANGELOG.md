@@ -9,6 +9,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.13.5] - 2026-10-28
+
+This patch fixes bugs in org reports, batch runs, and several command exit codes, and it makes some runs faster. Org reports for two orgs no longer overwrite each other's cache, `--clear-cache` no longer runs when the lock is refused, and Ctrl+C now stops queued work. Commands that write a file now exit 1 when the write fails, and a few crashes on bad input now give clear errors.
+
+### Fixed
+
+- **`--org-report` cache shared by several orgs:** every org uses one `org_report_cache.json`, but each org has its own lock. When runs for two orgs overlapped, the run that finished last wrote its whole cache over the other run's entries. The cache now merges only the entries a run changed into the file on disk when it saves.
+- **`--org-report --clear-cache`:** the cache was cleared before the lock was taken. A run that was then refused because another run held the lock still erased every org's cache. The cache is now cleared after the lock is held, and it is still cleared when the lock is skipped.
+- **Ctrl+C during `--org-report` and `--batch`:** after Ctrl+C, the program still ran every queued data view before it exited. Now the queued work is cancelled, and only the data views already in progress finish. In a test with 20 data views in a batch, all 20 finished after the signal before this fix, and 3 finished after it.
+- **`--org-report` component names and ordering:** when two data views named the same component differently, the reported name and the stale check could change from run to run, because summaries were kept in the order the fetches finished. Summaries now follow the order of the data view listing.
+- **`--org-report` data views with no name:** a data view with a null name crashed `--filter`, `--exclude`, and stratified sampling. It could also add a duplicate error row and break clustering. Names are now always read as strings.
+- **`--org-report` locks after a container restart:** a lock left by a process on the same host was never treated as stale while its process ID was alive. After a container restart reused the same process ID, every later `--org-report` was refused. A lock that carries this process's own ID is now reclaimed when this process does not hold that lock.
+- **`--prune-snapshots` and `--list-org-report-snapshots` with `--output`:** when `--output` was a directory, `--prune-snapshots` deleted the snapshots and then crashed with a traceback, so it never reported what it deleted. `--list-org-report-snapshots` crashed the same way. Both commands now check the output path first and exit 1 without deleting. Other write failures also exit 1 instead of showing a traceback.
+- **Run summary write failures:** when a requested run summary could not be written, the command printed a warning and still exited 0. It now exits 1 if the run would otherwise have exited 0. A run that already failed keeps its own exit code, such as 2 or 130.
+- **Machine-readable discovery errors:** a plain text `Credential error:` line appeared on stderr before the JSON error. Machine-readable discovery no longer prints it. Human output is unchanged.
+- **Discovery output file errors:** a failure to write the local output file was reported as `connectivity_error`. It now reports `error_type: output_error`, which is documented in AGENTS.md and docs/AGENT_AUTOMATION.md. Real network errors still report `connectivity_error`.
+- **`--push-to-notion`:** combined with a mode that runs earlier, such as `--profile-list` or `--sample-config`, the publish was dropped silently and the run exited 0. These combinations now fail validation with exit 1. Also, `--push-to-notion` crashed with a traceback when the file held JSON that was not an object, or null sections. Non-object JSON now gives a clean error, and null sections are skipped.
+- **`--validate-config` with a bad config:** a config whose root is `[]`, or whose required credential fields are not strings, crashed with a traceback. Both cases are now reported as validation failures. Optional fields such as a list of `scopes` behave as before.
+- **Diff snapshot error message:** the error repeated its prefix, as in `Snapshot file not found: Snapshot file not found: …`. The prefix now appears once.
+- **Inventory `functions_used` order:** in the calculated metric and segment inventories, the order of `functions_used` changed on every run, which added noise to git-tracked JSON, CSV, and Excel output. The lists are now sorted. `--diff` already compared them without regard to order, so old snapshots show no false changes.
+- **Legacy snapshots when `TZ` is a zoneinfo path:** when `TZ` was an absolute path such as `/usr/share/zoneinfo/America/New_York`, snapshots saved without a timezone were skipped by the snapshot list, and loading one failed with `ValueError`. Absolute paths and values that start with `:` are now loaded from the file. A malformed zone file falls back to the local timezone, as before.
+- **Progress label for a failed data view with an empty name:** the progress bar label was blank. It now shows the data view ID.
+
+### Performance
+
+- **Fewer API calls per data view:** per-data-view workers and `--inventory-summary` no longer run the `getDataViews` connection test, which listed every data view only to log a count. A single run drops from 5 API calls to 4, and a batch of 5 drops from 21 to 16. Workers no longer log "API connection successful! Found N data view(s)". Authentication errors still surface when the client is created, with the same failure code. The git snapshot path keeps the test.
+- **JSON output:** JSON files are now built as one string and written once. Writing a diff report with 5,000 components went from 140ms to 42ms, and an org report with 150 data views went from 43ms to 20ms, with byte-identical output. These numbers are on Python 3.14. The speedup applies on Python 3.13 and later, and Python 3.11 and 3.12 see almost none. A serialization error also no longer truncates an existing output file.
+- **Diff Excel output:** each data row is now written once, with its format. A diff with 5,000 components went from 165ms to about 100ms, with the same cells and styles.
+- **Org CSV and Excel output:** the writers now read the successful data view list once per table instead of twice for every component. The CSV writer at 150 data views went from 72ms to 24ms.
+
 ## [3.13.4] - 2026-10-28
 
 This patch fixes more places where output did not match the documentation. `--org-report --cluster` no longer crashes with JSON output, `--watch` keeps stdout to NDJSON events, `--quiet` discovery tables show only rows, and `--inventory-summary` honors `--output`. `--stats --output` creates a missing folder, and a `--compare-org-report` baseline that cannot be compared now fails the run with exit 1 after the report is written.
