@@ -322,10 +322,7 @@ def validate_config_only(
                 missing.append(field_name)
 
         for field_name in optional_fields:
-            if creds.get(field_name) is not None and not isinstance(creds[field_name], str):
-                print(generator.ConsoleColors.error(f"    \u2717 {field_name}: must be a string"))
-                missing.append(field_name)
-            elif creds.get(field_name):
+            if creds.get(field_name):
                 print(generator.ConsoleColors.success(f"    \u2713 {field_name}: {creds[field_name]}"))
             else:
                 print(generator.ConsoleColors.info(f"    - {field_name}: not set (optional)"))

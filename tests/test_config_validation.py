@@ -706,3 +706,35 @@ class TestValidateConfigOnlyMalformedConfig:
 
         assert validate_config_only(config_file=str(cfg)) is False
         assert "secret: must be a string" in capsys.readouterr().out
+
+    @patch("cja_auto_sdr.generator.cjapy")
+    def test_validate_config_list_scopes_still_valid(self, mock_cjapy, tmp_path, monkeypatch, capsys):
+        from cja_auto_sdr.generator import validate_config_only
+
+        self._isolate(tmp_path, monkeypatch)
+        mock_cjapy.CJA.return_value.getDataViews.return_value = [{"id": "dv_1"}]
+        cfg = tmp_path / "c.json"
+        cfg.write_text(
+            json.dumps(
+                {
+                    "org_id": "o@AdobeOrg",
+                    "client_id": "abcdefghijk",
+                    "secret": "s" * 20,
+                    "scopes": ["openid", "AdobeID"],
+                    "sandbox": False,
+                }
+            )
+        )
+
+        assert validate_config_only(config_file=str(cfg), output_dir=str(tmp_path / "out")) is True
+        assert "must be a string" not in capsys.readouterr().out
+
+    def test_validate_config_non_string_client_id_fails_cleanly(self, tmp_path, monkeypatch, capsys):
+        from cja_auto_sdr.generator import validate_config_only
+
+        self._isolate(tmp_path, monkeypatch)
+        cfg = tmp_path / "c.json"
+        cfg.write_text(json.dumps({"org_id": "o@AdobeOrg", "client_id": 12345678901, "secret": "s" * 20}))
+
+        assert validate_config_only(config_file=str(cfg)) is False
+        assert "client_id: must be a string" in capsys.readouterr().out
