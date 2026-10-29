@@ -137,8 +137,9 @@ class OrgComponentAnalyzer:
             stale_threshold_seconds=self.config.lock_stale_threshold_seconds
         )
 
-        # Handle cache clear option
-        if config.clear_cache and self.cache:
+    def _apply_clear_cache_option(self) -> None:
+        """Clear the org cache if requested. Runs only once the org lock is held (or skipped)."""
+        if self.config.clear_cache and self.cache:
             self.cache.invalidate()
             self.logger.info("Cache cleared")
 
@@ -386,6 +387,7 @@ class OrgComponentAnalyzer:
         start_time = time.monotonic()
         timestamp = datetime.now(UTC).isoformat()
         self._assert_lock_healthy()
+        self._apply_clear_cache_option()
 
         # 1. List and filter data views
         self.logger.info("Fetching data view list...")
@@ -605,6 +607,12 @@ class OrgComponentAnalyzer:
             self.logger.warning("Invalid %s pattern: %s", name, e)
             return None
 
+    @staticmethod
+    def _data_view_name(dv: dict[str, Any], default: str = "") -> str:
+        """Return the data view name, or ``default`` when it is missing, null, or NaN."""
+        name = dv.get("name")
+        return name if isinstance(name, str) else default
+
     def _list_and_filter_data_views(self) -> tuple[list[dict[str, Any]], bool, int]:
         """List all data views and apply filter/exclude/sample patterns.
 
@@ -636,7 +644,7 @@ class OrgComponentAnalyzer:
         if self.config.filter_pattern:
             pattern = self._validate_regex_pattern(self.config.filter_pattern, "filter")
             if pattern:
-                filtered = [dv for dv in filtered if pattern.search(dv.get("name", ""))]
+                filtered = [dv for dv in filtered if pattern.search(self._data_view_name(dv))]
                 self.logger.info("Filter '%s' matched %s data views", self.config.filter_pattern, len(filtered))
 
         # Apply exclude filter
@@ -644,7 +652,7 @@ class OrgComponentAnalyzer:
             pattern = self._validate_regex_pattern(self.config.exclude_pattern, "exclude")
             if pattern:
                 before = len(filtered)
-                filtered = [dv for dv in filtered if not pattern.search(dv.get("name", ""))]
+                filtered = [dv for dv in filtered if not pattern.search(self._data_view_name(dv))]
                 self.logger.info(
                     "Exclude '%s' removed %s data views", self.config.exclude_pattern, before - len(filtered)
                 )
@@ -687,7 +695,7 @@ class OrgComponentAnalyzer:
         # Group by prefix (first word or chars before common separators)
         groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
         for dv in data_views:
-            name = dv.get("name", "")
+            name = self._data_view_name(dv)
             # Extract prefix: first word or chars before - _ or space
             prefix = name.split()[0] if name.split() else name[:10]
             for sep in ["-", "_", " "]:
@@ -769,7 +777,7 @@ class OrgComponentAnalyzer:
             to_fetch = data_views
 
         if not to_fetch:
-            return summaries
+            return self._order_summaries_by_listing(summaries, data_views)
 
         pending_cache: list[DataViewSummary] = []
         # Bind validation evidence to the listing that scheduled these fetches,
@@ -816,7 +824,7 @@ class OrgComponentAnalyzer:
                                 pending_cache.append(summary)
 
                             if summary.has_error:
-                                pbar.set_postfix_str(f"✗ {dv.get('name', dv.get('id', '?'))[:20]}")
+                                pbar.set_postfix_str(f"✗ {(self._data_view_name(dv) or str(dv.get('id', '?')))[:20]}")
                             else:
                                 pbar.set_postfix_str(f"✓ {summary.metric_count}m/{summary.dimension_count}d")
                         except LockOwnershipLostError:
@@ -828,13 +836,13 @@ class OrgComponentAnalyzer:
                             summaries.append(
                                 DataViewSummary(
                                     data_view_id=dv.get("id", "unknown"),
-                                    data_view_name=dv.get("name", "Unknown"),
+                                    data_view_name=self._data_view_name(dv, "Unknown"),
                                     error=error_msg,
                                 ),
                             )
                         pbar.update(1)
                         self._assert_lock_healthy()
-        except LockOwnershipLostError:
+        except BaseException:  # Intentional: any exit (incl. KeyboardInterrupt) must cancel queued fetches.
             fail_closed_shutdown = True
             self._cancel_futures_best_effort(futures)
             raise
@@ -853,7 +861,29 @@ class OrgComponentAnalyzer:
                 validation_modified_by_id=validation_modified_by_id,
             )
 
-        return summaries
+        return self._order_summaries_by_listing(summaries, data_views)
+
+    @staticmethod
+    def _order_summaries_by_listing(
+        summaries: list[DataViewSummary],
+        data_views: list[dict[str, Any]],
+    ) -> list[DataViewSummary]:
+        """Order summaries by data view listing position (unlisted IDs last, by ID).
+
+        Fetches complete in thread-completion order and cache hits come first;
+        downstream "first encountered wins" logic needs a stable order.
+        """
+        position: dict[str, int] = {}
+        for index, dv in enumerate(data_views):
+            position.setdefault(dv.get("id", ""), index)
+        unlisted = len(position)
+        return sorted(
+            summaries,
+            key=lambda s: (
+                position.get(s.data_view_id, unlisted),
+                str(s.data_view_id) if s.data_view_id not in position else "",
+            ),
+        )
 
     def _get_thread_client(self):
         if not self.config.cja_per_thread:
@@ -877,7 +907,7 @@ class OrgComponentAnalyzer:
             DataViewSummary with component IDs (and names if include_names=True)
         """
         dv_id = dv.get("id", "")
-        dv_name = dv.get("name", "Unknown")
+        dv_name = self._data_view_name(dv, "Unknown")
         start_time = time.monotonic()
 
         try:

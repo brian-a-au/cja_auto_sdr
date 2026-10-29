@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 import re
 import sys
+import time
 import types
 from unittest.mock import Mock, patch
 
@@ -1937,26 +1938,59 @@ def _make_scipy_import_error():
 
 
 # ===================================================================
-# 17. __init__ cache clear when config.clear_cache=True (lines 91-92)
+# 17. Cache clear when config.clear_cache=True happens in run_analysis(), not __init__
 # ===================================================================
 
 
 class TestInitCacheClear:
-    """Tests for __init__ cache clear when config.clear_cache=True."""
+    """Tests that the clear_cache=True clear happens inside run_analysis(), not at construction."""
 
-    def test_clear_cache_true_calls_invalidate(self, mock_cja, logger, caplog):
-        """clear_cache=True should call cache.invalidate() and log info."""
+    def test_clear_cache_not_applied_at_construction(self, mock_cja, logger):
+        """Construction must not clear the shared cache; that waits for the org lock."""
         from unittest.mock import MagicMock
 
         config = OrgReportConfig(clear_cache=True, skip_lock=True, cja_per_thread=False)
         mock_cache = MagicMock()
+        OrgComponentAnalyzer(mock_cja, config, logger, org_id="test@Org", cache=mock_cache)
+        mock_cache.invalidate.assert_not_called()
+
+    def test_clear_cache_skipped_when_lock_contended(self, mock_cja, logger, tmp_path):
+        """A run refused by the org lock must not wipe the shared cache."""
+        from functools import partial
+        from unittest.mock import MagicMock, patch
+
+        from cja_auto_sdr.core.exceptions import ConcurrentOrgReportError
+        from cja_auto_sdr.org.cache import OrgReportLock
+
+        config = OrgReportConfig(clear_cache=True, skip_lock=False, cja_per_thread=False)
+        mock_cache = MagicMock()
+        analyzer = OrgComponentAnalyzer(mock_cja, config, logger, org_id="test@Org", cache=mock_cache)
+
+        holder = OrgReportLock("test@Org", lock_dir=tmp_path)
+        with holder:
+            assert holder.acquired
+            with (
+                patch("cja_auto_sdr.org.analyzer.OrgReportLock", partial(OrgReportLock, lock_dir=tmp_path)),
+                pytest.raises(ConcurrentOrgReportError),
+            ):
+                analyzer.run_analysis()
+
+        mock_cache.invalidate.assert_not_called()
+
+    def test_clear_cache_applied_inside_run_with_skip_lock(self, mock_cja, logger, caplog):
+        """With skip_lock=True the cache is still cleared, inside run_analysis()."""
+        from unittest.mock import MagicMock
+
+        config = OrgReportConfig(clear_cache=True, skip_lock=True, cja_per_thread=False)
+        mock_cache = MagicMock()
+        mock_cja.getDataViews.return_value = []
+        analyzer = OrgComponentAnalyzer(mock_cja, config, logger, org_id="test@Org", cache=mock_cache)
 
         with caplog.at_level(logging.INFO):
-            analyzer = OrgComponentAnalyzer(mock_cja, config, logger, org_id="test@Org", cache=mock_cache)
+            analyzer.run_analysis()
 
-        mock_cache.invalidate.assert_called_once()
+        mock_cache.invalidate.assert_called_once_with()
         assert "Cache cleared" in caplog.text
-        assert analyzer.cache is mock_cache
 
     def test_clear_cache_true_no_cache_object_no_error(self, mock_cja, logger):
         """clear_cache=True with cache=None should not raise."""
@@ -3226,3 +3260,150 @@ def test_compact_cluster_cohesion_preserves_distance_round_trip(mock_cja, logger
     clusters = analyzer._compute_clusters(summaries, precomputed=precomputed)
     assert clusters is not None
     assert clusters[0].cohesion_score == 0.0062
+
+
+# ---------------------------------------------------------------------------
+# _fetch_all_data_views interrupt / completion handling
+# ---------------------------------------------------------------------------
+
+
+def _fetch_test_config() -> OrgReportConfig:
+    return OrgReportConfig(skip_lock=True, use_cache=False, cja_per_thread=False, quiet=True)
+
+
+def test_keyboard_interrupt_cancels_queued_fetches(mock_cja, logger):
+    import time
+
+    from cja_auto_sdr.org import analyzer as analyzer_module
+
+    started: list[str] = []
+
+    def slow_fetch(dv):
+        started.append(dv["id"])
+        time.sleep(0.05)
+        return DataViewSummary(dv["id"], dv["id"])
+
+    analyzer = OrgComponentAnalyzer(mock_cja, _fetch_test_config(), logger)
+    dvs = [{"id": f"dv_{i}", "name": f"dv {i}"} for i in range(100)]
+    calls = {"n": 0}
+    real_wait = analyzer_module.wait
+
+    def interrupting_wait(*args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 2:
+            raise KeyboardInterrupt
+        return real_wait(*args, **kwargs)
+
+    with (
+        patch.object(analyzer, "_fetch_data_view_components", side_effect=slow_fetch),
+        patch("cja_auto_sdr.org.analyzer.wait", side_effect=interrupting_wait),
+        pytest.raises(KeyboardInterrupt),
+    ):
+        analyzer._fetch_all_data_views(dvs)
+
+    # Only the in-flight batch (at most a few waves of 10 workers) may start.
+    assert len(started) < 100
+
+
+def test_normal_completion_returns_all_summaries(mock_cja, logger):
+    analyzer = OrgComponentAnalyzer(mock_cja, _fetch_test_config(), logger)
+    dvs = [{"id": f"dv_{i}", "name": f"dv {i}"} for i in range(20)]
+
+    with patch.object(
+        analyzer,
+        "_fetch_data_view_components",
+        side_effect=lambda dv: DataViewSummary(dv["id"], dv["name"]),
+    ):
+        summaries = analyzer._fetch_all_data_views(dvs)
+
+    assert sorted(s.data_view_id for s in summaries) == sorted(dv["id"] for dv in dvs)
+
+
+def test_fetch_all_returns_listing_order_not_completion_order(mock_cja, logger):
+    def fetch(dv):
+        time.sleep(0.2 if dv["id"] == "dv_prod" else 0.0)
+        return DataViewSummary(dv["id"], dv["id"], metric_ids={"metrics/revenue"})
+
+    analyzer = OrgComponentAnalyzer(
+        mock_cja,
+        OrgReportConfig(skip_lock=True, use_cache=False, cja_per_thread=False, quiet=True),
+        logger,
+    )
+    with patch.object(analyzer, "_fetch_data_view_components", side_effect=fetch):
+        result = analyzer._fetch_all_data_views([{"id": "dv_prod", "name": "p"}, {"id": "dv_stage", "name": "s"}])
+    assert [s.data_view_id for s in result] == ["dv_prod", "dv_stage"]
+
+
+def test_order_summaries_by_listing_puts_unlisted_last_sorted_by_id():
+    summaries = [DataViewSummary(i, i) for i in ("z_extra", "b", "a_extra", "a")]
+    ordered = OrgComponentAnalyzer._order_summaries_by_listing(summaries, [{"id": "a"}, {"id": "b"}])
+    assert [s.data_view_id for s in ordered] == ["a", "b", "a_extra", "z_extra"]
+
+
+# ===================================================================
+# Null data view names (B14)
+# ===================================================================
+
+
+@pytest.mark.parametrize("bad_name", [None, float("nan")])
+def test_filter_and_exclude_tolerate_null_names(mock_cja, logger, bad_name):
+    mock_cja.getDataViews.return_value = [
+        {"id": "dv_1", "name": "Prod"},
+        {"id": "dv_2", "name": bad_name},
+    ]
+    config = OrgReportConfig(filter_pattern="Prod", skip_lock=True, cja_per_thread=False)
+    result, _, _ = _make_analyzer(mock_cja, logger, config=config)._list_and_filter_data_views()
+    assert [dv["id"] for dv in result] == ["dv_1"]
+
+    config = OrgReportConfig(exclude_pattern="Prod", skip_lock=True, cja_per_thread=False)
+    result, _, _ = _make_analyzer(mock_cja, logger, config=config)._list_and_filter_data_views()
+    assert [dv["id"] for dv in result] == ["dv_2"]
+
+
+@pytest.mark.parametrize("bad_name", [None, float("nan")])
+def test_stratified_sample_tolerates_null_names(mock_cja, logger, bad_name):
+    analyzer = _make_analyzer(mock_cja, logger)
+    dvs = [
+        {"id": "dv_1", "name": "Prod A"},
+        {"id": "dv_2", "name": bad_name},
+        {"id": "dv_3", "name": "Dev B"},
+    ]
+    assert len(analyzer._stratified_sample(dvs, 2)) == 2
+
+
+def test_null_name_error_summary_yields_single_row(mock_cja, logger):
+    analyzer = _make_analyzer(mock_cja, logger)
+    analyzer.cache = None
+    error_summary = DataViewSummary(data_view_id="dv_1", data_view_name="Unknown", error="boom")
+    with patch.object(analyzer, "_fetch_data_view_components", return_value=error_summary):
+        result = analyzer._fetch_all_data_views([{"id": "dv_1", "name": None}])
+    assert [s.data_view_id for s in result] == ["dv_1"]
+
+
+def test_null_name_fetch_failure_uses_unknown_name(mock_cja, logger):
+    analyzer = _make_analyzer(mock_cja, logger)
+    analyzer.cache = None
+    with patch.object(analyzer, "_fetch_data_view_components", side_effect=ValueError("bad")):
+        result = analyzer._fetch_all_data_views([{"id": "dv_1", "name": float("nan")}])
+    assert len(result) == 1
+    assert result[0].data_view_name == "Unknown"
+
+
+def test_nan_name_successful_fetch_uses_unknown_name(mock_cja, logger):
+    analyzer = _make_analyzer(mock_cja, logger)
+    mock_cja.getMetrics.return_value = pd.DataFrame({"id": ["m1"], "name": ["Revenue"]})
+    mock_cja.getDimensions.return_value = pd.DataFrame({"id": ["d1"], "name": ["Browser"]})
+    result = analyzer._fetch_data_view_components({"id": "dv_1", "name": float("nan")})
+    assert result.data_view_name == "Unknown"
+
+
+def test_order_summaries_unlisted_none_id_mixed_with_string_id(mock_cja, logger):
+    analyzer = _make_analyzer(mock_cja, logger)
+    summaries = [
+        DataViewSummary(data_view_id=None, data_view_name="NoId"),
+        DataViewSummary(data_view_id="dv_x", data_view_name="X"),
+        DataViewSummary(data_view_id="dv_listed", data_view_name="Listed"),
+    ]
+    result = analyzer._order_summaries_by_listing(summaries, [{"id": "dv_listed"}])
+    assert result[0].data_view_id == "dv_listed"
+    assert {s.data_view_id for s in result[1:]} == {None, "dv_x"}

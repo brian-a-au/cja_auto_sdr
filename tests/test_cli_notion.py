@@ -136,6 +136,26 @@ _PUSH_TO_NOTION_MUTEX_CASES: tuple[tuple[str, object], ...] = (
     ("inventory_summary", True),
     ("dry_run", True),
     ("data_views", ["dv_123"]),
+    ("profile_list", True),
+    ("profile_add", "name"),
+    ("profile_import", ["name", "./profile.json"]),
+    ("profile_show", "name"),
+    ("profile_test", "name"),
+    ("sample_config", True),
+    ("config_status", True),
+    ("config_json", True),
+    ("validate_config", True),
+    ("git_init", True),
+    ("list_dataviews", True),
+    ("list_connections", True),
+    ("list_datasets", True),
+    ("list_metrics", "dv_123"),
+    ("list_dimensions", "dv_123"),
+    ("list_segments", "dv_123"),
+    ("list_calculated_metrics", "dv_123"),
+    ("describe_dataview", "dv_123"),
+    ("stats", True),
+    ("notion_print_database_schema", True),
 )
 
 
@@ -150,3 +170,24 @@ def test_push_to_notion_rejects_incompatible_mode_flag(dest, value):
     with pytest.raises(SystemExit) as exc_info:
         _validate_semantic_flag_relationships(args, inferred_mode=RunMode.PUSH_TO_NOTION)
     assert exc_info.value.code == 1
+
+
+@pytest.mark.parametrize("argv_tail", [["--profile-list"], ["--sample-config"], ["--stats", "dv_1"]])
+@patch("cja_auto_sdr.generator.configure_cjapy")
+@patch("cja_auto_sdr.generator.cjapy")
+def test_main_push_to_notion_with_early_mode_exits_1(
+    mock_cjapy, mock_configure, tmp_path, monkeypatch, capsys, argv_tail
+):
+    """Early-dispatching modes must not silently drop --push-to-notion."""
+    from cja_auto_sdr.generator import main
+
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "sdr.json").write_text("{}")
+    monkeypatch.setattr(sys, "argv", ["cja_auto_sdr", "--push-to-notion", "sdr.json", *argv_tail])
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 1
+    assert "--push-to-notion is incompatible with" in capsys.readouterr().err
+    assert not (tmp_path / "config.sample.json").exists()
+    mock_cjapy.CJA.assert_not_called()
+    mock_configure.assert_not_called()

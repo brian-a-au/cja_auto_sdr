@@ -6,6 +6,8 @@ import errno
 import json
 import os
 import socket
+import subprocess
+import sys
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -27,6 +29,17 @@ from cja_auto_sdr.core.locks.backends import (
     _write_all,
     _write_info_path,
 )
+
+
+@pytest.fixture
+def live_foreign_pid():
+    """PID of a live child process (not this process), killed in teardown."""
+    proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+    try:
+        yield proc.pid
+    finally:
+        proc.kill()
+        proc.wait()
 
 
 def _build_lock_info(
@@ -711,13 +724,13 @@ class TestIsLockInfoStale:
         )
         assert _is_lock_info_stale(info, 3600) is False
 
-    def test_same_host_non_fcntl_live_pid_not_stale(self) -> None:
+    def test_same_host_non_fcntl_live_pid_not_stale(self, live_foreign_pid: int) -> None:
         """Same host, non-fcntl: live pid -> not stale regardless of time."""
         old = datetime(2000, 1, 1, tzinfo=UTC).isoformat()
         info = _build_lock_info(
             "test",
             backend="lease",
-            pid=os.getpid(),
+            pid=live_foreign_pid,
             started_at=old,
             updated_at=old,
         )
@@ -1941,3 +1954,9 @@ class TestLeaseAcquireResultEdgeCases:
         monkeypatch.setattr(backend, "_stat_inode", lambda path: (1, 999))
         result = backend.acquire_result(lock_file, 10)
         assert result.status == AcquireStatus.CONTENDED
+
+
+class TestIsLockInfoStaleOwnPid:
+    def test_same_host_lease_own_pid_unknown_lock_id_is_stale(self) -> None:
+        info = _build_lock_info("never-held-here", backend="lease", pid=os.getpid())
+        assert _is_lock_info_stale(info, 3600) is True

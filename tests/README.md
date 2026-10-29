@@ -186,7 +186,7 @@ tests/
 └── README.md                        # This file
 ```
 
-**Total: 9,288 comprehensive tests**
+**Total: 9,353 comprehensive tests**
 
 ### Test Count Breakdown
 
@@ -195,16 +195,16 @@ tests/
 
 | Category | Tests | Files | Notes |
 |----------|-------|-------|-------|
-| `unit` | 9,137 | 168 | Default primary category for files without explicit integration/e2e/smoke scope |
+| `unit` | 9,202 | 168 | Default primary category for files without explicit integration/e2e/smoke scope |
 | `integration` | 118 | 3 | Cross-module integration suites |
 | `e2e` | 23 | 2 | End-to-end suites with a mocked external boundary |
 | `smoke` | 10 | 1 | Lightweight command-mode coverage |
 | `slow` | 0 | 0 | Overlay marker; these tests are also counted in a primary category |
-| **Primary Total** | **9,288** | **174** | **unit + integration + e2e + smoke** |
+| **Primary Total** | **9,353** | **174** | **unit + integration + e2e + smoke** |
 
 | CI Slice | Tests | Files | Selector |
 |----------|-------|-------|----------|
-| `test-unit` | 9,137 | 168 | `-m "unit and not slow"` |
+| `test-unit` | 9,202 | 168 | `-m "unit and not slow"` |
 | `test-integration` | 141 | 5 | `-m "integration or e2e or slow"` |
 | `smoke-test` | 10 | 1 | `-m smoke` |
 
@@ -272,7 +272,7 @@ tests/
 | `test_quality_policy_and_run_summary.py` | 178 | Quality policy functions and run summary/status inference |
 | `test_e2e_integration.py` | 16 | End-to-end integration tests with real pipeline, mocked API boundary |
 | `test_api_client.py` | 39 | API client exception paths and error handling |
-| `test_config_validation.py` | 56 | Configuration validation logic |
+| `test_config_validation.py` | 60 | Configuration validation logic |
 | `test_credentials.py` | 76 | Credential resolution and source selection |
 | `test_performance_tracker.py` | 7 | Performance tracker (cache eviction, statistics) |
 | `test_snapshot.py` | 94 | Diff snapshot creation and comparison |
@@ -283,29 +283,29 @@ tests/
 | `test_config_dataclasses.py` | 89 | Config dataclasses and constants functions |
 | `test_lock_manager.py` | 68 | Lock manager acquire/release/heartbeat lifecycle |
 | `test_lazy_forwarding.py` | 73 | Lazy-forwarding infrastructure and make_getattr() |
-| `test_lock_backend_edge_cases.py` | 164 | Lock backend metadata I/O, stale detection, legacy parsing |
+| `test_lock_backend_edge_cases.py` | 165 | Lock backend metadata I/O, stale detection, legacy parsing |
 | `test_derived_fields_coverage.py` | 161 | Derived field complexity scoring, logic summary, predicates |
-| `test_org_analyzer_coverage.py` | 166 | Org analyzer governance, naming audit, sampling, memory, drift, clustering |
+| `test_org_analyzer_coverage.py` | 180 | Org analyzer governance, naming audit, sampling, memory, drift, clustering |
 | `test_org_analyzer_metadata_enrichment.py` | 3 | Org analyzer metadata enrichment payload handling |
 | `test_api_coverage.py` | 98 | API cache, quality, fetch, resilience exception paths |
 | `test_diff_coverage.py` | 75 | Diff comparator, models, git integration edge cases |
 | `test_generator_coverage.py` | 160 | Generator utility functions — coercion, normalization, diff formatting |
-| `test_generator_discovery_compat_coverage.py` | 42 | Generator discovery helper parity with extracted list-command implementations |
+| `test_generator_discovery_compat_coverage.py` | 44 | Generator discovery helper parity with extracted list-command implementations |
 | `test_segments_coverage.py` | 78 | Segment comparison operators, container types, sequence variants |
 | `test_diff_inventory_output.py` | 101 | Inventory diff output across all formats (console, JSON, HTML, Excel, MD, CSV) |
 | `test_cli_command_handlers.py` | 166 | CLI dispatch for --stats, --org-report, --list-snapshots, discovery inspection, diff config unpacking |
 | `test_profile_management.py` | 54 | Interactive profile creation, import, test, show |
-| `test_snapshot_commands.py` | 90 | Snapshot creation, comparison, name resolution |
+| `test_snapshot_commands.py` | 94 | Snapshot creation, comparison, name resolution |
 | `test_config_and_resolution.py` | 116 | Config status, validation, stats, name resolution |
 | `test_derived_fields_edge_cases.py` | 34 | Derived fields edge cases and coverage |
 | `test_diff_command_coverage.py` | 46 | Diff command edge cases and coverage |
 | `test_generator_interactive_and_console.py` | 41 | Generator interactive and console tests |
-| `test_generator_remaining_coverage.py` | 85 | Generator remaining coverage edge cases |
+| `test_generator_remaining_coverage.py` | 88 | Generator remaining coverage edge cases |
 | `test_interactive_discovery_coverage.py` | 118 | Interactive discovery and helpers coverage |
-| `test_lock_backends.py` | 47 | Lock backends edge cases and coverage |
+| `test_lock_backends.py` | 51 | Lock backends edge cases and coverage |
 | `test_main_impl_cli_coverage.py` | 94 | _main_impl CLI path coverage |
 | `test_main_impl_coverage.py` | 66 | _main_impl coverage edge cases |
-| `test_org_cache_branches.py` | 122 | Org cache branch coverage |
+| `test_org_cache_branches.py` | 126 | Org cache branch coverage |
 | `test_org_writer_compat_contracts.py` | 116 | Org writer compatibility boundary contract tests |
 | `test_org_writer_coverage.py` | 145 | Org writer edge cases and coverage |
 | `test_output_writer_coverage.py` | 39 | Output writer edge cases and coverage |
@@ -370,8 +370,8 @@ tests/
 | `test_watch_logging.py` | 4 | Structured-log event emission tests |
 | `test_notion_registry.py` | 19 | Notion page ID registry CRUD tests |
 | `test_notion_writer.py` | 95 | Notion block builder + API layer tests |
-| `test_cli_notion.py` | 28 | CLI flag wiring for --format notion and --push-to-notion |
-| `test_push_to_notion.py` | 6 | --push-to-notion JSON ingest and error paths |
+| `test_cli_notion.py` | 51 | CLI flag wiring for --format notion and --push-to-notion |
+| `test_push_to_notion.py` | 12 | --push-to-notion JSON ingest and error paths |
 | `test_cli_notion_database.py` | 34 | CLI flag wiring for --notion-create-database and --notion-database-id |
 | `test_notion_database.py` | 41 | Notion database creation and upsert tests |
 | `test_notion_org_publisher.py` | 13 | --org-report --format notion catalog publisher tests |
@@ -388,7 +388,7 @@ tests/
 | `test_diff_snapshot_retention.py` | 81 | Diff snapshot-retention parse-cache characterization test |
 | `test_diff_comparator_normalize.py` | 21 | Diff field-normalization type-fast-path characterization test |
 | `test_logging_diagnostics.py` | 2 | emit_diagnostic isEnabledFor guard characterization tests |
-| **Total** | **9,288** | **Collected via pytest --collect-only** |
+| **Total** | **9,353** | **Collected via pytest --collect-only** |
 
 ## Running Tests
 
@@ -846,7 +846,7 @@ the `tests/README.md` inventory tree or count table.
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (9,288 tests total)
+- [x] Comprehensive test coverage (9,353 tests total)
 - [x] Org-wide analysis tests (test_org_report.py) - 225 tests (including large org scaling, output path aliases, memory warnings, smart cache invalidation)
 - [x] Org-wide analysis integration tests (test_org_report_integration.py) - 42 tests (end-to-end flows, caching, filtering, governance thresholds)
 - [x] Profile management tests (test_profiles.py) - 88 tests

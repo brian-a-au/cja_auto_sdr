@@ -7,6 +7,8 @@ import json
 import multiprocessing
 import os
 import socket
+import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -51,10 +53,21 @@ def _build_lock_info(
     )
 
 
-def _write_lock_info(lock_path: Path, lock_id: str) -> None:
-    info = _build_lock_info(lock_id)
+def _write_lock_info(lock_path: Path, lock_id: str, *, pid: int | None = None) -> None:
+    info = _build_lock_info(lock_id, pid=pid)
     metadata_path = lock_path.with_name(f"{lock_path.name}.info")
     metadata_path.write_text(json.dumps(info.to_dict()) + "\n", encoding="utf-8")
+
+
+@pytest.fixture
+def live_foreign_pid():
+    """PID of a live child process (not this process), killed in teardown."""
+    proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+    try:
+        yield proc.pid
+    finally:
+        proc.kill()
+        proc.wait()
 
 
 def _flock_holder_worker(lock_path: str, ready_path: str, hold_seconds: float) -> None:
@@ -96,7 +109,7 @@ def test_lease_backend_acquire_writes_bootstrap_metadata() -> None:
         assert not lock_path.exists()
 
 
-def test_lease_backend_waits_for_transient_unreadable_lock_file() -> None:
+def test_lease_backend_waits_for_transient_unreadable_lock_file(live_foreign_pid: int) -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         lock_path = Path(tmpdir) / "lease.lock"
         lock_path.write_text("marker\n", encoding="utf-8")
@@ -108,7 +121,7 @@ def test_lease_backend_waits_for_transient_unreadable_lock_file() -> None:
 
         def _delayed_write() -> None:
             time.sleep(backend.unreadable_retry_sleep_seconds * 2)
-            _write_lock_info(lock_path, lock_id)
+            _write_lock_info(lock_path, lock_id, pid=live_foreign_pid)
 
         writer = threading.Thread(target=_delayed_write, daemon=True)
         writer.start()
@@ -412,14 +425,14 @@ def test_fcntl_backend_retries_when_lock_path_disappears_mid_acquire(monkeypatch
             os.fstat(first_fd)
 
 
-def test_lease_backend_does_not_expire_local_live_pid_even_if_old() -> None:
+def test_lease_backend_does_not_expire_local_live_pid_even_if_old(live_foreign_pid: int) -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         lock_path = Path(tmpdir) / "lease.lock"
         old = datetime(2000, 1, 1, tzinfo=UTC).isoformat()
         info = _build_lock_info(
             "live-local-pid",
             owner="live-owner",
-            pid=os.getpid(),
+            pid=live_foreign_pid,
             host=socket.gethostname(),
             started_at=old,
             updated_at=old,
@@ -434,6 +447,76 @@ def test_lease_backend_does_not_expire_local_live_pid_even_if_old() -> None:
         current = backend.read_info(lock_path)
         assert current is not None
         assert current.lock_id == "live-local-pid"
+
+
+def test_lease_lock_with_own_pid_but_unknown_lock_id_is_stale(tmp_path: Path) -> None:
+    lock_path = tmp_path / "org.lock"
+    old = datetime(2000, 1, 1, tzinfo=UTC).isoformat()
+    info = _build_lock_info(
+        "previous-run",
+        pid=os.getpid(),
+        started_at=old,
+        updated_at=old,
+        backend="lease",
+    )
+    lock_path.write_text("previous-run\n", encoding="utf-8")
+    lock_path.with_name(f"{lock_path.name}.info").write_text(json.dumps(info.to_dict()) + "\n", encoding="utf-8")
+
+    result = LeaseFileLockBackend().acquire_result(lock_path, stale_threshold_seconds=60)
+
+    assert result.status == AcquireStatus.ACQUIRED
+    assert result.handle is not None
+    LeaseFileLockBackend().release(result.handle)
+
+
+def test_lease_lock_held_in_this_process_is_not_stolen(tmp_path: Path) -> None:
+    backend = LeaseFileLockBackend()
+    first = backend.acquire_result(tmp_path / "org.lock", stale_threshold_seconds=60)
+    assert first.status == AcquireStatus.ACQUIRED
+    assert first.handle is not None
+    second = backend.acquire_result(tmp_path / "org.lock", stale_threshold_seconds=60)
+    assert second.status == AcquireStatus.CONTENDED
+    backend.release(first.handle)
+
+
+def test_lease_lock_mid_acquire_is_not_stolen_by_in_process_contender(tmp_path: Path) -> None:
+    lock_path = tmp_path / "org.lock"
+    first = LeaseFileLockBackend()
+    second = LeaseFileLockBackend()
+    original_stat = first._stat_inode
+    in_window = threading.Event()
+    proceed = threading.Event()
+
+    def paused_stat(path: Path):
+        result = original_stat(path)
+        in_window.set()
+        proceed.wait(5)
+        return result
+
+    first._stat_inode = paused_stat  # type: ignore[method-assign]
+    results: dict[str, object] = {}
+    thread = threading.Thread(target=lambda: results.update(a=first.acquire_result(lock_path, 3600)))
+    thread.start()
+    try:
+        assert in_window.wait(5)
+        contender = second.acquire_result(lock_path, 3600)
+    finally:
+        proceed.set()
+        thread.join(5)
+
+    assert contender.status == AcquireStatus.CONTENDED
+    held = results["a"]
+    assert held.status == AcquireStatus.ACQUIRED
+    first.release(held.handle)
+
+
+def test_lease_failed_acquire_does_not_leave_lock_id_registered(tmp_path: Path) -> None:
+    before = set(backends_module._HELD_LEASE_LOCK_IDS)
+    backend = LeaseFileLockBackend()
+    with patch.object(backends_module, "_write_info_path", side_effect=OSError("boom")):
+        result = backend.acquire_result(tmp_path / "org.lock", 60)
+    assert result.status == AcquireStatus.METADATA_ERROR
+    assert set(backends_module._HELD_LEASE_LOCK_IDS) == before
 
 
 def test_lock_info_from_dict_rejects_modern_bool_pid() -> None:
@@ -958,6 +1041,7 @@ def test_lease_backend_stale_holder_cannot_overwrite_new_owner_metadata() -> Non
 
 def test_lease_stale_reclaim_does_not_unlink_new_owner_sidecar_on_race(
     monkeypatch: pytest.MonkeyPatch,
+    live_foreign_pid: int,
 ) -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         lock_path = Path(tmpdir) / "lease.lock"
@@ -985,7 +1069,7 @@ def test_lease_stale_reclaim_does_not_unlink_new_owner_sidecar_on_race(
             if path == lock_path and result and not injected["done"]:
                 injected["done"] = True
                 lock_path.write_text("marker\n", encoding="utf-8")
-                new_info = _build_lock_info(new_lock_id, owner="new-owner", backend="lease")
+                new_info = _build_lock_info(new_lock_id, owner="new-owner", pid=live_foreign_pid, backend="lease")
                 metadata_path.write_text(json.dumps(new_info.to_dict()) + "\n", encoding="utf-8")
             return result
 
