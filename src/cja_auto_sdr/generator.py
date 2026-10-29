@@ -3125,7 +3125,7 @@ def process_inventory_summary(
     logger = with_log_context(base_logger, run_mode="inventory_summary", data_view_id=data_view_id)
 
     # Initialize CJA
-    cja = initialize_cja(config_file, logger, profile=profile)
+    cja = initialize_cja(config_file, logger, profile=profile, verify_connection=False)
     if cja is None:
         print(ConsoleColors.error("ERROR: Failed to initialize CJA connection"), file=sys.stderr)
         return {"error": "CJA initialization failed"}
@@ -3479,7 +3479,7 @@ def process_single_dataview(
 
     try:
         # Initialize CJA
-        cja = initialize_cja(config_file, logger, profile=profile)
+        cja = initialize_cja(config_file, logger, profile=profile, verify_connection=False)
         if cja is None:
             return _finalize_result(
                 data_view_name="Unknown",

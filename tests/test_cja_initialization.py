@@ -96,6 +96,26 @@ class TestInitializeCjaSuccess:
         mock_cjapy.importConfigFile.assert_called_once_with(mock_config_file)
 
     @patch("cja_auto_sdr.api.client.CredentialResolver")
+    @patch("cja_auto_sdr.api.client.cjapy")
+    def test_initialize_cja_without_verification_skips_probe(
+        self, mock_cjapy, mock_resolver_class, mock_logger, mock_config_file
+    ):
+        """verify_connection=False must not issue the getDataViews connection test."""
+        mock_resolver = Mock()
+        mock_resolver.resolve.return_value = (
+            {"org_id": "test_org@AdobeOrg", "client_id": "c", "secret": "s", "scopes": "openid"},
+            f"config:{Path(mock_config_file).name}",
+        )
+        mock_resolver_class.return_value = mock_resolver
+        mock_cja = Mock()
+        mock_cjapy.CJA.return_value = mock_cja
+
+        result = initialize_cja(mock_config_file, mock_logger, verify_connection=False)
+
+        assert result is mock_cja
+        mock_cja.getDataViews.assert_not_called()
+
+    @patch("cja_auto_sdr.api.client.CredentialResolver")
     @patch("cja_auto_sdr.api.client._config_from_env")
     @patch("cja_auto_sdr.api.client.cjapy")
     @patch("cja_auto_sdr.api.client.make_api_call_with_retry")

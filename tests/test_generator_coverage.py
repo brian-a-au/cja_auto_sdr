@@ -1000,6 +1000,23 @@ def _run_typed_generation(tmp_path, config_file, **kwargs):
         )
 
 
+def test_process_single_dataview_lists_data_views_zero_times(tmp_path):
+    """Per-data-view workers skip the getDataViews connection probe (it was one wasted call per run)."""
+    from contextlib import ExitStack
+    from unittest.mock import Mock, patch
+
+    from cja_auto_sdr.generator import process_single_dataview
+
+    cja = Mock()
+    with ExitStack() as stack:
+        _typed_generation_mocks(stack)
+        init = stack.enter_context(patch("cja_auto_sdr.generator.initialize_cja", return_value=cja))
+        process_single_dataview(data_view_id="dv_typed_1", config_file="config.json", output_dir=str(tmp_path))
+
+    assert init.call_args.kwargs["verify_connection"] is False
+    assert cja.getDataViews.call_count == 0
+
+
 def _without_timing_metadata(payload):
     payload = dict(payload)
     payload["metadata"] = {k: v for k, v in payload["metadata"].items() if k not in _TIMING_METADATA_KEYS}
