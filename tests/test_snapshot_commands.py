@@ -1541,6 +1541,25 @@ class TestMainSnapshotDispatch:
 
         assert exc_info.value.code == 1
 
+    def test_compare_snapshots_missing_file_message_not_doubled(self, tmp_path, monkeypatch, capsys):
+        """A missing snapshot reports the not-found prefix once and exits 1."""
+        from cja_auto_sdr.generator import main
+
+        b_file = tmp_path / "b.json"
+        _write_snapshot_file(str(b_file))
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(
+            "sys.argv",
+            ["cja_auto_sdr", "--compare-snapshots", str(tmp_path / "missing.json"), str(b_file)],
+        )
+
+        with pytest.raises(SystemExit) as exc_info:
+            main()
+
+        assert exc_info.value.code == 1
+        err = capsys.readouterr().err
+        assert err.count("Snapshot file not found") == 1
+
     @patch("cja_auto_sdr.generator.parse_arguments")
     def test_main_compare_snapshots_metrics_dimensions_conflict(self, mock_parse, capsys):
         """main() rejects --metrics-only + --dimensions-only with --compare-snapshots."""
