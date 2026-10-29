@@ -597,7 +597,16 @@ def _push_to_notion_from_json(
     except OSError as exc:
         _exit_error(f"--push-to-notion: failed to read {json_file}: {exc}")
 
-    metadata_dict = payload.get("metadata", {})
+    if not isinstance(payload, dict):
+        _exit_error(
+            f"--push-to-notion: {json_file} must contain a JSON object (got {type(payload).__name__})",
+        )
+
+    def _section(container: dict[str, Any], key: str) -> dict[str, Any]:
+        value = container.get(key)
+        return value if isinstance(value, dict) else {}
+
+    metadata_dict = _section(payload, "metadata")
     data_dict: dict[str, pd.DataFrame] = {}
     if payload.get("metrics"):
         data_dict["Metrics"] = pd.DataFrame(payload["metrics"])
@@ -605,14 +614,14 @@ def _push_to_notion_from_json(
         data_dict["Dimensions"] = pd.DataFrame(payload["dimensions"])
     if payload.get("data_quality"):
         data_dict["Data Quality"] = pd.DataFrame(payload["data_quality"])
-    if payload.get("derived_fields", {}).get("fields"):
-        data_dict["Derived Fields"] = pd.DataFrame(payload["derived_fields"]["fields"])
-    if payload.get("calculated_metrics", {}).get("metrics"):
+    if _section(payload, "derived_fields").get("fields"):
+        data_dict["Derived Fields"] = pd.DataFrame(_section(payload, "derived_fields")["fields"])
+    if _section(payload, "calculated_metrics").get("metrics"):
         data_dict["Calculated Metrics"] = pd.DataFrame(
-            payload["calculated_metrics"]["metrics"],
+            _section(payload, "calculated_metrics")["metrics"],
         )
-    if payload.get("segments", {}).get("segments"):
-        data_dict["Segments"] = pd.DataFrame(payload["segments"]["segments"])
+    if _section(payload, "segments").get("segments"):
+        data_dict["Segments"] = pd.DataFrame(_section(payload, "segments")["segments"])
 
     effective_output_dir = output_dir or str(json_path.parent)
     base_filename = json_path.stem
