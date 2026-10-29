@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [3.13.5] - 2026-10-28
 
-This patch fixes bugs in org reports, batch runs, and several command exit codes, and it makes some runs faster. Org reports for two orgs no longer overwrite each other's cache, `--clear-cache` no longer runs when the lock is refused, and Ctrl+C now stops queued work. Commands that write a file now exit 1 when the write fails, and a few crashes on bad input now give clear errors.
+This patch fixes bugs in org reports, batch runs, and several command exit codes, and it makes some runs faster. Org reports for two orgs no longer overwrite each other's cache, `--clear-cache` no longer runs when the lock is refused, and Ctrl+C now stops queued work. Snapshot commands and run summaries now exit 1 when their output cannot be written, and a few crashes on bad input now give clear errors.
 
 ### Fixed
 
@@ -35,7 +35,7 @@ This patch fixes bugs in org reports, batch runs, and several command exit codes
 ### Performance
 
 - **Fewer API calls per data view:** per-data-view workers and `--inventory-summary` no longer run the `getDataViews` connection test, which listed every data view only to log a count. A single run drops from 5 API calls to 4, and a batch of 5 drops from 21 to 16. Workers no longer log "API connection successful! Found N data view(s)". Authentication errors still surface when the client is created, with the same failure code. The git snapshot path keeps the test.
-- **JSON output:** JSON files are now built as one string and written once. Writing a diff report with 5,000 components went from 140ms to 42ms, and an org report with 150 data views went from 43ms to 20ms, with byte-identical output. These numbers are on Python 3.14. The speedup applies on Python 3.13 and later, and Python 3.11 and 3.12 see almost none. A serialization error also no longer truncates an existing output file.
+- **JSON output:** JSON files are now built as one string and written once. Writing a diff report with 5,000 components went from 140ms to 42ms, and an org report with 150 data views went from 43ms to 20ms, with byte-identical output. These numbers are on Python 3.14. The speedup applies on Python 3.13 and later, and Python 3.11 and 3.12 see almost none. A serialization error also no longer truncates an existing output file. Building the text first uses more memory while writing, about 3 to 4 times the output size.
 - **Diff Excel output:** each data row is now written once, with its format. A diff with 5,000 components went from 165ms to about 100ms, with the same cells and styles.
 - **Org CSV and Excel output:** the writers now read the successful data view list once per table instead of twice for every component. The CSV writer at 150 data views went from 72ms to 24ms.
 
