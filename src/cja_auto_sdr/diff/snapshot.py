@@ -41,9 +41,13 @@ class SnapshotManager:
         """Return a DST-aware local timezone for legacy naive snapshot timestamps."""
         tz_env = os.environ.get("TZ", "").strip()
         if tz_env:
+            tz_key = tz_env.removeprefix(":")
             try:
-                return ZoneInfo(tz_env)
-            except ZoneInfoNotFoundError:
+                if os.path.isabs(tz_key) and os.path.isfile(tz_key):
+                    with open(tz_key, "rb") as tz_file:
+                        return ZoneInfo.from_file(tz_file)
+                return ZoneInfo(tz_key)
+            except (ZoneInfoNotFoundError, ValueError, OSError):
                 pass
 
         try:

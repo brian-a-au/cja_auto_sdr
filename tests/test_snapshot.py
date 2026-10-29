@@ -132,6 +132,22 @@ class TestDefaultSnapshotTimezone:
                 assert tz is not None
 
 
+NY_ZONEINFO = "/usr/share/zoneinfo/America/New_York"
+
+
+@pytest.mark.skipif(not os.path.isfile(NY_ZONEINFO), reason="system zoneinfo not available")
+@pytest.mark.parametrize("tz_value", [NY_ZONEINFO, ":" + NY_ZONEINFO])
+def test_absolute_tz_path_is_honored(monkeypatch, tz_value):
+    monkeypatch.setenv("TZ", tz_value)
+    tz = SnapshotManager._default_snapshot_timezone()
+    assert tz.utcoffset(datetime(2026, 1, 15, 12)) == timedelta(hours=-5)
+
+
+def test_unloadable_tz_path_falls_back_without_raising(monkeypatch):
+    monkeypatch.setenv("TZ", "/nonexistent/zone")
+    assert SnapshotManager._default_snapshot_timezone() is not None
+
+
 # ==================== _parse_snapshot_created_at Tests ====================
 
 
