@@ -186,7 +186,7 @@ tests/
 └── README.md                        # This file
 ```
 
-**Total: 9,279 comprehensive tests**
+**Total: 9,302 comprehensive tests**
 
 ### Test Count Breakdown
 
@@ -195,16 +195,16 @@ tests/
 
 | Category | Tests | Files | Notes |
 |----------|-------|-------|-------|
-| `unit` | 9,128 | 168 | Default primary category for files without explicit integration/e2e/smoke scope |
+| `unit` | 9,151 | 168 | Default primary category for files without explicit integration/e2e/smoke scope |
 | `integration` | 118 | 3 | Cross-module integration suites |
 | `e2e` | 23 | 2 | End-to-end suites with a mocked external boundary |
 | `smoke` | 10 | 1 | Lightweight command-mode coverage |
 | `slow` | 0 | 0 | Overlay marker; these tests are also counted in a primary category |
-| **Primary Total** | **9,279** | **174** | **unit + integration + e2e + smoke** |
+| **Primary Total** | **9,302** | **174** | **unit + integration + e2e + smoke** |
 
 | CI Slice | Tests | Files | Selector |
 |----------|-------|-------|----------|
-| `test-unit` | 9,128 | 168 | `-m "unit and not slow"` |
+| `test-unit` | 9,151 | 168 | `-m "unit and not slow"` |
 | `test-integration` | 141 | 5 | `-m "integration or e2e or slow"` |
 | `smoke-test` | 10 | 1 | `-m smoke` |
 
@@ -283,9 +283,9 @@ tests/
 | `test_config_dataclasses.py` | 89 | Config dataclasses and constants functions |
 | `test_lock_manager.py` | 68 | Lock manager acquire/release/heartbeat lifecycle |
 | `test_lazy_forwarding.py` | 73 | Lazy-forwarding infrastructure and make_getattr() |
-| `test_lock_backend_edge_cases.py` | 164 | Lock backend metadata I/O, stale detection, legacy parsing |
+| `test_lock_backend_edge_cases.py` | 165 | Lock backend metadata I/O, stale detection, legacy parsing |
 | `test_derived_fields_coverage.py` | 161 | Derived field complexity scoring, logic summary, predicates |
-| `test_org_analyzer_coverage.py` | 166 | Org analyzer governance, naming audit, sampling, memory, drift, clustering |
+| `test_org_analyzer_coverage.py` | 180 | Org analyzer governance, naming audit, sampling, memory, drift, clustering |
 | `test_org_analyzer_metadata_enrichment.py` | 3 | Org analyzer metadata enrichment payload handling |
 | `test_api_coverage.py` | 98 | API cache, quality, fetch, resilience exception paths |
 | `test_diff_coverage.py` | 75 | Diff comparator, models, git integration edge cases |
@@ -302,10 +302,10 @@ tests/
 | `test_generator_interactive_and_console.py` | 41 | Generator interactive and console tests |
 | `test_generator_remaining_coverage.py` | 85 | Generator remaining coverage edge cases |
 | `test_interactive_discovery_coverage.py` | 118 | Interactive discovery and helpers coverage |
-| `test_lock_backends.py` | 47 | Lock backends edge cases and coverage |
+| `test_lock_backends.py` | 51 | Lock backends edge cases and coverage |
 | `test_main_impl_cli_coverage.py` | 94 | _main_impl CLI path coverage |
 | `test_main_impl_coverage.py` | 66 | _main_impl coverage edge cases |
-| `test_org_cache_branches.py` | 122 | Org cache branch coverage |
+| `test_org_cache_branches.py` | 126 | Org cache branch coverage |
 | `test_org_writer_compat_contracts.py` | 116 | Org writer compatibility boundary contract tests |
 | `test_org_writer_coverage.py` | 145 | Org writer edge cases and coverage |
 | `test_output_writer_coverage.py` | 39 | Output writer edge cases and coverage |
@@ -388,7 +388,7 @@ tests/
 | `test_diff_snapshot_retention.py` | 81 | Diff snapshot-retention parse-cache characterization test |
 | `test_diff_comparator_normalize.py` | 21 | Diff field-normalization type-fast-path characterization test |
 | `test_logging_diagnostics.py` | 2 | emit_diagnostic isEnabledFor guard characterization tests |
-| **Total** | **9,279** | **Collected via pytest --collect-only** |
+| **Total** | **9,302** | **Collected via pytest --collect-only** |
 
 ## Running Tests
 
@@ -846,7 +846,7 @@ the `tests/README.md` inventory tree or count table.
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (9,279 tests total)
+- [x] Comprehensive test coverage (9,302 tests total)
 - [x] Org-wide analysis tests (test_org_report.py) - 225 tests (including large org scaling, output path aliases, memory warnings, smart cache invalidation)
 - [x] Org-wide analysis integration tests (test_org_report_integration.py) - 42 tests (end-to-end flows, caching, filtering, governance thresholds)
 - [x] Profile management tests (test_profiles.py) - 88 tests
