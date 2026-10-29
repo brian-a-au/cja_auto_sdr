@@ -307,7 +307,10 @@ def validate_config_only(
         print()
         print("  Credential status:")
         for field_name in required_fields:
-            if creds.get(field_name):
+            if creds.get(field_name) is not None and not isinstance(creds[field_name], str):
+                print(generator.ConsoleColors.error(f"    \u2717 {field_name}: must be a string"))
+                missing.append(field_name)
+            elif creds.get(field_name):
                 value = creds[field_name]
                 if field_name in ["secret", "client_id"]:
                     masked = value[:4] + "****" + value[-4:] if len(value) > 8 else "****"
@@ -436,7 +439,10 @@ def validate_config_only(
                 with open(config_file, encoding="utf-8") as f:
                     config = json.load(f)
                 print(generator.ConsoleColors.success("  \u2713 Config file is valid JSON"))
-                if display_credentials(config, f"Config file ({config_file})"):
+                if not isinstance(config, dict):
+                    print(generator.ConsoleColors.error("  \u2717 Config file must contain a JSON object"))
+                    all_passed = False
+                elif display_credentials(config, f"Config file ({config_file})"):
                     active_credentials = config
                     credential_source = "file"
                 else:
