@@ -703,7 +703,7 @@ class SegmentsInventoryBuilder:
         # Convert to display names
         functions_display = [
             SEGMENT_FUNCTION_DISPLAY_NAMES.get(f, f.replace("-", " ").title())
-            for f in functions_internal
+            for f in sorted(functions_internal)
             if f not in ("number", "string")  # Don't show literal types
         ]
 
@@ -718,7 +718,7 @@ class SegmentsInventoryBuilder:
         )
 
         return {
-            "functions_internal": list(functions_internal),
+            "functions_internal": sorted(functions_internal),
             "functions_display": functions_display,
             "dimension_references": sorted(dimension_refs),
             "metric_references": sorted(metric_refs),

@@ -10,6 +10,11 @@ Tests cover:
 """
 
 import json
+import os
+import subprocess
+import sys
+import textwrap
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pandas as pd
@@ -4226,3 +4231,32 @@ class TestBuildFormulaExpressionComplexDivide:
         # The add sub-expression "a + b" should be wrapped as "(a + b)"
         assert "(" in result and ")" in result
         assert "/" in result
+
+
+def test_functions_used_order_is_stable_across_hash_seeds():
+    """functions_used must not depend on per-process string hash randomization."""
+    script = textwrap.dedent("""
+        import json
+        from cja_auto_sdr.inventory.calculated_metrics import CalculatedMetricsInventoryBuilder
+        m = {"id": "cm1", "name": "X", "definition": {"formula": {"func": "divide",
+             "col1": {"func": "metric", "name": "metrics/a"},
+             "col2": {"func": "add", "col1": {"func": "metric", "name": "metrics/b"},
+                      "col2": {"func": "abs", "col": {"func": "metric", "name": "metrics/c"}}}}}}
+        s = CalculatedMetricsInventoryBuilder()._process_metric(m)
+        print(json.dumps([s.functions_used, s.functions_used_internal, s.to_dict()["functions_used"]]))
+    """)
+    outs = {
+        subprocess.run(
+            [sys.executable, "-c", script],
+            env={**os.environ, "PYTHONHASHSEED": seed},
+            cwd=Path(__file__).resolve().parent.parent,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+        for seed in ("1", "2", "3")
+    }
+    assert len(outs) == 1, outs
+    _display, internal, _dict_used = json.loads(outs.pop())
+    assert len(internal) >= 4
+    assert internal == sorted(internal)
