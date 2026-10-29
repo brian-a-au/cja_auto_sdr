@@ -16,6 +16,7 @@ import logging
 import math
 import os
 import socket
+import threading
 import time
 import uuid
 from collections.abc import Callable
@@ -357,6 +358,19 @@ def _is_fcntl_lock_active(lock_path: Path) -> bool | None:
             os.close(probe_fd)
 
 
+# Lock IDs of lease locks acquired (and not yet released) by this process. A
+# same-host lease lock carrying our own PID but an unknown lock ID was left by a
+# previous process that happened to have the same PID (for example after a
+# container restart), so it can never be live.
+_HELD_LEASE_LOCK_IDS: set[str] = set()
+_HELD_LEASE_LOCK_IDS_GUARD = threading.Lock()
+
+
+def _is_lease_lock_id_held(lock_id: str) -> bool:
+    with _HELD_LEASE_LOCK_IDS_GUARD:
+        return lock_id in _HELD_LEASE_LOCK_IDS
+
+
 def _is_lock_info_stale(info: LockInfo, stale_threshold_seconds: int, *, lock_path: Path | None = None) -> bool:
     if info.backend == "fcntl":
         if lock_path is None:
@@ -372,6 +386,10 @@ def _is_lock_info_stale(info: LockInfo, stale_threshold_seconds: int, *, lock_pa
         return not lock_active
 
     if info.host == socket.gethostname():
+        if info.pid == os.getpid() and not _is_lease_lock_id_held(info.lock_id):
+            # Our own PID but not a lock this process holds: left by a dead
+            # previous process that had the same PID.
+            return True
         # Never expire a same-host non-fcntl lock while its PID is still alive.
         return not _is_process_running(info.pid)
 
@@ -669,7 +687,21 @@ class LeaseFileLockBackend:
     def acquire_result(self, lock_path: Path, stale_threshold_seconds: int) -> AcquireResult:
         lock_path.parent.mkdir(parents=True, exist_ok=True)
         lock_id = str(uuid.uuid4())
+        # Register before the lock file exists: the bootstrap sidecar carries our
+        # PID, and a concurrent in-process contender must not treat it as stale.
+        with _HELD_LEASE_LOCK_IDS_GUARD:
+            _HELD_LEASE_LOCK_IDS.add(lock_id)
+        acquired = False
+        try:
+            result = self._acquire_with_lock_id(lock_path, stale_threshold_seconds, lock_id)
+            acquired = result.status == AcquireStatus.ACQUIRED
+            return result
+        finally:
+            if not acquired:
+                with _HELD_LEASE_LOCK_IDS_GUARD:
+                    _HELD_LEASE_LOCK_IDS.discard(lock_id)
 
+    def _acquire_with_lock_id(self, lock_path: Path, stale_threshold_seconds: int, lock_id: str) -> AcquireResult:
         for _ in range(self.acquire_attempts):
             try:
                 fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_RDWR, 0o600)
@@ -791,6 +823,8 @@ class LeaseFileLockBackend:
         if handle.closed:
             return
 
+        with _HELD_LEASE_LOCK_IDS_GUARD:
+            _HELD_LEASE_LOCK_IDS.discard(handle.lock_id)
         held_inode = self._fstat_inode(handle.fd)
         with contextlib.suppress(OSError):
             os.close(handle.fd)
