@@ -189,5 +189,5 @@ def test_main_push_to_notion_with_early_mode_exits_1(
     assert exc.value.code == 1
     assert "--push-to-notion is incompatible with" in capsys.readouterr().err
     assert not (tmp_path / "config.sample.json").exists()
-    mock_cjapy.assert_not_called()
+    mock_cjapy.CJA.assert_not_called()
     mock_configure.assert_not_called()
