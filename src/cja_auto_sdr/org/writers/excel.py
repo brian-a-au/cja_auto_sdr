@@ -234,6 +234,7 @@ def write_org_report_excel(
 
         # Sheet 3: Core Components
         core_data = []
+        successful = result.successful_data_views
         for comp_id in result.distribution.core_metrics:
             info = result.component_index.get(comp_id)
             if info:
@@ -243,9 +244,7 @@ def write_org_report_excel(
                         "Type": "Metric",
                         "Name": info.name or "",
                         "Data View Count": info.presence_count,
-                        "Coverage %": info.presence_count / result.successful_data_views
-                        if result.successful_data_views > 0
-                        else 0,
+                        "Coverage %": info.presence_count / successful if successful > 0 else 0,
                     },
                 )
         for comp_id in result.distribution.core_dimensions:
@@ -257,9 +256,7 @@ def write_org_report_excel(
                         "Type": "Dimension",
                         "Name": info.name or "",
                         "Data View Count": info.presence_count,
-                        "Coverage %": info.presence_count / result.successful_data_views
-                        if result.successful_data_views > 0
-                        else 0,
+                        "Coverage %": info.presence_count / successful if successful > 0 else 0,
                     },
                 )
 

@@ -171,7 +171,8 @@ def write_diff_excel_output(
                 ]
 
                 df = pd.DataFrame(rows)
-                df.to_excel(writer, sheet_name=sheet_name, index=False)
+                # Header only: the write_row loop below writes each data row once.
+                df.head(0).to_excel(writer, sheet_name=sheet_name, index=False)
 
                 # Apply color formatting
                 worksheet = writer.sheets[sheet_name]
@@ -215,7 +216,8 @@ def write_diff_excel_output(
                 ]
 
                 df = pd.DataFrame(rows)
-                df.to_excel(writer, sheet_name=sheet_name, index=False)
+                # Header only: the write_row loop below writes each data row once.
+                df.head(0).to_excel(writer, sheet_name=sheet_name, index=False)
 
                 # Apply color formatting
                 worksheet = writer.sheets[sheet_name]

@@ -289,6 +289,8 @@ def initialize_cja(
     config_file: str | Path = "config.json",
     logger: logging.Logger | None = None,
     profile: str | None = None,
+    *,
+    verify_connection: bool = True,
 ) -> cjapy.CJA | None:
     """Initialize CJA connection with comprehensive error handling.
 
@@ -301,6 +303,8 @@ def initialize_cja(
         config_file: Path to CJA configuration file
         logger: Logger instance (uses module logger if None)
         profile: Profile name to load credentials from (optional)
+        verify_connection: Run a getDataViews connection test after building the client.
+            Callers that already verified the connection or fetch data right away can pass False.
 
     Returns:
         Initialized CJA instance, or None if initialization fails
@@ -362,29 +366,32 @@ def initialize_cja(
         cja = cjapy.CJA()
         logger.info("CJA instance created successfully")
 
-        # Test connection with a simple API call (with retry)
-        logger.info("Testing API connection...")
-        try:
-            # Attempt to list data views to verify connection with retry
-            test_call = make_api_call_with_retry(
-                cja.getDataViews,
-                logger=logger,
-                operation_name="getDataViews (connection test)",
-            )
-            if _looks_like_dataview_listing(test_call):
-                count = len(test_call) if hasattr(test_call, "__len__") else "multiple"
-                logger.info("\u2713 API connection successful! Found %s data view(s)", count)
-            elif test_call is None:
-                logger.warning("API connection test returned None - connection may be unstable")
-            else:
-                # Error-shaped payload (e.g. {"statusCode": 500, "message": ...}) reached
-                # the probe because the status was non-retryable or retries were exhausted.
-                detail = _describe_unexpected_probe_payload(test_call)
-                logger.warning("API connection test returned unexpected payload: %s", detail)
+        if verify_connection:
+            # Test connection with a simple API call (with retry)
+            logger.info("Testing API connection...")
+            try:
+                # Attempt to list data views to verify connection with retry
+                test_call = make_api_call_with_retry(
+                    cja.getDataViews,
+                    logger=logger,
+                    operation_name="getDataViews (connection test)",
+                )
+                if _looks_like_dataview_listing(test_call):
+                    count = len(test_call) if hasattr(test_call, "__len__") else "multiple"
+                    logger.info("\u2713 API connection successful! Found %s data view(s)", count)
+                elif test_call is None:
+                    logger.warning("API connection test returned None - connection may be unstable")
+                else:
+                    # Error-shaped payload (e.g. {"statusCode": 500, "message": ...}) reached
+                    # the probe because the status was non-retryable or retries were exhausted.
+                    detail = _describe_unexpected_probe_payload(test_call)
+                    logger.warning("API connection test returned unexpected payload: %s", detail)
+                    logger.warning("Proceeding anyway - errors may occur during data fetching")
+            except RECOVERABLE_CONNECTION_TEST_EXCEPTIONS as test_error:
+                logger.warning("Could not verify connection with test call: %s", test_error)
                 logger.warning("Proceeding anyway - errors may occur during data fetching")
-        except RECOVERABLE_CONNECTION_TEST_EXCEPTIONS as test_error:
-            logger.warning("Could not verify connection with test call: %s", test_error)
-            logger.warning("Proceeding anyway - errors may occur during data fetching")
+        else:
+            logger.debug("Skipping API connection test (verified by caller)")
 
         logger.info("CJA initialization complete")
         return cja

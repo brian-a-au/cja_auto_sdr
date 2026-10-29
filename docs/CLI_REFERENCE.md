@@ -1566,7 +1566,7 @@ Processing data view: dv_677ea9291244fd082f02dd42
 ============================================================
 INITIALIZING CJA CONNECTION
 ============================================================
-✓ API connection successful! Found 85 data view(s)
+✓ CJA connection established successfully
 ============================================================
 VALIDATING DATA VIEW
 ============================================================

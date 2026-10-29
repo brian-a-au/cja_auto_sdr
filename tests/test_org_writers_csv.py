@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from unittest.mock import PropertyMock, patch
 
 from cja_auto_sdr.org.writers.csv import write_org_report_csv
 
@@ -44,3 +45,18 @@ def test_components_csv_bucket_assignment_unchanged(tmp_path, rich_org_report_re
     body = (Path(returned) / "org_report_components.csv").read_text(encoding="utf-8")
 
     assert body == EXPECTED_COMPONENTS_CSV
+
+
+def test_csv_writer_reads_successful_count_once_per_table(tmp_path, rich_org_report_result):
+    """The property loops over every summary, so it is read per table, not per component.
+
+    After hoisting there are two reads: one for the summary row and one ahead of
+    the components loop.
+    """
+    result = rich_org_report_result
+    logger = logging.getLogger("test_org_writers_csv")
+
+    with patch.object(type(result), "successful_data_views", new_callable=PropertyMock, return_value=3) as prop:
+        write_org_report_csv(result, None, str(tmp_path), logger)
+
+    assert prop.call_count <= 2

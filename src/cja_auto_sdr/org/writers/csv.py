@@ -171,13 +171,12 @@ def write_org_report_csv(
     for cid in (*dist.core_metrics, *dist.core_dimensions):
         bucket_by_id[cid] = "Core"
 
+    successful = result.successful_data_views
     comp_data = []
     for comp_id, info in result.component_index.items():
         bucket = bucket_by_id.get(comp_id, "Isolated")
 
-        coverage_pct = (
-            (info.presence_count / result.successful_data_views * 100) if result.successful_data_views > 0 else 0
-        )
+        coverage_pct = (info.presence_count / successful * 100) if successful > 0 else 0
 
         comp_data.append(
             {

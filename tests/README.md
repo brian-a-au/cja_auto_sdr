@@ -186,7 +186,7 @@ tests/
 └── README.md                        # This file
 ```
 
-**Total: 9,353 comprehensive tests**
+**Total: 9,358 comprehensive tests**
 
 ### Test Count Breakdown
 
@@ -195,16 +195,16 @@ tests/
 
 | Category | Tests | Files | Notes |
 |----------|-------|-------|-------|
-| `unit` | 9,202 | 168 | Default primary category for files without explicit integration/e2e/smoke scope |
+| `unit` | 9,207 | 168 | Default primary category for files without explicit integration/e2e/smoke scope |
 | `integration` | 118 | 3 | Cross-module integration suites |
 | `e2e` | 23 | 2 | End-to-end suites with a mocked external boundary |
 | `smoke` | 10 | 1 | Lightweight command-mode coverage |
 | `slow` | 0 | 0 | Overlay marker; these tests are also counted in a primary category |
-| **Primary Total** | **9,353** | **174** | **unit + integration + e2e + smoke** |
+| **Primary Total** | **9,358** | **174** | **unit + integration + e2e + smoke** |
 
 | CI Slice | Tests | Files | Selector |
 |----------|-------|-------|----------|
-| `test-unit` | 9,202 | 168 | `-m "unit and not slow"` |
+| `test-unit` | 9,207 | 168 | `-m "unit and not slow"` |
 | `test-integration` | 141 | 5 | `-m "integration or e2e or slow"` |
 | `smoke-test` | 10 | 1 | `-m smoke` |
 
@@ -231,7 +231,7 @@ tests/
 | `test_calculated_metrics_inventory.py` | 367 | Calculated metrics inventory feature |
 | `test_git_integration.py` | 61 | Git integration, snapshot management, inventory snapshots |
 | `test_output_formats.py` | 37 | CSV, JSON, HTML, Markdown output generation |
-| `test_cja_initialization.py` | 51 | CJA connection and configuration validation |
+| `test_cja_initialization.py` | 52 | CJA connection and configuration validation |
 | `test_cjapy_retry_interaction.py` | 58 | cjapy retry/status-payload normalization contract |
 | `test_classify_component_payload.py` | 10 | Shared component payload classification helper |
 | `test_utils.py` | 50 | Utility functions and helpers |
@@ -289,7 +289,7 @@ tests/
 | `test_org_analyzer_metadata_enrichment.py` | 3 | Org analyzer metadata enrichment payload handling |
 | `test_api_coverage.py` | 98 | API cache, quality, fetch, resilience exception paths |
 | `test_diff_coverage.py` | 75 | Diff comparator, models, git integration edge cases |
-| `test_generator_coverage.py` | 160 | Generator utility functions — coercion, normalization, diff formatting |
+| `test_generator_coverage.py` | 161 | Generator utility functions — coercion, normalization, diff formatting |
 | `test_generator_discovery_compat_coverage.py` | 44 | Generator discovery helper parity with extracted list-command implementations |
 | `test_segments_coverage.py` | 78 | Segment comparison operators, container types, sequence variants |
 | `test_diff_inventory_output.py` | 101 | Inventory diff output across all formats (console, JSON, HTML, Excel, MD, CSV) |
@@ -342,7 +342,7 @@ tests/
 | `test_github_actions_audit.py` | 7 | GitHub Actions audit workflow helper and manifest staging tests |
 | `test_example_automation_scripts.py` | 4 | Automation shell script validation tests |
 | `test_exit_codes.py` | 11 | Exit code helpers and signal detection tests |
-| `test_json_io.py` | 39 | JSON I/O atomic write and read tests |
+| `test_json_io.py` | 41 | JSON I/O atomic write and read tests |
 | `test_lock_info_normalization.py` | 54 | Lock-info normalization classmethod direct unit tests |
 | `test_resilience_edge_cases.py` | 74 | Resilience edge-case tests |
 | `test_cache_edge_cases.py` | 20 | Cache edge-case tests |
@@ -379,7 +379,7 @@ tests/
 | `test_cli_notion_prune.py` | 20 | CLI flag wiring for --notion-prune-orphans |
 | `test_cli_notion_repair.py` | 14 | CLI flag wiring for --notion-repair-database and --notion-print-database-schema |
 | `test_org_analyzer_similarity.py` | 42 | Org similarity characterization, streaming parity, thresholds, and dispatch tests |
-| `test_org_writers_csv.py` | 1 | Org components-CSV bucket-lookup characterization test |
+| `test_org_writers_csv.py` | 2 | Org components-CSV bucket-lookup characterization test |
 | `test_csv_staging.py` | 16 | Staged CSV bundle publication and completion manifest tests |
 | `test_sdr_markdown_escaping.py` | 4 | SDR markdown vectorized cell-escaping characterization test |
 | `test_diff_excel.py` | 3 | Diff Excel row-coloring characterization tests |
@@ -388,7 +388,7 @@ tests/
 | `test_diff_snapshot_retention.py` | 81 | Diff snapshot-retention parse-cache characterization test |
 | `test_diff_comparator_normalize.py` | 21 | Diff field-normalization type-fast-path characterization test |
 | `test_logging_diagnostics.py` | 2 | emit_diagnostic isEnabledFor guard characterization tests |
-| **Total** | **9,353** | **Collected via pytest --collect-only** |
+| **Total** | **9,358** | **Collected via pytest --collect-only** |
 
 ## Running Tests
 
@@ -846,7 +846,7 @@ the `tests/README.md` inventory tree or count table.
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (9,353 tests total)
+- [x] Comprehensive test coverage (9,358 tests total)
 - [x] Org-wide analysis tests (test_org_report.py) - 225 tests (including large org scaling, output path aliases, memory warnings, smart cache invalidation)
 - [x] Org-wide analysis integration tests (test_org_report_integration.py) - 42 tests (end-to-end flows, caching, filtering, governance thresholds)
 - [x] Profile management tests (test_profiles.py) - 88 tests
