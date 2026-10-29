@@ -1259,8 +1259,12 @@ def test_legacy_validation_uses_existing_modified_without_new_token(tmp_path, ca
     summary.modified = cached_modified
     cache.put(summary, include_metadata=True)
     # Model the pre-patch on-disk cache schema.
-    cache._cache["dv_legacy"].pop("validation_modified", None)
-    cache._save_cache()
+    cache_file = tmp_path / "org_report_cache.json"
+    payload = json.loads(cache_file.read_text())
+    payload["dv_legacy"].pop("validation_modified", None)
+    cache_file.write_text(json.dumps(payload))
+    # Prove the legacy fallback is what gets exercised.
+    assert "validation_modified" not in json.loads(cache_file.read_text())["dv_legacy"]
     reloaded = OrgReportCache(tmp_path)
     retrieved = reloaded.get("dv_legacy", current_modified="2024-01-15T10:00:00Z")
     if cached_modified:
@@ -1369,3 +1373,42 @@ class TestOrgReportCacheUnsearchableParent:
 
         cache = OrgReportCache(cache_dir=unsearchable_dir / "cache")
         assert cache.get_stats()["cache_size_bytes"] == 0
+
+
+def _disk_ids(cache_dir: Path) -> set[str]:
+    return set(json.loads((cache_dir / "org_report_cache.json").read_text()))
+
+
+def test_concurrent_instances_keep_each_others_entries(tmp_path):
+    a = OrgReportCache(cache_dir=tmp_path)
+    b = OrgReportCache(cache_dir=tmp_path)
+    a.put_many([_summary("dv_a")])
+    b.put_many([_summary("dv_b")])
+    assert _disk_ids(tmp_path) == {"dv_a", "dv_b"}
+
+
+def test_invalidate_one_id_keeps_entries_written_by_other_instance(tmp_path):
+    a = OrgReportCache(cache_dir=tmp_path)
+    b = OrgReportCache(cache_dir=tmp_path)
+    a.put_many([_summary("dv_a")])
+    b.put_many([_summary("dv_b")])
+    a.invalidate("dv_a")
+    assert _disk_ids(tmp_path) == {"dv_b"}
+
+
+def test_invalidate_all_then_put_writes_only_new_entries(tmp_path):
+    a = OrgReportCache(cache_dir=tmp_path)
+    a.put_many([_summary("dv_old")])
+    b = OrgReportCache(cache_dir=tmp_path)
+    b.invalidate()
+    b.put_many([_summary("dv_new")])
+    assert _disk_ids(tmp_path) == {"dv_new"}
+
+
+def test_save_survives_corrupt_disk_file(tmp_path, caplog):
+    a = OrgReportCache(cache_dir=tmp_path)
+    (tmp_path / "org_report_cache.json").write_text("{not json")
+    with caplog.at_level(logging.WARNING):
+        a.put_many([_summary("dv_a")])
+    assert _disk_ids(tmp_path) == {"dv_a"}
+    assert "Failed to load org report cache" in caplog.text

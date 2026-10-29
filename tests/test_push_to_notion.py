@@ -111,3 +111,32 @@ class TestPushToNotionUnsearchableParent:
         with pytest.raises(SystemExit):
             _push_to_notion_from_json(str(unsearchable_dir / "report.json"))
         assert "file not found" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("content", ["[1, 2]", '"text"', "null"])
+def test_push_non_object_json_exits_1_without_traceback(tmp_path, capsys, content):
+    from cja_auto_sdr.generator import _push_to_notion_from_json
+
+    path = tmp_path / "bad_shape.json"
+    path.write_text(content)
+    with pytest.raises(SystemExit) as exc_info:
+        _push_to_notion_from_json(str(path), output_dir=str(tmp_path))
+    assert exc_info.value.code == 1
+    assert "must contain a JSON object" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("section", ["derived_fields", "calculated_metrics", "segments"])
+def test_push_null_inventory_section_is_skipped(tmp_path, section):
+    from cja_auto_sdr.generator import _push_to_notion_from_json
+
+    payload = {"metadata": {}, "metrics": [{"Name": "Visits"}], section: None}
+    path = tmp_path / "null_section.json"
+    path.write_text(json.dumps(payload))
+    with patch(
+        "cja_auto_sdr.output.writers.notion.write_notion_output",
+        return_value="notion://pages/x",
+    ) as mock_write:
+        result = _push_to_notion_from_json(str(path), output_dir=str(tmp_path))
+
+    assert result == "notion://pages/x"
+    assert list(mock_write.call_args.kwargs["data_dict"]) == ["Metrics"]

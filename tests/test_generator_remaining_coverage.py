@@ -1909,6 +1909,29 @@ class TestMainRunSummaryFailure:
             captured = capsys.readouterr()
             assert "Failed to write run summary" in captured.err
 
+    @staticmethod
+    def _run_main_with_failing_summary(original):
+        from cja_auto_sdr.generator import main
+
+        with (
+            patch("cja_auto_sdr.generator._cli_option_value", return_value="/bad/path/summary.json"),
+            patch("cja_auto_sdr.generator._cli_option_specified", return_value=False),
+            patch("cja_auto_sdr.generator._main_impl", side_effect=SystemExit(original)),
+            patch("cja_auto_sdr.generator.write_run_summary_output", side_effect=OSError("Permission denied")),
+            pytest.raises(SystemExit) as exc,
+        ):
+            main()
+        return exc.value.code
+
+    def test_run_summary_write_failure_on_success_exits_1(self, capsys):
+        assert self._run_main_with_failing_summary(0) == 1
+        assert "Failed to write run summary" in capsys.readouterr().err
+
+    @pytest.mark.parametrize("original", [2, 130])
+    def test_run_summary_write_failure_keeps_original_failure_code(self, original, capsys):
+        assert self._run_main_with_failing_summary(original) == original
+        assert "Failed to write run summary" in capsys.readouterr().err
+
 
 # ===========================================================================
 # _main_impl: failed result error display (15312-15314)

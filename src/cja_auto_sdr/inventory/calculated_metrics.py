@@ -704,7 +704,7 @@ class CalculatedMetricsInventoryBuilder:
         # Convert to display names
         functions_display = [
             CALC_METRIC_FUNCTION_DISPLAY_NAMES.get(f, f.replace("-", " ").title())
-            for f in functions_internal
+            for f in sorted(functions_internal)
             if f != "number"  # Don't show static numbers
         ]
 
@@ -719,7 +719,7 @@ class CalculatedMetricsInventoryBuilder:
         )
 
         return {
-            "functions_internal": list(functions_internal),
+            "functions_internal": sorted(functions_internal),
             "functions_display": functions_display,
             "metric_references": sorted(metric_refs),
             "segment_references": sorted(segment_refs),

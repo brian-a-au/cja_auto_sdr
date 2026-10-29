@@ -989,7 +989,9 @@ def handle_compare_snapshots_command(
         _populate_diff_advisory_rollup(runtime_details, diff_result, changes_only=changes_only)
         return True, diff_result.summary.has_changes, exit_code_override
     except FileNotFoundError as e:
-        print(generator.ConsoleColors.error(f"ERROR: Snapshot file not found: {e!s}"), file=sys.stderr)
+        detail = str(e)
+        message = detail if detail.startswith("Snapshot file not found") else f"Snapshot file not found: {detail}"
+        print(generator.ConsoleColors.error(f"ERROR: {message}"), file=sys.stderr)
         return False, False, None
     except ValueError as e:
         if _emit_requested_inventory_failure(generator, e):

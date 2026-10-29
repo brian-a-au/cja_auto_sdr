@@ -583,6 +583,7 @@ fi
 |------------------------------------------|------------------------------------------------|--------------------------------------------------------------------------------------------------|
 | Exit 1 with `error_type: configuration_error` | Missing or expired credentials             | Verify `ORG_ID`, `CLIENT_ID`, `SECRET` env vars are set and the secret has not expired           |
 | Exit 1 with `error_type: api_error`      | API connectivity failure or rate limit         | Check network access to Adobe IMS/CJA endpoints; implement retry with `--max-retries` and `--retry-max-delay` |
+| Exit 1 with `error_type: output_error`   | The `--output` path is a directory or cannot be written | Choose a writable file path for `--output`                                                       |
 | Stale snapshot comparison misses changes | Snapshot file is too old or wrong data view    | Re-run `uv run cja_auto_sdr <dv_id> --snapshot <file>` to refresh; check `--snapshot-dir` path  |
 | Git commit step fails in CI              | Missing git identity on runner                 | Set `git config user.email` and `git config user.name` in the workflow before any git steps      |
 | Rate limiting (429 errors)               | Too many concurrent requests                   | Reduce `--workers` count; increase `--retry-base-delay`; use `--org-report --use-cache`          |

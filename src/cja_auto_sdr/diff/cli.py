@@ -316,6 +316,7 @@ def dispatch_snapshot_cli_modes(
     generator = _generator_module()
 
     if getattr(args, "list_snapshots", False):
+        generator._preflight_output_file(getattr(args, "output", None), output_to_stdout)
         if data_view_inputs and any(not generator.is_data_view_id(dv) for dv in data_view_inputs):
             generator._exit_error("--list-snapshots filters only support DATA_VIEW_ID values (e.g., dv_12345)")
 
@@ -335,12 +336,15 @@ def dispatch_snapshot_cli_modes(
                 "count": len(snapshots),
                 "snapshots": snapshots,
             }
-            generator._emit_json_output(
-                payload,
-                output_file=getattr(args, "output", None),
-                is_stdout=output_to_stdout,
-                contract_label="Snapshot listing output",
-            )
+            try:
+                generator._emit_json_output(
+                    payload,
+                    output_file=getattr(args, "output", None),
+                    is_stdout=output_to_stdout,
+                    contract_label="Snapshot listing output",
+                )
+            except OSError as e:
+                generator._exit_error(f"Failed to write output to '{getattr(args, 'output', None)}': {e}")
         elif list_output_format == "csv":
             rows = [
                 {
@@ -353,7 +357,7 @@ def dispatch_snapshot_cli_modes(
                 }
                 for s in snapshots
             ]
-            generator._emit_output(
+            generator._emit_output_or_exit(
                 generator._format_as_csv(
                     ["data_view_id", "data_view_name", "created_at", "metrics_count", "dimensions_count", "filepath"],
                     rows,
@@ -380,7 +384,7 @@ def dispatch_snapshot_cli_modes(
                 )
             else:
                 table_text = f"\nNo snapshots found in {getattr(args, 'snapshot_dir', './snapshots')}.\n"
-            generator._emit_output(table_text, getattr(args, "output", None), output_to_stdout)
+            generator._emit_output_or_exit(table_text, getattr(args, "output", None), output_to_stdout)
 
         if run_state is not None:
             run_state["output_format"] = list_output_format
@@ -390,6 +394,7 @@ def dispatch_snapshot_cli_modes(
         sys.exit(0)
 
     if getattr(args, "prune_snapshots", False):
+        generator._preflight_output_file(getattr(args, "output", None), output_to_stdout)
         if data_view_inputs and any(not generator.is_data_view_id(dv) for dv in data_view_inputs):
             generator._exit_error("--prune-snapshots filters only support DATA_VIEW_ID values (e.g., dv_12345)")
 
@@ -450,15 +455,18 @@ def dispatch_snapshot_cli_modes(
                 "target_data_view_ids": target_ids,
                 "retention": {"keep_last": effective_keep_last, "keep_since": effective_keep_since},
             }
-            generator._emit_json_output(
-                payload,
-                output_file=getattr(args, "output", None),
-                is_stdout=output_to_stdout,
-                contract_label="Snapshot prune output",
-            )
+            try:
+                generator._emit_json_output(
+                    payload,
+                    output_file=getattr(args, "output", None),
+                    is_stdout=output_to_stdout,
+                    contract_label="Snapshot prune output",
+                )
+            except OSError as e:
+                generator._exit_error(f"Failed to write output to '{getattr(args, 'output', None)}': {e}")
         elif prune_output_format == "csv":
             rows = [{"filepath": path} for path in unique_deleted]
-            generator._emit_output(
+            generator._emit_output_or_exit(
                 generator._format_as_csv(["filepath"], rows),
                 getattr(args, "output", None),
                 output_to_stdout,
@@ -477,7 +485,7 @@ def dispatch_snapshot_cli_modes(
                 lines.extend(["", "Deleted files:"])
                 lines.extend([f"  - {Path(path).name}" for path in unique_deleted])
             lines.append("")
-            generator._emit_output("\n".join(lines), getattr(args, "output", None), output_to_stdout)
+            generator._emit_output_or_exit("\n".join(lines), getattr(args, "output", None), output_to_stdout)
 
         if run_state is not None:
             run_state["output_format"] = prune_output_format
