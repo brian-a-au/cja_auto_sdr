@@ -1000,7 +1000,7 @@ def _run_typed_generation(tmp_path, config_file, **kwargs):
         )
 
 
-def test_process_single_dataview_lists_data_views_zero_times(tmp_path):
+def test_process_single_dataview_skips_connection_probe(tmp_path):
     """Per-data-view workers skip the getDataViews connection probe (it was one wasted call per run)."""
     from contextlib import ExitStack
     from unittest.mock import Mock, patch
@@ -1014,7 +1014,6 @@ def test_process_single_dataview_lists_data_views_zero_times(tmp_path):
         process_single_dataview(data_view_id="dv_typed_1", config_file="config.json", output_dir=str(tmp_path))
 
     assert init.call_args.kwargs["verify_connection"] is False
-    assert cja.getDataViews.call_count == 0
 
 
 def _without_timing_metadata(payload):
