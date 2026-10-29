@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import struct
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -47,7 +48,7 @@ class SnapshotManager:
                     with open(tz_key, "rb") as tz_file:
                         return ZoneInfo.from_file(tz_file)
                 return ZoneInfo(tz_key)
-            except (ZoneInfoNotFoundError, ValueError, OSError):
+            except (ZoneInfoNotFoundError, ValueError, OSError, struct.error):
                 pass
 
         try:
@@ -61,7 +62,7 @@ class SnapshotManager:
             try:
                 with open(localtime_path, "rb") as tz_file:
                     return ZoneInfo.from_file(tz_file)
-            except OSError:
+            except (OSError, ValueError, struct.error):
                 continue
 
         return datetime.now().astimezone().tzinfo or UTC

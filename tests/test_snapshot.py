@@ -143,9 +143,30 @@ def test_absolute_tz_path_is_honored(monkeypatch, tz_value):
     assert tz.utcoffset(datetime(2026, 1, 15, 12)) == timedelta(hours=-5)
 
 
+def _tz_fingerprint(tz):
+    """Behavioral fingerprint (ZoneInfo.from_file instances never compare equal)."""
+    return tuple(tz.utcoffset(datetime(2026, month, 15, 12)) for month in (1, 7))
+
+
 def test_unloadable_tz_path_falls_back_without_raising(monkeypatch):
+    monkeypatch.delenv("TZ", raising=False)
+    expected = _tz_fingerprint(SnapshotManager._default_snapshot_timezone())
     monkeypatch.setenv("TZ", "/nonexistent/zone")
-    assert SnapshotManager._default_snapshot_timezone() is not None
+    assert _tz_fingerprint(SnapshotManager._default_snapshot_timezone()) == expected
+
+
+@pytest.mark.parametrize(
+    "content",
+    [b"not a tzif file at all", b"TZif2" + b"\x00" * 20],
+    ids=["garbage", "truncated_tzif"],
+)
+def test_malformed_tz_file_falls_back_without_raising(monkeypatch, tmp_path, content):
+    monkeypatch.delenv("TZ", raising=False)
+    expected = _tz_fingerprint(SnapshotManager._default_snapshot_timezone())
+    bad = tmp_path / "bad_zone"
+    bad.write_bytes(content)
+    monkeypatch.setenv("TZ", str(bad))
+    assert _tz_fingerprint(SnapshotManager._default_snapshot_timezone()) == expected
 
 
 # ==================== _parse_snapshot_created_at Tests ====================
