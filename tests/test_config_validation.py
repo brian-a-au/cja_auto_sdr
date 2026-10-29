@@ -673,3 +673,36 @@ class TestValidateConfigFileUnsearchableParent:
         from cja_auto_sdr.core.config_validation import validate_config_file
 
         assert validate_config_file(unsearchable_dir / "config.json", logging.getLogger("test")) is False
+
+
+class TestValidateConfigOnlyMalformedConfig:
+    """--validate-config must diagnose malformed config files without a traceback."""
+
+    @staticmethod
+    def _isolate(tmp_path, monkeypatch):
+        for var in ("ORG_ID", "CLIENT_ID", "SECRET", "SCOPES", "SANDBOX", "CJA_PROFILE"):
+            monkeypatch.delenv(var, raising=False)
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.setenv("USERPROFILE", str(tmp_path))
+        monkeypatch.setenv("CJA_HOME", str(tmp_path / "cja_home"))
+        monkeypatch.chdir(tmp_path)
+
+    def test_validate_config_list_root_fails_cleanly(self, tmp_path, monkeypatch, capsys):
+        from cja_auto_sdr.generator import validate_config_only
+
+        self._isolate(tmp_path, monkeypatch)
+        cfg = tmp_path / "c.json"
+        cfg.write_text("[]")
+
+        assert validate_config_only(config_file=str(cfg)) is False
+        assert "must contain a JSON object" in capsys.readouterr().out
+
+    def test_validate_config_non_string_secret_fails_cleanly(self, tmp_path, monkeypatch, capsys):
+        from cja_auto_sdr.generator import validate_config_only
+
+        self._isolate(tmp_path, monkeypatch)
+        cfg = tmp_path / "c.json"
+        cfg.write_text(json.dumps({"org_id": "o@AdobeOrg", "client_id": "abcdefghijk", "secret": 1234567890123}))
+
+        assert validate_config_only(config_file=str(cfg)) is False
+        assert "secret: must be a string" in capsys.readouterr().out
