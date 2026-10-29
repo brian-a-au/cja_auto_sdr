@@ -293,7 +293,7 @@ class BatchProcessor:
                         self.logger.warning("[%s] Interrupted - cancelling remaining tasks...", self.batch_id)
                         for pending in future_to_dv:
                             pending.cancel()
-                        executor.shutdown(wait=False, cancel_futures=True)
+                        executor.shutdown(wait=True, cancel_futures=True)
                         raise
         finally:
             if self._shared_cache is not None:

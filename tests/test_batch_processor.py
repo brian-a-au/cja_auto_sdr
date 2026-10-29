@@ -619,9 +619,56 @@ class TestBatchProcessorProcessBatch:
             processor.process_batch([f"dv_{i}" for i in range(5)])
 
         assert all(f.cancel.called for f in futures)
-        fake_executor.shutdown.assert_any_call(wait=False, cancel_futures=True)
+        fake_executor.shutdown.assert_called_once_with(wait=True, cancel_futures=True)
         interrupt_logs = [c for c in mock_logger.warning.call_args_list if "Interrupted" in str(c)]
         assert len(interrupt_logs) == 1
+
+    @patch("cja_auto_sdr.generator.setup_logging")
+    @patch("cja_auto_sdr.generator.tqdm")
+    def test_shared_cache_shutdown_after_executor_shutdown_on_interrupt(
+        self,
+        mock_tqdm,
+        mock_setup_logging,
+        mock_config_file,
+        temp_output_dir,
+    ):
+        """Shared cache must be torn down only after in-flight workers have finished"""
+        mock_setup_logging.return_value = Mock()
+        mock_tqdm.return_value.__enter__ = Mock(return_value=MagicMock())
+        mock_tqdm.return_value.__exit__ = Mock(return_value=False)
+
+        fake_executor = MagicMock()
+        fake_executor.__enter__.return_value = fake_executor
+        fake_executor.__exit__.return_value = False
+        fake_executor.submit.return_value = MagicMock()
+
+        def interrupted_as_completed(fs):
+            raise KeyboardInterrupt
+            yield
+
+        mock_shared_cache = Mock()
+        mock_shared_cache.get_statistics.return_value = {"hits": 0, "misses": 0, "hit_rate": 0.0}
+        parent = MagicMock()
+        parent.attach_mock(fake_executor.shutdown, "executor_shutdown")
+        parent.attach_mock(mock_shared_cache.shutdown, "cache_shutdown")
+
+        processor = BatchProcessor(
+            config_file=mock_config_file,
+            output_dir=temp_output_dir,
+            enable_cache=True,
+            shared_cache=True,
+        )
+        processor._shared_cache = mock_shared_cache
+        with (
+            patch("cja_auto_sdr.generator.ProcessPoolExecutor", return_value=fake_executor),
+            patch("cja_auto_sdr.generator.as_completed", side_effect=interrupted_as_completed),
+            pytest.raises(KeyboardInterrupt),
+        ):
+            processor.process_batch(["dv_1"])
+
+        names = [c[0] for c in parent.mock_calls if c[0] in ("executor_shutdown", "cache_shutdown")]
+        assert names == ["executor_shutdown", "cache_shutdown"]
+        assert fake_executor.shutdown.call_args.kwargs["wait"] is True
 
 
 class TestBatchProcessorPrintSummary:
