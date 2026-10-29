@@ -52,7 +52,13 @@ def _dumps_json_text(
     default: Callable[[Any], Any] | None,
     trailing_newline: bool,
 ) -> str:
-    """Serialize with ``json.dumps`` (C encoder on 3.13+) before any file is opened or truncated."""
+    """Serialize with ``json.dumps`` before any file is opened or truncated.
+
+    ``json.dumps`` uses the C encoder for every call with ``indent=None``, on all
+    supported Python versions. With ``indent`` set it uses the C encoder only on
+    Python 3.13+; older versions fall back to the pure-Python encoder. Serializing
+    first also means a serialization error can never truncate an existing file.
+    """
     text = json.dumps(
         payload,
         indent=indent,
