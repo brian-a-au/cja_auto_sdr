@@ -236,59 +236,65 @@ class BatchProcessor:
                     bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]",
                     disable=self.quiet,
                 ) as pbar:
-                    for future in generator.as_completed(future_to_dv):
-                        dv_id = future_to_dv[future]
-                        try:
-                            result = future.result()
+                    try:
+                        for future in generator.as_completed(future_to_dv):
+                            dv_id = future_to_dv[future]
+                            try:
+                                result = future.result()
 
-                            if result.success:
-                                results["successful"].append(result)
-                                pbar.set_postfix_str(f"✓ {dv_id[:20]}", refresh=True)
-                                self.logger.info("[%s] ✓ %s: SUCCESS (%.1fs)", self.batch_id, dv_id, result.duration)
-                            else:
-                                results["failed"].append(result)
-                                pbar.set_postfix_str(f"✗ {dv_id[:20]}", refresh=True)
-                                self.logger.error("[%s] ✗ %s: FAILED - %s", self.batch_id, dv_id, result.error_message)
+                                if result.success:
+                                    results["successful"].append(result)
+                                    pbar.set_postfix_str(f"✓ {dv_id[:20]}", refresh=True)
+                                    self.logger.info(
+                                        "[%s] ✓ %s: SUCCESS (%.1fs)", self.batch_id, dv_id, result.duration
+                                    )
+                                else:
+                                    results["failed"].append(result)
+                                    pbar.set_postfix_str(f"✗ {dv_id[:20]}", refresh=True)
+                                    self.logger.error(
+                                        "[%s] ✗ %s: FAILED - %s", self.batch_id, dv_id, result.error_message
+                                    )
+
+                                    if not self.continue_on_error:
+                                        self.logger.warning(
+                                            "[%s] Stopping batch processing due to error (use --continue-on-error to continue)",
+                                            self.batch_id,
+                                        )
+                                        for pending in future_to_dv:
+                                            pending.cancel()
+                                        break
+
+                            except Exception as e:  # Intentional: batch worker resilience boundary
+                                is_expected = isinstance(e, generator.RECOVERABLE_BATCH_WORKER_EXCEPTIONS)
+                                prefix = "EXCEPTION" if is_expected else "UNEXPECTED EXCEPTION"
+                                self.logger.error("[%s] ✗ %s: %s - %s", self.batch_id, dv_id, prefix, e)
+                                if not is_expected:
+                                    self.logger.debug("Unexpected batch worker error", exc_info=True)
+                                results["failed"].append(
+                                    generator.ProcessingResult(
+                                        data_view_id=dv_id,
+                                        data_view_name="Unknown",
+                                        success=False,
+                                        duration=0,
+                                        error_message=str(e),
+                                        failure_code=generator.FAILURE_CODE_BATCH_WORKER_EXCEPTION,
+                                        failure_reason=f"batch_worker_exception:{type(e).__name__}",
+                                    ),
+                                )
 
                                 if not self.continue_on_error:
-                                    self.logger.warning(
-                                        "[%s] Stopping batch processing due to error (use --continue-on-error to continue)",
-                                        self.batch_id,
-                                    )
+                                    self.logger.warning("[%s] Stopping batch processing due to error", self.batch_id)
                                     for pending in future_to_dv:
                                         pending.cancel()
                                     break
 
-                        except (KeyboardInterrupt, SystemExit):
-                            self.logger.warning("[%s] Interrupted - cancelling remaining tasks...", self.batch_id)
-                            for pending in future_to_dv:
-                                pending.cancel()
-                            raise
-                        except Exception as e:  # Intentional: batch worker resilience boundary
-                            is_expected = isinstance(e, generator.RECOVERABLE_BATCH_WORKER_EXCEPTIONS)
-                            prefix = "EXCEPTION" if is_expected else "UNEXPECTED EXCEPTION"
-                            self.logger.error("[%s] ✗ %s: %s - %s", self.batch_id, dv_id, prefix, e)
-                            if not is_expected:
-                                self.logger.debug("Unexpected batch worker error", exc_info=True)
-                            results["failed"].append(
-                                generator.ProcessingResult(
-                                    data_view_id=dv_id,
-                                    data_view_name="Unknown",
-                                    success=False,
-                                    duration=0,
-                                    error_message=str(e),
-                                    failure_code=generator.FAILURE_CODE_BATCH_WORKER_EXCEPTION,
-                                    failure_reason=f"batch_worker_exception:{type(e).__name__}",
-                                ),
-                            )
-
-                            if not self.continue_on_error:
-                                self.logger.warning("[%s] Stopping batch processing due to error", self.batch_id)
-                                for pending in future_to_dv:
-                                    pending.cancel()
-                                break
-
-                        pbar.update(1)
+                            pbar.update(1)
+                    except (KeyboardInterrupt, SystemExit):
+                        self.logger.warning("[%s] Interrupted - cancelling remaining tasks...", self.batch_id)
+                        for pending in future_to_dv:
+                            pending.cancel()
+                        executor.shutdown(wait=False, cancel_futures=True)
+                        raise
         finally:
             if self._shared_cache is not None:
                 cache_stats = self._shared_cache.get_statistics()
