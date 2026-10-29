@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import io
 import json
+import logging
 import os
 from contextlib import redirect_stdout
 from unittest.mock import MagicMock, patch
@@ -684,3 +685,20 @@ def test_segment_and_calculated_metric_display_rows_match_extracted_module() -> 
     assert generator._build_calculated_metric_display_row(
         item
     ) == discovery_commands._build_calculated_metric_display_row(item)
+
+
+def test_list_dataviews_json_stderr_is_only_json_without_credentials(tmp_path, monkeypatch, capsys) -> None:
+    """Real configure_cjapy fails before any network call; stderr must stay pure JSON."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    for var in ("ORG_ID", "CLIENT_ID", "SECRET", "SCOPES", "SANDBOX", "CJA_PROFILE"):
+        monkeypatch.delenv(var, raising=False)
+    # pytest's logging plugin attaches root handlers, which hides Python's lastResort
+    # stderr handler. Drop them so the test sees what a real CLI run sees.
+    monkeypatch.setattr(logging.getLogger(), "handlers", [])
+
+    assert generator.list_dataviews(output_format="json") is False
+
+    err_lines = [line for line in capsys.readouterr().err.splitlines() if line.strip()]
+    assert err_lines
+    assert all(json.loads(line) for line in err_lines)

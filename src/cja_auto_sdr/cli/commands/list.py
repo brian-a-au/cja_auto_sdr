@@ -150,7 +150,15 @@ def _run_list_command(
         if validate_inputs:
             validate_inputs()
 
-        logger = logging.getLogger(command_name)
+        if is_machine_readable:
+            # No handler would let logging's lastResort print plain text on stderr
+            # ahead of the JSON error envelope, so swallow log records in machine modes.
+            logger = logging.getLogger(f"{command_name}.machine")
+            logger.propagate = False
+            if not logger.handlers:
+                logger.addHandler(logging.NullHandler())
+        else:
+            logger = logging.getLogger(command_name)
         logger.setLevel(logging.WARNING)
         success, source, _ = _generator.configure_cjapy(
             profile=active_profile,
