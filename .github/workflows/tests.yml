@@ -91,7 +91,9 @@ jobs:
           if [ "$PYTHON_VERSION" = "3.14" ]; then
             cov_args=(--cov=cja_auto_sdr --cov-report=term --cov-fail-under=95)
           fi
-          uv run --locked pytest tests/ -v --tb=short \
+          # -q overrides pytest.ini's -v: per-test lines from 9K+ tests bloat
+          # the log without helping triage (failures still print in full).
+          uv run --locked pytest tests/ -q --tb=short \
             -m "unit and not slow" -n auto \
             "${cov_args[@]}" \
             --durations=25 | tee /tmp/test-unit.log
@@ -138,6 +140,17 @@ jobs:
             echo ""
             echo "_Source: \`update-badges\` workflow consumes the same parse from this run on \`main\` to refresh the README badges. PR drift from main is informational here, not gated._"
           } >> "$GITHUB_STEP_SUMMARY"
+          printf '{"coverage": "%s", "tests": "%s"}\n' "$COV" "$TESTS" > /tmp/test-metrics.json
+      - name: Upload badge metrics for update-badges
+        # update-badges reads these instead of re-running the coverage suite.
+        if: ${{ success() && matrix.python-version == '3.14' && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: test-metrics
+          path: /tmp/test-metrics.json
+          # A metrics parse failure only warns above; skip the badge refresh too.
+          if-no-files-found: warn
+          retention-days: 7
 
   test-integration:
     runs-on: ubuntu-latest
@@ -156,11 +169,12 @@ jobs:
           prune-cache: false
       - name: Sync dependencies
         run: uv sync --locked --dev --extra clustering
-      - name: Run integration, end-to-end, and slow test slices
+      - name: Run integration, end-to-end, slow, and smoke test slices
         shell: bash
         run: |
           set -o pipefail
-          uv run --locked pytest tests/ -q --tb=short -m "integration or e2e or slow" --durations=25 | tee /tmp/test-integration.log
+          # Linux smoke tests run here; smoke-test covers macOS and Windows.
+          uv run --locked pytest tests/ -q --tb=short -m "integration or e2e or slow or smoke" --durations=25 | tee /tmp/test-integration.log
           {
             echo "### test-integration slowest tests"
             echo '```text'
@@ -168,36 +182,16 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-  run-summary-contract:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.11", "3.14"]
-    steps:
-      - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10.3.2
-        with:
-          python-version: ${{ matrix.python-version }}
-          enable-cache: true
-          cache-dependency-glob: uv.lock
-          prune-cache: false
-      - name: Sync dependencies
-        run: uv sync --locked --dev
-      - name: Run run-summary JSON contract tests
-        run: >
-          uv run --locked pytest -q tests/test_quality_policy_and_run_summary.py
-          -m run_summary_contract
-
   smoke-test:
+    # Linux smoke tests run in test-integration. macOS runners queue longest,
+    # so PRs check the newest Python only; main pushes add the 3.11 floor.
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        python-version: ["3.11", "3.14"]
+        os: [windows-latest, macos-latest]
+        python-version: ${{ fromJSON(github.event_name == 'pull_request' && '["3.14"]' || '["3.11", "3.14"]') }}
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.3.2
@@ -216,13 +210,14 @@ jobs:
       - name: Smoke test - parser and contract tests
         run: uv run --locked pytest tests/ -q --tb=short -m smoke
 
-  no-extras-smoke:
-    # Confirm the package imports and runs without the optional `notion-client`
-    # extra installed. The `dev` group includes notion-client for tests, so we
-    # build the wheel and install it into a fresh, isolated venv without any
-    # extras — the same shape users get from `pip install cja-auto-sdr`.
+  build:
+    # One wheel, three install checks: a plain uv install, a no-extras install
+    # (the optional `notion-client` extra must stay optional; the `dev` group
+    # includes it for tests), and a plain-pip install on the Python 3.11 floor
+    # the way a user without uv would, resolving numpy/pandas from PyPI rather
+    # than uv.lock. Folded into one job to save runner slots.
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.3.2
@@ -231,19 +226,26 @@ jobs:
           enable-cache: true
           cache-dependency-glob: uv.lock
           prune-cache: false
-      - name: Build wheel
+      - name: Clean build artifacts
+        run: rm -f dist/*.whl dist/*.tar.gz
+      - name: Build package
+        run: uv build
+      - name: Locate the wheel
+        id: wheel
+        shell: bash
         run: |
-          rm -f dist/*.whl dist/*.tar.gz
-          uv build --wheel
-      - name: Install wheel into isolated venv (no extras, no dev deps)
-        run: |
-          uv venv /tmp/no-extras-venv --python 3.14
           wheels=(dist/*.whl)
           if [ "${#wheels[@]}" -ne 1 ]; then
             echo "::error::Expected exactly one wheel, found ${#wheels[@]}" >&2
             exit 1
           fi
-          uv pip install "${wheels[0]}" --python /tmp/no-extras-venv/bin/python
+          echo "path=${wheels[0]}" >> "$GITHUB_OUTPUT"
+      - name: Install wheel into isolated venv (no extras, no dev deps)
+        env:
+          WHEEL: ${{ steps.wheel.outputs.path }}
+        run: |
+          uv venv /tmp/no-extras-venv --python 3.14
+          uv pip install "$WHEEL" --python /tmp/no-extras-venv/bin/python
       - name: Confirm notion_client is NOT installed in this environment
         run: |
           if /tmp/no-extras-venv/bin/python -c "import notion_client" 2>/dev/null; then
@@ -252,39 +254,20 @@ jobs:
           fi
       - name: Package imports cleanly without notion_client
         run: |
+          /tmp/no-extras-venv/bin/python -c "from cja_auto_sdr.core.version import __version__; print(f'v{__version__}')"
           /tmp/no-extras-venv/bin/python -m cja_auto_sdr --version
+          /tmp/no-extras-venv/bin/python -m cja_auto_sdr --exit-codes > /dev/null
           /tmp/no-extras-venv/bin/python -c "import cja_auto_sdr; import cja_auto_sdr.output.writers.notion as _n; print('module loads:', _n.__name__)"
-
-  pip-install-smoke:
-    # Install the wheel with plain pip on the Python 3.11 floor, the way a user
-    # on a locked-down machine without uv would. pip resolves numpy and pandas
-    # from PyPI itself here, not from uv.lock.
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10.3.2
-        with:
-          python-version: "3.11"
-          enable-cache: true
-          cache-dependency-glob: uv.lock
-          prune-cache: false
-      - name: Build wheel
-        run: |
-          rm -f dist/*.whl dist/*.tar.gz
-          uv build --wheel
-      - name: Install wheel with pip into a stdlib venv
+      - name: Install wheel with pip into a stdlib venv on Python 3.11
         shell: bash
+        env:
+          WHEEL: ${{ steps.wheel.outputs.path }}
         run: |
+          uv python install 3.11
           python3_11="$(uv python find 3.11)"
           "$python3_11" -m venv /tmp/pip-venv
-          wheels=(dist/*.whl)
-          if [ "${#wheels[@]}" -ne 1 ]; then
-            echo "::error::Expected exactly one wheel, found ${#wheels[@]}" >&2
-            exit 1
-          fi
           /tmp/pip-venv/bin/python -m pip install --upgrade pip
-          /tmp/pip-venv/bin/python -m pip install "${wheels[0]}"
+          /tmp/pip-venv/bin/python -m pip install "$WHEEL"
       - name: CLI starts on Python 3.11
         shell: bash
         run: |
@@ -308,42 +291,15 @@ jobs:
           fi
           /tmp/pip-venv/bin/python -c "import numpy, pandas; print('numpy', numpy.__version__, 'pandas', pandas.__version__)"
 
-  build:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10.3.2
-        with:
-          python-version: "3.14"
-          enable-cache: true
-          cache-dependency-glob: uv.lock
-          prune-cache: false
-      - name: Clean build artifacts
-        run: rm -f dist/*.whl dist/*.tar.gz
-      - name: Build package
-        run: uv build
-      - name: Verify wheel installs
-        shell: bash
-        run: |
-          uv venv /tmp/test-install
-          wheels=(dist/*.whl)
-          if [ "${#wheels[@]}" -ne 1 ]; then
-            echo "Expected exactly one wheel artifact, found ${#wheels[@]}" >&2
-            exit 1
-          fi
-          uv pip install "${wheels[0]}" --python /tmp/test-install/bin/python
-          /tmp/test-install/bin/python -c "from cja_auto_sdr.core.version import __version__; print(f'v{__version__}')"
-
   ci-gate:
     if: always()
-    needs: [test-unit, test-integration, run-summary-contract, smoke-test, no-extras-smoke, pip-install-smoke, build]
+    needs: [test-unit, test-integration, smoke-test, build]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Verify all required jobs passed
         # Design note: the check below treats any non-"success" result
-        # (including "skipped") as a failure. This is intentional — all seven
+        # (including "skipped") as a failure. This is intentional — all four
         # required jobs are unconditional. If a job is ever made conditional
         # (with an `if:` guard), its "skipped" result will fail this gate;
         # update the check accordingly if that happens.
@@ -351,10 +307,7 @@ jobs:
           declare -A results=(
             [test-unit]="${{ needs.test-unit.result }}"
             [test-integration]="${{ needs.test-integration.result }}"
-            [run-summary-contract]="${{ needs.run-summary-contract.result }}"
             [smoke-test]="${{ needs.smoke-test.result }}"
-            [no-extras-smoke]="${{ needs.no-extras-smoke.result }}"
-            [pip-install-smoke]="${{ needs.pip-install-smoke.result }}"
             [build]="${{ needs.build.result }}"
           )
           failed=0

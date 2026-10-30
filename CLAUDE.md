@@ -187,12 +187,13 @@ uv run pytest tests/ --collect-only -q  # Get accurate test count
 
 | Workflow | Purpose |
 |----------|---------|
-| `tests.yml` | Unit tests (95% coverage gate, `-n auto` xdist), integration/e2e/slow tests, run-summary contracts, cross-platform smoke tests, package build |
+| `tests.yml` | Unit tests (95% coverage gate, `-n auto` xdist), integration/e2e/slow/Linux smoke tests, macOS/Windows smoke tests (3.14 on PRs, 3.11+3.14 on main), package build + no-extras + pip-on-3.11 install checks |
 | `lint.yml` | Ruff check + format, actionlint, shellcheck |
 | `dependency-review.yml` | Blocks pull requests that introduce moderate-or-higher vulnerable dependencies |
 | `version-sync.yml` | `scripts/check_version_sync.py` — single source of truth for version consistency |
 | `patch-release-gate.yml` | Release validation (version, changelog, docs, tag ref, test counts) |
 | `test-counts.yml` | Validates README test count inventory is current |
+| `update-badges.yml` | Refreshes README coverage/test-count badges from the main `tests` run's `test-metrics` artifact (no re-run) |
 | `release.yml` | Publishes to PyPI via Trusted Publishing (OIDC) on GitHub release; `pypi` environment, no API tokens |
 
 ### Test Organization

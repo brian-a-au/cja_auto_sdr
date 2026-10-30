@@ -4,6 +4,8 @@ on:
   workflow_run:
     workflows: [dependabot-policy, tests, lint, version-sync, dependency-review]
     types: [completed]
+    # Only PR runs can lead to a merge; skip the empty runs from main pushes.
+    branches-ignore: [main]
   workflow_dispatch:
     inputs:
       pr:

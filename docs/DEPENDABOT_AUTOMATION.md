@@ -30,6 +30,14 @@ the policy passes the check with a **manual merge required** decision and receiv
 no automatic approval or merge request. SDK updates and GitHub Actions updates
 are outside the allowlist.
 
+## Update grouping
+
+`.github/dependabot.yml` batches uv updates so each week opens a few PRs
+instead of one per package. Patch bumps to `ruff`, `pytest`, and `pytest-cov`
+go in their own `dev-tools-patch` group, so that PR still fits the
+auto-merge policy. Other minor and patch updates share the `minor-and-patch`
+group and need a manual merge. Major updates still open one PR each.
+
 ## Workflow and trust boundary
 
 `dependabot-policy.yml` runs on every PR with a read-only token and checks out

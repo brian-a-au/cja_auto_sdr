@@ -34,19 +34,19 @@ jobs:
           cache-dependency-glob: uv.lock
           prune-cache: false
       - name: Sync dependencies
-        run: uv sync --dev
+        run: uv sync --locked --dev
       - name: Verify version, changelog, docs, release tag, and CI tag ref
         env:
           GITHUB_REF: ${{ github.ref }}
           REQUIRE_TAG: ${{ github.event_name == 'push' && 'true' || github.event.inputs.require_tag || 'false' }}
         run: |
           if [ "${REQUIRE_TAG}" = "true" ]; then
-            uv run python scripts/check_version_sync.py --require-tag
+            uv run --locked python scripts/check_version_sync.py --require-tag
           else
             echo "INFO: running manual release-gate checks without tag requirement."
-            uv run python scripts/check_version_sync.py
+            uv run --locked python scripts/check_version_sync.py
           fi
       - name: Verify test counts are up to date
-        run: uv run python scripts/update_test_counts.py --check
+        run: uv run --locked python scripts/update_test_counts.py --check
       - name: Verify PyPI README links
-        run: uv run python scripts/check_pypi_readme_links.py README.md
+        run: uv run --locked python scripts/check_pypi_readme_links.py README.md
