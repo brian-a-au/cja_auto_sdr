@@ -44,12 +44,11 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
-      - name: Install shellcheck
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y shellcheck
+      # shellcheck ships on the ubuntu-latest image; no apt install needed.
       - name: Lint shell scripts
-        run: shellcheck examples/automation/*.sh examples/agent-workflows/*.sh
+        run: |
+          shellcheck --version
+          shellcheck examples/automation/*.sh examples/agent-workflows/*.sh
 
   lockfile:
     runs-on: ubuntu-latest
