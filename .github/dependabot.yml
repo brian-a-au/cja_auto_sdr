@@ -7,6 +7,18 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # Each update PR runs the full CI matrix, so batch them. The dev-tools
+    # group holds only the patch bumps that dependabot-auto-merge may merge
+    # (scripts/dependabot_review.py ALLOWED_PACKAGES); mixing in any other
+    # package would force the whole PR to manual review. Major bumps stay
+    # as single PRs so each breaking change is reviewed on its own.
+    groups:
+      dev-tools-patch:
+        patterns: ["ruff", "pytest", "pytest-cov"]
+        update-types: ["patch"]
+      minor-and-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
 
   - package-ecosystem: github-actions
     directory: /

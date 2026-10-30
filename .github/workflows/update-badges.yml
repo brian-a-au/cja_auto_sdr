@@ -21,50 +21,57 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  actions: read
 
 jobs:
   update:
-    # Only refresh badges after a successful tests run; on workflow_dispatch
-    # there's no upstream conclusion so allow it through unconditionally.
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    # Only refresh badges after a successful tests push run on main (only
+    # those upload metrics); on workflow_dispatch there's no upstream run,
+    # so allow it through and read the latest successful push run instead.
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push') }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
 
-      - uses: astral-sh/setup-uv@v10.3.2
+      - name: Pick the tests run to read metrics from
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TRIGGER_RUN_ID: ${{ github.event.workflow_run.id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          run_id="$TRIGGER_RUN_ID"
+          if [ -z "$run_id" ]; then
+            # workflow_dispatch: use the latest successful tests push on main.
+            run_id="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow tests.yml --branch main \
+              --event push --status success --limit 1 --json databaseId --jq '.[0].databaseId')"
+          fi
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+
+      # test-unit (3.14) on main uploads the coverage % and test count it
+      # parsed, so this job reads them instead of re-running the suite. A
+      # missing artifact (metrics parse failed upstream) fails this step and
+      # no badge PR is opened.
+      - name: Download badge metrics from the tests run
+        uses: actions/download-artifact@v8.0.2
         with:
-          python-version: "3.14"
-          enable-cache: true
-          cache-dependency-glob: uv.lock
-          prune-cache: false
+          name: test-metrics
+          path: /tmp/test-metrics
+          run-id: ${{ steps.source.outputs.run_id }}
+          github-token: ${{ github.token }}
 
-      - name: Sync dependencies
-        run: uv sync --dev --extra clustering
-
-      - name: Re-derive coverage + test count
+      - name: Read coverage + test count
         id: stats
         shell: bash
         run: |
           set -euo pipefail
-          # Mirror the `test-unit` job in tests.yml — same selector, same
-          # 95% gate. If coverage drops below the gate, this step fails
-          # and no badge-update PR is opened (consistent with the tests
-          # workflow's contract).
-          uv run pytest tests/ --tb=short \
-            -m "unit and not slow" -n auto \
-            --cov=cja_auto_sdr --cov-report=term --cov-fail-under=95 \
-            | tee /tmp/test-unit.log
-          # Coverage line looks like: `TOTAL  ...  99%`
-          COVERAGE="$(grep -E '^TOTAL' /tmp/test-unit.log | awk '{print $NF}' | tr -d '%')"
-          # Test count: the README badge counts ALL tests, not just the
-          # unit slice. pytest's `-q` + pytest-cov suppresses the
-          # "N passed in X.XXs" summary in non-tty output, so use a
-          # separate `--collect-only --no-cov` pass — its summary line
-          # `7895 tests collected in 0.74s` appears regardless of -q.
-          TESTS="$(uv run pytest --collect-only --no-cov 2>&1 | grep -oE '[0-9]+ tests collected' | head -1 | awk '{print $1}')"
-          if [ -z "$COVERAGE" ] || [ -z "$TESTS" ]; then
-            echo "Failed to parse coverage (got '$COVERAGE') or test count (got '$TESTS')"
+          COVERAGE="$(jq -r .coverage /tmp/test-metrics/test-metrics.json)"
+          TESTS="$(jq -r .tests /tmp/test-metrics/test-metrics.json)"
+          # Artifact values land in README.md; accept plain numbers only.
+          if ! [[ "$COVERAGE" =~ ^[0-9]+$ && "$TESTS" =~ ^[0-9]+$ ]]; then
+            echo "::error::Unexpected metrics (coverage='$COVERAGE', tests='$TESTS')"
             exit 1
           fi
           echo "coverage=$COVERAGE" >> "$GITHUB_OUTPUT"
@@ -76,7 +83,7 @@ jobs:
           COV: ${{ steps.stats.outputs.coverage }}
           TESTS: ${{ steps.stats.outputs.tests }}
         run: |
-          python - <<'PY'
+          python3 - <<'PY'
           import os
           import pathlib
           import re
