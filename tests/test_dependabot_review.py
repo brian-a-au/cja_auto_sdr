@@ -353,6 +353,7 @@ def test_privileged_workflow_uses_trusted_main_and_check_permissions():
     }
     assert "          ref: main\n          persist-credentials: false" in workflow
     assert "          enable-cache: false" in workflow
+    assert "startsWith(github.event.workflow_run.head_branch, 'dependabot/')" in workflow
     assert "uv run --no-project" in workflow
     assert '--apply "${args[@]}"' in workflow
 

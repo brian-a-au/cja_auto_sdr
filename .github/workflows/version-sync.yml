@@ -22,8 +22,7 @@ jobs:
       - uses: astral-sh/setup-uv@v10.3.2
         with:
           python-version: "3.14"
-          enable-cache: true
-          cache-dependency-glob: uv.lock
-          prune-cache: false
+          enable-cache: false
       - name: Verify version strings are in sync
-        run: uv run --locked python scripts/check_version_sync.py
+        # The script is stdlib only, so skip syncing the project environment.
+        run: uv run --no-project python scripts/check_version_sync.py

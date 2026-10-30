@@ -22,10 +22,14 @@ concurrency:
 
 jobs:
   review-and-merge:
+    # Each PR run fires this five times (once per watched workflow). Skip
+    # non-Dependabot branches here instead of starting a runner per run;
+    # dependabot_review.py still checks the author and branch itself.
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event.workflow_run.event == 'pull_request' &&
        github.event.workflow_run.conclusion == 'success' &&
+       startsWith(github.event.workflow_run.head_branch, 'dependabot/') &&
        github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 5
