@@ -950,3 +950,35 @@ class TestProfilesUnsearchableParent:
         source.write_text(json.dumps({"org_id": "org@AdobeOrg", "client_id": "abcd1234", "secret": "secret1234"}))
         with patch.dict(os.environ, {"CJA_HOME": str(unsearchable_dir)}):
             assert import_profile_non_interactive("prod", source) is False
+
+
+class TestProfileDotenvParsing:
+    """CFG-4 / CFG-8: profile .env parsing matches python-dotenv; names reject trailing newlines."""
+
+    def test_load_profile_dotenv_accepts_export_and_inline_comments(self, tmp_path):
+        (tmp_path / ".env").write_text(
+            "export ORG_ID=abc@AdobeOrg\n"
+            "export CLIENT_ID=cid1234567890abcd\n"
+            "SECRET=s3cr3tvalue1234567  # note\n"
+            'SCOPES="openid, AdobeID"\n'
+        )
+        assert load_profile_dotenv(tmp_path) == {
+            "org_id": "abc@AdobeOrg",
+            "client_id": "cid1234567890abcd",
+            "secret": "s3cr3tvalue1234567",
+            "scopes": "openid, AdobeID",
+        }
+
+    def test_parse_env_import_strips_inline_comments(self):
+        from cja_auto_sdr.core.profiles import _parse_env_credentials_content
+
+        result = _parse_env_credentials_content("SECRET=s3cr3tvalue1234567  # note\n")
+        assert result == {"secret": "s3cr3tvalue1234567"}
+
+    def test_quoted_value_keeps_hash(self):
+        from cja_auto_sdr.core.profiles import _parse_dotenv_line
+
+        assert _parse_dotenv_line('SECRET="a#b"') == ("SECRET", "a#b")
+        assert _parse_dotenv_line("SECRET='a#b'  # c") == ("SECRET", "a#b")
+        assert _parse_dotenv_line("# comment") is None
+        assert _parse_dotenv_line("   ") is None

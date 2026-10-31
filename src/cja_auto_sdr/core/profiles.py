@@ -106,6 +106,34 @@ def load_profile_config_json(profile_path: Path) -> dict[str, str] | None:
         return None
 
 
+def _parse_dotenv_line(raw_line: str) -> tuple[str, str] | None:
+    """Parse one ``.env`` line the way python-dotenv does.
+
+    Returns ``(key, value)`` for an assignment and ``None`` for a blank or comment line.
+    Handles a leading ``export``, quoted values (``#`` kept inside quotes), and unquoted
+    inline comments (`` #`` onward is dropped). A line without ``=`` yields the whole
+    line as the key and an empty value; callers that care must check for ``=`` first.
+    """
+    line = raw_line.strip()
+    if not line or line.startswith("#"):
+        return None
+    if line.lower().startswith("export ") or line.lower().startswith("export\t"):
+        line = line[7:].strip()
+    key, _, value = line.partition("=")
+    key = key.strip()
+    value = value.strip()
+    if value[:1] in ('"', "'"):
+        quote = value[0]
+        end = value.find(quote, 1)
+        value = value[1:end] if end != -1 else value[1:]
+    else:
+        match = re.search(r"\s#", value)
+        if match:
+            value = value[: match.start()]
+        value = value.strip()
+    return key, value
+
+
 def load_profile_dotenv(profile_path: Path) -> dict[str, str] | None:
     """Load credentials from a profile ``.env`` file when present."""
     env_file = profile_path / ".env"
@@ -116,17 +144,16 @@ def load_profile_dotenv(profile_path: Path) -> dict[str, str] | None:
     try:
         with open(env_file, encoding="utf-8") as f:
             for raw_line in f:
-                line = raw_line.strip()
-                if not line or line.startswith("#"):
+                if "=" not in raw_line:
                     continue
-                if "=" in line:
-                    key, _, value = line.partition("=")
-                    key = key.strip()
-                    value = value.strip().strip('"').strip("'")
-                    if key and value:
-                        config_key = key.lower()
-                        if config_key in CREDENTIAL_FIELDS["all"]:
-                            credentials[config_key] = value
+                parsed = _parse_dotenv_line(raw_line)
+                if parsed is None:
+                    continue
+                key, value = parsed
+                if key and value:
+                    config_key = key.lower()
+                    if config_key in CREDENTIAL_FIELDS["all"]:
+                        credentials[config_key] = value
     except OSError:
         return None
     except UnicodeDecodeError:
@@ -446,16 +473,12 @@ def _parse_env_credentials_content(content: str) -> dict[str, str]:
     """Parse ``.env``-formatted credential content."""
     credentials: dict[str, str] = {}
     for line_number, raw_line in enumerate(content.splitlines(), start=1):
-        line = raw_line.strip()
-        if not line or line.startswith("#"):
+        parsed = _parse_dotenv_line(raw_line)
+        if parsed is None:
             continue
-        if line.lower().startswith("export "):
-            line = line[7:].strip()
-        if "=" not in line:
+        if "=" not in raw_line:
             raise ValueError(f"Invalid .env content at line {line_number}: expected KEY=VALUE")
-        key, _, value = line.partition("=")
-        key = key.strip()
-        value = value.strip()
+        key, value = parsed
         if not key:
             raise ValueError(f"Invalid .env content at line {line_number}: empty key")
         credentials.update(_normalize_import_credentials({key: value}))
