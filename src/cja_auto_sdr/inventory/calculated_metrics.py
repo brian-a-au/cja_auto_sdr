@@ -64,6 +64,7 @@ CALC_METRIC_FUNCTION_DISPLAY_NAMES: dict[str, str] = {
     # References
     "metric": "Metric Reference",
     "segment": "Segment Filter",
+    "segment-ref": "Segment Filter",
     "calc-metric": "Calculated Metric",
     "number": "Static Number",
     # Aggregation functions
@@ -85,8 +86,10 @@ CALC_METRIC_FUNCTION_DISPLAY_NAMES: dict[str, str] = {
     "ne": "Not Equals",
     "gt": "Greater Than",
     "gte": "Greater Than or Equal",
+    "ge": "Greater Than or Equal",
     "lt": "Less Than",
     "lte": "Less Than or Equal",
+    "le": "Less Than or Equal",
     # Statistical
     "median": "Median",
     "percentile": "Percentile",
@@ -501,8 +504,13 @@ class CalculatedMetricsInventoryBuilder:
                 stats.record_skip("unsupported formula format", metric_id)
             return None
 
-        # Parse the formula
-        parsed = self._parse_formula(formula)
+        # Real CJA definitions can carry segment filters beside the formula
+        top_filters = definition.get("filters")
+        if not isinstance(top_filters, list):
+            top_filters = []
+
+        # Parse the formula (and any top-level filters)
+        parsed = self._parse_formula(formula, extra_nodes=top_filters)
 
         # Extract format metadata
         polarity = metric_data.get("polarity", "positive")
@@ -533,7 +541,10 @@ class CalculatedMetricsInventoryBuilder:
         site_title = self._coerce_display_text(metric_data.get("siteTitle", ""), fallback="")
 
         # Generate formula summary
-        formula_summary = self._generate_formula_summary(formula, parsed)
+        summary_formula: Any = formula
+        if any(isinstance(f, dict) for f in top_filters):
+            summary_formula = {"func": "calc-metric", "formula": formula, "filters": top_filters}
+        formula_summary = self._generate_formula_summary(summary_formula, parsed)
 
         # Serialize definition to JSON string for full fidelity
         try:
@@ -605,13 +616,19 @@ class CalculatedMetricsInventoryBuilder:
             return ""
         return normalized
 
-    def _parse_formula(self, formula: Any, depth: int = 0) -> dict[str, Any]:
+    def _parse_formula(
+        self,
+        formula: Any,
+        depth: int = 0,
+        extra_nodes: list[Any] | None = None,
+    ) -> dict[str, Any]:
         """
         Recursively parse a formula and extract all relevant data.
 
         Args:
             formula: The formula dict to parse
             depth: Current nesting depth
+            extra_nodes: Additional nodes (e.g. top-level definition filters) to walk
 
         Returns:
             Dictionary with parsed information
@@ -656,7 +673,7 @@ class CalculatedMetricsInventoryBuilder:
                     total_operators += 1
 
                 # Count conditionals
-                if func in ("if", "and", "or", "not", "eq", "ne", "gt", "gte", "lt", "lte"):
+                if func in ("if", "and", "or", "not", "eq", "ne", "gt", "gte", "ge", "lt", "lte", "le"):
                     total_conditionals += 1
 
                 # Extract metric references
@@ -666,7 +683,7 @@ class CalculatedMetricsInventoryBuilder:
                         metric_refs.add(clean_name)
 
                 # Extract segment references
-                if func == "segment":
+                if func in ("segment", "segment-ref"):
                     clean_segment = self._normalize_reference_value(node.get("segment_id", node.get("id", "")))
                     if clean_segment:
                         segment_refs.add(clean_segment)
@@ -684,6 +701,8 @@ class CalculatedMetricsInventoryBuilder:
                 "left",
                 "right",
                 "condition",
+                "cond",
+                "field",
                 "value",
                 "operand",
                 "dividend",
@@ -693,13 +712,15 @@ class CalculatedMetricsInventoryBuilder:
                     traverse(node[key], current_depth + 1)
 
             # Handle lists of operands
-            for key in ["operands", "values", "metrics", "columns"]:
+            for key in ["operands", "values", "metrics", "columns", "filters"]:
                 if key in node and isinstance(node[key], list):
                     for item in node[key]:
                         if isinstance(item, dict):
                             traverse(item, current_depth + 1)
 
         traverse(formula, depth)
+        for extra in extra_nodes or []:
+            traverse(extra, depth + 1)
 
         # Convert to display names
         functions_display = [
@@ -846,6 +867,14 @@ class CalculatedMetricsInventoryBuilder:
                 return f"If {condition_desc}"
             return "Conditional calculation"
 
+        if func == "calc-metric":
+            inner_metric = self._get_reference_name(actual_formula)
+            if inner_metric and segment_refs:
+                return f"{inner_metric} filtered by segment"
+            if inner_metric:
+                return f"{inner_metric} (filtered)"
+            return "Segmented metric"
+
         if func == "segment":
             inner_metric = self._get_reference_name(actual_formula.get("metric", {}))
             segment_id = actual_formula.get("segment_id", actual_formula.get("id", ""))
@@ -920,7 +949,7 @@ class CalculatedMetricsInventoryBuilder:
             return "Power calculation"
 
         # Generic summary based on functions used
-        if "segment" in functions_internal and metric_refs:
+        if ("segment" in functions_internal or "segment-ref" in functions_internal) and metric_refs:
             if segment_refs:
                 return f"{metric_refs[0]} filtered by segment"
             return f"Filtered {metric_refs[0]}"
@@ -999,6 +1028,26 @@ class CalculatedMetricsInventoryBuilder:
             right = self._build_formula_expression(node.get("col2", {}), max_depth - 1)
             if left and right:
                 return f"{left} - {right}"
+
+        if func == "calc-metric":
+            inner = self._build_formula_expression(node.get("formula", {}), max_depth - 1)
+            filters = node.get("filters")
+            has_segment = isinstance(filters, list) and any(
+                isinstance(f, dict) and self._normalize_func_name(f.get("func", "")) in ("segment", "segment-ref")
+                for f in filters
+            )
+            if inner and has_segment:
+                return f"{inner}[segment]"
+            if inner:
+                return inner
+
+        if func == "attr":
+            return self._normalize_reference_value(node.get("name", ""))
+
+        if func == "count-distinct-metric":
+            inner = self._build_formula_expression(node.get("field", {}), max_depth - 1)
+            if inner:
+                return f"DISTINCT({inner})"
 
         if func == "segment":
             inner = self._build_formula_expression(node.get("metric", {}), max_depth - 1)
@@ -1102,7 +1151,7 @@ class CalculatedMetricsInventoryBuilder:
             left, right = get_left(), get_right()
             if left and right:
                 return f"{left} > {right}"
-        elif func == "gte":
+        elif func in ("gte", "ge"):
             left, right = get_left(), get_right()
             if left and right:
                 return f"{left} >= {right}"
@@ -1110,7 +1159,7 @@ class CalculatedMetricsInventoryBuilder:
             left, right = get_left(), get_right()
             if left and right:
                 return f"{left} < {right}"
-        elif func == "lte":
+        elif func in ("lte", "le"):
             left, right = get_left(), get_right()
             if left and right:
                 return f"{left} <= {right}"
@@ -1161,6 +1210,9 @@ class CalculatedMetricsInventoryBuilder:
         if func == "segment":
             inner = node.get("metric", {})
             return self._get_reference_name(inner)
+
+        if func == "calc-metric":
+            return self._get_reference_name(node.get("formula", {}))
 
         # For aggregations, try to get the inner metric name
         if func in ("col-sum", "col-max", "col-min", "col-mean", "col-count", "cumulative", "rolling"):
