@@ -7912,7 +7912,9 @@ def _main_impl(run_state: dict[str, Any] | None = None):
     temp_logger = logging.getLogger("name_resolution")
     temp_logger.setLevel(logging.INFO if not args.quiet else logging.ERROR)
     handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter("%(levelname)s - %(message)s"))
+    handler.setFormatter(
+        JSONFormatter() if args.log_format == "json" else logging.Formatter("%(levelname)s - %(message)s"),
+    )
     temp_logger.addHandler(handler)
     temp_logger.propagate = False
 
