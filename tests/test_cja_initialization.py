@@ -1135,3 +1135,35 @@ class TestConfigFileListSecret:
 
         assert success is True
         assert mock_config_from_env.call_args.args[0]["secret"] == "s-first-1234567890"
+
+
+class TestValidateConfigFileNormalization:
+    @patch("cja_auto_sdr.generator._config_from_env")
+    @patch("cja_auto_sdr.generator.cjapy")
+    def test_validate_config_file_source_passes_stripped_values(
+        self, mock_cjapy, mock_config_from_env, tmp_path, monkeypatch
+    ):
+        for key in ("ORG_ID", "CLIENT_ID", "SECRET", "SCOPES", "SANDBOX", "CJA_PROFILE"):
+            monkeypatch.delenv(key, raising=False)
+        monkeypatch.setenv("HOME", str(tmp_path / "home"))
+        monkeypatch.chdir(tmp_path)
+        config_file = tmp_path / "config.json"
+        config_file.write_text(
+            json.dumps(
+                {
+                    "org_id": " ORG@AdobeOrg ",
+                    "client_id": " client_id_value ",
+                    "secret": "  padded-secret\n",
+                    "scopes": "openid, AdobeID",
+                },
+            ),
+        )
+        mock_cjapy.CJA.return_value.getDataViews.return_value = [{"id": "dv_1", "name": "x"}]
+
+        result = validate_config_only(str(config_file), output_dir=str(tmp_path))
+
+        assert result is True
+        passed = mock_config_from_env.call_args.args[0]
+        assert passed["org_id"] == "ORG@AdobeOrg"
+        assert passed["client_id"] == "client_id_value"
+        assert passed["secret"] == "padded-secret"
