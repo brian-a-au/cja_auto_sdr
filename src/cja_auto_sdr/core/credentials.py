@@ -227,6 +227,9 @@ class EnvironmentCredentialLoader(CredentialLoader):
 # ==================== CREDENTIAL RESOLVER ====================
 
 
+_INCOMPLETE_PROFILE_HINT = "Fix the profile with --profile-show / --profile-add, or omit --profile"
+
+
 class CredentialResolver:
     """Resolves credentials using priority-based strategy.
 
@@ -305,17 +308,28 @@ class CredentialResolver:
         self.logger.info("Loading credentials from profile '%s'...", profile_name)
         try:
             creds = load_profile_credentials(profile_name, self.logger)
-            if creds:
-                is_valid, issues = validate_credentials(
-                    creds,
-                    self.logger,
-                    strict=False,
+            if not creds:
+                raise CredentialSourceError(
+                    f"Profile '{profile_name}' credentials are incomplete",
                     source=f"profile:{profile_name}",
+                    reason="Profile has no credential fields",
+                    details=_INCOMPLETE_PROFILE_HINT,
                 )
-                if is_valid:
-                    self.logger.info("Using credentials from profile '%s'", profile_name)
-                    return creds, f"profile:{profile_name}"
-                self.logger.warning("Profile '%s' credentials have issues: %s", profile_name, issues)
+            is_valid, issues = validate_credentials(
+                creds,
+                self.logger,
+                strict=False,
+                source=f"profile:{profile_name}",
+            )
+            if is_valid:
+                self.logger.info("Using credentials from profile '%s'", profile_name)
+                return creds, f"profile:{profile_name}"
+            raise CredentialSourceError(
+                f"Profile '{profile_name}' credentials are incomplete",
+                source=f"profile:{profile_name}",
+                reason="; ".join(issues[:3]),
+                details=_INCOMPLETE_PROFILE_HINT,
+            )
         except ProfileNotFoundError as e:
             raise CredentialSourceError(
                 str(e),
@@ -330,8 +344,6 @@ class CredentialResolver:
                 reason="Invalid profile configuration",
                 details=e.details,
             ) from e
-
-        return None, ""
 
     def _try_environment(self) -> tuple[dict[str, str] | None, str]:
         """Try to load credentials from environment variables.

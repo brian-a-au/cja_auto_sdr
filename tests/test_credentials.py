@@ -606,8 +606,8 @@ class TestCredentialResolverTryProfile:
         assert creds is not None
         assert source == "profile:my-profile"
 
-    def test_profile_invalid_credentials_returns_none(self, clean_env):
-        """Profile with invalid credentials should return (None, '') (line 276)."""
+    def test_profile_invalid_credentials_raises(self, clean_env):
+        """Profile with invalid credentials is a hard error, not a fallback."""
         resolver = self._make_resolver()
         # Missing required fields triggers is_valid=False in non-strict mode
         invalid_creds = {
@@ -618,10 +618,51 @@ class TestCredentialResolverTryProfile:
             "cja_auto_sdr.generator.load_profile_credentials",
             return_value=invalid_creds,
         ):
-            creds, source = resolver._try_profile("my-profile")
+            with pytest.raises(CredentialSourceError) as exc_info:
+                resolver._try_profile("my-profile")
 
-        assert creds is None
-        assert source == ""
+        assert exc_info.value.source == "profile:my-profile"
+        assert "incomplete" in str(exc_info.value)
+
+    def test_incomplete_explicit_profile_raises(self, tmp_path, monkeypatch, clean_env):
+        """CFG-3: an incomplete explicit profile must not fall back to another org's config.json."""
+        home = tmp_path / "home"
+        profile_dir = home / ".cja" / "orgs" / "client-a"
+        profile_dir.mkdir(parents=True)
+        (profile_dir / "config.json").write_text(
+            json.dumps({"org_id": "PROFILEORG@AdobeOrg", "secret": "b" * 32, "scopes": "openid"}),
+        )
+        cwd_config = tmp_path / "config.json"
+        cwd_config.write_text(
+            json.dumps(
+                {"org_id": "OTHER@AdobeOrg", "client_id": "a" * 32, "secret": "c" * 32, "scopes": "openid"},
+            ),
+        )
+        monkeypatch.setenv("HOME", str(home))
+        monkeypatch.setenv("USERPROFILE", str(home))
+        monkeypatch.delenv("CJA_HOME", raising=False)
+
+        with pytest.raises(CredentialSourceError) as exc_info:
+            self._make_resolver().resolve(profile="client-a", config_file=cwd_config)
+
+        assert exc_info.value.source == "profile:client-a"
+        assert "client_id" in (exc_info.value.reason or "")
+
+    def test_complete_profile_with_extra_keys_resolves(self, clean_env):
+        """Unknown extra keys in an otherwise complete profile must not cause an error."""
+        creds_in = {
+            "org_id": "profile@AdobeOrg",
+            "client_id": "a" * 32,
+            "secret": "b" * 32,
+            "scopes": "openid",
+            "unknown_key": "whatever",
+            "note": "extra",
+        }
+        with patch("cja_auto_sdr.generator.load_profile_credentials", return_value=creds_in):
+            creds, source = self._make_resolver().resolve(profile="p", config_file="nonexistent.json")
+
+        assert source == "profile:p"
+        assert creds["org_id"] == "profile@AdobeOrg"
 
     def test_profile_not_found_raises_credential_source_error(self, clean_env):
         """ProfileNotFoundError should be wrapped in CredentialSourceError (lines 267-270)."""
@@ -649,18 +690,18 @@ class TestCredentialResolverTryProfile:
 
         assert "broken" in str(exc_info.value)
 
-    def test_profile_returns_none_when_load_returns_none(self, clean_env):
-        """When load_profile_credentials returns None, _try_profile returns (None, '')."""
+    def test_profile_raises_when_load_returns_none(self, clean_env):
+        """A profile with no credential fields is a hard error."""
         resolver = self._make_resolver()
 
         with patch(
             "cja_auto_sdr.generator.load_profile_credentials",
             return_value=None,
         ):
-            creds, source = resolver._try_profile("empty")
+            with pytest.raises(CredentialSourceError) as exc_info:
+                resolver._try_profile("empty")
 
-        assert creds is None
-        assert source == ""
+        assert exc_info.value.source == "profile:empty"
 
 
 class TestCredentialResolverTryEnvironment:
