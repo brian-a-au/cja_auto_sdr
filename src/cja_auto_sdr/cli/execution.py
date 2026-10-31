@@ -108,6 +108,12 @@ def resolve_inventory_mode_configuration(args: argparse.Namespace, *, argv: list
     return inventory_order
 
 
+def _warn_output_ignored(output_file: str | None, *, scope: str, hint: str) -> None:
+    from cja_auto_sdr.generator import _warn_output_ignored as _impl
+
+    _impl(output_file, scope=scope, hint=hint)
+
+
 def dispatch_inventory_summary_mode(
     args: argparse.Namespace,
     *,
@@ -128,6 +134,13 @@ def dispatch_inventory_summary_mode(
             file=sys.stderr,
         )
         sys.exit(1)
+
+    if output_file and args.format not in ("json", "all"):
+        _warn_output_ignored(
+            output_file,
+            scope=f"with --inventory-summary --format {args.format or 'console'}",
+            hint="use --format json to write the summary to a file",
+        )
 
     # Stdout output is always the JSON summary.
     if output_file in ("-", "stdout"):
@@ -538,6 +551,12 @@ def _run_batch_mode(
             ),
         )
         print()
+
+    _warn_output_ignored(
+        getattr(args, "output", None),
+        scope="with --batch",
+        hint="use --output-dir to choose the folder for batch output",
+    )
 
     processor = generator.BatchProcessor(
         config_file=args.config_file,

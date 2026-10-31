@@ -1803,8 +1803,14 @@ def _handle_exit_codes_prevalidation() -> NoReturn:
 
 def _handle_sample_config_prevalidation(
     run_state: dict[str, Any] | None = None,
+    args: argparse.Namespace | None = None,
 ) -> NoReturn:
     """Handle sample-config generation after standalone semantic validation."""
+    _warn_output_ignored(
+        getattr(args, "output", None),
+        scope="with --sample-config",
+        hint="the sample is written to config.sample.json",
+    )
     success = generate_sample_config()
     if run_state is not None:
         run_state["details"] = {"operation_success": success}
@@ -1911,7 +1917,7 @@ def _dispatch_prevalidation_mode(
         _handle_exit_codes_prevalidation()
 
     elif inferred_mode == RunMode.SAMPLE_CONFIG:
-        _handle_sample_config_prevalidation(run_state=run_state)
+        _handle_sample_config_prevalidation(run_state=run_state, args=args)
 
 
 # Flags that --push-to-notion must reject explicitly. _run_mode_checks
@@ -7180,6 +7186,11 @@ def _dispatch_post_validation_report_modes(
     """Handle config/status, interactive, stats, and org-report branches."""
     if getattr(args, "config_status", False) or getattr(args, "config_json", False):
         output_json = getattr(args, "config_json", False)
+        _warn_output_ignored(
+            getattr(args, "output", None),
+            scope="with --config-status",
+            hint="use --config-json and redirect stdout to save the status",
+        )
         success = show_config_status(args.config_file, profile=getattr(args, "profile", None), output_json=output_json)
         if run_state is not None:
             run_state["details"] = {"operation_success": success}

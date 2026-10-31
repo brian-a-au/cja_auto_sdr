@@ -2155,3 +2155,93 @@ class TestSingleModeFailure:
         out = capsys.readouterr().out
         assert "FAILED" in out
         assert "API connection failed" in out
+
+
+# =========================================================================
+# --output FILE ignored warnings (CLI-6)
+# =========================================================================
+
+
+class TestOutputIgnoredWarnings:
+    """Modes that never write --output FILE warn instead of silently ignoring it."""
+
+    @patch("cja_auto_sdr.generator._cli_option_specified", _mock_cli_option_specified)
+    @patch("cja_auto_sdr.generator.resolve_data_view_names", return_value=(["dv_1", "dv_2"], {}))
+    @patch("cja_auto_sdr.generator.BatchProcessor")
+    @patch("cja_auto_sdr.generator.aggregate_quality_issues", return_value=[])
+    @patch("cja_auto_sdr.generator.append_github_step_summary")
+    @patch("cja_auto_sdr.generator.build_quality_step_summary", return_value="")
+    def test_batch_output_file_warns(self, _bqs, _aghs, _aqi, mock_bp_cls, _resolve, capsys):
+        mock_bp_cls.return_value.process_batch.return_value = {"successful": [], "failed": [], "total": 0}
+        args = _make_args(data_views=["dv_1", "dv_2"], batch=True, output="report.xlsx")
+        with patch("cja_auto_sdr.generator.parse_arguments", return_value=args):
+            try:
+                _main_impl()
+            except SystemExit:
+                pass
+        err = capsys.readouterr().err
+        assert (
+            "Warning: --output is ignored with --batch; use --output-dir to choose the folder for batch output." in err
+        )
+
+    @pytest.mark.parametrize("fmt", ["html", None])
+    def test_inventory_summary_non_json_warns(self, fmt, capsys):
+        from cja_auto_sdr.cli.execution import dispatch_inventory_summary_mode
+
+        args = _make_args(
+            data_views=["dv_1"], inventory_summary=True, output="summary.html", format=fmt, log_format="text"
+        )
+        with patch("cja_auto_sdr.generator.process_inventory_summary", return_value={}), pytest.raises(SystemExit) as e:
+            dispatch_inventory_summary_mode(
+                args, data_views=["dv_1"], effective_log_level="WARNING", inventory_order=[]
+            )
+        assert e.value.code == 0
+        assert (
+            f"Warning: --output is ignored with --inventory-summary --format {fmt or 'console'}; "
+            "use --format json to write the summary to a file."
+        ) in capsys.readouterr().err
+
+    def test_inventory_summary_json_does_not_warn(self, capsys):
+        from cja_auto_sdr.cli.execution import dispatch_inventory_summary_mode
+
+        args = _make_args(
+            data_views=["dv_1"], inventory_summary=True, output="summary.json", format="json", log_format="text"
+        )
+        with patch("cja_auto_sdr.generator.process_inventory_summary", return_value={}), pytest.raises(SystemExit):
+            dispatch_inventory_summary_mode(
+                args, data_views=["dv_1"], effective_log_level="WARNING", inventory_order=[]
+            )
+        assert "--output is ignored" not in capsys.readouterr().err
+
+    def test_sample_config_output_warns(self, tmp_path):
+        import subprocess
+        import sys
+
+        result = subprocess.run(
+            [sys.executable, "-m", "cja_auto_sdr", "--sample-config", "--output", "x.json"],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=tmp_path,
+        )
+        assert result.returncode == 0
+        assert (
+            "Warning: --output is ignored with --sample-config; the sample is written to config.sample.json."
+            in result.stderr
+        )
+        assert (tmp_path / "config.sample.json").exists()
+        assert not (tmp_path / "x.json").exists()
+
+    def test_config_status_output_warns(self, tmp_path):
+        import subprocess
+        import sys
+
+        base = [sys.executable, "-m", "cja_auto_sdr", "--config-status"]
+        plain = subprocess.run(base, capture_output=True, text=True, check=False, cwd=tmp_path)
+        result = subprocess.run([*base, "--output", "x.txt"], capture_output=True, text=True, check=False, cwd=tmp_path)
+        assert result.returncode == plain.returncode
+        assert (
+            "Warning: --output is ignored with --config-status; "
+            "use --config-json and redirect stdout to save the status." in result.stderr
+        )
+        assert "--output is ignored" not in plain.stderr
