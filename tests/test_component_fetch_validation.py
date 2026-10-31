@@ -143,6 +143,46 @@ class TestFetchComponentPayload:
         cja.getDimensions = MagicMock(return_value=frame)
         assert fetch_component_payload(cja, "dimensions", DV_ID, inclType="hidden", full=True) is frame
 
+    def test_fetch_with_expansion_pages_with_narrow_params(self):
+        cja = _native_cja(
+            {
+                "/metrics": [
+                    _page([{"id": "metrics/a", "name": "A", "type": "int"}], last=False),
+                    _page([{"id": "metrics/b", "name": "B", "sourceFieldType": "derived"}]),
+                ],
+            },
+        )
+        result = fetch_component_payload(
+            cja, "metrics", DV_ID, inclType=True, full=True, expansion="type,sourceFieldType"
+        )
+        assert isinstance(result, pd.DataFrame)
+        assert list(result["id"]) == ["metrics/a", "metrics/b"]
+        assert list(result["name"]) == ["A", "B"]
+        assert len(cja.connector.calls) == 2
+        for page_number, (endpoint, params) in enumerate(cja.connector.calls):
+            assert endpoint == f"https://cja.example.test/data/dataviews/{DV_ID}/metrics"
+            assert params == {"page": page_number, "expansion": "type,sourceFieldType"}
+
+    def test_fetch_with_expansion_error_body_returns_failure(self):
+        cja = _native_cja({"/dimensions": [_page([{"id": "variables/a"}], last=False), {"totalElements": 0}]})
+        result = fetch_component_payload(cja, "dimensions", DV_ID, expansion="type,sourceFieldType")
+        assert isinstance(result, ComponentFetchFailure)
+        assert result.reason == "missing_content"
+        assert DV_ID in result.message
+        assert "dimensions" in result.message
+
+    def test_fetch_with_expansion_forwards_hidden_include_type(self):
+        cja = _native_cja({"/dimensions": [_page([{"id": "variables/a"}])]})
+        fetch_component_payload(cja, "dimensions", DV_ID, inclType="hidden", expansion="type")
+        assert cja.connector.calls[0][1] == {"page": 0, "expansion": "type", "includeType": "hidden"}
+
+    def test_fetch_with_expansion_ignored_by_test_doubles(self):
+        frame = pd.DataFrame([{"id": "variables/a"}])
+        cja = MagicMock()
+        cja.getDimensions.return_value = frame
+        assert fetch_component_payload(cja, "dimensions", DV_ID, expansion="type,sourceFieldType") is frame
+        cja.getDimensions.assert_called_once_with(DV_ID, inclType=True, full=True)
+
     def test_unknown_component_rejected(self):
         with pytest.raises(ValueError, match="Unsupported component"):
             fetch_component_payload(MagicMock(), "segments", DV_ID)
