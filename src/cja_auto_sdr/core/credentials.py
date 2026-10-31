@@ -233,7 +233,7 @@ class EnvironmentCredentialLoader(CredentialLoader):
 # ==================== CREDENTIAL RESOLVER ====================
 
 
-_INCOMPLETE_PROFILE_HINT = "Fix the profile with --profile-show / --profile-add, or omit --profile"
+_INCOMPLETE_PROFILE_HINT = "Fix the profile with --profile-show / --profile-add, or omit --profile / unset CJA_PROFILE"
 
 
 class CredentialResolver:

@@ -623,6 +623,7 @@ class TestCredentialResolverTryProfile:
 
         assert exc_info.value.source == "profile:my-profile"
         assert "incomplete" in str(exc_info.value)
+        assert "unset CJA_PROFILE" in (exc_info.value.details or "")
 
     def test_incomplete_explicit_profile_raises(self, tmp_path, monkeypatch, clean_env):
         """CFG-3: an incomplete explicit profile must not fall back to another org's config.json."""
