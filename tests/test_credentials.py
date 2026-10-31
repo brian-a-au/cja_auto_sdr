@@ -960,3 +960,26 @@ class TestCredentialLoadersUnsearchableParent:
 
         resolver = CredentialResolver(logging.getLogger("test"))
         assert resolver._try_config_file(unsearchable_dir / "config.json") == (None, "")
+
+
+class TestSecretListNormalization:
+    """A list-valued secret uses its first non-empty string, like cjapy.importConfigFile."""
+
+    def test_list_secret_uses_first_item(self):
+        from cja_auto_sdr.core.credentials import normalize_credential_field
+
+        assert normalize_credential_field("secret", [" s-first ", "s-second"]) == "s-first"
+
+    def test_list_secret_skips_empty_items(self):
+        from cja_auto_sdr.core.credentials import normalize_credential_field
+
+        assert normalize_credential_field("secret", ["", "  ", "s-second"]) == "s-second"
+
+    def test_list_secret_without_usable_item_is_empty(self):
+        from cja_auto_sdr.core.credentials import normalize_credential_field
+
+        assert normalize_credential_field("secret", ["", None]) == ""
+        assert normalize_credential_field("secret", ()) == ""
+
+    def test_filter_credentials_uses_first_secret(self):
+        assert filter_credentials({"secret": ["s-first", "s-second"]}) == {"secret": "s-first"}

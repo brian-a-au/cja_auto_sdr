@@ -77,6 +77,12 @@ def normalize_credential_field(name: str, value: Any) -> str:
     """Normalize a credential field according to its expected cjapy contract."""
     if name == "scopes":
         return normalize_scopes_value(value)
+    if name == "secret" and isinstance(value, (list, tuple)):
+        # cjapy.importConfigFile used secret[0] for list-valued secrets
+        for item in value:
+            if isinstance(item, str) and item.strip():
+                return normalize_credential_value(item)
+        return ""
     return normalize_credential_value(value)
 
 

@@ -1110,3 +1110,28 @@ class TestConfigCommandsProfileResolution:
         out = capsys.readouterr().out
         assert "Profile 'pa' found" in out
         assert exc.value.code == 0
+
+
+class TestConfigFileListSecret:
+    @patch("cja_auto_sdr.api.client._config_from_env")
+    @patch("cja_auto_sdr.api.client.cjapy")
+    def test_config_file_list_secret_uses_first_item(self, _mock_cjapy, mock_config_from_env, tmp_path, monkeypatch):
+        for key in ("ORG_ID", "CLIENT_ID", "SECRET", "SCOPES", "SANDBOX", "CJA_PROFILE"):
+            monkeypatch.delenv(key, raising=False)
+        monkeypatch.setenv("HOME", str(tmp_path / "home"))
+        monkeypatch.chdir(tmp_path)
+        config_file = tmp_path / "config.json"
+        config_file.write_text(
+            json.dumps(
+                {
+                    "org_id": "ORG@AdobeOrg",
+                    "client_id": "client_id_value",
+                    "secret": ["s-first-1234567890", "s-second"],
+                },
+            ),
+        )
+
+        success, _source, _creds = configure_cjapy(config_file=str(config_file), logger=logging.getLogger("t"))
+
+        assert success is True
+        assert mock_config_from_env.call_args.args[0]["secret"] == "s-first-1234567890"
