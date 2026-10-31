@@ -168,6 +168,7 @@ def dispatch_inventory_summary_mode(
             include_segments=getattr(args, "include_segments_inventory", False),
             inventory_order=inventory_order,
             output_file=output_file,
+            log_to_stderr=bool(getattr(args, "agent_mode", False)),
         )
         if isinstance(summary, dict) and "error" in summary:
             failed = True
@@ -484,6 +485,7 @@ def _run_quality_report_mode(
             notion_force_new=getattr(args, "notion_force_new", False),
             notion_database_id=getattr(args, "notion_database_id", None) or os.environ.get("NOTION_DATABASE_ID"),
             notion_create_database=getattr(args, "notion_create_database", False),
+            log_to_stderr=bool(getattr(args, "agent_mode", False)),
         )
         quality_report_results.append(result)
         processed_results.append(result)

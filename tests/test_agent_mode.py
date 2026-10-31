@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import logging
 import sys
 from unittest.mock import patch
 
@@ -607,6 +608,44 @@ class TestAgentModeOutputFileLogRouting:
         ):
             self._run_tolerant(["dv_test", "--output", out, "--format", "json"])
         assert mock_single.call_args.kwargs["log_to_stderr"] is False
+
+    def test_inventory_summary_logs_to_stderr_when_requested(self, tmp_path):
+        from cja_auto_sdr.generator import process_inventory_summary
+
+        for log_to_stderr, expected in ((True, sys.stderr), (False, None)):
+            with (
+                patch("cja_auto_sdr.generator.setup_logging", return_value=logging.getLogger("t")) as mock_setup,
+                patch("cja_auto_sdr.generator.initialize_cja", return_value=None),
+            ):
+                process_inventory_summary(
+                    "dv_test",
+                    output_format="json",
+                    output_file=str(tmp_path / "s.json"),
+                    log_to_stderr=log_to_stderr,
+                )
+            assert mock_setup.call_args.kwargs["stream"] is expected
+
+    def test_main_passes_log_to_stderr_for_agent_mode_inventory_summary(self, tmp_path):
+        out = str(tmp_path / "s.json")
+        for extra, expected in ((["--agent-mode"], True), ([], False)):
+            with (
+                patch("cja_auto_sdr.generator.resolve_data_view_names", return_value=(["dv_test"], {})),
+                patch("cja_auto_sdr.generator.process_inventory_summary", return_value={}) as mock_summary,
+            ):
+                self._run_tolerant(["dv_test", "--inventory-summary", "--include-segments", "--format", "json", "--output", out, *extra])
+            assert mock_summary.call_args.kwargs["log_to_stderr"] is expected
+
+    def test_main_passes_log_to_stderr_for_agent_mode_quality_report(self):
+        from cja_auto_sdr.pipeline.models import ProcessingResult
+
+        result = ProcessingResult(data_view_id="dv_test", data_view_name="n", success=True, duration=0.1)
+        for extra, expected in ((["--agent-mode"], True), ([], False)):
+            with (
+                patch("cja_auto_sdr.generator.resolve_data_view_names", return_value=(["dv_test"], {})),
+                patch("cja_auto_sdr.generator.process_single_dataview", return_value=result) as mock_single,
+            ):
+                self._run_tolerant(["dv_test", "--quality-report", "json", *extra])
+            assert mock_single.call_args.kwargs["log_to_stderr"] is expected
 
     def test_batch_worker_inherits_log_to_stderr(self):
         from cja_auto_sdr.pipeline.models import ProcessingResult, WorkerArgs

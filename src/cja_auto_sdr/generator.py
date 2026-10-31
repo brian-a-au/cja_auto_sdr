@@ -3140,6 +3140,7 @@ def process_inventory_summary(
     include_segments: bool = False,
     inventory_order: list[str] | None = None,
     output_file: str | None = None,
+    log_to_stderr: bool = False,
 ) -> dict[str, Any]:
     """
     Process inventory summary mode - fetch inventory data and display statistics.
@@ -3158,6 +3159,7 @@ def process_inventory_summary(
         include_segments: Include segments inventory
         inventory_order: Order of inventory types as specified in CLI
         output_file: Exact JSON output path, or "-"/"stdout" to print the JSON
+        log_to_stderr: Send log records to stderr (set under --agent-mode)
 
     Returns:
         Dictionary with summary statistics
@@ -3168,7 +3170,7 @@ def process_inventory_summary(
         batch_mode=False,
         log_level=log_level,
         log_format=log_format,
-        stream=sys.stderr if output_file in ("-", "stdout") else None,
+        stream=sys.stderr if (log_to_stderr or output_file in ("-", "stdout")) else None,
     )
     logger = with_log_context(base_logger, run_mode="inventory_summary", data_view_id=data_view_id)
 
