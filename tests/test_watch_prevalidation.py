@@ -146,3 +146,15 @@ def test_watch_no_warning_when_no_duplicates():
     """Sanity: distinct IDs produce no dedup warning."""
     result = _run(["--watch", "dv_abc", "dv_def", "--interval", "garbage"])
     assert "deduplicat" not in result.stderr.lower()
+
+
+def test_watch_agent_mode_error_names_agent_mode():
+    result = _run(["--watch", "dv_abc", "--interval", "1h", "--agent-mode"])
+    assert result.returncode == 1
+    assert "--watch is incompatible with --agent-mode" in result.stderr
+
+
+def test_watch_agent_mode_with_explicit_format_names_format():
+    result = _run(["--watch", "dv_abc", "--interval", "1h", "--agent-mode", "--format", "json"])
+    assert result.returncode == 1
+    assert "--watch is incompatible with --format" in result.stderr

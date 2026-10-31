@@ -413,3 +413,52 @@ class TestDataViewNameResolution:
         assert set(ids) == {"dv_a1", "dv_a2", "dv_b1", "dv_b2"}
         assert len(name_map["View A"]) == 2
         assert len(name_map["View B"]) == 2
+
+
+class TestNameResolutionLogFormat:
+    """Name-resolution log records follow the resolved --log-format."""
+
+    @pytest.fixture(autouse=True)
+    def _reset_name_resolution_logger(self):
+        resolution_logger = logging.getLogger("name_resolution")
+        resolution_logger.handlers.clear()
+        yield
+        resolution_logger.handlers.clear()
+
+    @pytest.mark.parametrize("argv", [["X", "--log-format", "json"], ["X", "--agent-mode"]])
+    def test_name_resolution_logger_uses_json_formatter_for_json_log_format(self, argv, capsys):
+        import json
+
+        from cja_auto_sdr import generator
+
+        def fake_resolve(identifiers, config_file, logger, **kwargs):
+            logger.error("Data view name 'X' not found")
+            return [], {}
+
+        with (
+            patch("sys.argv", ["cja_auto_sdr", *argv]),
+            patch("cja_auto_sdr.generator.resolve_data_view_names", side_effect=fake_resolve),
+            pytest.raises(SystemExit),
+        ):
+            generator.main()
+
+        lines = [line for line in capsys.readouterr().err.splitlines() if "not found" in line]
+        assert lines
+        record = json.loads(lines[0])
+        assert record["level"] == "ERROR"
+
+    def test_name_resolution_logger_keeps_text_format_by_default(self, capsys):
+        from cja_auto_sdr import generator
+
+        def fake_resolve(identifiers, config_file, logger, **kwargs):
+            logger.error("Data view name 'X' not found")
+            return [], {}
+
+        with (
+            patch("sys.argv", ["cja_auto_sdr", "X"]),
+            patch("cja_auto_sdr.generator.resolve_data_view_names", side_effect=fake_resolve),
+            pytest.raises(SystemExit),
+        ):
+            generator.main()
+
+        assert "ERROR - Data view name 'X' not found" in capsys.readouterr().err
