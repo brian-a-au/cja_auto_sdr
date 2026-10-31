@@ -945,3 +945,81 @@ class TestBatchProcessorEdgeCases:
         with patch("pathlib.Path.mkdir", side_effect=PermissionError("Access denied")):
             with pytest.raises(OutputError, match="Permission denied"):
                 BatchProcessor(config_file=mock_config_file, output_dir="/nonexistent/restricted/path")
+
+
+class TestBatchStopOnErrorCollectsRunningViews:
+    """PIPE-6: views already running when the batch stops must still be reported."""
+
+    @patch("cja_auto_sdr.generator.setup_logging")
+    def test_stop_on_error_collects_running_views(self, mock_setup_logging, mock_config_file, temp_output_dir):
+        import threading
+        import time
+        from concurrent.futures import Future
+
+        mock_setup_logging.return_value = Mock()
+        fail_done = threading.Event()
+
+        class TwoSlotExecutor:
+            """Runs the first two submissions on threads; later ones stay queued (cancellable)."""
+
+            def __init__(self, max_workers=None):
+                self.threads = []
+                self.count = 0
+
+            def submit(self, fn, *args):
+                future = Future()
+                self.count += 1
+                if self.count <= 2:
+
+                    def run():
+                        if future.set_running_or_notify_cancel():
+                            try:
+                                future.set_result(fn(*args))
+                            except BaseException as exc:
+                                future.set_exception(exc)
+
+                    t = threading.Thread(target=run)
+                    self.threads.append(t)
+                    t.start()
+                return future
+
+            def shutdown(self, wait=True, cancel_futures=False):
+                for t in self.threads:
+                    t.join()
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                self.shutdown()
+                return False
+
+        started = []
+
+        def fake_worker(wa):
+            started.append(wa.data_view_id)
+            if wa.data_view_id == "dv_fail":
+                fail_done.set()
+                return ProcessingResult(
+                    data_view_id="dv_fail", data_view_name="F", success=False, duration=0.0, error_message="boom"
+                )
+            fail_done.wait(5)
+            time.sleep(0.3)
+            return ProcessingResult(data_view_id=wa.data_view_id, data_view_name="S", success=True, duration=0.3)
+
+        with (
+            patch("cja_auto_sdr.generator.ProcessPoolExecutor", TwoSlotExecutor),
+            patch("cja_auto_sdr.generator.process_single_dataview_worker", fake_worker),
+        ):
+            processor = BatchProcessor(
+                config_file=mock_config_file,
+                output_dir=temp_output_dir,
+                workers=2,
+                continue_on_error=False,
+                quiet=True,
+            )
+            results = processor.process_batch(["dv_fail", "dv_slow", "dv_queued"])
+
+        assert [r.data_view_id for r in results["successful"]] == ["dv_slow"]
+        assert [r.data_view_id for r in results["failed"]] == ["dv_fail"]
+        assert "dv_queued" not in started
