@@ -9,6 +9,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.13.7] - 2026-10-31
+
+This patch fixes bugs in CLI output contracts, interrupt handling, and several writers, and it makes two runs faster. Ctrl+C now stops `--watch` after the current data view. A Ctrl+C in an org report keeps the lock until in-flight fetches finish. Excel output no longer turns text into formulas or leaves a partial workbook behind. Several results change on purpose:
+- `--stats` now exits 1 when a data view or name cannot be read.
+- Segmented calculated metrics now list their segment references, so their complexity scores and summaries change.
+- Four kinds of derived field summaries now describe the main rule.
+- Org report components appear in a stable order, so existing reports change order once.
+
+### Fixed
+
+- **`--stats` errors in machine-readable output:** with `--format json`, `--format csv`, or `--output -`, a failure to resolve the data views printed plain text on stderr. It now prints one JSON line with `error` and `error_type`, as `docs/CLI_REFERENCE.md` documents. Human output is unchanged.
+- **`--stats` exit code:** a data view that could not be read showed an `ERROR` row, and the run still exited 0. A name that did not resolve was dropped without a message. Both now give an error row and make the run exit 1, and the payload still lists every row.
+  - **Behavior change:** scripts that run `--stats` on a list that includes a missing data view now see exit 1.
+- **Logs under `--agent-mode`:** with `--output FILE`, JSON log lines went to stdout for single, batch, inventory summary, and quality report runs. They now go to stderr. Without `--agent-mode`, logs stay on stdout.
+- **Name resolution logs:** the lines printed while resolving data view names ignored `--log-format json` and `--agent-mode`. They now use the JSON format.
+- **Diff output to stdout:** `--diff`, `--compare-snapshots`, and `--diff-snapshot` with `--output -` and a format that writes a file, such as `markdown`, wrote the file without saying so. They now print a warning. `--diff-output -` wrote a file named `-`. It is now rejected with exit 1 before any work.
+- **Ignored `--output FILE`:** `--batch`, `--inventory-summary` with a format other than JSON, `--sample-config`, and `--config-status` ignored `--output FILE` silently. They now print a warning that names the option to use instead.
+- **`--watch --agent-mode`:** the error said `--watch is incompatible with --format`, though no `--format` was given. It now names `--agent-mode`.
+- **Ctrl+C in `--watch`:** the watch loop checked for Ctrl+C and SIGTERM only between cycles, so a long cycle ran to the end. It now stops after the current data view. A second Ctrl+C exits at once with code 130.
+- **Org report lock after Ctrl+C:** the lock was released at once while fetch threads kept running for several seconds, so a second run could start while the first one was still calling the API. The lock is now held until the in-flight fetches finish. The total exit time does not change.
+- **Notion page registry:** lookups read the registry file without its lock. During concurrent `--batch --format notion` runs, a lookup could read the file while it was being rewritten, find nothing, and create a duplicate page. Lookups now take the lock.
+- **Inventory fetch retries:** the calculated metric and segment inventory requests had no retry, so one connection reset failed the inventory. They now retry like the metric and dimension requests. Error responses are still not retried.
+- **Partial Excel workbooks:** the org report and diff Excel writers wrote straight to the target file. A Ctrl+C or an error partway through replaced a good workbook with a partial one. They now write to a staging file first, as the SDR Excel writer does. A hard-linked or non-regular destination is now rejected for these writers too.
+- **Excel formulas from text:** text that starts with `=`, such as a description or a name, became a formula in SDR, diff, and org workbooks. Excel then showed `#NAME?`, or a live link for `=HYPERLINK(...)`. This text is now written as plain text.
+- **Excel SDR with a missing name:** a metric or dimension with no name made the Excel SDR fail with `NAN/INF not supported`. The name cell is now left blank.
+- **Markdown tables:** diff Markdown and PR comment tables broke when a name, label, or description had a `|` or a line break. SDR Markdown tables broke on a backslash before a `|`. These characters are now escaped. Output for values without them is unchanged.
+- **Org report component order:** the order of components in org report output depended on Python's hash seed, so it changed between runs. It is now sorted.
+- **Calculated metric segment filters:** the parser did not read the real CJA shapes for segment filters (`segment-ref`, nested or at the top level), condition branches (`cond`), dimension fields (`field`), and the `ge` and `le` comparisons. On a data view with 65 calculated metrics, 8 used segment filters, but none showed any `segment_references`. They now list them, and summaries read, e.g., `orders[segment] / visitors`. Complexity scores rise for these metrics, because their segments and conditions were not counted before.
+- **Derived field summaries:** for a derived field that concatenates values, `logic_summary` described a helper rule, e.g., `Case When (1): default→"unknown"`, instead of the main rule. It now describes the main rule. `branch_count` is unchanged.
+
+### Performance
+
+- **Data view IDs:** when every input is a data view ID, the run no longer creates an extra API client and lists every data view during name resolution. A single SDR on a rich data view went from 2.05s to 1.26s median, with 4 API calls instead of 6. An unknown ID or a credential problem is now reported when that data view is fetched, not during resolution.
+- **`--org-report`:** the report now asks the API only for the four component fields it reads. On an org with 100 data views, a cold run went from 10.9s to 13.7s down to 7.4s to 8.0s, and the downloaded data went from 42.2 MB to 7.3 MB. The JSON report is identical, and the number of API calls is the same.
+
 ## [3.13.6] - 2026-10-30
 
 This patch makes the lock check safe on Windows, fills in segment references and summaries from real CJA payloads, and cuts one API call per data view from `--org-report --include-metadata`. It also replaces a few tracebacks with clear errors and warns when `--output` is ignored. Two results change on purpose: whitespace-only descriptions now count as missing, and segment complexity scores rise because predicates were undercounted before.
