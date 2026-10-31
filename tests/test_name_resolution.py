@@ -143,6 +143,43 @@ class TestDataViewNameResolution:
         assert ids == []  # Name not found, not added to results
         assert name_map == {}
 
+    @patch("cja_auto_sdr.generator.get_cached_data_views")
+    @patch("cja_auto_sdr.generator.cjapy")
+    def test_all_id_inputs_skip_client_and_listing(self, mock_cjapy, mock_listing):
+        """All-ID input needs no client or listing call (PERF-1)."""
+        ids, name_map = resolve_data_view_names(["dv_a", "dv_b", "dv_a"], "config.json", self.logger)
+
+        assert ids == ["dv_a", "dv_b", "dv_a"]
+        assert name_map == {}
+        mock_cjapy.CJA.assert_not_called()
+        mock_listing.assert_not_called()
+
+    @patch("cja_auto_sdr.generator.get_cached_data_views")
+    @patch("cja_auto_sdr.generator.cjapy")
+    def test_all_id_inputs_still_report_credential_failure(self, mock_cjapy, mock_listing):
+        """A credential failure is still reported for all-ID input."""
+        with patch("cja_auto_sdr.generator.configure_cjapy", return_value=(False, "no creds", None)):
+            ids, name_map, diagnostics = resolve_data_view_names(
+                ["dv_a"], "config.json", self.logger, include_diagnostics=True
+            )
+
+        assert ids == []
+        assert name_map == {}
+        assert diagnostics.error_type == "configuration_error"
+        mock_cjapy.CJA.assert_not_called()
+        mock_listing.assert_not_called()
+
+    @patch("cja_auto_sdr.generator.get_cached_data_views")
+    @patch("cja_auto_sdr.generator.cjapy")
+    def test_mixed_id_and_name_inputs_still_list(self, mock_cjapy, mock_listing):
+        """Any name input still needs the listing, called once."""
+        mock_listing.return_value = self.mock_dataviews
+
+        ids, _ = resolve_data_view_names(["dv_a", "Staging"], "config.json", self.logger)
+
+        assert ids == ["dv_a", "dv_stage789"]
+        mock_listing.assert_called_once()
+
     @patch("cja_auto_sdr.generator.cjapy")
     def test_resolve_nonexistent_id(self, mock_cjapy):
         """Test resolving an ID that doesn't exist (should still pass through with warning)"""

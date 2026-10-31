@@ -54,6 +54,10 @@ if TYPE_CHECKING:
 
 from cja_auto_sdr.org.cache import OrgReportCache, OrgReportLock
 
+# The only component fields the org report reads besides the default ``id`` and
+# ``name``: ``type`` and ``sourceFieldType`` drive the standard/derived counts.
+ORG_REPORT_COMPONENT_EXPANSION = "type,sourceFieldType"
+
 # Pre-compiled regex patterns for stale component detection.
 # Shared by _audit_naming_conventions and _detect_stale_components so that
 # both code paths use the same unified set of keywords.
@@ -949,7 +953,14 @@ class OrgComponentAnalyzer:
         try:
             cja = self._get_thread_client()
             # Fetch metrics
-            metrics_df = fetch_component_payload(cja, "metrics", dv_id, inclType=True, full=True)
+            metrics_df = fetch_component_payload(
+                cja,
+                "metrics",
+                dv_id,
+                inclType=True,
+                full=True,
+                expansion=ORG_REPORT_COMPONENT_EXPANSION,
+            )
             if isinstance(metrics_df, ComponentFetchFailure):
                 raise RuntimeError(metrics_df.message)
             metric_ids = set()
@@ -991,7 +1002,14 @@ class OrgComponentAnalyzer:
                     standard_metric_count = len(metrics_df) - derived_metric_count
 
             # Fetch dimensions
-            dimensions_df = fetch_component_payload(cja, "dimensions", dv_id, inclType=True, full=True)
+            dimensions_df = fetch_component_payload(
+                cja,
+                "dimensions",
+                dv_id,
+                inclType=True,
+                full=True,
+                expansion=ORG_REPORT_COMPONENT_EXPANSION,
+            )
             if isinstance(dimensions_df, ComponentFetchFailure):
                 raise RuntimeError(dimensions_df.message)
             dimension_ids = set()
