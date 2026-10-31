@@ -606,22 +606,28 @@ def _push_to_notion_from_json(
         value = container.get(key)
         return value if isinstance(value, dict) else {}
 
+    def _rows(value: Any, path: str) -> list[dict[str, Any]]:
+        # Each table must be a list of JSON objects; anything else would reach
+        # pd.DataFrame and fail with a traceback.
+        if not isinstance(value, list) or not all(isinstance(row, dict) for row in value):
+            _exit_error(
+                f"--push-to-notion: '{path}' in {json_file} must be a list of objects (got {type(value).__name__})",
+            )
+        return value
+
     metadata_dict = _section(payload, "metadata")
+    tables = (
+        ("Metrics", payload.get("metrics"), "metrics"),
+        ("Dimensions", payload.get("dimensions"), "dimensions"),
+        ("Data Quality", payload.get("data_quality"), "data_quality"),
+        ("Derived Fields", _section(payload, "derived_fields").get("fields"), "derived_fields.fields"),
+        ("Calculated Metrics", _section(payload, "calculated_metrics").get("metrics"), "calculated_metrics.metrics"),
+        ("Segments", _section(payload, "segments").get("segments"), "segments.segments"),
+    )
     data_dict: dict[str, pd.DataFrame] = {}
-    if payload.get("metrics"):
-        data_dict["Metrics"] = pd.DataFrame(payload["metrics"])
-    if payload.get("dimensions"):
-        data_dict["Dimensions"] = pd.DataFrame(payload["dimensions"])
-    if payload.get("data_quality"):
-        data_dict["Data Quality"] = pd.DataFrame(payload["data_quality"])
-    if _section(payload, "derived_fields").get("fields"):
-        data_dict["Derived Fields"] = pd.DataFrame(_section(payload, "derived_fields")["fields"])
-    if _section(payload, "calculated_metrics").get("metrics"):
-        data_dict["Calculated Metrics"] = pd.DataFrame(
-            _section(payload, "calculated_metrics")["metrics"],
-        )
-    if _section(payload, "segments").get("segments"):
-        data_dict["Segments"] = pd.DataFrame(_section(payload, "segments")["segments"])
+    for sheet_name, value, path in tables:
+        if value:
+            data_dict[sheet_name] = pd.DataFrame(_rows(value, path))
 
     effective_output_dir = output_dir or str(json_path.parent)
     base_filename = json_path.stem
@@ -5186,6 +5192,16 @@ def _preflight_output_file(output_file: str | None, is_stdout: bool) -> None:
         _exit_error(f"Cannot write output to '{output_file}': path is a directory")
 
 
+def _warn_output_ignored(output_file: str | None, *, scope: str, hint: str) -> None:
+    """Warn on stderr when ``--output FILE`` is given to a mode that never writes it."""
+    if not output_file or output_file in ("-", "stdout"):
+        return
+    print(
+        ConsoleColors.warning(f"Warning: --output is ignored {scope}; {hint}."),
+        file=sys.stderr,
+    )
+
+
 def _emit_output_or_exit(data: str, output_file: str | None, is_stdout: bool) -> None:
     """Call ``_emit_output`` and turn an ``OSError`` into a clean error exit."""
     try:
@@ -7564,6 +7580,11 @@ def _main_impl(run_state: dict[str, Any] | None = None):
             supported_formats={"json": "json", "console": "table", "table": "table"},
             fallback_format="table",
             warning_scope="--profile-list",
+        )
+        _warn_output_ignored(
+            getattr(args, "output", None),
+            scope="with --profile-list",
+            hint="redirect stdout to save the list",
         )
         success = list_profiles(output_format=list_format)
         if run_state is not None:

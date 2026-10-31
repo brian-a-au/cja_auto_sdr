@@ -115,7 +115,7 @@ cja-auto-sdr [OPTIONS] DATA_VIEW_ID_OR_NAME [...]
 | Option | Description | Default |
 |--------|-------------|---------|
 | `--output-dir PATH` | Output directory for generated files | Current directory (or `OUTPUT_DIR` if set) |
-| `--output PATH` | Output file path. Use `-` or `stdout` to write a command-family-supported format to stdout; SDR generation and `--inventory-summary` support JSON, discovery and stats support JSON/CSV, diff supports JSON, and org-report supports JSON/console. Implies `--quiet` for stdout | - |
+| `--output PATH` | Output file path. Use `-` or `stdout` to write a command-family-supported format to stdout; SDR generation and `--inventory-summary` support JSON, discovery and stats support JSON/CSV, diff supports JSON, and org-report supports JSON/console. Implies `--quiet` for stdout. Modes that never write to `--output FILE` (diff modes, `--profile-list`, and `--stats` table output) print a warning instead of ignoring it silently; `--stats --format json/csv` exits 1 before any API call when the path is a directory | - |
 | `--format FORMAT` | Output format (see table below) | excel (SDR), console (diff) |
 | `--json-typed` | Emit versioned typed JSON (`schema_version: cja-auto-sdr.sdr-typed/1`) that keeps nested objects, lists, booleans, and numbers native. SDR generation only; requires `--format json` (or `--agent-mode`, which defaults to JSON on stdout). Any other format exits 1 with `ERROR: --json-typed requires --format json` before any API call. Ignored in other modes, and has no effect with `--quality-report`. See [OUTPUT_FORMATS.md](OUTPUT_FORMATS.md#typed-json---json-typed) | False |
 | `--stats` | Show quick statistics (metrics/dimensions count) without generating full SDR report | False |
@@ -1064,7 +1064,7 @@ cja_auto_sdr dv_12345 --stats --format json
 # Stats to stdout for scripting
 cja_auto_sdr dv_12345 --stats --output -
 
-# Stats in CSV format to file
+# Stats in CSV format to file (table output ignores --output and warns)
 cja_auto_sdr dv_12345 --stats --format csv --output stats.csv
 ```
 

@@ -374,6 +374,16 @@ def show_stats(
     generator = _generator_module()
     is_stdout = output_file in ("-", "stdout")
     is_machine_readable = generator._is_machine_readable_output(output_format, output_file)
+    writes_file = output_format in ("json", "csv") and not is_stdout
+    if writes_file:
+        # Fail before any API work rather than after it.
+        generator._preflight_output_file(output_file, is_stdout)
+    elif not is_stdout:
+        generator._warn_output_ignored(
+            output_file,
+            scope="with --stats --format table",
+            hint="use --format json or csv to write a file",
+        )
 
     if not is_machine_readable and not quiet:
         print()
@@ -416,7 +426,7 @@ def show_stats(
             if is_stdout or not output_file:
                 print(output_data)
             else:
-                generator._emit_output(output_data, output_file, is_stdout)
+                generator._emit_output_or_exit(output_data, output_file, is_stdout)
         elif output_format == "csv":
             lines = ["id,name,owner,metrics,dimensions,total_components"]
             for item in stats_data:
@@ -429,7 +439,7 @@ def show_stats(
             if is_stdout or not output_file:
                 print(output_data)
             else:
-                generator._emit_output(output_data, output_file, is_stdout)
+                generator._emit_output_or_exit(output_data, output_file, is_stdout)
         else:
             if stats_data:
                 max_id_width = max(len("ID"), *(len(s["id"]) for s in stats_data)) + 2

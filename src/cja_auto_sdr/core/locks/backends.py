@@ -304,6 +304,47 @@ def _parse_iso(value: str) -> datetime | None:
         return None
 
 
+_IS_WINDOWS = os.name == "nt"
+_WINDOWS_MAX_PID = 0xFFFFFFFF
+
+
+def _is_windows_process_running(pid: int) -> bool:
+    """Check whether ``pid`` is alive on Windows without signalling it.
+
+    ``os.kill(pid, 0)`` is not a probe on Windows: signal 0 is ``CTRL_C_EVENT``,
+    so it would send Ctrl+C to that process group. Query the process instead.
+    """
+    import ctypes  # Windows-only path; keep off the import-time path
+    from ctypes import wintypes
+
+    if pid > _WINDOWS_MAX_PID:
+        return False
+
+    process_query_limited_information = 0x1000
+    still_active = 259
+    error_access_denied = 5
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+    kernel32.GetExitCodeProcess.restype = wintypes.BOOL
+    kernel32.GetExitCodeProcess.argtypes = (wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD))
+    kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
+
+    handle = kernel32.OpenProcess(process_query_limited_information, False, pid)
+    if not handle:
+        # Access denied means the process exists but belongs to another user.
+        return ctypes.get_last_error() == error_access_denied
+    try:
+        exit_code = wintypes.DWORD()
+        if not kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code)):
+            # Unknown state: report alive so a live lock is never taken over.
+            return True
+        return exit_code.value == still_active
+    finally:
+        kernel32.CloseHandle(handle)
+
+
 def _is_process_running(pid: int) -> bool:
     # Metadata can be malformed; never probe process groups/special values.
     if isinstance(pid, bool):
@@ -314,6 +355,9 @@ def _is_process_running(pid: int) -> bool:
         return False
     if normalized_pid <= 0:
         return False
+
+    if _IS_WINDOWS:
+        return _is_windows_process_running(normalized_pid)
 
     try:
         os.kill(normalized_pid, 0)

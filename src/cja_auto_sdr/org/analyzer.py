@@ -897,6 +897,33 @@ class OrgComponentAnalyzer:
             self._thread_local.cja = client
         return client
 
+    @staticmethod
+    def _listing_metadata(
+        dv: Mapping[str, Any],
+    ) -> tuple[str | None, str | None, Any, Any, str | None] | None:
+        """Return ``(owner, owner_id, created, modified, description)`` from a listing row.
+
+        ``getDataViews()`` returns the same owner/created/modified/description
+        fields as ``getDataView()``. Returns ``None`` when the row has no owner
+        (a listing without metadata, which may still carry ``modified`` for cache
+        validation), so callers fall back to the per-data-view lookup.
+        """
+
+        def _present(value: Any) -> Any:
+            # DataFrame-sourced rows use NaN for missing values.
+            if value is None or (isinstance(value, float) and math.isnan(value)):
+                return None
+            return value
+
+        if not isinstance(_present(dv.get("owner")), Mapping):
+            return None
+        owner, owner_id = extract_owner(_present(dv.get("owner")))
+        created = _present(dv.get("created")) or _present(dv.get("createdDate"))
+        modified = _present(dv.get("modified")) or _present(dv.get("modifiedDate"))
+        raw_description = _present(dv.get("description"))
+        description = raw_description if isinstance(raw_description, str) else None
+        return owner, owner_id, created, modified, description
+
     def _fetch_data_view_components(self, dv: dict[str, Any]) -> DataViewSummary:
         """Fetch metrics and dimensions for a single data view.
 
@@ -1004,7 +1031,12 @@ class OrgComponentAnalyzer:
             description = None
             has_description = False
 
-            if self.config.include_metadata:
+            listing_metadata = self._listing_metadata(dv) if self.config.include_metadata else None
+            if listing_metadata is not None:
+                # getDataViews() already returned the metadata; skip a getDataView() per data view.
+                owner, owner_id, created, modified, description = listing_metadata
+                has_description = bool(description and description.strip())
+            elif self.config.include_metadata:
                 try:
                     raw_dv_details = cja.getDataView(dv_id)
                 except Exception as e:  # Intentional: metadata enrichment is optional and best-effort only.

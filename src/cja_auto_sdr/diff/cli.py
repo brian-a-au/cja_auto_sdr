@@ -48,6 +48,15 @@ def _resolve_diff_quiet(args: argparse.Namespace, *, output_path: str | None) ->
     return resolve_agent_quiet(args, output_path=output_path)
 
 
+def _warn_diff_output_ignored(output_path: str | None, *, command: str) -> None:
+    """Warn that diff-family modes write files via --diff-output, not --output."""
+    _generator_module()._warn_output_ignored(
+        output_path,
+        scope=f"with {command}",
+        hint="use --diff-output FILE or --output-dir DIR to write a file",
+    )
+
+
 def _exit_with_diff_result(
     *,
     success: bool,
@@ -240,6 +249,7 @@ def dispatch_cross_data_view_diff_cli_mode(
     diff_format = args.format or "console"
     resolved_output_path = _resolve_diff_output_path(args, output_format=diff_format)
     diff_quiet = _resolve_diff_quiet(args, output_path=resolved_output_path)
+    _warn_diff_output_ignored(resolved_output_path, command="--diff")
     _diff_output_to_stdout = _diff_output_to_stdout_requested(
         args,
         output_format=diff_format,
@@ -519,6 +529,7 @@ def dispatch_snapshot_cli_modes(
         diff_format = args.format or "console"
         resolved_output_path = _resolve_diff_output_path(args, output_format=diff_format)
         diff_quiet = _resolve_diff_quiet(args, output_path=resolved_output_path)
+        _warn_diff_output_ignored(resolved_output_path, command="--compare-snapshots")
         _cs_output_to_stdout = _diff_output_to_stdout_requested(
             args,
             output_format=diff_format,
@@ -675,6 +686,7 @@ def dispatch_snapshot_cli_modes(
         diff_format = args.format or "console"
         resolved_output_path = _resolve_diff_output_path(args, output_format=diff_format)
         diff_quiet = _resolve_diff_quiet(args, output_path=resolved_output_path)
+        _warn_diff_output_ignored(resolved_output_path, command="--diff-snapshot")
         _ds_output_to_stdout = _diff_output_to_stdout_requested(
             args,
             output_format=diff_format,

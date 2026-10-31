@@ -52,6 +52,7 @@ tests/
 ├── test_parallel_api_fetcher.py     # Parallel API fetcher tests
 ├── test_parallel_validation.py      # Parallel validation tests
 ├── test_process_single_dataview.py  # Single data view processing tests
+├── test_process_liveness_smoke.py   # Cross-platform lock PID liveness probes (Windows-safe)
 ├── test_profiles.py                 # Multi-organization profile tests
 ├── test_quality_edge_cases.py       # Quality edge-case tests
 ├── test_resilience_edge_cases.py     # Resilience edge-case tests
@@ -186,7 +187,7 @@ tests/
 └── README.md                        # This file
 ```
 
-**Total: 9,358 comprehensive tests**
+**Total: 9,410 comprehensive tests**
 
 ### Test Count Breakdown
 
@@ -195,18 +196,18 @@ tests/
 
 | Category | Tests | Files | Notes |
 |----------|-------|-------|-------|
-| `unit` | 9,207 | 168 | Default primary category for files without explicit integration/e2e/smoke scope |
-| `integration` | 118 | 3 | Cross-module integration suites |
+| `unit` | 9,249 | 168 | Default primary category for files without explicit integration/e2e/smoke scope |
+| `integration` | 122 | 3 | Cross-module integration suites |
 | `e2e` | 23 | 2 | End-to-end suites with a mocked external boundary |
-| `smoke` | 10 | 1 | Lightweight command-mode coverage |
+| `smoke` | 16 | 2 | Lightweight command-mode coverage |
 | `slow` | 0 | 0 | Overlay marker; these tests are also counted in a primary category |
-| **Primary Total** | **9,358** | **174** | **unit + integration + e2e + smoke** |
+| **Primary Total** | **9,410** | **175** | **unit + integration + e2e + smoke** |
 
 | CI Slice | Tests | Files | Selector |
 |----------|-------|-------|----------|
-| `test-unit` | 9,207 | 168 | `-m "unit and not slow"` |
-| `test-integration` | 141 | 5 | `-m "integration or e2e or slow"` |
-| `smoke-test` | 10 | 1 | `-m smoke` |
+| `test-unit` | 9,249 | 168 | `-m "unit and not slow"` |
+| `test-integration` | 145 | 5 | `-m "integration or e2e or slow"` |
+| `smoke-test` | 16 | 2 | `-m smoke` |
 
 > Coverage note: the `--cov-fail-under=95` gate currently runs only in the `test-unit` CI slice.
 <!-- END GENERATED TEST CATEGORY SUMMARY -->
@@ -215,10 +216,10 @@ tests/
 | Test File | Tests | Coverage Area |
 |-----------|-------|---------------|
 | `test_diff_comparison.py` | 186 | Data view diff comparison feature with inventory support |
-| `test_ux_features.py` | 129 | UX features: --open, --stats, --output, --list-dataviews formats, inventory validation, inventory summary, include-all-inventory |
+| `test_ux_features.py` | 133 | UX features: --open, --stats, --output, --list-dataviews formats, inventory validation, inventory summary, include-all-inventory |
 | `test_org_report.py` | 225 | Org-wide component analysis: config, distribution, similarity, output formats, large org scaling, output path aliases |
 | `test_org_governance_checks.py` | 26 | Governance evaluation statuses, evidence scope, strict exits, and writer contracts |
-| `test_org_report_integration.py` | 42 | Org-wide analysis integration tests: end-to-end flows, caching, filtering, governance |
+| `test_org_report_integration.py` | 46 | Org-wide analysis integration tests: end-to-end flows, caching, filtering, governance |
 | `test_cli.py` | 418 | Command-line interface and argument parsing |
 | `test_profiles.py` | 88 | Multi-organization profile support |
 | `test_derived_inventory.py` | 64 | Derived fields inventory feature |
@@ -226,7 +227,7 @@ tests/
 | `test_inventory_pragma_coverage.py` | 18 | Inventory pragma coverage hardening |
 | `test_inventory_summary_cjapy_payloads.py` | 4 | Inventory summary cjapy payload classification |
 | `test_inventory_utils.py` | 56 | Inventory utilities and helpers |
-| `test_segments_inventory.py` | 49 | Segments inventory feature |
+| `test_segments_inventory.py` | 63 | Segments inventory feature |
 | `test_edge_cases.py` | 35 | Edge cases, configuration dataclasses, custom exceptions |
 | `test_calculated_metrics_inventory.py` | 367 | Calculated metrics inventory feature |
 | `test_git_integration.py` | 61 | Git integration, snapshot management, inventory snapshots |
@@ -245,6 +246,7 @@ tests/
 | `test_batch_processor.py` | 31 | Batch processing of multiple data views |
 | `test_validation_cache.py` | 32 | Validation result caching |
 | `test_process_single_dataview.py` | 53 | End-to-end single data view processing |
+| `test_process_liveness_smoke.py` | 6 | Cross-platform lock PID liveness probes (Windows-safe) |
 | `test_optimized_validation.py` | 14 | Optimized data quality validation |
 | `test_name_resolution.py` | 24 | Data view name to ID resolution |
 | `test_shared_cache.py` | 30 | Shared validation cache |
@@ -268,7 +270,7 @@ tests/
 | `test_inventory_operation_status.py` | 16 | Optional inventory completed/failed status, unavailable placeholders, run summary parity |
 | `test_output_extraction_contracts.py` | 347 | Extraction contracts for output.diff and output.inventory |
 | `test_malformed_api_responses.py` | 21 | Negative tests for malformed/unexpected API responses |
-| `test_main_entry_points.py` | 45 | main() and _main_impl() entry points, dispatch, run_state, run summary |
+| `test_main_entry_points.py` | 51 | main() and _main_impl() entry points, dispatch, run_state, run summary |
 | `test_quality_policy_and_run_summary.py` | 178 | Quality policy functions and run summary/status inference |
 | `test_e2e_integration.py` | 16 | End-to-end integration tests with real pipeline, mocked API boundary |
 | `test_api_client.py` | 39 | API client exception paths and error handling |
@@ -283,7 +285,7 @@ tests/
 | `test_config_dataclasses.py` | 89 | Config dataclasses and constants functions |
 | `test_lock_manager.py` | 68 | Lock manager acquire/release/heartbeat lifecycle |
 | `test_lazy_forwarding.py` | 73 | Lazy-forwarding infrastructure and make_getattr() |
-| `test_lock_backend_edge_cases.py` | 165 | Lock backend metadata I/O, stale detection, legacy parsing |
+| `test_lock_backend_edge_cases.py` | 173 | Lock backend metadata I/O, stale detection, legacy parsing |
 | `test_derived_fields_coverage.py` | 161 | Derived field complexity scoring, logic summary, predicates |
 | `test_org_analyzer_coverage.py` | 180 | Org analyzer governance, naming audit, sampling, memory, drift, clustering |
 | `test_org_analyzer_metadata_enrichment.py` | 3 | Org analyzer metadata enrichment payload handling |
@@ -346,7 +348,7 @@ tests/
 | `test_lock_info_normalization.py` | 54 | Lock-info normalization classmethod direct unit tests |
 | `test_resilience_edge_cases.py` | 74 | Resilience edge-case tests |
 | `test_cache_edge_cases.py` | 20 | Cache edge-case tests |
-| `test_quality_edge_cases.py` | 27 | Quality edge-case tests |
+| `test_quality_edge_cases.py` | 29 | Quality edge-case tests |
 | `test_tuning_edge_cases.py` | 15 | Tuning edge-case tests |
 | `test_fetch_edge_cases.py` | 9 | Fetch edge-case tests |
 | `test_advisories.py` | 53 | Advisory model, builder, and rollup tests |
@@ -371,7 +373,7 @@ tests/
 | `test_notion_registry.py` | 19 | Notion page ID registry CRUD tests |
 | `test_notion_writer.py` | 95 | Notion block builder + API layer tests |
 | `test_cli_notion.py` | 51 | CLI flag wiring for --format notion and --push-to-notion |
-| `test_push_to_notion.py` | 12 | --push-to-notion JSON ingest and error paths |
+| `test_push_to_notion.py` | 20 | --push-to-notion JSON ingest and error paths |
 | `test_cli_notion_database.py` | 34 | CLI flag wiring for --notion-create-database and --notion-database-id |
 | `test_notion_database.py` | 41 | Notion database creation and upsert tests |
 | `test_notion_org_publisher.py` | 13 | --org-report --format notion catalog publisher tests |
@@ -388,7 +390,7 @@ tests/
 | `test_diff_snapshot_retention.py` | 81 | Diff snapshot-retention parse-cache characterization test |
 | `test_diff_comparator_normalize.py` | 21 | Diff field-normalization type-fast-path characterization test |
 | `test_logging_diagnostics.py` | 2 | emit_diagnostic isEnabledFor guard characterization tests |
-| **Total** | **9,358** | **Collected via pytest --collect-only** |
+| **Total** | **9,410** | **Collected via pytest --collect-only** |
 
 ## Running Tests
 
@@ -520,7 +522,7 @@ uv run pytest --cov=cja_auto_sdr --cov-report=html --cov-report=term
 - `unit`: Default marker for tests that are not explicitly classified as `integration`, `e2e`, or `smoke`
 - `integration`: File-level integration suites such as `test_git_integration.py`, `test_org_report_integration.py`, and `test_trending_integration.py`
 - `e2e`: End-to-end suites such as `test_e2e_integration.py` and `test_cli_color_policy_e2e.py`
-- `smoke`: Lightweight command-mode coverage in `test_cli_smoke_modes.py`
+- `smoke`: Lightweight command-mode coverage in `test_cli_smoke_modes.py` and lock PID liveness probes in `test_process_liveness_smoke.py`
 - `slow`: Performance-oriented tests matching `*_perf.py` or `*_slow.py` filename patterns (e.g. a future `test_cache_perf.py`)
 
 ### CI Mapping
@@ -846,20 +848,20 @@ the `tests/README.md` inventory tree or count table.
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (9,358 tests total)
+- [x] Comprehensive test coverage (9,410 tests total)
 - [x] Org-wide analysis tests (test_org_report.py) - 225 tests (including large org scaling, output path aliases, memory warnings, smart cache invalidation)
-- [x] Org-wide analysis integration tests (test_org_report_integration.py) - 42 tests (end-to-end flows, caching, filtering, governance thresholds)
+- [x] Org-wide analysis integration tests (test_org_report_integration.py) - 46 tests (end-to-end flows, caching, filtering, governance thresholds)
 - [x] Profile management tests (test_profiles.py) - 88 tests
 - [x] API worker auto-tuning tests (test_api_tuning.py) - 25 tests
 - [x] Circuit breaker pattern tests (test_circuit_breaker.py) - 25 tests
 - [x] Shared validation cache tests (test_shared_cache.py) - 30 tests
 - [x] Calculated metrics inventory tests (test_calculated_metrics_inventory.py) - 367 tests
-- [x] Segments inventory tests (test_segments_inventory.py) - 49 tests
+- [x] Segments inventory tests (test_segments_inventory.py) - 63 tests
 - [x] Derived fields inventory tests (test_derived_inventory.py) - 64 tests
 - [x] Inventory utilities tests (test_inventory_utils.py) - 56 tests
 - [x] Git integration tests (test_git_integration.py) - 61 tests
 - [x] Inventory diff support in snapshot comparisons (test_diff_comparison.py) - 186 tests
-- [x] Inventory summary and include-all-inventory tests (test_ux_features.py) - 129 tests
+- [x] Inventory summary and include-all-inventory tests (test_ux_features.py) - 133 tests
 - [x] Parallel validation tests (test_parallel_validation.py)
 - [x] Validation caching tests (test_validation_cache.py)
 - [x] Early exit optimization tests (test_early_exit.py)

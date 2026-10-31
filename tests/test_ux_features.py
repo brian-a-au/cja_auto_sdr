@@ -244,6 +244,61 @@ class TestShowStatsFunction:
         else:
             assert text.splitlines()[0] == "id,name,owner,metrics,dimensions,total_components"
 
+    @pytest.mark.parametrize("output_format", ["json", "csv"])
+    @patch("cja_auto_sdr.generator.cjapy")
+    def test_show_stats_output_directory_exits_before_api_calls(self, mock_cjapy, output_format, tmp_path, capsys):
+        """--output naming an existing folder exits 1 cleanly, before any CJA call."""
+        with (
+            patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "mock", None)) as mock_configure,
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            show_stats(["dv_12345"], output_format=output_format, output_file=str(tmp_path), quiet=True)
+
+        assert exc_info.value.code == 1
+        err = capsys.readouterr().err
+        assert "path is a directory" in err
+        assert "Traceback" not in err
+        mock_configure.assert_not_called()
+        mock_cjapy.CJA.assert_not_called()
+
+    @patch("cja_auto_sdr.generator.cjapy")
+    def test_show_stats_write_failure_exits_cleanly(self, mock_cjapy, tmp_path, capsys):
+        """An OSError while writing --output becomes an error exit, not a traceback."""
+        mock_cja = MagicMock()
+        mock_cjapy.CJA.return_value = mock_cja
+        mock_cja.getDataView.return_value = {"name": "Test View", "owner": {"name": "Owner"}}
+        mock_cja.getMetrics.return_value = []
+        mock_cja.getDimensions.return_value = []
+        target = tmp_path / "stats.json"
+
+        with (
+            patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "mock", None)),
+            patch("cja_auto_sdr.generator._emit_output", side_effect=PermissionError("denied")),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            show_stats(["dv_12345"], output_format="json", output_file=str(target), quiet=True)
+
+        assert exc_info.value.code == 1
+        assert "Failed to write output" in capsys.readouterr().err
+
+    @patch("cja_auto_sdr.generator.cjapy")
+    def test_show_stats_table_warns_that_output_file_is_ignored(self, mock_cjapy, tmp_path, capsys):
+        mock_cja = MagicMock()
+        mock_cjapy.CJA.return_value = mock_cja
+        mock_cja.getDataView.return_value = {"name": "Test View", "owner": {"name": "Owner"}}
+        mock_cja.getMetrics.return_value = []
+        mock_cja.getDimensions.return_value = []
+        target = tmp_path / "stats.txt"
+
+        with patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "mock", None)):
+            result = show_stats(["dv_12345"], output_format="table", output_file=str(target), quiet=True)
+
+        assert result is True
+        captured = capsys.readouterr()
+        assert "Warning: --output is ignored with --stats --format table" in captured.err
+        assert "TOTAL" in captured.out
+        assert not target.exists()
+
     @patch("cja_auto_sdr.generator.cjapy")
     def test_show_stats_table_output(self, mock_cjapy):
         """Test show_stats with table format"""

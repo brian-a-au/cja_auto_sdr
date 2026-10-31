@@ -360,6 +360,21 @@ class TestMainImplProfileManagement:
         assert "--profile-list" in caplog.text
         assert "using table" in caplog.text
 
+    @pytest.mark.parametrize(("output", "warned"), [("profiles.json", True), ("-", False)])
+    @patch("cja_auto_sdr.generator._cli_option_specified", _mock_cli_option_specified)
+    @patch("cja_auto_sdr.generator.list_profiles")
+    def test_profile_list_warns_when_output_file_is_ignored(self, mock_list, capsys, output, warned):
+        mock_list.return_value = True
+
+        with pytest.raises(SystemExit) as exc_info:
+            with patch("cja_auto_sdr.generator.parse_arguments") as mock_pa:
+                mock_pa.return_value = parse_arguments(["--profile-list", "--output", output])
+                _main_impl()
+
+        assert exc_info.value.code == 0
+        err = capsys.readouterr().err
+        assert ("Warning: --output is ignored with --profile-list" in err) is warned
+
     @patch("cja_auto_sdr.generator._cli_option_specified", _mock_cli_option_specified)
     @patch("cja_auto_sdr.generator.test_profile")
     def test_profile_test_dispatches(self, mock_test):
@@ -667,3 +682,47 @@ assert not {"cja_auto_sdr.generator", "pandas", "numpy", "cjapy", "tqdm"}.inters
     assert result.returncode == 0, result.stderr
     assert result.stdout.startswith("usage: cja_auto_sdr ")
     assert result.stderr == ""
+
+
+class TestDiffFamilyOutputIgnoredWarning:
+    """Diff-family modes write files via --diff-output; --output FILE only warns."""
+
+    @staticmethod
+    def _run(argv_tail: list[str]) -> int:
+        with patch.object(sys, "argv", ["cja_auto_sdr", *argv_tail]):
+            with pytest.raises(SystemExit) as exc_info:
+                _main_impl()
+        return int(exc_info.value.code)
+
+    @pytest.mark.parametrize(("output", "warned"), [("diff.json", True), ("-", False)])
+    def test_cross_data_view_diff(self, capsys, output, warned):
+        with (
+            patch(
+                "cja_auto_sdr.generator.resolve_data_view_names",
+                side_effect=[(["dv_source"], {}), (["dv_target"], {})],
+            ),
+            patch("cja_auto_sdr.generator.handle_diff_command", return_value=(True, False, None)),
+        ):
+            exit_code = self._run(["--diff", "dv_source", "dv_target", "--format", "json", "--output", output])
+
+        assert exit_code == 0
+        err = capsys.readouterr().err
+        assert ("Warning: --output is ignored with --diff;" in err) is warned
+
+    def test_compare_snapshots(self, capsys, tmp_path):
+        a, b = tmp_path / "a.json", tmp_path / "b.json"
+        with patch("cja_auto_sdr.generator.handle_compare_snapshots_command", return_value=(True, False, None)):
+            exit_code = self._run(["--compare-snapshots", str(a), str(b), "--output", "diff.txt"])
+
+        assert exit_code == 0
+        assert "Warning: --output is ignored with --compare-snapshots;" in capsys.readouterr().err
+
+    def test_diff_snapshot(self, capsys, tmp_path):
+        with (
+            patch("cja_auto_sdr.generator.resolve_data_view_names", return_value=(["dv_1"], {})),
+            patch("cja_auto_sdr.generator.handle_diff_snapshot_command", return_value=(True, False, None)),
+        ):
+            exit_code = self._run(["dv_1", "--diff-snapshot", str(tmp_path / "base.json"), "--output", "diff.txt"])
+
+        assert exit_code == 0
+        assert "Warning: --output is ignored with --diff-snapshot;" in capsys.readouterr().err
