@@ -2112,6 +2112,13 @@ def _validate_semantic_flag_relationships(
     if watch_active:
         if _normalize_output_format(getattr(args, "format", None)) == "notion":
             _exit_error("--watch is not supported with --format notion")
+        if (
+            getattr(args, "agent_mode", False)
+            and not _cli_option_specified("--format")
+            and not _cli_option_specified("--output")
+        ):
+            # The agent-mode preset fills in format/output; blame the flag the user typed.
+            _exit_error("--watch is incompatible with --agent-mode")
         if getattr(args, "format", None) is not None:
             _exit_error("--watch is incompatible with --format")
         if getattr(args, "output", None) is not None:
