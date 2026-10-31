@@ -1047,3 +1047,66 @@ class TestConfigFileCredentialsNormalized:
         assert result is mock_cjapy.CJA.return_value
         self._assert_normalized(mock_config_from_env)
         mock_cjapy.importConfigFile.assert_not_called()
+
+
+class TestConfigCommandsProfileResolution:
+    """--config-status / --validate-config resolve the profile like real runs do."""
+
+    @staticmethod
+    def _setup_profile(tmp_path, monkeypatch):
+        for key in ("ORG_ID", "CLIENT_ID", "SECRET", "SCOPES", "SANDBOX", "CJA_PROFILE"):
+            monkeypatch.delenv(key, raising=False)
+        monkeypatch.setenv("CJA_HOME", str(tmp_path / "cjahome"))
+        monkeypatch.chdir(tmp_path)
+        pdir = tmp_path / "cjahome" / "orgs" / "pa"
+        pdir.mkdir(parents=True)
+        (pdir / "config.json").write_text(
+            json.dumps({"org_id": "ORG@AdobeOrg", "client_id": "client_id_value", "secret": "s-1234567890abcdef"}),
+        )
+
+    @staticmethod
+    def _args(**overrides):
+        import argparse
+
+        base = {
+            "config_status": False,
+            "config_json": False,
+            "validate_config": False,
+            "config_file": "config.json",
+            "profile": " pa ",
+            "output": None,
+            "output_dir": ".",
+            "data_views": [],
+        }
+        base.update(overrides)
+        return argparse.Namespace(**base)
+
+    def test_config_status_trims_profile(self, tmp_path, monkeypatch, capsys):
+        from cja_auto_sdr.generator import _dispatch_post_validation_report_modes
+
+        self._setup_profile(tmp_path, monkeypatch)
+        args = self._args(config_status=True, config_json=True)
+
+        with pytest.raises(SystemExit) as exc:
+            _dispatch_post_validation_report_modes(args, output_to_stdout=False)
+
+        assert exc.value.code == 0
+        out = json.loads(capsys.readouterr().out)
+        assert out["source_type"] == "profile"
+        assert out["profile"] == "pa"
+
+    @patch("cja_auto_sdr.generator._config_from_env")
+    @patch("cja_auto_sdr.generator.cjapy")
+    def test_validate_config_trims_profile(self, mock_cjapy, _mock_cfg, tmp_path, monkeypatch, capsys):
+        from cja_auto_sdr.generator import _dispatch_post_validation_report_modes
+
+        self._setup_profile(tmp_path, monkeypatch)
+        mock_cjapy.CJA.return_value.getDataViews.return_value = [{"id": "dv_1", "name": "x"}]
+        args = self._args(validate_config=True, output_dir=str(tmp_path))
+
+        with pytest.raises(SystemExit) as exc:
+            _dispatch_post_validation_report_modes(args, output_to_stdout=False)
+
+        out = capsys.readouterr().out
+        assert "Profile 'pa' found" in out
+        assert exc.value.code == 0

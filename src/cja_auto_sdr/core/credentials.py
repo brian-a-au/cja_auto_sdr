@@ -297,10 +297,12 @@ class CredentialResolver:
             profile_name: Name of the profile
 
         Returns:
-            Tuple of (credentials or None, source_name)
+            Tuple of (credentials, source_name). Credentials are never None;
+            a missing or incomplete profile raises instead.
 
         Raises:
-            CredentialSourceError: If profile loading fails critically
+            CredentialSourceError: If the profile cannot be loaded, has no
+                credential fields, or is missing required fields
         """
         # Import here to avoid circular dependency — profile functions are still in generator.py
         from cja_auto_sdr.generator import load_profile_credentials

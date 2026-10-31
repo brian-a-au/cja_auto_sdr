@@ -7203,7 +7203,11 @@ def _dispatch_post_validation_report_modes(
             scope="with --config-status",
             hint="use --config-json and redirect stdout to save the status",
         )
-        success = show_config_status(args.config_file, profile=getattr(args, "profile", None), output_json=output_json)
+        success = show_config_status(
+            args.config_file,
+            profile=resolve_active_profile(getattr(args, "profile", None)),
+            output_json=output_json,
+        )
         if run_state is not None:
             run_state["details"] = {"operation_success": success}
         sys.exit(0 if success else 1)
@@ -7211,7 +7215,7 @@ def _dispatch_post_validation_report_modes(
     if args.validate_config:
         success = validate_config_only(
             args.config_file,
-            profile=getattr(args, "profile", None),
+            profile=resolve_active_profile(getattr(args, "profile", None)),
             output_dir=getattr(args, "output_dir", "."),
         )
         if run_state is not None:
