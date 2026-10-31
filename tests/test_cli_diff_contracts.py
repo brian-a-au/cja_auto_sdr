@@ -1258,3 +1258,36 @@ def test_compare_snapshots_console_stdout_does_not_warn(tmp_path, monkeypatch, c
     code = _run_main(monkeypatch, ["--compare-snapshots", a, b, "--output", "-"])
     assert code == 0
     assert "only supported with --format json" not in capsys.readouterr().err
+
+
+def test_diff_output_strips_ansi(tmp_path):
+    from cja_auto_sdr.diff.commands import _write_diff_report
+
+    target = tmp_path / "diff.txt"
+    _write_diff_report(
+        lambda _directory: "\033[1mREPORT\033[0m",
+        output_format="console",
+        output_dir=str(tmp_path / "auto"),
+        diff_output=str(target),
+        quiet=True,
+        output_to_stdout=False,
+    )
+    text = target.read_text(encoding="utf-8")
+    assert "REPORT" in text
+    assert "\033" not in text
+
+
+def test_diff_output_format_all_warns(tmp_path, capsys):
+    from cja_auto_sdr.diff.commands import _write_diff_report
+
+    target = tmp_path / "diff.txt"
+    _write_diff_report(
+        lambda _directory: "some console text",
+        output_format="all",
+        output_dir=str(tmp_path / "auto"),
+        diff_output=str(target),
+        quiet=True,
+        output_to_stdout=False,
+    )
+    assert not target.exists()
+    assert "--diff-output does not apply to --format all" in capsys.readouterr().err

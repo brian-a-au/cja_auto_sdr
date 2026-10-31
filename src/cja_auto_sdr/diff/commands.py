@@ -14,6 +14,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from cja_auto_sdr.core.colors import ConsoleColors
 from cja_auto_sdr.core.exceptions import OutputError
 from cja_auto_sdr.core.json_io import write_text_atomic_compatible
 from cja_auto_sdr.diff.snapshot import _annotate_snapshot_failure
@@ -73,8 +74,9 @@ def _write_diff_report(
         return
 
     output_content = render(output_dir)
-    if diff_output and output_content:
-        write_text_atomic_compatible(diff_output, output_content)
+    if diff_output and output_content and output_format != "all":
+        # Terminal color codes are for stdout; the file gets plain text.
+        write_text_atomic_compatible(diff_output, ConsoleColors.ANSI_ESCAPE.sub("", output_content))
         if not quiet:
             print(f"Diff output written to: {diff_output}")
     elif diff_output and not output_to_stdout:
