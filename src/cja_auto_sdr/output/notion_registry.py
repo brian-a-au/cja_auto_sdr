@@ -127,12 +127,24 @@ def save_registry(path: Path, registry: dict[str, RegistryEntry]) -> None:
     )
 
 
+def _load_registry_locked(registry_path: Path) -> dict[str, RegistryEntry]:
+    """Read the registry under its lock so a concurrent writer cannot be observed mid-update.
+
+    A missing registry file returns ``{}`` without taking the lock, so a pure
+    lookup never creates the output folder or the sidecar lock file.
+    """
+    if not os.path.exists(registry_path):
+        return {}
+    with _exclusive_registry_lock(registry_path):
+        return load_registry(registry_path)
+
+
 def lookup_page_id(registry_path: Path, data_view_id: str) -> str | None:
-    return load_registry(registry_path).get(data_view_id, {}).get("page_id")
+    return _load_registry_locked(registry_path).get(data_view_id, {}).get("page_id")
 
 
 def lookup_database_row_id(registry_path: Path, data_view_id: str) -> str | None:
-    return load_registry(registry_path).get(data_view_id, {}).get("database_row_id")
+    return _load_registry_locked(registry_path).get(data_view_id, {}).get("database_row_id")
 
 
 def _store_field(registry_path: Path, data_view_id: str, field: str, value: str | None) -> None:
@@ -160,7 +172,7 @@ def store_database_row_id(
 
 def lookup_orphaned_page_ids(registry_path: Path, data_view_id: str) -> list[str]:
     """Return the recorded orphan (superseded) page ids for this data view."""
-    return list(load_registry(registry_path).get(data_view_id, {}).get("orphaned_page_ids") or [])
+    return list(_load_registry_locked(registry_path).get(data_view_id, {}).get("orphaned_page_ids") or [])
 
 
 def add_orphaned_page_id(registry_path: Path, data_view_id: str, page_id: str) -> None:
