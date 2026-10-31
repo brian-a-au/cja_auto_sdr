@@ -125,3 +125,19 @@ def test_escape_markdown_handles_list_values():
     must too.
     """
     assert escape_markdown(["a|b", "c"]) == "['a\\|b', 'c']"
+
+
+def _gfm_cell_count(line):
+    # GFM: a backslash escapes the next char; an unescaped pipe splits cells.
+    import re
+
+    return len(re.findall(r"(?:\\.|[^|\\])*\|", line)) - 1
+
+
+def test_backslash_before_pipe_keeps_cell_count():
+    df = pd.DataFrame([{"id": "metrics/a", "name": "Path C:\\|x", "description": "d"}])
+    lines = df_to_markdown_table(df, "Metrics").split("\n")
+    assert _gfm_cell_count(lines[0]) == 3
+    assert _gfm_cell_count(lines[2]) == 3
+    assert "Path C:\\\\\\|x" in lines[2]
+    assert escape_markdown("Path C:\\|x") == "Path C:\\\\\\|x"

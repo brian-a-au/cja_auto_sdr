@@ -1115,7 +1115,9 @@ def escape_markdown(text: Any) -> str:
         # pd.isna returns an array for list-like input; truth-testing it raises.
         pass
     text = str(text)
-    # Escape pipe characters that would break tables
+    # Escape backslashes first so a literal backslash before a pipe cannot
+    # swallow the pipe escape, then escape pipes that would break tables
+    text = text.replace("\\", "\\\\")
     text = text.replace("|", "\\|")
     # Escape backticks
     text = text.replace("`", "\\`")
@@ -1154,6 +1156,7 @@ def df_to_markdown_table(df: pd.DataFrame, sheet_name: str, empty_message: str |
     for col in df_esc.columns:
         df_esc[col] = (
             df_esc[col]
+            .str.replace("\\", "\\\\", regex=False)
             .str.replace("|", "\\|", regex=False)
             .str.replace("`", "\\`", regex=False)
             .str.replace("\n", " ", regex=False)
