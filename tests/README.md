@@ -187,7 +187,7 @@ tests/
 └── README.md                        # This file
 ```
 
-**Total: 9,416 comprehensive tests**
+**Total: 9,431 comprehensive tests**
 
 ### Test Count Breakdown
 
@@ -196,16 +196,16 @@ tests/
 
 | Category | Tests | Files | Notes |
 |----------|-------|-------|-------|
-| `unit` | 9,255 | 168 | Default primary category for files without explicit integration/e2e/smoke scope |
+| `unit` | 9,270 | 168 | Default primary category for files without explicit integration/e2e/smoke scope |
 | `integration` | 122 | 3 | Cross-module integration suites |
 | `e2e` | 23 | 2 | End-to-end suites with a mocked external boundary |
 | `smoke` | 16 | 2 | Lightweight command-mode coverage |
 | `slow` | 0 | 0 | Overlay marker; these tests are also counted in a primary category |
-| **Primary Total** | **9,416** | **175** | **unit + integration + e2e + smoke** |
+| **Primary Total** | **9,431** | **175** | **unit + integration + e2e + smoke** |
 
 | CI Slice | Tests | Files | Selector |
 |----------|-------|-------|----------|
-| `test-unit` | 9,255 | 168 | `-m "unit and not slow"` |
+| `test-unit` | 9,270 | 168 | `-m "unit and not slow"` |
 | `test-integration` | 145 | 5 | `-m "integration or e2e or slow"` |
 | `smoke-test` | 16 | 2 | `-m smoke` |
 
@@ -227,9 +227,9 @@ tests/
 | `test_inventory_pragma_coverage.py` | 18 | Inventory pragma coverage hardening |
 | `test_inventory_summary_cjapy_payloads.py` | 4 | Inventory summary cjapy payload classification |
 | `test_inventory_utils.py` | 56 | Inventory utilities and helpers |
-| `test_segments_inventory.py` | 63 | Segments inventory feature |
+| `test_segments_inventory.py` | 65 | Segments inventory feature |
 | `test_edge_cases.py` | 35 | Edge cases, configuration dataclasses, custom exceptions |
-| `test_calculated_metrics_inventory.py` | 367 | Calculated metrics inventory feature |
+| `test_calculated_metrics_inventory.py` | 369 | Calculated metrics inventory feature |
 | `test_git_integration.py` | 61 | Git integration, snapshot management, inventory snapshots |
 | `test_output_formats.py` | 37 | CSV, JSON, HTML, Markdown output generation |
 | `test_cja_initialization.py` | 52 | CJA connection and configuration validation |
@@ -287,7 +287,7 @@ tests/
 | `test_lazy_forwarding.py` | 73 | Lazy-forwarding infrastructure and make_getattr() |
 | `test_lock_backend_edge_cases.py` | 173 | Lock backend metadata I/O, stale detection, legacy parsing |
 | `test_derived_fields_coverage.py` | 161 | Derived field complexity scoring, logic summary, predicates |
-| `test_org_analyzer_coverage.py` | 180 | Org analyzer governance, naming audit, sampling, memory, drift, clustering |
+| `test_org_analyzer_coverage.py` | 183 | Org analyzer governance, naming audit, sampling, memory, drift, clustering |
 | `test_org_analyzer_metadata_enrichment.py` | 3 | Org analyzer metadata enrichment payload handling |
 | `test_api_coverage.py` | 98 | API cache, quality, fetch, resilience exception paths |
 | `test_diff_coverage.py` | 75 | Diff comparator, models, git integration edge cases |
@@ -367,7 +367,7 @@ tests/
 | `test_watch_cli.py` | 11 | Watch mode argparse acceptance and rejection tests |
 | `test_watch_prevalidation.py` | 43 | Watch flag semantic prevalidation tests |
 | `test_watch_command.py` | 22 | Watch command dispatch and signal handler tests |
-| `test_watch_signals.py` | 2 | SIGINT/SIGTERM exit-0 contract tests |
+| `test_watch_signals.py` | 8 | SIGINT/SIGTERM exit-0 contract tests |
 | `test_watch_dispatch.py` | 2 | End-to-end dispatch wiring tests |
 | `test_watch_logging.py` | 4 | Structured-log event emission tests |
 | `test_notion_registry.py` | 19 | Notion page ID registry CRUD tests |
@@ -377,7 +377,7 @@ tests/
 | `test_cli_notion_database.py` | 34 | CLI flag wiring for --notion-create-database and --notion-database-id |
 | `test_notion_database.py` | 41 | Notion database creation and upsert tests |
 | `test_notion_org_publisher.py` | 13 | --org-report --format notion catalog publisher tests |
-| `test_notion_registry_v2.py` | 11 | Notion registry v2 schema and legacy v1 migration tests |
+| `test_notion_registry_v2.py` | 13 | Notion registry v2 schema and legacy v1 migration tests |
 | `test_cli_notion_prune.py` | 20 | CLI flag wiring for --notion-prune-orphans |
 | `test_cli_notion_repair.py` | 14 | CLI flag wiring for --notion-repair-database and --notion-print-database-schema |
 | `test_org_analyzer_similarity.py` | 42 | Org similarity characterization, streaming parity, thresholds, and dispatch tests |
@@ -390,7 +390,7 @@ tests/
 | `test_diff_snapshot_retention.py` | 81 | Diff snapshot-retention parse-cache characterization test |
 | `test_diff_comparator_normalize.py` | 21 | Diff field-normalization type-fast-path characterization test |
 | `test_logging_diagnostics.py` | 2 | emit_diagnostic isEnabledFor guard characterization tests |
-| **Total** | **9,416** | **Collected via pytest --collect-only** |
+| **Total** | **9,431** | **Collected via pytest --collect-only** |
 
 ## Running Tests
 
@@ -848,15 +848,15 @@ the `tests/README.md` inventory tree or count table.
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (9,416 tests total)
+- [x] Comprehensive test coverage (9,431 tests total)
 - [x] Org-wide analysis tests (test_org_report.py) - 225 tests (including large org scaling, output path aliases, memory warnings, smart cache invalidation)
 - [x] Org-wide analysis integration tests (test_org_report_integration.py) - 46 tests (end-to-end flows, caching, filtering, governance thresholds)
 - [x] Profile management tests (test_profiles.py) - 88 tests
 - [x] API worker auto-tuning tests (test_api_tuning.py) - 25 tests
 - [x] Circuit breaker pattern tests (test_circuit_breaker.py) - 25 tests
 - [x] Shared validation cache tests (test_shared_cache.py) - 30 tests
-- [x] Calculated metrics inventory tests (test_calculated_metrics_inventory.py) - 367 tests
-- [x] Segments inventory tests (test_segments_inventory.py) - 63 tests
+- [x] Calculated metrics inventory tests (test_calculated_metrics_inventory.py) - 369 tests
+- [x] Segments inventory tests (test_segments_inventory.py) - 65 tests
 - [x] Derived fields inventory tests (test_derived_inventory.py) - 64 tests
 - [x] Inventory utilities tests (test_inventory_utils.py) - 56 tests
 - [x] Git integration tests (test_git_integration.py) - 61 tests
