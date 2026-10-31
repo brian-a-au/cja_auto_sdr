@@ -4369,3 +4369,26 @@ class TestRealCjaDefinitionShapes:
         }
         s = CalculatedMetricsInventoryBuilder()._process_metric(metric)
         assert s.conditional_count == 2
+
+
+def test_build_retries_transient_connection_error(mock_cja_instance):
+    """A transient ConnectionError on getCalculatedMetrics is retried, then the build succeeds."""
+    good = mock_cja_instance.getCalculatedMetrics.return_value
+    mock_cja_instance.getCalculatedMetrics.side_effect = [ConnectionError("reset"), good]
+
+    with patch("cja_auto_sdr.api.resilience.time.sleep"):
+        inventory = CalculatedMetricsInventoryBuilder().build(mock_cja_instance, "dv_test", "Test View")
+
+    assert mock_cja_instance.getCalculatedMetrics.call_count == 2
+    assert inventory.total_calculated_metrics == 2
+
+
+def test_build_does_not_retry_error_body_keyerror(mock_cja_instance):
+    """cjapy error bodies raise KeyError('content'); that is not transient, so no retry and it fails closed."""
+    mock_cja_instance.getCalculatedMetrics.side_effect = KeyError("content")
+
+    with patch("cja_auto_sdr.api.resilience.time.sleep") as sleep, pytest.raises(KeyError):
+        CalculatedMetricsInventoryBuilder().build(mock_cja_instance, "dv_test", "Test View")
+
+    assert mock_cja_instance.getCalculatedMetrics.call_count == 1
+    sleep.assert_not_called()

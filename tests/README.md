@@ -188,7 +188,7 @@ tests/
 └── README.md                        # This file
 ```
 
-**Total: 9,439 comprehensive tests**
+**Total: 9,493 comprehensive tests**
 
 ### Test Count Breakdown
 
@@ -197,16 +197,16 @@ tests/
 
 | Category | Tests | Files | Notes |
 |----------|-------|-------|-------|
-| `unit` | 9,278 | 169 | Default primary category for files without explicit integration/e2e/smoke scope |
+| `unit` | 9,332 | 169 | Default primary category for files without explicit integration/e2e/smoke scope |
 | `integration` | 122 | 3 | Cross-module integration suites |
 | `e2e` | 23 | 2 | End-to-end suites with a mocked external boundary |
 | `smoke` | 16 | 2 | Lightweight command-mode coverage |
 | `slow` | 0 | 0 | Overlay marker; these tests are also counted in a primary category |
-| **Primary Total** | **9,439** | **176** | **unit + integration + e2e + smoke** |
+| **Primary Total** | **9,493** | **176** | **unit + integration + e2e + smoke** |
 
 | CI Slice | Tests | Files | Selector |
 |----------|-------|-------|----------|
-| `test-unit` | 9,278 | 169 | `-m "unit and not slow"` |
+| `test-unit` | 9,332 | 169 | `-m "unit and not slow"` |
 | `test-integration` | 145 | 5 | `-m "integration or e2e or slow"` |
 | `smoke-test` | 16 | 2 | `-m smoke` |
 
@@ -228,9 +228,9 @@ tests/
 | `test_inventory_pragma_coverage.py` | 18 | Inventory pragma coverage hardening |
 | `test_inventory_summary_cjapy_payloads.py` | 4 | Inventory summary cjapy payload classification |
 | `test_inventory_utils.py` | 56 | Inventory utilities and helpers |
-| `test_segments_inventory.py` | 63 | Segments inventory feature |
+| `test_segments_inventory.py` | 65 | Segments inventory feature |
 | `test_edge_cases.py` | 35 | Edge cases, configuration dataclasses, custom exceptions |
-| `test_calculated_metrics_inventory.py` | 375 | Calculated metrics inventory feature |
+| `test_calculated_metrics_inventory.py` | 377 | Calculated metrics inventory feature |
 | `test_git_integration.py` | 61 | Git integration, snapshot management, inventory snapshots |
 | `test_output_formats.py` | 37 | CSV, JSON, HTML, Markdown output generation |
 | `test_cja_initialization.py` | 52 | CJA connection and configuration validation |
@@ -249,7 +249,7 @@ tests/
 | `test_process_single_dataview.py` | 53 | End-to-end single data view processing |
 | `test_process_liveness_smoke.py` | 6 | Cross-platform lock PID liveness probes (Windows-safe) |
 | `test_optimized_validation.py` | 14 | Optimized data quality validation |
-| `test_name_resolution.py` | 24 | Data view name to ID resolution |
+| `test_name_resolution.py` | 27 | Data view name to ID resolution |
 | `test_shared_cache.py` | 30 | Shared validation cache |
 | `test_logging_optimization.py` | 19 | Logging performance optimizations |
 | `test_env_credentials.py` | 15 | Environment variable credentials |
@@ -288,7 +288,7 @@ tests/
 | `test_lazy_forwarding.py` | 73 | Lazy-forwarding infrastructure and make_getattr() |
 | `test_lock_backend_edge_cases.py` | 173 | Lock backend metadata I/O, stale detection, legacy parsing |
 | `test_derived_fields_coverage.py` | 161 | Derived field complexity scoring, logic summary, predicates |
-| `test_org_analyzer_coverage.py` | 182 | Org analyzer governance, naming audit, sampling, memory, drift, clustering |
+| `test_org_analyzer_coverage.py` | 185 | Org analyzer governance, naming audit, sampling, memory, drift, clustering |
 | `test_org_analyzer_metadata_enrichment.py` | 3 | Org analyzer metadata enrichment payload handling |
 | `test_api_coverage.py` | 98 | API cache, quality, fetch, resilience exception paths |
 | `test_diff_coverage.py` | 75 | Diff comparator, models, git integration edge cases |
@@ -299,14 +299,14 @@ tests/
 | `test_cli_command_handlers.py` | 166 | CLI dispatch for --stats, --org-report, --list-snapshots, discovery inspection, diff config unpacking |
 | `test_profile_management.py` | 54 | Interactive profile creation, import, test, show |
 | `test_snapshot_commands.py` | 94 | Snapshot creation, comparison, name resolution |
-| `test_config_and_resolution.py` | 116 | Config status, validation, stats, name resolution |
+| `test_config_and_resolution.py` | 128 | Config status, validation, stats, name resolution |
 | `test_derived_fields_edge_cases.py` | 37 | Derived fields edge cases and coverage |
 | `test_diff_command_coverage.py` | 46 | Diff command edge cases and coverage |
 | `test_generator_interactive_and_console.py` | 41 | Generator interactive and console tests |
 | `test_generator_remaining_coverage.py` | 88 | Generator remaining coverage edge cases |
 | `test_interactive_discovery_coverage.py` | 118 | Interactive discovery and helpers coverage |
 | `test_lock_backends.py` | 51 | Lock backends edge cases and coverage |
-| `test_main_impl_cli_coverage.py` | 94 | _main_impl CLI path coverage |
+| `test_main_impl_cli_coverage.py` | 100 | _main_impl CLI path coverage |
 | `test_main_impl_coverage.py` | 66 | _main_impl coverage edge cases |
 | `test_org_cache_branches.py` | 126 | Org cache branch coverage |
 | `test_org_writer_compat_contracts.py` | 116 | Org writer compatibility boundary contract tests |
@@ -328,7 +328,7 @@ tests/
 | `test_org_snapshot_utils.py` | 149 | Org snapshot helper utilities edge cases |
 | `test_org_trending_contracts.py` | 108 | Org/trending public API contract tests |
 | `test_org_trending_adversarial.py` | 51 | Adversarial and stress tests for trending |
-| `test_cli_diff_contracts.py` | 88 | CLI/diff public API contract tests |
+| `test_cli_diff_contracts.py` | 94 | CLI/diff public API contract tests |
 | `test_list_command_edge_cases.py` | 68 | List command edge cases and coverage |
 | `test_cli_commands_config_coverage.py` | 48 | Config command edge cases and coverage |
 | `test_cli_execution.py` | 38 | CLI execution edge cases and coverage |
@@ -355,7 +355,7 @@ tests/
 | `test_advisories.py` | 53 | Advisory model, builder, and rollup tests |
 | `test_agent_contract_docs.py` | 27 | Agent contract documentation validation tests |
 | `test_agent_contract_samples.py` | 6 | Agent contract sample fixture validation tests |
-| `test_agent_mode.py` | 58 | --agent-mode CLI preset and resolution tests |
+| `test_agent_mode.py` | 68 | --agent-mode CLI preset and resolution tests |
 | `test_agent_output_contract.py` | 43 | Centralized agent-output contract resolver tests |
 | `test_agent_playbooks.py` | 38 | Agent playbook structural validation tests |
 | `test_agent_workflows.py` | 69 | Agent workflow shell script validation tests |
@@ -366,9 +366,9 @@ tests/
 | `test_watch_events.py` | 8 | cja-watch-event/v1 NDJSON schema conformance tests |
 | `test_watch_pipeline.py` | 11 | Watch pipeline cycle orchestrator tests |
 | `test_watch_cli.py` | 11 | Watch mode argparse acceptance and rejection tests |
-| `test_watch_prevalidation.py` | 43 | Watch flag semantic prevalidation tests |
+| `test_watch_prevalidation.py` | 45 | Watch flag semantic prevalidation tests |
 | `test_watch_command.py` | 22 | Watch command dispatch and signal handler tests |
-| `test_watch_signals.py` | 2 | SIGINT/SIGTERM exit-0 contract tests |
+| `test_watch_signals.py` | 8 | SIGINT/SIGTERM exit-0 contract tests |
 | `test_watch_dispatch.py` | 2 | End-to-end dispatch wiring tests |
 | `test_watch_logging.py` | 4 | Structured-log event emission tests |
 | `test_notion_registry.py` | 19 | Notion page ID registry CRUD tests |
@@ -378,7 +378,7 @@ tests/
 | `test_cli_notion_database.py` | 34 | CLI flag wiring for --notion-create-database and --notion-database-id |
 | `test_notion_database.py` | 41 | Notion database creation and upsert tests |
 | `test_notion_org_publisher.py` | 13 | --org-report --format notion catalog publisher tests |
-| `test_notion_registry_v2.py` | 11 | Notion registry v2 schema and legacy v1 migration tests |
+| `test_notion_registry_v2.py` | 13 | Notion registry v2 schema and legacy v1 migration tests |
 | `test_cli_notion_prune.py` | 20 | CLI flag wiring for --notion-prune-orphans |
 | `test_cli_notion_repair.py` | 14 | CLI flag wiring for --notion-repair-database and --notion-print-database-schema |
 | `test_org_analyzer_similarity.py` | 42 | Org similarity characterization, streaming parity, thresholds, and dispatch tests |
@@ -392,7 +392,7 @@ tests/
 | `test_diff_snapshot_retention.py` | 81 | Diff snapshot-retention parse-cache characterization test |
 | `test_diff_comparator_normalize.py` | 21 | Diff field-normalization type-fast-path characterization test |
 | `test_logging_diagnostics.py` | 2 | emit_diagnostic isEnabledFor guard characterization tests |
-| **Total** | **9,439** | **Collected via pytest --collect-only** |
+| **Total** | **9,493** | **Collected via pytest --collect-only** |
 
 ## Running Tests
 
@@ -850,15 +850,15 @@ the `tests/README.md` inventory tree or count table.
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (9,439 tests total)
+- [x] Comprehensive test coverage (9,493 tests total)
 - [x] Org-wide analysis tests (test_org_report.py) - 225 tests (including large org scaling, output path aliases, memory warnings, smart cache invalidation)
 - [x] Org-wide analysis integration tests (test_org_report_integration.py) - 46 tests (end-to-end flows, caching, filtering, governance thresholds)
 - [x] Profile management tests (test_profiles.py) - 88 tests
 - [x] API worker auto-tuning tests (test_api_tuning.py) - 25 tests
 - [x] Circuit breaker pattern tests (test_circuit_breaker.py) - 25 tests
 - [x] Shared validation cache tests (test_shared_cache.py) - 30 tests
-- [x] Calculated metrics inventory tests (test_calculated_metrics_inventory.py) - 375 tests
-- [x] Segments inventory tests (test_segments_inventory.py) - 63 tests
+- [x] Calculated metrics inventory tests (test_calculated_metrics_inventory.py) - 377 tests
+- [x] Segments inventory tests (test_segments_inventory.py) - 65 tests
 - [x] Derived fields inventory tests (test_derived_inventory.py) - 64 tests
 - [x] Inventory utilities tests (test_inventory_utils.py) - 56 tests
 - [x] Git integration tests (test_git_integration.py) - 61 tests

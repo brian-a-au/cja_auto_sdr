@@ -108,6 +108,13 @@ def resolve_inventory_mode_configuration(args: argparse.Namespace, *, argv: list
     return inventory_order
 
 
+# Imports generator directly: tests stub the generator module and its attributes.
+def _warn_output_ignored(output_file: str | None, *, scope: str, hint: str) -> None:
+    from cja_auto_sdr.generator import _warn_output_ignored as _impl
+
+    _impl(output_file, scope=scope, hint=hint)
+
+
 def dispatch_inventory_summary_mode(
     args: argparse.Namespace,
     *,
@@ -128,6 +135,13 @@ def dispatch_inventory_summary_mode(
             file=sys.stderr,
         )
         sys.exit(1)
+
+    if output_file and args.format not in ("json", "all"):
+        _warn_output_ignored(
+            output_file,
+            scope=f"with --inventory-summary --format {args.format or 'console'}",
+            hint="use --format json to write the summary to a file",
+        )
 
     # Stdout output is always the JSON summary.
     if output_file in ("-", "stdout"):
@@ -154,6 +168,7 @@ def dispatch_inventory_summary_mode(
             include_segments=getattr(args, "include_segments_inventory", False),
             inventory_order=inventory_order,
             output_file=output_file,
+            log_to_stderr=bool(getattr(args, "agent_mode", False)),
         )
         if isinstance(summary, dict) and "error" in summary:
             failed = True
@@ -470,6 +485,7 @@ def _run_quality_report_mode(
             notion_force_new=getattr(args, "notion_force_new", False),
             notion_database_id=getattr(args, "notion_database_id", None) or os.environ.get("NOTION_DATABASE_ID"),
             notion_create_database=getattr(args, "notion_create_database", False),
+            log_to_stderr=bool(getattr(args, "agent_mode", False)),
         )
         quality_report_results.append(result)
         processed_results.append(result)
@@ -539,6 +555,12 @@ def _run_batch_mode(
         )
         print()
 
+    _warn_output_ignored(
+        getattr(args, "output", None),
+        scope="with --batch",
+        hint="use --output-dir to choose the folder for batch output",
+    )
+
     processor = generator.BatchProcessor(
         config_file=args.config_file,
         output_dir=args.output_dir,
@@ -574,6 +596,7 @@ def _run_batch_mode(
         notion_create_database=getattr(args, "notion_create_database", False),
         json_typed=getattr(args, "json_typed", False),
         fail_on_quality=getattr(args, "fail_on_quality", None),
+        log_to_stderr=bool(getattr(args, "agent_mode", False)),
     )
 
     results = processor.process_batch(data_views)
@@ -818,6 +841,7 @@ def _run_single_mode(
         notion_create_database=getattr(args, "notion_create_database", False),
         json_typed=getattr(args, "json_typed", False),
         fail_on_quality=getattr(args, "fail_on_quality", None),
+        log_to_stderr=bool(getattr(args, "agent_mode", False)),
     )
     processed_results = [result]
     git_step_ok = True

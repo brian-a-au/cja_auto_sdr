@@ -47,6 +47,10 @@ def _install_signal_handlers() -> None:
     _previous_handlers.clear()
 
     def _handler(signum, _frame):
+        # First signal asks for a graceful stop after the current data view; a second
+        # one means the operator wants out now, so escape the in-flight API call.
+        if _stop_requested.is_set():
+            raise KeyboardInterrupt
         _stop_reason_holder["reason"] = "sigint" if signum == signal.SIGINT else "sigterm"
         _stop_requested.set()
 
@@ -207,17 +211,35 @@ def run_watch(args: Any, *, cja: Any | None = None) -> int:
     try:
         while True:
             cycle += 1
-            for event in runner.run_cycle(cja=cja, data_view_ids=args.watch_data_views, cycle=cycle):
-                sys.stdout.write(serialize_event(event))
-                sys.stdout.flush()
-                # cycle_complete fires per emitted NDJSON event but NOT for error events
-                # (the error event itself is the signal).
-                if not isinstance(event, ErrorEvent):
-                    emitter.cycle_complete(
-                        cycle=cycle,
-                        data_view_id=event.data_view_id,
-                        total_changes=getattr(event, "total_changes", 0),
-                    )
+            events = runner.run_cycle(
+                cja=cja,
+                data_view_ids=args.watch_data_views,
+                cycle=cycle,
+                should_stop=_stop_requested.is_set,
+            )
+            try:
+                for event in events:
+                    sys.stdout.write(serialize_event(event))
+                    sys.stdout.flush()
+                    # cycle_complete fires per emitted NDJSON event but NOT for error events
+                    # (the error event itself is the signal).
+                    if not isinstance(event, ErrorEvent):
+                        emitter.cycle_complete(
+                            cycle=cycle,
+                            data_view_id=event.data_view_id,
+                            total_changes=getattr(event, "total_changes", 0),
+                        )
+                # The runner checks should_stop before each data view, so a signal ends the
+                # cycle after the current data view even when no events are being emitted.
+            finally:
+                # Close the generator so the cycle's cleanup runs when we stop early
+                # (plain iterators used as test doubles have no close()).
+                close = getattr(events, "close", None)
+                if close is not None:
+                    close()
+            if getattr(runner, "last_cycle_stopped_early", False) is True:
+                # Partial cycle: leave cycles_completed at the last full cycle.
+                break
             cycles_completed = cycle
             if _stop_requested.is_set():
                 break
@@ -228,7 +250,9 @@ def run_watch(args: Any, *, cja: Any | None = None) -> int:
                 break
         stop_reason = _stop_reason_holder.get("reason", "fatal")
     finally:
-        emitter.loop_stop(reason=stop_reason, cycles_completed=cycles_completed)
+        # A forced exit (second signal) raises before stop_reason is computed, so fall
+        # back to the recorded signal reason rather than reporting "fatal".
+        emitter.loop_stop(reason=_stop_reason_holder.get("reason", stop_reason), cycles_completed=cycles_completed)
         _stop_reason_holder.clear()
         _restore_signal_handlers()
 

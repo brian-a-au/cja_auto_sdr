@@ -2696,6 +2696,86 @@ class TestFetchAllLockOwnershipLost:
 
 
 # ===================================================================
+# Shutdown semantics of _fetch_all_data_views (lock held until fetches finish)
+# ===================================================================
+
+
+class _RecordingExecutor:
+    """Executor stand-in that records shutdown() and returns pending futures."""
+
+    last_instance = None
+
+    def __init__(self, *args, **kwargs):
+        from concurrent.futures import Future
+
+        self._future_cls = Future
+        self.submitted = []
+        self.shutdown_calls = []
+        _RecordingExecutor.last_instance = self
+
+    def submit(self, fn, dv):
+        future = self._future_cls()
+        future.set_running_or_notify_cancel()  # simulate a fetch already running
+        self.submitted.append(future)
+        return future
+
+    def shutdown(self, wait=True, cancel_futures=False):
+        self.shutdown_calls.append((wait, cancel_futures))
+
+
+class TestFetchAllShutdownSemantics:
+    def _analyzer(self, mock_cja, logger):
+        config = OrgReportConfig(skip_lock=True, cja_per_thread=False, quiet=True)
+        analyzer = _make_analyzer(mock_cja, logger, config=config)
+        analyzer.cache = None
+        return analyzer
+
+    def test_fetch_interrupt_waits_for_in_flight_before_returning(self, mock_cja, logger, caplog):
+        analyzer = self._analyzer(mock_cja, logger)
+        with (
+            patch("cja_auto_sdr.org.analyzer.ThreadPoolExecutor", _RecordingExecutor),
+            patch("cja_auto_sdr.org.analyzer.wait", side_effect=KeyboardInterrupt),
+            caplog.at_level(logging.WARNING, logger=logger.name),
+            pytest.raises(KeyboardInterrupt),
+        ):
+            analyzer._fetch_all_data_views([{"id": "dv1", "name": "DV 1"}, {"id": "dv2", "name": "DV 2"}])
+        assert _RecordingExecutor.last_instance.shutdown_calls == [(True, True)]
+        assert "Waiting for" in caplog.text
+        assert "in-flight data view fetch(es)" in caplog.text
+
+    def test_fetch_lock_lost_does_not_wait(self, mock_cja, logger):
+        from cja_auto_sdr.core.exceptions import LockOwnershipLostError
+
+        analyzer = self._analyzer(mock_cja, logger)
+        analyzer._assert_lock_healthy = Mock(side_effect=LockOwnershipLostError("/tmp/x.lock", reason="lost"))
+        with (
+            patch("cja_auto_sdr.org.analyzer.ThreadPoolExecutor", _RecordingExecutor),
+            pytest.raises(LockOwnershipLostError),
+        ):
+            analyzer._fetch_all_data_views([{"id": "dv1", "name": "DV 1"}])
+        assert _RecordingExecutor.last_instance.shutdown_calls == [(False, True)]
+
+    def test_fetch_normal_completion_waits_without_cancel(self, mock_cja, logger):
+        analyzer = self._analyzer(mock_cja, logger)
+        summary = DataViewSummary(data_view_id="dv1", data_view_name="DV 1")
+        with (
+            patch("cja_auto_sdr.org.analyzer.ThreadPoolExecutor", _RecordingExecutor),
+            patch("cja_auto_sdr.org.analyzer.wait", side_effect=lambda fs, timeout=None, return_when=None: (fs, set())),
+        ):
+            # Futures need results for the loop to consume them.
+            orig_submit = _RecordingExecutor.submit
+
+            def _submit(self, fn, dv):
+                f = orig_submit(self, fn, dv)
+                f.set_result(summary)
+                return f
+
+            with patch.object(_RecordingExecutor, "submit", _submit):
+                analyzer._fetch_all_data_views([{"id": "dv1", "name": "DV 1"}])
+        assert _RecordingExecutor.last_instance.shutdown_calls == [(True, False)]
+
+
+# ===================================================================
 # 30. Thread-local CJA client (lines 605-611)
 # ===================================================================
 

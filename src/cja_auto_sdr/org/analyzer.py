@@ -787,7 +787,8 @@ class OrgComponentAnalyzer:
         # Use explicit executor lifecycle so lock-loss can fail closed immediately.
         executor = ThreadPoolExecutor(max_workers=min(DEFAULT_ORG_REPORT_WORKERS, len(to_fetch)))
         futures: dict[Any, dict[str, Any]] = {}
-        fail_closed_shutdown = False
+        lock_lost = False
+        interrupted = False
         try:
             futures = {executor.submit(self._fetch_data_view_components, dv): dv for dv in to_fetch}
 
@@ -842,15 +843,23 @@ class OrgComponentAnalyzer:
                             )
                         pbar.update(1)
                         self._assert_lock_healthy()
-        except BaseException:  # Intentional: any exit (incl. KeyboardInterrupt) must cancel queued fetches.
-            fail_closed_shutdown = True
+        except BaseException as exc:  # Intentional: any exit (incl. KeyboardInterrupt) must cancel queued fetches.
+            interrupted = True
+            lock_lost = isinstance(exc, LockOwnershipLostError)
             self._cancel_futures_best_effort(futures)
             raise
         finally:
-            if fail_closed_shutdown:
-                executor.shutdown(wait=False, cancel_futures=True)
-            else:
-                executor.shutdown(wait=True)
+            if interrupted and not lock_lost:
+                # Keep the org lock (held by our caller) until running fetches finish;
+                # releasing it early lets a second run overlap with live API threads.
+                in_flight = sum(1 for f in futures if not f.done())
+                if in_flight:
+                    self.logger.warning(
+                        "Waiting for %d in-flight data view fetch(es) to finish before releasing the lock...",
+                        in_flight,
+                    )
+            # Lock loss fails closed (no wait); otherwise always join in-flight work.
+            executor.shutdown(wait=not lock_lost, cancel_futures=interrupted)
 
         if self.config.use_cache and self.cache and pending_cache:
             self.cache.put_many(

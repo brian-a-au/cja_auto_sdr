@@ -25,6 +25,7 @@ from typing import Any
 
 import pandas as pd
 
+from cja_auto_sdr.api.resilience import make_api_call_with_retry
 from cja_auto_sdr.inventory.utils import (
     BatchProcessingStats,
     coerce_display_text,
@@ -410,7 +411,13 @@ class CalculatedMetricsInventoryBuilder:
 
         try:
             # Get calculated metrics filtered by data view ID
-            calc_metrics_df = cja.getCalculatedMetrics(dataIds=data_view_id, full=True)
+            calc_metrics_df = make_api_call_with_retry(
+                cja.getCalculatedMetrics,
+                dataIds=data_view_id,
+                full=True,
+                logger=self.logger,
+                operation_name="getCalculatedMetrics",
+            )
 
             # Normalize API response (handles DataFrame, list, None)
             metrics_list = normalize_api_response(
