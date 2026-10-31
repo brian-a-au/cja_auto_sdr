@@ -385,7 +385,9 @@ class TestValidateConfigOnly:
 
         config = tmp_path / "config.json"
         config.write_text(
-            json.dumps({"org_id": "org@Adobe", "client_id": "abcd1234efgh", "secret": "secret12345678"}),
+            json.dumps(
+                {"org_id": "org@Adobe", "client_id": "abcd1234efgh", "secret": "secret12345678", "scopes": "openid"}
+            ),
         )
         mock_cja = MagicMock()
         mock_cja.getDataViews.side_effect = RuntimeError("unexpected auth bootstrap failure")
@@ -417,7 +419,9 @@ class TestValidateConfigOnly:
 
         config = tmp_path / "config.json"
         config.write_text(
-            json.dumps({"org_id": "org@Adobe", "client_id": "abcd1234efgh", "secret": "secret12345678"}),
+            json.dumps(
+                {"org_id": "org@Adobe", "client_id": "abcd1234efgh", "secret": "secret12345678", "scopes": "openid"}
+            ),
         )
         mock_cjapy.CJA.side_effect = Exception("auth bootstrap failed")
         with patch("cja_auto_sdr.generator.load_credentials_from_env", return_value=None):

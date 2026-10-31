@@ -178,12 +178,9 @@ def configure_cjapy(
 
         # Configure cjapy with the resolved credentials
         # Source format from resolver: "profile:name", "environment", "config:filename"
-        if source.startswith("profile:") or source == "environment":
-            # Profile or environment credentials use the direct in-memory cjapy path.
-            _config_from_env(credentials, logger)
-        else:
-            # Config file can be imported directly
-            cjapy.importConfigFile(config_file)
+        # Every source (profile, environment, config file) goes through the direct
+        # in-memory path so cjapy receives the same normalized values the resolver validated.
+        _config_from_env(credentials, logger)
 
         # Format source for display (convert resolver format to user-friendly format)
         if source.startswith("profile:"):
@@ -348,14 +345,12 @@ def initialize_cja(
             return None
 
         # Configure cjapy with resolved credentials
+        # All sources go through direct in-memory configuration with normalized values.
         if source.startswith("config:"):
-            # Config file - use cjapy's native loading
             logger.info("Loading CJA configuration from %s...", config_file)
-            cjapy.importConfigFile(config_file)
         else:
-            # Profile or environment credentials go through direct in-memory configuration.
             logger.info("Loading CJA configuration from %s...", source)
-            _config_from_env(credentials, logger)
+        _config_from_env(credentials, logger)
 
         logger.info("Configuration loaded successfully")
 
