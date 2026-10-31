@@ -53,7 +53,10 @@ def write_diff_excel_output(
         meta = diff_result.metadata_diff
         excel_file = os.path.join(output_dir, f"{base_filename}.xlsx")
 
-        with pd.ExcelWriter(excel_file, engine="xlsxwriter") as writer:
+        # Imported lazily: the output package forwards to generator (import cycle).
+        from cja_auto_sdr.output.excel_staging import staged_excel_writer
+
+        with staged_excel_writer(excel_file) as writer:
             workbook = writer.book
 
             # Define formats

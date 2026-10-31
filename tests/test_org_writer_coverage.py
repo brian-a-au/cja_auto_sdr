@@ -1316,6 +1316,31 @@ class TestWriteOrgReportExcel:
         assert Path(returned).exists()
         assert returned.endswith(".xlsx")
 
+    def test_org_excel_interrupt_keeps_existing_workbook(self, tmp_path):
+        result = _make_org_result()
+        logger = logging.getLogger("test_excel_interrupt")
+        out_path = tmp_path / "report.xlsx"
+        write_org_report_excel(result, out_path, str(tmp_path), logger)
+        good_sheets = pd.ExcelFile(out_path).sheet_names
+
+        real_to_excel = pd.DataFrame.to_excel
+        calls = {"n": 0}
+
+        def interrupting(self, *args, **kwargs):
+            calls["n"] += 1
+            if calls["n"] == 3:
+                raise KeyboardInterrupt
+            return real_to_excel(self, *args, **kwargs)
+
+        with (
+            patch.object(pd.DataFrame, "to_excel", interrupting),
+            pytest.raises(KeyboardInterrupt),
+        ):
+            write_org_report_excel(result, out_path, str(tmp_path), logger)
+
+        assert pd.ExcelFile(out_path).sheet_names == good_sheets
+        assert not list(tmp_path.glob(".xlsx-*"))
+
     def test_excel_auto_generated_path(self, tmp_path):
         result = _make_org_result()
         logger = logging.getLogger("test_excel_auto")

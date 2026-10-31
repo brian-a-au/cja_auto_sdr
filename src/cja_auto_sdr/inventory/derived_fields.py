@@ -941,15 +941,49 @@ class DerivedFieldInventoryBuilder:
 
         return label_map
 
+    def _ordered_match_nodes(self, functions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Return match nodes with concatenate-helper matches moved last.
+
+        A concatenate rule creates a helper ``match`` (a single ``true`` branch) whose
+        label feeds a later ``join`` or ``match``. It is not the user's Case When, so the
+        real rule is described first. If every match is a helper, original order is kept.
+        """
+        nodes = list(self._iter_function_dicts(functions))
+        matches = [(i, n) for i, n in enumerate(nodes) if n.get("func") == "match"]
+        if len(matches) < 2:
+            return [n for _, n in matches]
+
+        def is_helper(index: int, node: dict[str, Any]) -> bool:
+            branches = node.get("branches")
+            if not isinstance(branches, list) or len(branches) != 1:
+                return False
+            pred = branches[0].get("pred") if isinstance(branches[0], dict) else None
+            if not isinstance(pred, dict) or pred.get("func") != "true":
+                return False
+            label = self._normalize_label_key(node.get("label", ""))
+            if not label:
+                return False
+            for later in nodes[index + 1 :]:
+                if later.get("func") == "match" and self._normalize_label_key(later.get("field", "")) == label:
+                    return True
+                if later.get("func") == "join":
+                    fields = later.get("fields")
+                    if isinstance(fields, list) and any(
+                        isinstance(f, str) and self._normalize_label_key(f) == label for f in fields
+                    ):
+                        return True
+            return False
+
+        primary = [n for i, n in matches if not is_helper(i, n)]
+        helpers = [n for i, n in matches if is_helper(i, n)]
+        return primary + helpers
+
     def _describe_match_logic(self, functions: list[dict[str, Any]]) -> str:
         """Generate detailed description of match/Case When logic."""
         # Build label map for resolving field references
         label_map = self._build_label_map(functions)
 
-        for func_obj in self._iter_function_dicts(functions):
-            if func_obj.get("func") != "match":
-                continue
-
+        for func_obj in self._ordered_match_nodes(functions):
             branches = func_obj.get("branches", [])
             if not isinstance(branches, list):
                 continue

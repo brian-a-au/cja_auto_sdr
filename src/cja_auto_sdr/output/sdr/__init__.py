@@ -437,7 +437,11 @@ def apply_excel_formatting(
                 # Apply bold Name column for Metrics/Dimensions sheets
                 if is_component_sheet:
                     name_format = name_bold_grey if idx % 2 == 0 else name_bold_white
-                    worksheet.write(excel_row, name_col_idx, name_values[idx], name_format)
+                    name_value = name_values[idx]
+                    if pd.isna(name_value):
+                        worksheet.write_blank(excel_row, name_col_idx, None, name_format)
+                    else:
+                        worksheet.write(excel_row, name_col_idx, name_value, name_format)
 
         # Add autofilter to data table (offset by summary rows)
         worksheet.autofilter(summary_rows, 0, summary_rows + len(df), len(df.columns) - 1)
@@ -1111,7 +1115,9 @@ def escape_markdown(text: Any) -> str:
         # pd.isna returns an array for list-like input; truth-testing it raises.
         pass
     text = str(text)
-    # Escape pipe characters that would break tables
+    # Escape backslashes first so a literal backslash before a pipe cannot
+    # swallow the pipe escape, then escape pipes that would break tables
+    text = text.replace("\\", "\\\\")
     text = text.replace("|", "\\|")
     # Escape backticks
     text = text.replace("`", "\\`")
@@ -1150,6 +1156,7 @@ def df_to_markdown_table(df: pd.DataFrame, sheet_name: str, empty_message: str |
     for col in df_esc.columns:
         df_esc[col] = (
             df_esc[col]
+            .str.replace("\\", "\\\\", regex=False)
             .str.replace("|", "\\|", regex=False)
             .str.replace("`", "\\`", regex=False)
             .str.replace("\n", " ", regex=False)
