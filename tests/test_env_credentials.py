@@ -239,10 +239,11 @@ class TestBootstrapDotenvCwd:
         (tmp_path / ".env").write_text("ORG_ID=fromfile@AdobeOrg\nCJA_CFG1_ONLY=fromfile\n")
         monkeypatch.chdir(tmp_path)
         monkeypatch.setenv("ORG_ID", "fromshell@AdobeOrg")
-        monkeypatch.delenv("CJA_CFG1_ONLY", raising=False)
+        # Record the absent state so monkeypatch removes the var at teardown.
+        monkeypatch.setenv("CJA_CFG1_ONLY", "x")
+        monkeypatch.delenv("CJA_CFG1_ONLY")
 
         _bootstrap_dotenv(logging.getLogger("test"))
 
         assert os.environ["ORG_ID"] == "fromshell@AdobeOrg"
         assert os.environ["CJA_CFG1_ONLY"] == "fromfile"
-        monkeypatch.delenv("CJA_CFG1_ONLY", raising=False)

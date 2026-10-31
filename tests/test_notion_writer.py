@@ -281,10 +281,9 @@ def test_build_sdr_blocks_dq_section_omitted_when_empty():
 def _neutralize_dotenv(monkeypatch):
     """Install a no-op ``dotenv`` so a developer's local .env can't leak into
     these resolver tests. ``resolve_notion_credentials`` calls
-    ``from dotenv import load_dotenv; load_dotenv()``, and python-dotenv's
-    ``find_dotenv`` searches upward from the source file (not the cwd), so
-    chdir is not enough — we replace the module with a no-op loader. Works
-    whether or not python-dotenv is installed."""
+    ``load_dotenv(find_dotenv(usecwd=True))``, which would pick up a ``.env``
+    from the cwd or any parent directory, so we replace the module with a
+    no-op loader. Works whether or not python-dotenv is installed."""
     fake = types.ModuleType("dotenv")
     fake.find_dotenv = lambda *args, **kwargs: ""
     fake.load_dotenv = lambda *args, **kwargs: False
