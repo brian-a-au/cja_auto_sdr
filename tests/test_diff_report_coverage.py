@@ -153,3 +153,54 @@ def test_coverage_rows_helper():
     assert rows["ignored_fields"] == ""
     assert rows["show_only"] == ""
     assert rows["metadata_policy"] == "reported"
+
+
+_OLD_DESC = "Counts visits from the EMEA region only"
+_NEW_DESC = "Counts visits from the EMEA region and APAC"
+
+
+def _long_change_result() -> DiffResult:
+    from cja_auto_sdr.diff.models import ChangeType, ComponentDiff
+
+    diff = ComponentDiff(
+        id="metrics/a",
+        name="A",
+        change_type=ChangeType.MODIFIED,
+        changed_fields={"description": (_OLD_DESC, _NEW_DESC)},
+    )
+    return DiffResult(
+        summary=DiffSummary(),
+        metadata_diff=MetadataDiff(source_name="A", target_name="B", source_id="dv_a", target_id="dv_b"),
+        metric_diffs=[diff],
+        dimension_diffs=[],
+    )
+
+
+def test_file_outputs_keep_full_change_values(tmp_path):
+    from cja_auto_sdr.output.diff.markdown import write_diff_markdown_output
+
+    r = _long_change_result()
+    csv_dir = write_diff_csv_output(r, "d", str(tmp_path / "csv"), logger)
+    csv_text = "".join(Path(csv_dir, p).read_text(encoding="utf-8") for p in os.listdir(csv_dir) if p.endswith(".csv"))
+    assert _OLD_DESC in csv_text
+    assert _NEW_DESC in csv_text
+
+    xlsx = write_diff_excel_output(r, "d", str(tmp_path / "xlsx"), logger)
+    wb = load_workbook(xlsx)
+    cells = [str(c) for ws in wb for row in ws.iter_rows(values_only=True) for c in row if c is not None]
+    assert any(_OLD_DESC in c and _NEW_DESC in c for c in cells)
+
+    html = Path(write_diff_html_output(r, "d", str(tmp_path / "html"), logger)).read_text(encoding="utf-8")
+    assert _OLD_DESC in html
+    assert _NEW_DESC in html
+
+    md = Path(write_diff_markdown_output(r, "d", str(tmp_path / "md"), logger)).read_text(encoding="utf-8")
+    assert _OLD_DESC in md
+    assert _NEW_DESC in md
+
+
+def test_console_truncation_marks_ellipsis():
+    from cja_auto_sdr.output.diff.common import _format_diff_value
+
+    assert _format_diff_value("x" * 40) == "x" * 30 + "..."
+    assert _format_diff_value("x" * 30) == "x" * 30

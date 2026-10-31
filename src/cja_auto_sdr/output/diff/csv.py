@@ -155,7 +155,7 @@ def write_diff_csv_output(
                     "status": diff.change_type.value,
                     "id": diff.id,
                     "name": diff.name,
-                    "details": _get_change_detail(diff),
+                    "details": _get_change_detail(diff, truncate=False),
                 }
                 for diff in diffs
             ]
@@ -179,7 +179,7 @@ def write_diff_csv_output(
                     "status": diff.change_type.value,
                     "id": diff.id,
                     "name": diff.name,
-                    "details": _get_inventory_change_detail(diff),
+                    "details": _get_inventory_change_detail(diff, truncate=False),
                 }
                 for diff in diffs
             ]

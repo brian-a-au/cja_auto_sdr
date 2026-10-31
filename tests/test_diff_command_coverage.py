@@ -109,7 +109,8 @@ class TestFormatDiffValue:
         """List value that exceeds max_len is truncated."""
         long_list = list(range(50))
         result = _format_diff_value(long_list, truncate=True, max_len=20)
-        assert len(result) == 20
+        assert len(result) == 23
+        assert result.endswith("...")
 
     def test_list_no_truncation(self):
         """List value without truncation returns full string."""

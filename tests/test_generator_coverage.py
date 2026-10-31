@@ -387,8 +387,7 @@ class TestFormatDiffValue:
     def test_truncation_at_default_max(self):
         long_val = "a" * 50
         result = _format_diff_value(long_val, truncate=True, max_len=30)
-        assert len(result) == 30
-        assert result == "a" * 30
+        assert result == "a" * 30 + "..."
 
     def test_no_truncation(self):
         long_val = "a" * 50
@@ -397,7 +396,7 @@ class TestFormatDiffValue:
 
     def test_custom_max_len(self):
         result = _format_diff_value("abcdefghij", truncate=True, max_len=5)
-        assert result == "abcde"
+        assert result == "abcde..."
 
     def test_exact_max_len_not_truncated(self):
         result = _format_diff_value("abcde", truncate=True, max_len=5)
