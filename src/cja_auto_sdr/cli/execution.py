@@ -757,7 +757,11 @@ def _handle_single_mode_git_commit(args: argparse.Namespace, result: Any) -> boo
         else:
             print(generator.ConsoleColors.success(f"  Committed: {commit_result}"))
             if getattr(args, "git_push", False):
-                print(generator.ConsoleColors.success("  Pushed to remote"))
+                if "(push failed: " in commit_result:
+                    push_reason = commit_result.split("(push failed: ", 1)[1].rstrip(")")
+                    print(generator.ConsoleColors.warning(f"  Push failed: {push_reason}"))
+                else:
+                    print(generator.ConsoleColors.success("  Pushed to remote"))
     else:
         print(generator.ConsoleColors.error(f"  Git commit failed: {commit_result}"))
         return False
