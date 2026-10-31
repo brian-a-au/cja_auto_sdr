@@ -7225,19 +7225,42 @@ def _dispatch_post_validation_report_modes(
             print(ConsoleColors.error("ERROR: --stats requires at least one data view ID or name"), file=sys.stderr)
             sys.exit(1)
 
-        temp_logger = logging.getLogger("name_resolution")
-        temp_logger.setLevel(logging.WARNING)
-        resolved_ids, _ = resolve_data_view_names(
-            data_view_inputs,
-            args.config_file,
-            temp_logger,
-            profile=getattr(args, "profile", None),
-            match_mode=getattr(args, "name_match", "exact"),
-        )
+        stats_machine_readable = _is_machine_readable_output(args.format, getattr(args, "output", None))
+        if stats_machine_readable:
+            # Keep stderr machine-safe: mute resolution logs and report failures as a JSON envelope.
+            resolution_result = resolve_data_view_names(
+                data_view_inputs,
+                args.config_file,
+                _build_inspection_name_resolution_logger(),
+                profile=getattr(args, "profile", None),
+                match_mode=getattr(args, "name_match", "exact"),
+                include_diagnostics=True,
+                emit_api_hints=False,
+            )
+            resolved_ids, _, stats_resolution_diagnostics = _coerce_name_resolution_result(resolution_result)
+            if not resolved_ids:
+                _emit_discovery_error(
+                    stats_resolution_diagnostics.error_message
+                    or f"Could not resolve data view(s): {', '.join(data_view_inputs)}",
+                    is_machine_readable=True,
+                    error_type=stats_resolution_diagnostics.error_type or "not_found",
+                    human_to_stderr=True,
+                )
+                sys.exit(1)
+        else:
+            temp_logger = logging.getLogger("name_resolution")
+            temp_logger.setLevel(logging.WARNING)
+            resolved_ids, _ = resolve_data_view_names(
+                data_view_inputs,
+                args.config_file,
+                temp_logger,
+                profile=getattr(args, "profile", None),
+                match_mode=getattr(args, "name_match", "exact"),
+            )
 
-        if not resolved_ids:
-            print(ConsoleColors.error("ERROR: No valid data views found"), file=sys.stderr)
-            sys.exit(1)
+            if not resolved_ids:
+                print(ConsoleColors.error("ERROR: No valid data views found"), file=sys.stderr)
+                sys.exit(1)
         if run_state is not None:
             run_state["resolved_data_views"] = list(resolved_ids)
 

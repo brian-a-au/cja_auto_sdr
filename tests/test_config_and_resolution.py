@@ -1721,3 +1721,60 @@ class TestIsDataViewId:
         from cja_auto_sdr.generator import is_data_view_id
 
         assert is_data_view_id("") is False
+
+
+class TestStatsResolutionFailureContract:
+    """--stats resolution failures honor the machine-readable output contract."""
+
+    @staticmethod
+    def _run_stats(argv: list[str], resolution_result, capsys: pytest.CaptureFixture):
+        from cja_auto_sdr import generator
+
+        with (
+            patch("sys.argv", ["cja_auto_sdr", *argv]),
+            patch("cja_auto_sdr.generator.resolve_data_view_names", return_value=resolution_result),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            generator.main()
+        return exc_info.value.code, capsys.readouterr()
+
+    def test_stats_resolution_failure_emits_json_envelope_on_stderr(self, capsys: pytest.CaptureFixture) -> None:
+        from cja_auto_sdr.generator import NameResolutionDiagnostics
+
+        diagnostics = NameResolutionDiagnostics(
+            error_type="configuration_error",
+            error_message="Failed to configure credentials: no creds",
+        )
+        code, captured = self._run_stats(
+            ["--stats", "dv_a", "--format", "json", "--output", "-"], ([], {}, diagnostics), capsys
+        )
+
+        assert code == 1
+        assert captured.out == ""
+        lines = [line for line in captured.err.splitlines() if line.strip()]
+        assert len(lines) == 1
+        payload = json.loads(lines[0])
+        assert payload["error_type"] == "configuration_error"
+        assert "no creds" in payload["error"]
+        assert "No valid data views found" not in captured.err
+
+    def test_stats_resolution_not_found_defaults_error_type(self, capsys: pytest.CaptureFixture) -> None:
+        from cja_auto_sdr.generator import NameResolutionDiagnostics
+
+        code, captured = self._run_stats(
+            ["--stats", "dv_a", "--format", "json", "--output", "-"],
+            ([], {}, NameResolutionDiagnostics(error_type=None)),
+            capsys,
+        )
+
+        assert code == 1
+        lines = [line for line in captured.err.splitlines() if line.strip()]
+        assert json.loads(lines[-1])["error_type"] == "not_found"
+
+    def test_stats_resolution_failure_human_output_unchanged(self, capsys: pytest.CaptureFixture) -> None:
+        code, captured = self._run_stats(["--stats", "dv_a", "--format", "console"], ([], {}), capsys)
+
+        assert code == 1
+        assert "ERROR: No valid data views found" in captured.err
+        for line in captured.err.splitlines():
+            assert not line.lstrip().startswith("{")
