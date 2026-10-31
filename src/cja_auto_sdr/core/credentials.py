@@ -466,6 +466,6 @@ def validate_env_credentials(credentials: dict[str, str], logger: logging.Logger
             return False
 
     # Use unified validation function
-    is_valid, _issues = validate_credentials(credentials, logger, strict=False, source="environment")
+    is_valid, _issues = validate_credentials(credentials, logger, strict=True, source="environment")
 
     return is_valid

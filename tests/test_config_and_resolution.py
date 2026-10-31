@@ -80,6 +80,37 @@ class TestShowConfigStatusEnvVars:
         assert "Environment variables" in output
 
 
+class TestShowConfigStatusStrictEnv:
+    """CFG-2: config status must reject env credentials that real runs skip."""
+
+    def test_config_status_skips_env_credentials_that_real_runs_reject(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        from cja_auto_sdr.generator import show_config_status
+
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.delenv("CJA_PROFILE", raising=False)
+        monkeypatch.setenv("ORG_ID", "ENVORG")  # no @AdobeOrg suffix
+        monkeypatch.setenv("CLIENT_ID", "envclient00000000000000000000000c")
+        monkeypatch.setenv("SECRET", "env-secret-00000000000000000000000")
+        monkeypatch.setenv("SCOPES", "openid")
+        config = tmp_path / "config.json"
+        config.write_text(
+            json.dumps(
+                {
+                    "org_id": "FILEORG11111111111111111@AdobeOrg",
+                    "client_id": "fileclient000000000000000000000b",
+                    "secret": "file-secret-000000000000000000000",
+                    "scopes": "openid",
+                },
+            ),
+        )
+        result = show_config_status(config_file=str(config), output_json=True)
+        assert result is True
+        data = json.loads(capsys.readouterr().out)
+        assert data["source"].startswith("Config file")
+
+
 class TestShowConfigStatusFile:
     """Lines 9918-9954: config file loading and error paths."""
 

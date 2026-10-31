@@ -75,8 +75,8 @@ class TestValidateEnvCredentials:
         """Test validation passes for complete OAuth credentials"""
         credentials = {
             "org_id": "test_org@AdobeOrg",
-            "client_id": "test_client_id",
-            "secret": "test_secret",
+            "client_id": "0123456789abcdef0123456789abcdef",
+            "secret": "test-secret-not-real-0123456789ab",
             "scopes": "openid, AdobeID",
         }
         logger = MagicMock()
@@ -106,8 +106,8 @@ class TestValidateEnvCredentials:
         """Test validation passes with warning when only base credentials present"""
         credentials = {
             "org_id": "test_org@AdobeOrg",
-            "client_id": "test_client_id",
-            "secret": "test_secret",
+            "client_id": "0123456789abcdef0123456789abcdef",
+            "secret": "test-secret-not-real-0123456789ab",
             # No scopes specified
         }
         logger = MagicMock()
