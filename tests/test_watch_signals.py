@@ -8,9 +8,11 @@ the default unit slice.
 """
 
 import os
+import queue
 import signal
 import subprocess
 import sys
+import threading
 import time
 from unittest.mock import MagicMock, patch
 
@@ -168,39 +170,56 @@ def test_signal_during_sleep_stops_before_next_cycle(MockRunner, mock_emit, mock
     assert stops[0].kwargs["cycles_completed"] == 1
 
 
-@pytest.mark.slow
-def test_sigint_exits_zero():
+def _wait_for_watch_ready(proc: subprocess.Popen, deadline_s: float = 15.0) -> None:
+    """Block until the child prints its post-handler-install note on stderr.
+
+    A reader thread feeds a queue so a hung child cannot block the test.
+    """
+    lines: queue.Queue = queue.Queue()
+
+    def _reader() -> None:
+        for raw in iter(proc.stderr.readline, b""):
+            lines.put(raw)
+        lines.put(None)
+
+    threading.Thread(target=_reader, daemon=True).start()
+    deadline = time.monotonic() + deadline_s
+    while time.monotonic() < deadline:
+        try:
+            raw = lines.get(timeout=0.2)
+        except queue.Empty:
+            continue
+        if raw is None:
+            break
+        if b"watch holds snapshots" in raw:
+            return
+    proc.kill()
+    pytest.fail("watch did not report readiness (handlers installed) within deadline")
+
+
+def _run_signal_test(sig: signal.Signals) -> None:
     proc = subprocess.Popen(
         [sys.executable, "-m", "cja_auto_sdr", "--watch", "dv_does_not_exist", "--interval", "1h"],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         env={**os.environ, "CJA_AUTO_SDR_WATCH_TEST_MODE": "1"},
     )
-    time.sleep(2)
-    proc.send_signal(signal.SIGINT)
+    _wait_for_watch_ready(proc)
+    proc.send_signal(sig)
     try:
         proc.wait(timeout=10)
     except subprocess.TimeoutExpired:
         proc.kill()
-        pytest.fail("watch loop did not respond to SIGINT within 10s")
+        pytest.fail(f"watch loop did not respond to {sig.name} within 10s")
 
     assert proc.returncode == 0
+
+
+@pytest.mark.slow
+def test_sigint_exits_zero():
+    _run_signal_test(signal.SIGINT)
 
 
 @pytest.mark.slow
 def test_sigterm_exits_zero():
-    proc = subprocess.Popen(
-        [sys.executable, "-m", "cja_auto_sdr", "--watch", "dv_does_not_exist", "--interval", "1h"],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        env={**os.environ, "CJA_AUTO_SDR_WATCH_TEST_MODE": "1"},
-    )
-    time.sleep(2)
-    proc.send_signal(signal.SIGTERM)
-    try:
-        proc.wait(timeout=10)
-    except subprocess.TimeoutExpired:
-        proc.kill()
-        pytest.fail("watch loop did not respond to SIGTERM within 10s")
-
-    assert proc.returncode == 0
+    _run_signal_test(signal.SIGTERM)
