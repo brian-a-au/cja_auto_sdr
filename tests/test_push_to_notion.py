@@ -140,3 +140,64 @@ def test_push_null_inventory_section_is_skipped(tmp_path, section):
 
     assert result == "notion://pages/x"
     assert list(mock_write.call_args.kwargs["data_dict"]) == ["Metrics"]
+
+
+@pytest.mark.parametrize(
+    ("payload", "path"),
+    [
+        ({"metrics": 5}, "metrics"),
+        ({"dimensions": "Page"}, "dimensions"),
+        ({"data_quality": {"Issue": "x"}}, "data_quality"),
+        ({"metrics": [1, 2]}, "metrics"),
+        ({"derived_fields": {"fields": "abc"}}, "derived_fields.fields"),
+        ({"calculated_metrics": {"metrics": {"id": "cm1"}}}, "calculated_metrics.metrics"),
+        ({"segments": {"segments": [{"id": "s1"}, "s2"]}}, "segments.segments"),
+    ],
+)
+def test_push_malformed_section_exits_1_without_traceback(tmp_path, capsys, payload, path):
+    from cja_auto_sdr.generator import _push_to_notion_from_json
+
+    json_path = tmp_path / "bad_section.json"
+    json_path.write_text(json.dumps(payload))
+    with (
+        patch("cja_auto_sdr.output.writers.notion.write_notion_output") as mock_write,
+        pytest.raises(SystemExit) as exc_info,
+    ):
+        _push_to_notion_from_json(str(json_path), output_dir=str(tmp_path))
+
+    assert exc_info.value.code == 1
+    err = capsys.readouterr().err
+    assert f"'{path}'" in err
+    assert "must be a list of objects" in err
+    assert "Traceback" not in err
+    mock_write.assert_not_called()
+
+
+def test_push_all_sections_build_sheets_in_order(tmp_path):
+    from cja_auto_sdr.generator import _push_to_notion_from_json
+
+    payload = {
+        "metadata": {},
+        "metrics": [{"Name": "Visits"}],
+        "dimensions": [{"Name": "Page"}],
+        "data_quality": [{"Issue": "x"}],
+        "derived_fields": {"fields": [{"id": "df1"}]},
+        "calculated_metrics": {"metrics": [{"id": "cm1"}]},
+        "segments": {"segments": [{"id": "s1"}]},
+    }
+    json_path = tmp_path / "full.json"
+    json_path.write_text(json.dumps(payload))
+    with patch(
+        "cja_auto_sdr.output.writers.notion.write_notion_output",
+        return_value="notion://pages/x",
+    ) as mock_write:
+        _push_to_notion_from_json(str(json_path), output_dir=str(tmp_path))
+
+    assert list(mock_write.call_args.kwargs["data_dict"]) == [
+        "Metrics",
+        "Dimensions",
+        "Data Quality",
+        "Derived Fields",
+        "Calculated Metrics",
+        "Segments",
+    ]

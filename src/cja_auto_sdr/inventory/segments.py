@@ -565,6 +565,27 @@ class SegmentsInventoryBuilder:
             return ""
         return normalized
 
+    def _reference_from_node(self, node: Any, depth: int = 0) -> tuple[str, str] | None:
+        """Return ``(kind, short_name)`` for a CJA attribute/event reference node.
+
+        CJA predicates wrap their operands: ``{"func": "attr", "name": "variables/x"}``
+        for a dimension and ``{"func": "event", "name": "metrics/y"}`` for a metric.
+        Aggregates such as ``{"func": "total", "evt": {...}}`` wrap an event.
+        """
+        if not isinstance(node, dict) or depth > 3:
+            return None
+        func = self._normalize_func_name(node.get("func", ""))
+        if func in ("attr", "event"):
+            name = self._normalize_reference_value(node.get("name", ""))
+            if not name:
+                return None
+            return ("dimension" if func == "attr" else "metric", name)
+        for key in ("evt", "val"):
+            ref = self._reference_from_node(node.get(key), depth + 1)
+            if ref:
+                return ref
+        return None
+
     def _parse_definition(self, definition: dict[str, Any], depth: int = 0) -> dict[str, Any]:
         """
         Recursively parse a segment definition and extract all relevant data.
@@ -623,6 +644,16 @@ class SegmentsInventoryBuilder:
                     "within",
                     "after",
                     "before",
+                    # Names used in CJA segment payloads.
+                    "ge",
+                    "le",
+                    "not-streq",
+                    "not-streq-in",
+                    "not-starts-with",
+                    "not-ends-with",
+                    "event-exists",
+                    "not-event-exists",
+                    "datetime-within",
                 ):
                     total_predicates += 1
 
@@ -635,7 +666,7 @@ class SegmentsInventoryBuilder:
                     total_logic_operators += 1
 
                 # Count containers
-                if func in ("container", "sequence", "sequence-prefix", "sequence-suffix", "exclude"):
+                if func in ("container", "sequence", "sequence-prefix", "sequence-suffix", "exclude", "without"):
                     total_containers += 1
 
             # Extract container type (context)
@@ -664,6 +695,13 @@ class SegmentsInventoryBuilder:
                 if clean_name:
                     segment_refs.add(clean_name)
 
+            # CJA payload shape: operands wrapped in val/evt reference nodes
+            for ref_key in ("val", "evt"):
+                ref = self._reference_from_node(node.get(ref_key))
+                if ref:
+                    kind, name = ref
+                    (dimension_refs if kind == "dimension" else metric_refs).add(name)
+
             # Check for 'pred' which contains a predicate or nested structure
             pred = node.get("pred", {})
             if isinstance(pred, dict) and pred:
@@ -686,17 +724,19 @@ class SegmentsInventoryBuilder:
             if isinstance(exclude_def, dict) and exclude_def:
                 traverse(exclude_def, current_depth + 1)
 
-            # Handle sequence checkpoints
-            checkpoints = node.get("checkpoints", [])
-            if isinstance(checkpoints, list):
-                for checkpoint in checkpoints:
-                    if isinstance(checkpoint, dict):
-                        traverse(checkpoint, current_depth + 1)
+            # Handle sequence steps ('checkpoints', or 'stream' in CJA payloads)
+            for steps_key in ("checkpoints", "stream"):
+                steps = node.get(steps_key, [])
+                if isinstance(steps, list):
+                    for step in steps:
+                        if isinstance(step, dict):
+                            traverse(step, current_depth + 1)
 
-            # Handle val arrays (for streq-in, etc.)
-            val = node.get("val", [])
-            if isinstance(val, list) and val:
-                total_predicates += len(val) - 1  # Each additional value adds complexity
+            # Handle value arrays ('val', or 'list' for CJA streq-in)
+            for values_key in ("val", "list"):
+                values = node.get(values_key, [])
+                if isinstance(values, list) and values:
+                    total_predicates += len(values) - 1  # Each additional value adds complexity
 
         traverse(definition, depth)
 
@@ -834,6 +874,10 @@ class SegmentsInventoryBuilder:
         func = self._normalize_func_name(func)
         context = node.get("context", "")
 
+        # CJA wraps every definition as {"func": "segment", "container": {...}}
+        if func == "segment":
+            return self._describe_definition(node.get("container", {}), max_depth)
+
         # Handle container - go to inner content
         if func == "container" or context:
             pred = node.get("pred", {})
@@ -885,6 +929,16 @@ class SegmentsInventoryBuilder:
             metric = self._normalize_reference_value(metric)
 
         val = node.get("val", "")
+        if isinstance(val, dict) or "evt" in node:
+            # CJA payload shape: the operand is a reference node and the
+            # compared value sits in str/list/num.
+            ref = self._reference_from_node(val) or self._reference_from_node(node.get("evt"))
+            if ref and not (dimension or metric):
+                if ref[0] == "dimension":
+                    dimension = ref[1]
+                else:
+                    metric = ref[1]
+            val = next((node[key] for key in ("str", "list", "num") if key in node), "")
         # Handle list values
         if isinstance(val, list):
             if len(val) == 1:
@@ -899,12 +953,15 @@ class SegmentsInventoryBuilder:
         if func in ("eq", "streq"):
             if field_name and val:
                 return f"{field_name} = '{val}'" if isinstance(val, str) else f"{field_name} = {val}"
-        elif func in ("ne", "strne"):
+        elif func in ("ne", "strne", "not-streq"):
             if field_name and val:
                 return f"{field_name} != '{val}'" if isinstance(val, str) else f"{field_name} != {val}"
         elif func == "streq-in":
             if field_name and val:
                 return f"{field_name} in ({val})"
+        elif func == "not-streq-in":
+            if field_name and val:
+                return f"{field_name} not in ({val})"
         elif func == "contains":
             if field_name and val:
                 return f"{field_name} contains '{val}'"
@@ -917,19 +974,25 @@ class SegmentsInventoryBuilder:
         elif func == "ends-with":
             if field_name and val:
                 return f"{field_name} ends with '{val}'"
+        elif func == "not-starts-with":
+            if field_name and val:
+                return f"{field_name} does not start with '{val}'"
+        elif func == "not-ends-with":
+            if field_name and val:
+                return f"{field_name} does not end with '{val}'"
         elif func == "matches":
             if field_name and val:
                 val_str = str(val)
                 short_pattern = val_str[:20] + "..." if len(val_str) > 20 else val_str
                 return f"{field_name} matches /{short_pattern}/"
-        elif func == "exists":
+        elif func in ("exists", "event-exists"):
             if field_name:
                 return f"{field_name} exists"
-        elif func == "not-exists":
+        elif func in ("not-exists", "not-event-exists"):
             if field_name:
                 return f"{field_name} does not exist"
-        elif func in ("gt", "gte", "lt", "lte"):
-            op_map = {"gt": ">", "gte": ">=", "lt": "<", "lte": "<="}
+        elif func in ("gt", "gte", "ge", "lt", "lte", "le"):
+            op_map = {"gt": ">", "gte": ">=", "ge": ">=", "lt": "<", "lte": "<=", "le": "<="}
             if field_name and val is not None:
                 return f"{field_name} {op_map[func]} {val}"
 
@@ -938,11 +1001,27 @@ class SegmentsInventoryBuilder:
             checkpoints = node.get("checkpoints", [])
             if isinstance(checkpoints, list) and checkpoints:
                 return f"sequential pattern with {len(checkpoints)} steps"
+            # CJA payloads list steps in 'stream', mixed with time/container restrictions
+            stream = node.get("stream", [])
+            if isinstance(stream, list):
+                steps = [
+                    step
+                    for step in stream
+                    if isinstance(step, dict)
+                    and self._normalize_func_name(step.get("func", ""))
+                    not in ("time-restriction", "container-restriction", "exclude-next-checkpoint")
+                ]
+                if steps:
+                    return f"sequential pattern with {len(steps)} steps"
 
-        # Handle exclude
+        # Handle exclude ('without' in CJA payloads)
         if func == "exclude":
             container = node.get("container", {})
             inner = self._describe_definition(container, max_depth - 1)
+            if inner:
+                return f"excluding ({inner})"
+        if func == "without":
+            inner = self._describe_definition(node.get("pred", {}), max_depth - 1)
             if inner:
                 return f"excluding ({inner})"
 

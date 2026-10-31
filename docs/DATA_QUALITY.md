@@ -40,7 +40,7 @@ The generator performs six core automated validation checks on your CJA componen
 
 ### 4. Missing Descriptions
 
-**What it checks**: Identifies components without descriptions.
+**What it checks**: Identifies components without descriptions. A description that is empty, null, or only whitespace counts as missing.
 
 | Aspect | Details |
 |--------|---------|

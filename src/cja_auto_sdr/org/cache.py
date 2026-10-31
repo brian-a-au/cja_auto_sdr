@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from cja_auto_sdr.core.json_io import load_json_cached, write_json_atomic
+from cja_auto_sdr.core.locks import backends as _lock_backends
 from cja_auto_sdr.core.locks.manager import LockManager, normalize_lock_stale_threshold_seconds
 from cja_auto_sdr.org.models import DataViewSummary
 from cja_auto_sdr.org.snapshot_utils import (
@@ -126,6 +127,9 @@ class OrgReportLock:
             return False
         if normalized_pid <= 0:
             return False
+        if _lock_backends._IS_WINDOWS:
+            # Signal 0 is CTRL_C_EVENT on Windows, so os.kill is not a probe there.
+            return _lock_backends._is_windows_process_running(normalized_pid)
         try:
             os.kill(normalized_pid, 0)  # Signal 0 doesn't kill, just checks
             return True

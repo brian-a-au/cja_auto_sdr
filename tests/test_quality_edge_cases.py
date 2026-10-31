@@ -199,14 +199,42 @@ class TestDescriptionValidation:
     def _make_checker(self):
         return DataQualityChecker(logger=logging.getLogger("test"), quiet=True)
 
-    def test_whitespace_only_description_not_treated_as_missing(self):
-        """Whitespace-only descriptions are NOT caught by empty-string check — document."""
+    def test_whitespace_only_description_treated_as_missing(self):
+        """Whitespace-only descriptions count as missing, like empty and null ones."""
         checker = self._make_checker()
-        df = pd.DataFrame({"id": ["m1"], "name": ["A"], "description": ["   "]})
+        df = pd.DataFrame(
+            {
+                "id": ["m1", "m2", "m3", "m4"],
+                "name": ["A", "B", "C", "D"],
+                "description": ["   ", "\t\n", None, "Real description"],
+            }
+        )
         checker.check_missing_descriptions(df, "Metrics")
         desc_issues = [i for i in checker.issues if i["Category"] == "Missing Descriptions"]
-        # Current behavior: whitespace-only is NOT treated as missing (only isna() or == "")
-        assert len(desc_issues) == 0
+        assert len(desc_issues) == 1
+        assert desc_issues[0]["Item Name"] == "3 items"
+        assert desc_issues[0]["Details"] == "Items: A, B, C"
+
+    def test_optimized_check_treats_whitespace_only_description_as_missing(self):
+        checker = self._make_checker()
+        df = pd.DataFrame(
+            {
+                "id": ["m1", "m2", "m3"],
+                "name": ["A", "B", "C"],
+                "type": ["metric"] * 3,
+                "description": ["  ", "Padded but real  ", ""],
+            }
+        )
+        checker.check_all_quality_issues_optimized(df, "Metrics", ["id", "name", "type"], ["description"])
+        desc_issues = [i for i in checker.issues if i["Category"] == "Missing Descriptions"]
+        assert len(desc_issues) == 1
+        assert desc_issues[0]["Item Name"] == "2 items"
+
+    def test_non_string_description_is_not_missing(self):
+        checker = self._make_checker()
+        df = pd.DataFrame({"id": ["m1"], "name": ["A"], "description": [42]})
+        checker.check_missing_descriptions(df, "Metrics")
+        assert [i for i in checker.issues if i["Category"] == "Missing Descriptions"] == []
 
     def test_very_long_description_no_crash(self):
         checker = self._make_checker()

@@ -835,3 +835,98 @@ class TestValidatedCachePersistence:
         write_org_report_json(result, output, str(tmp_path), logging.getLogger("storage_failure"))
         assert len(json.loads(output.read_text())["data_views"]) == 3
         assert "Failed to save org report cache" in caplog.text
+
+
+class TestListingMetadataSkipsPerDataViewLookup:
+    """--include-metadata reads owner/created/modified/description from getDataViews().
+
+    The live listing returns the same values as getDataView(), so the per-data-view
+    call is only a fallback for listings without metadata.
+    """
+
+    @staticmethod
+    def _client(listing):
+        client = Mock()
+        client.getDataViews.return_value = listing
+        client.getMetrics.side_effect = lambda dv_id, **kwargs: create_mock_metrics(dv_id)
+        client.getDimensions.side_effect = lambda dv_id, **kwargs: create_mock_dimensions(dv_id)
+        client.getDataView.side_effect = lambda dv_id: {
+            "id": dv_id,
+            "name": dv_id,
+            "owner": {"name": "Detail Owner", "id": "detail_owner"},
+            "createdDate": "2020-01-01T00:00:00Z",
+            "modifiedDate": "2020-02-01T00:00:00Z",
+            "description": "From detail",
+        }
+        return client
+
+    @staticmethod
+    def _run(client):
+        config = OrgReportConfig(include_metadata=True, cja_per_thread=False, quiet=True, skip_lock=True)
+        return OrgComponentAnalyzer(client, config, logging.getLogger("listing_metadata")).run_analysis()
+
+    def test_listing_with_owner_skips_get_data_view(self):
+        listing = [
+            {
+                "id": f"dv_{i}",
+                "name": f"DV {i}",
+                "owner": {"name": f"Owner {i}", "id": f"owner_{i}"},
+                "createdDate": "2021-07-15T21:56:53Z",
+                "modifiedDate": "2022-09-13T21:08:10Z",
+                "description": "Listed" if i else "   ",
+            }
+            for i in range(3)
+        ]
+        client = self._client(listing)
+        result = self._run(client)
+
+        client.getDataView.assert_not_called()
+        by_id = {s.data_view_id: s for s in result.data_view_summaries}
+        assert by_id["dv_1"].owner == "Owner 1"
+        assert by_id["dv_1"].owner_id == "owner_1"
+        assert by_id["dv_1"].created == "2021-07-15T21:56:53Z"
+        assert by_id["dv_1"].modified == "2022-09-13T21:08:10Z"
+        assert by_id["dv_1"].has_description is True
+        assert by_id["dv_0"].has_description is False
+
+    def test_dataframe_listing_with_nan_fields(self):
+        listing = pd.DataFrame(
+            [
+                {"id": "dv_a", "name": "A", "owner": {"name": "Owner A", "id": "oa"}, "description": None},
+                {
+                    "id": "dv_b",
+                    "name": "B",
+                    "owner": {"name": "Owner B", "id": "ob"},
+                    "description": "Has text",
+                    "createdDate": "2021-01-01T00:00:00Z",
+                },
+            ]
+        )
+        client = self._client(listing)
+        result = self._run(client)
+
+        client.getDataView.assert_not_called()
+        by_id = {s.data_view_id: s for s in result.data_view_summaries}
+        assert by_id["dv_a"].created is None
+        assert by_id["dv_a"].description is None
+        assert by_id["dv_a"].has_description is False
+        assert by_id["dv_b"].created == "2021-01-01T00:00:00Z"
+
+    def test_listing_without_owner_falls_back_to_get_data_view(self):
+        listing = [{"id": "dv_x", "name": "X", "modified": "2024-01-01T00:00:00Z"}]
+        client = self._client(listing)
+        result = self._run(client)
+
+        client.getDataView.assert_called_once_with("dv_x")
+        summary = result.data_view_summaries[0]
+        assert summary.owner == "Detail Owner"
+        assert summary.description == "From detail"
+
+    def test_without_include_metadata_reads_nothing(self):
+        listing = [{"id": "dv_y", "name": "Y", "owner": {"name": "Owner", "id": "o"}}]
+        client = self._client(listing)
+        config = OrgReportConfig(include_metadata=False, cja_per_thread=False, quiet=True, skip_lock=True)
+        result = OrgComponentAnalyzer(client, config, logging.getLogger("listing_metadata")).run_analysis()
+
+        client.getDataView.assert_not_called()
+        assert result.data_view_summaries[0].owner is None

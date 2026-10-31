@@ -68,6 +68,11 @@ def _ids_for_mask(df: pd.DataFrame, mask: Any) -> list[object]:
     return df.loc[mask, "id"].tolist()
 
 
+def _missing_description_mask(descriptions: pd.Series) -> pd.Series:
+    """True where a description is null, empty, or only whitespace."""
+    return descriptions.isna() | descriptions.astype(str).str.strip().eq("")
+
+
 class DataQualityChecker:
     # Severity levels in priority order (highest to lowest) for proper sorting
     SEVERITY_ORDER: ClassVar[list[str]] = list(QUALITY_SEVERITY_ORDER)
@@ -232,7 +237,7 @@ class DataQualityChecker:
                 self.logger.info("'description' column not found in %s", item_type)
                 return
 
-            missing_desc = df["description"].isna() | (df["description"] == "")
+            missing_desc = _missing_description_mask(df["description"])
             missing_desc_count = missing_desc.sum()
             if missing_desc_count > 0:
                 item_names = df.loc[missing_desc, "name"].tolist() if "name" in df.columns else []
@@ -408,7 +413,7 @@ class DataQualityChecker:
 
             # Check 5: Vectorized missing descriptions check
             if "description" in df.columns:
-                missing_desc = df["description"].isna() | (df["description"] == "")
+                missing_desc = _missing_description_mask(df["description"])
                 missing_desc_count = missing_desc.sum()
                 if missing_desc_count > 0:
                     item_names = df.loc[missing_desc, "name"].tolist() if "name" in df.columns else []

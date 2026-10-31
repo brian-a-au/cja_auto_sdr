@@ -1050,3 +1050,124 @@ def test_functions_used_order_is_stable_across_hash_seeds():
     _display, internal, _dict_used = json.loads(outs.pop())
     assert len(internal) >= 4
     assert internal == sorted(internal)
+
+
+# ==================== CJA PAYLOAD SHAPES ====================
+# Real CJA segment definitions wrap the rule as {"func": "segment", "container": ...}
+# and wrap operands in reference nodes: val={"func": "attr"} for dimensions and
+# evt={"func": "event"} (or val={"func": "total", "evt": ...}) for metrics.
+
+
+def _attr(name: str) -> dict:
+    return {"func": "attr", "name": f"variables/{name}"}
+
+
+def _event(name: str) -> dict:
+    return {"func": "event", "name": f"metrics/{name}"}
+
+
+def _segment(context: str, pred: dict) -> dict:
+    return {
+        "func": "segment",
+        "version": [1, 0, 0],
+        "container": {"func": "container", "context": context, "pred": pred},
+    }
+
+
+class TestCjaPayloadShapes:
+    @pytest.fixture
+    def builder(self):
+        return SegmentsInventoryBuilder()
+
+    def _summary(self, builder, definition):
+        parsed = builder._parse_definition(definition)
+        return parsed, builder._generate_definition_summary(definition, parsed)
+
+    def test_attr_and_event_references_are_extracted(self, builder):
+        definition = _segment(
+            "visitors",
+            {
+                "func": "and",
+                "preds": [
+                    {"func": "streq-in", "val": _attr("product_pages"), "list": ["a", "b"]},
+                    {"func": "not-event-exists", "evt": _event("orders")},
+                ],
+            },
+        )
+        parsed, summary = self._summary(builder, definition)
+
+        assert parsed["dimension_references"] == ["product_pages"]
+        assert parsed["metric_references"] == ["orders"]
+        assert parsed["container_type"] == "visitors"
+        # streq-in with two values plus not-event-exists
+        assert parsed["predicate_count"] == 3
+        assert summary == "Person where product_pages in (a, b) AND orders does not exist"
+        # Reference wrappers are operands, not functions the segment uses.
+        assert "attr" not in parsed["functions_internal"]
+        assert "event" not in parsed["functions_internal"]
+
+    def test_total_wrapped_metric_comparison(self, builder):
+        definition = _segment(
+            "hits",
+            {"func": "gt", "val": {"func": "total", "evt": _event("revenue")}, "num": 0},
+        )
+        parsed, summary = self._summary(builder, definition)
+
+        assert parsed["metric_references"] == ["revenue"]
+        assert parsed["dimension_references"] == []
+        assert summary == "Hit where revenue > 0"
+
+    @pytest.mark.parametrize(
+        ("pred", "expected"),
+        [
+            ({"func": "streq", "val": _attr("browser"), "str": "Chrome"}, "browser = 'Chrome'"),
+            ({"func": "not-streq", "val": _attr("browser"), "str": "Chrome"}, "browser != 'Chrome'"),
+            ({"func": "contains", "val": _attr("page"), "str": "cart"}, "page contains 'cart'"),
+            ({"func": "not-starts-with", "val": _attr("page"), "str": "/x"}, "page does not start with '/x'"),
+            ({"func": "exists", "val": _attr("page")}, "page exists"),
+            ({"func": "not-exists", "val": _attr("page")}, "page does not exist"),
+            ({"func": "event-exists", "evt": _event("orders")}, "orders exists"),
+            ({"func": "ge", "val": {"func": "total", "evt": _event("visits")}, "num": 2}, "visits >= 2"),
+            (
+                {"func": "without", "pred": {"func": "event-exists", "evt": _event("orders")}},
+                "excluding (orders exists)",
+            ),
+        ],
+    )
+    def test_predicate_descriptions(self, builder, pred, expected):
+        _, summary = self._summary(builder, _segment("visits", pred))
+        assert summary == f"Visit where {expected}"
+
+    def test_stream_sequence_steps_are_traversed_and_counted(self, builder):
+        definition = _segment(
+            "visitors",
+            {
+                "func": "sequence",
+                "stream": [
+                    {"func": "container", "context": "hits", "pred": {"func": "event-exists", "evt": _event("calls")}},
+                    {"func": "time-restriction", "limit": "after", "count": 1, "unit": "week"},
+                    {"func": "container", "context": "hits", "pred": {"func": "exists", "val": _attr("page")}},
+                ],
+            },
+        )
+        parsed, summary = self._summary(builder, definition)
+
+        assert parsed["metric_references"] == ["calls"]
+        assert parsed["dimension_references"] == ["page"]
+        assert summary == "Person where sequential pattern with 2 steps"
+
+    def test_legacy_dimension_shape_still_supported(self, builder):
+        definition = {
+            "func": "container",
+            "context": "hits",
+            "pred": {"func": "streq", "dimension": "variables/page", "val": "Home"},
+        }
+        parsed, summary = self._summary(builder, definition)
+
+        assert parsed["dimension_references"] == ["page"]
+        assert summary == "Hit where page = 'Home'"
+
+    def test_reference_node_without_name_is_ignored(self, builder):
+        definition = _segment("hits", {"func": "exists", "val": {"func": "attr"}})
+        parsed = builder._parse_definition(definition)
+        assert parsed["dimension_references"] == []

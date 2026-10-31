@@ -683,7 +683,7 @@ To minimize API calls during name resolution, data view listings are cached for 
 | `--warn-threshold PERCENT` | Exit with code 3 if change percentage exceeds threshold. |
 | `--group-by-field` | Group changes by field name instead of by component. |
 | `--group-by-field-limit N` | Max items per section in --group-by-field output (default: 10, 0=unlimited). |
-| `--diff-output FILE` | Write the diff to `FILE`. Console and PR-comment output is saved as text. JSON, Markdown, HTML, and Excel reports are written to `FILE` instead of an auto-named file in `--output-dir`. CSV writes several files, so it ignores `--diff-output` and prints a warning. |
+| `--diff-output FILE` | Write the diff to `FILE`. Console and PR-comment output is saved as text. JSON, Markdown, HTML, and Excel reports are written to `FILE` instead of an auto-named file in `--output-dir`. CSV writes several files, so it ignores `--diff-output` and prints a warning. Diff modes use `--output` only for `--output -` (JSON to stdout); `--output FILE` is ignored with a warning, so use `--diff-output FILE` instead. |
 | `--format-pr-comment` | Output in GitHub/GitLab PR comment format with collapsible details. |
 | `--auto-snapshot` | Automatically save snapshots during diff for audit trail. |
 | `--auto-prune` | With `--auto-snapshot`, apply default retention (`--keep-last 20` and `--keep-since 30d`) only when both retention flags are omitted. |

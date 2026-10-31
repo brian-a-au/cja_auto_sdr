@@ -643,6 +643,101 @@ class TestIsProcessRunning:
         assert _is_process_running(10**40) is False
 
 
+class _FakeKernel32:
+    """Stand-in for ``ctypes.WinDLL("kernel32")`` recording each call."""
+
+    def __init__(self, *, handle: int = 7, exit_code: int = 259, exit_code_ok: bool = True) -> None:
+        self.handle = handle
+        self.exit_code = exit_code
+        self.exit_code_ok = exit_code_ok
+        self.opened: list[int] = []
+        self.closed: list[int] = []
+        # Plain functions (not bound methods) so the code under test can set
+        # ctypes restype/argtypes attributes on them.
+
+        def open_process(access: int, inherit: bool, pid: int) -> int:
+            self.opened.append(pid)
+            return self.handle
+
+        def get_exit_code_process(handle: int, exit_code_ref) -> bool:
+            exit_code_ref._obj.value = self.exit_code
+            return self.exit_code_ok
+
+        def close_handle(handle: int) -> bool:
+            self.closed.append(handle)
+            return True
+
+        self.OpenProcess = open_process
+        self.GetExitCodeProcess = get_exit_code_process
+        self.CloseHandle = close_handle
+
+
+class TestIsProcessRunningWindows:
+    """Windows must never probe with os.kill(pid, 0): signal 0 is CTRL_C_EVENT there."""
+
+    @pytest.fixture
+    def windows(self, monkeypatch: pytest.MonkeyPatch):
+        import ctypes
+
+        def _no_kill(pid: int, sig: int) -> None:
+            raise AssertionError("os.kill must not be used on Windows")
+
+        kernel32 = _FakeKernel32()
+        last_error = {"value": 0}
+        monkeypatch.setattr(backends_module, "_IS_WINDOWS", True)
+        monkeypatch.setattr(os, "kill", _no_kill)
+        monkeypatch.setattr(ctypes, "WinDLL", lambda *args, **kwargs: kernel32, raising=False)
+        monkeypatch.setattr(ctypes, "get_last_error", lambda: last_error["value"], raising=False)
+        return kernel32, last_error
+
+    def test_live_process_is_running_and_handle_closed(self, windows) -> None:
+        kernel32, _ = windows
+        assert _is_process_running(1234) is True
+        assert kernel32.opened == [1234]
+        assert kernel32.closed == [kernel32.handle]
+
+    def test_exited_process_is_not_running(self, windows) -> None:
+        kernel32, _ = windows
+        kernel32.exit_code = 0
+        assert _is_process_running(1234) is False
+
+    def test_open_failure_not_found_is_not_running(self, windows) -> None:
+        kernel32, last_error = windows
+        kernel32.handle = 0
+        last_error["value"] = 87  # ERROR_INVALID_PARAMETER: no such process
+        assert _is_process_running(1234) is False
+
+    def test_open_failure_access_denied_is_running(self, windows) -> None:
+        kernel32, last_error = windows
+        kernel32.handle = 0
+        last_error["value"] = 5  # ERROR_ACCESS_DENIED: exists, other user
+        assert _is_process_running(1234) is True
+
+    def test_unknown_exit_code_is_treated_as_running(self, windows) -> None:
+        kernel32, _ = windows
+        kernel32.exit_code_ok = False
+        assert _is_process_running(1234) is True
+        assert kernel32.closed == [kernel32.handle]
+
+    def test_pid_above_dword_range_is_not_running(self, windows) -> None:
+        kernel32, _ = windows
+        assert _is_process_running(2**32) is False
+        assert kernel32.opened == []
+
+    def test_invalid_pids_short_circuit_before_windows_probe(self, windows) -> None:
+        kernel32, _ = windows
+        for pid in (True, 0, -1, "abc"):
+            assert _is_process_running(pid) is False  # type: ignore[arg-type]
+        assert kernel32.opened == []
+
+    def test_org_cache_legacy_helper_uses_windows_probe(self, windows) -> None:
+        from cja_auto_sdr.org.cache import OrgReportLock
+
+        kernel32, _ = windows
+        assert OrgReportLock._is_process_running(4321) is True
+        assert kernel32.opened == [4321]
+
+
 # ---------------------------------------------------------------------------
 # 14. _is_lock_info_stale() edge cases
 # ---------------------------------------------------------------------------
