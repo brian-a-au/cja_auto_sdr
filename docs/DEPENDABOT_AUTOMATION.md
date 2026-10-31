@@ -1,7 +1,7 @@
 # Dependabot review and auto-merge
 
 The repository automatically reviews and merges **patch updates to `ruff`,
-`pytest`, and `pytest-cov`** when all required CI checks pass on an up-to-date
+`pytest`, `pytest-cov`, and `pytest-xdist`** when all required CI checks pass on an up-to-date
 branch. Other dependency updates remain available for manual review and merge.
 This is a deterministic policy review; it does not claim to review arbitrary
 upstream source code or to provide an AI review.
@@ -25,6 +25,11 @@ The reviewer parses the base and head lockfiles and requires:
 - Artifacts use the expected PyPI URLs and filenames with SHA-256 hashes. Every
   URL, hash, and size must match PyPI's release metadata; yanked files are rejected.
 
+A change to the lockfile format `revision` always needs a manual merge. When
+Dependabot runs a newer uv than the one that wrote `main`'s lockfile, uv raises
+the revision and also rewrites unrelated entries, such as dependency markers.
+The check names this reason. After one manual merge, later updates qualify again.
+
 Malformed lockfiles and API failures fail the check. A well-formed PR outside
 the policy passes the check with a **manual merge required** decision and receives
 no automatic approval or merge request. SDK updates and GitHub Actions updates
@@ -33,10 +38,15 @@ are outside the allowlist.
 ## Update grouping
 
 `.github/dependabot.yml` batches uv updates so each week opens a few PRs
-instead of one per package. Patch bumps to `ruff`, `pytest`, and `pytest-cov`
-go in their own `dev-tools-patch` group, so that PR still fits the
+instead of one per package. Patch bumps to `ruff`, `pytest`, `pytest-cov`, and
+`pytest-xdist` go in their own `dev-tools-patch` group, so that PR still fits the
 auto-merge policy. Other minor and patch updates share the `minor-and-patch`
 group and need a manual merge. Major updates still open one PR each.
+
+Both ecosystems use a three-day `cooldown`, so Dependabot proposes a release
+only after it has been public for three days. Hijacked or broken releases are
+often yanked within that time, and the review rejects yanked files. Security
+updates are not delayed by the cooldown.
 
 ## Workflow and trust boundary
 
