@@ -1292,8 +1292,13 @@ class TestFdMatchesPathOSErrors:
         if backends_module.fcntl is None:
             pytest.skip("fcntl not available on this platform")
 
-        def _fstat_fail(fd: int) -> None:
-            raise OSError(errno.EBADF, "bad fd")
+        real_fstat = os.fstat
+
+        # Fail only for the fd under test: pytest's own capture calls os.fstat while the patch is active.
+        def _fstat_fail(fd: int) -> os.stat_result:
+            if fd == 999:
+                raise OSError(errno.EBADF, "bad fd")
+            return real_fstat(fd)
 
         monkeypatch.setattr(os, "fstat", _fstat_fail)
         result = FcntlFileLockBackend._fd_matches_path(999, Path("/nonexistent"))
