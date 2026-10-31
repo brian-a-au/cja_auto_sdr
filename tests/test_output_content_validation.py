@@ -101,7 +101,7 @@ def rich_data_dict():
 @pytest.fixture
 def rich_metadata_dict():
     return {
-        "Generated At": "2025-01-15 10:30:00 PST",
+        "Generated Date & timestamp and timezone": "2025-01-15 10:30:00 PST",
         "Data View ID": "dv_content_test",
         "Data View Name": "Test DataView",
         "Tool Version": "3.13.7",
@@ -280,6 +280,16 @@ class TestHTMLContentValidation:
         # The dimension "OS & Device <Type>" should be escaped in HTML table
         assert "<Type>" not in content, "Unescaped angle brackets in HTML table"
         assert "&amp;" in content  # & should be escaped
+
+    def test_html_footer_shows_generated_timestamp(self, tmp_path, rich_data_dict):
+        logger = logging.getLogger("html_test")
+        metadata = {"Generated Date & timestamp and timezone": "2026-10-31 12:00:00 UTC"}
+        path = write_html_output(rich_data_dict, metadata, "test", str(tmp_path), logger)
+
+        with open(path, encoding="utf-8") as f:
+            content = f.read()
+
+        assert "Generated at 2026-10-31 12:00:00 UTC" in content
 
     def test_html_contains_all_metric_names(self, tmp_path, rich_data_dict, rich_metadata_dict):
         logger = logging.getLogger("html_test")
