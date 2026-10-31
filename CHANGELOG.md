@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.13.6] - 2026-10-30
+
+This patch makes the lock check safe on Windows, fills in segment references and summaries from real CJA payloads, and cuts one API call per data view from `--org-report --include-metadata`. It also replaces a few tracebacks with clear errors and warns when `--output` is ignored. Two results change on purpose: whitespace-only descriptions now count as missing, and segment complexity scores rise because predicates were undercounted before.
+
+### Fixed
+
+- **Windows lock check:** the stale-lock check used `os.kill(pid, 0)` to see whether the process holding a lock was alive. On Windows, signal 0 is `CTRL_C_EVENT`, so the check could send Ctrl+C to another process instead. On Windows the check now asks the operating system whether the process is running, and it never signals the process. When the state cannot be read, the lock is treated as held. A new smoke test checks this on Linux, macOS, and Windows.
+- **Segment references and summaries:** real CJA segment definitions wrap the rule as `{"func": "segment", ...}` and wrap each dimension and metric in an `attr` or `event` reference, which the parser did not read. Sequences list their steps in `stream`. On a data view with 103 segments, no segment had any `dimension_references` or `metric_references`, and most summaries were vague, such as `Person with 1 conditions`. Now every segment has its references, and summaries describe the rule, such as `Person where product_pages contains 'pillow'`. The `without`, `event-exists`, `not-event-exists`, `not-streq`, `ge`, and `le` predicates are also handled. Predicate counts and complexity scores rise for these segments, because they were undercounted before.
+- **Whitespace-only descriptions:** a description made only of spaces, tabs, or newlines did not count as missing in data quality checks. It now counts as missing, so some data views show more `Missing Descriptions` items.
+- **`--push-to-notion` with a malformed section:** a section that was not a list of objects, such as `"metrics": 5`, crashed with a pandas traceback. It now exits 1 and names the section, such as `'segments.segments'`.
+- **`--stats --output` errors:** with `--format json` or `csv`, an `--output` path that is a directory crashed with a traceback after the API calls. It now exits 1 before any API call. Other write failures also exit 1 instead of showing a traceback.
+- **Ignored `--output FILE`:** `--diff`, `--compare-snapshots`, `--diff-snapshot`, `--profile-list`, and `--stats` table output never write to `--output FILE`, and they ignored it silently. They now print a warning that names the option to use instead, such as `--diff-output FILE`. `--output -` is unchanged.
+
+### Performance
+
+- **`--org-report --include-metadata`:** the owner, created and modified dates, and description now come from the data view listing, which already returns them. The extra `getDataView` call for each data view is skipped. In a live check on 15 data views, the run made no `getDataView` calls instead of 15, with identical metadata. A listing row without an owner still uses the per-data-view call.
+
 ## [3.13.5] - 2026-10-28
 
 This patch fixes bugs in org reports, batch runs, and several command exit codes, and it makes some runs faster. Org reports for two orgs no longer overwrite each other's cache, `--clear-cache` no longer runs when the lock is refused, and Ctrl+C now stops queued work. Snapshot commands and run summaries now exit 1 when their output cannot be written, and a few crashes on bad input now give clear errors.
