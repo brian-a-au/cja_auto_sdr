@@ -11,6 +11,7 @@ from cja_auto_sdr.output.diff.common import (
     _format_diff_value,
     detect_breaking_changes,
 )
+from cja_auto_sdr.output.markdown_escape import escape_markdown_table_cell as _esc
 
 
 def write_diff_pr_comment_output(
@@ -67,7 +68,7 @@ def write_diff_pr_comment_output(
         lines.append("|-----------|-------|--------|-------|")
         for bc in breaking_field_changes[:10]:
             lines.append(
-                f"| `{bc['component_id']}` | {bc['field']} | `{_format_diff_value(bc['old_value'], truncate=False)}` | `{_format_diff_value(bc['new_value'], truncate=False)}` |",
+                f"| `{_esc(bc['component_id'])}` | {_esc(bc['field'])} | `{_esc(_format_diff_value(bc['old_value'], truncate=False))}` | `{_esc(_format_diff_value(bc['new_value'], truncate=False))}` |",
             )
         if len(breaking_field_changes) > 10:
             lines.append(f"| ... | | | +{len(breaking_field_changes) - 10} more |")
@@ -92,7 +93,7 @@ def write_diff_pr_comment_output(
                 diff.change_type,
                 "",
             )
-            lines.append(f"| {symbol} | `{diff.id}` | {diff.name} |")
+            lines.append(f"| {symbol} | `{_esc(diff.id)}` | {_esc(diff.name)} |")
         if len(metric_changes) > 25:
             lines.append(f"| ... | | +{len(metric_changes) - 25} more |")
         lines.append("")
@@ -110,7 +111,7 @@ def write_diff_pr_comment_output(
                 diff.change_type,
                 "",
             )
-            lines.append(f"| {symbol} | `{diff.id}` | {diff.name} |")
+            lines.append(f"| {symbol} | `{_esc(diff.id)}` | {_esc(diff.name)} |")
         if len(dim_changes) > 25:
             lines.append(f"| ... | | +{len(dim_changes) - 25} more |")
         lines.append("")

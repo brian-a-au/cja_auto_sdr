@@ -613,3 +613,21 @@ def test_benchmark_workbook_digest_preserves_semantics(tmp_path):
     assert workbook("formula1.xlsx", '<c r="A1"><f>1+1</f><v>2</v></c>') != workbook(
         "formula2.xlsx", '<c r="A1"><f>2*1</f><v>2</v></c>'
     )
+
+
+def test_excel_metrics_sheet_with_missing_name_writes_blank_cell(tmp_path):
+    from cja_auto_sdr.output.sdr import write_excel_output
+
+    metrics = pd.DataFrame(
+        [
+            {"id": "metrics/a", "name": "Orders", "type": "int"},
+            {"id": "metrics/b", "type": "int"},
+        ],
+    )
+    path = write_excel_output({"Metrics": metrics}, "nan", str(tmp_path), logging.getLogger("t"))
+
+    assert os.path.exists(path)
+    back = pd.read_excel(path, sheet_name="Metrics")
+    name_col = next(c for c in back.columns if str(c).lower() == "name")
+    assert back[name_col].iloc[0] == "Orders"
+    assert pd.isna(back[name_col].iloc[1])

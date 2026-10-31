@@ -180,6 +180,7 @@ tests/
 ├── test_sdr_markdown_escaping.py    # SDR markdown vectorized cell-escaping characterization test
 ├── test_diff_excel.py               # Diff Excel row-coloring characterization tests
 ├── test_diff_report_coverage.py     # Metadata policy and coverage in HTML/CSV/Excel diffs
+├── test_diff_markdown_escaping.py   # Diff Markdown and PR comment table-cell escaping
 ├── test_org_snapshot_parse_cache.py # Org snapshot JSON parse-cache characterization test
 ├── test_diff_snapshot_retention.py  # Diff snapshot-retention parse-cache characterization test
 ├── test_diff_comparator_normalize.py # Diff field-normalization type-fast-path characterization test
@@ -187,7 +188,7 @@ tests/
 └── README.md                        # This file
 ```
 
-**Total: 9,470 comprehensive tests**
+**Total: 9,493 comprehensive tests**
 
 ### Test Count Breakdown
 
@@ -196,16 +197,16 @@ tests/
 
 | Category | Tests | Files | Notes |
 |----------|-------|-------|-------|
-| `unit` | 9,309 | 168 | Default primary category for files without explicit integration/e2e/smoke scope |
+| `unit` | 9,332 | 169 | Default primary category for files without explicit integration/e2e/smoke scope |
 | `integration` | 122 | 3 | Cross-module integration suites |
 | `e2e` | 23 | 2 | End-to-end suites with a mocked external boundary |
 | `smoke` | 16 | 2 | Lightweight command-mode coverage |
 | `slow` | 0 | 0 | Overlay marker; these tests are also counted in a primary category |
-| **Primary Total** | **9,470** | **175** | **unit + integration + e2e + smoke** |
+| **Primary Total** | **9,493** | **176** | **unit + integration + e2e + smoke** |
 
 | CI Slice | Tests | Files | Selector |
 |----------|-------|-------|----------|
-| `test-unit` | 9,309 | 168 | `-m "unit and not slow"` |
+| `test-unit` | 9,332 | 169 | `-m "unit and not slow"` |
 | `test-integration` | 145 | 5 | `-m "integration or e2e or slow"` |
 | `smoke-test` | 16 | 2 | `-m smoke` |
 
@@ -229,14 +230,14 @@ tests/
 | `test_inventory_utils.py` | 56 | Inventory utilities and helpers |
 | `test_segments_inventory.py` | 65 | Segments inventory feature |
 | `test_edge_cases.py` | 35 | Edge cases, configuration dataclasses, custom exceptions |
-| `test_calculated_metrics_inventory.py` | 369 | Calculated metrics inventory feature |
+| `test_calculated_metrics_inventory.py` | 377 | Calculated metrics inventory feature |
 | `test_git_integration.py` | 61 | Git integration, snapshot management, inventory snapshots |
 | `test_output_formats.py` | 37 | CSV, JSON, HTML, Markdown output generation |
 | `test_cja_initialization.py` | 52 | CJA connection and configuration validation |
 | `test_cjapy_retry_interaction.py` | 58 | cjapy retry/status-payload normalization contract |
 | `test_classify_component_payload.py` | 10 | Shared component payload classification helper |
 | `test_utils.py` | 50 | Utility functions and helpers |
-| `test_excel_formatting.py` | 31 | Excel sheet formatting and styling |
+| `test_excel_formatting.py` | 32 | Excel sheet formatting and styling |
 | `test_parallel_api_fetcher.py` | 41 | Parallel API data fetching |
 | `test_api_tuning.py` | 25 | API worker auto-tuning |
 | `test_error_messages.py` | 23 | Enhanced error messages and guidance |
@@ -264,7 +265,7 @@ tests/
 | `test_discovery_dataset_metadata.py` | 27 | Connection-scoped dataset discovery metadata contracts |
 | `test_diagnostic_events.py` | 23 | Structured diagnostic event vocabulary, logger adapters, and redaction |
 | `test_output_content_validation.py` | 45 | Output format content validation (CSV, JSON, HTML, Excel, Markdown roundtrip) |
-| `test_excel_publication.py` | 49 | Excel render/close/publication failures, destination integrity, and filesystem compatibility |
+| `test_excel_publication.py` | 52 | Excel render/close/publication failures, destination integrity, and filesystem compatibility |
 | `test_component_fetch_validation.py` | 27 | Metrics/dimensions error payloads classified as failed, not empty |
 | `test_sdr_coverage.py` | 48 | SDR Coverage sheet/section, collected_components, quality gate rows |
 | `test_inventory_operation_status.py` | 16 | Optional inventory completed/failed status, unavailable placeholders, run summary parity |
@@ -287,7 +288,7 @@ tests/
 | `test_lazy_forwarding.py` | 73 | Lazy-forwarding infrastructure and make_getattr() |
 | `test_lock_backend_edge_cases.py` | 173 | Lock backend metadata I/O, stale detection, legacy parsing |
 | `test_derived_fields_coverage.py` | 161 | Derived field complexity scoring, logic summary, predicates |
-| `test_org_analyzer_coverage.py` | 183 | Org analyzer governance, naming audit, sampling, memory, drift, clustering |
+| `test_org_analyzer_coverage.py` | 185 | Org analyzer governance, naming audit, sampling, memory, drift, clustering |
 | `test_org_analyzer_metadata_enrichment.py` | 3 | Org analyzer metadata enrichment payload handling |
 | `test_api_coverage.py` | 98 | API cache, quality, fetch, resilience exception paths |
 | `test_diff_coverage.py` | 75 | Diff comparator, models, git integration edge cases |
@@ -299,7 +300,7 @@ tests/
 | `test_profile_management.py` | 54 | Interactive profile creation, import, test, show |
 | `test_snapshot_commands.py` | 94 | Snapshot creation, comparison, name resolution |
 | `test_config_and_resolution.py` | 128 | Config status, validation, stats, name resolution |
-| `test_derived_fields_edge_cases.py` | 34 | Derived fields edge cases and coverage |
+| `test_derived_fields_edge_cases.py` | 37 | Derived fields edge cases and coverage |
 | `test_diff_command_coverage.py` | 46 | Diff command edge cases and coverage |
 | `test_generator_interactive_and_console.py` | 41 | Generator interactive and console tests |
 | `test_generator_remaining_coverage.py` | 88 | Generator remaining coverage edge cases |
@@ -309,7 +310,7 @@ tests/
 | `test_main_impl_coverage.py` | 66 | _main_impl coverage edge cases |
 | `test_org_cache_branches.py` | 126 | Org cache branch coverage |
 | `test_org_writer_compat_contracts.py` | 116 | Org writer compatibility boundary contract tests |
-| `test_org_writer_coverage.py` | 145 | Org writer edge cases and coverage |
+| `test_org_writer_coverage.py` | 146 | Org writer edge cases and coverage |
 | `test_output_writer_coverage.py` | 39 | Output writer edge cases and coverage |
 | `test_backwards_compat.py` | 34 | Backwards compatibility tests |
 | `test_exception_contracts.py` | 19 | Exception boundary contract tests |
@@ -383,14 +384,15 @@ tests/
 | `test_org_analyzer_similarity.py` | 42 | Org similarity characterization, streaming parity, thresholds, and dispatch tests |
 | `test_org_writers_csv.py` | 2 | Org components-CSV bucket-lookup characterization test |
 | `test_csv_staging.py` | 16 | Staged CSV bundle publication and completion manifest tests |
-| `test_sdr_markdown_escaping.py` | 4 | SDR markdown vectorized cell-escaping characterization test |
-| `test_diff_excel.py` | 3 | Diff Excel row-coloring characterization tests |
+| `test_sdr_markdown_escaping.py` | 5 | SDR markdown vectorized cell-escaping characterization test |
+| `test_diff_excel.py` | 4 | Diff Excel row-coloring characterization tests |
 | `test_diff_report_coverage.py` | 20 | Metadata policy and coverage in HTML/CSV/Excel diffs |
+| `test_diff_markdown_escaping.py` | 3 | Diff Markdown and PR comment table-cell escaping |
 | `test_org_snapshot_parse_cache.py` | 3 | Org snapshot JSON parse-cache characterization test |
 | `test_diff_snapshot_retention.py` | 81 | Diff snapshot-retention parse-cache characterization test |
 | `test_diff_comparator_normalize.py` | 21 | Diff field-normalization type-fast-path characterization test |
 | `test_logging_diagnostics.py` | 2 | emit_diagnostic isEnabledFor guard characterization tests |
-| **Total** | **9,470** | **Collected via pytest --collect-only** |
+| **Total** | **9,493** | **Collected via pytest --collect-only** |
 
 ## Running Tests
 
@@ -848,14 +850,14 @@ the `tests/README.md` inventory tree or count table.
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (9,470 tests total)
+- [x] Comprehensive test coverage (9,493 tests total)
 - [x] Org-wide analysis tests (test_org_report.py) - 225 tests (including large org scaling, output path aliases, memory warnings, smart cache invalidation)
 - [x] Org-wide analysis integration tests (test_org_report_integration.py) - 46 tests (end-to-end flows, caching, filtering, governance thresholds)
 - [x] Profile management tests (test_profiles.py) - 88 tests
 - [x] API worker auto-tuning tests (test_api_tuning.py) - 25 tests
 - [x] Circuit breaker pattern tests (test_circuit_breaker.py) - 25 tests
 - [x] Shared validation cache tests (test_shared_cache.py) - 30 tests
-- [x] Calculated metrics inventory tests (test_calculated_metrics_inventory.py) - 369 tests
+- [x] Calculated metrics inventory tests (test_calculated_metrics_inventory.py) - 377 tests
 - [x] Segments inventory tests (test_segments_inventory.py) - 65 tests
 - [x] Derived fields inventory tests (test_derived_inventory.py) - 64 tests
 - [x] Inventory utilities tests (test_inventory_utils.py) - 56 tests

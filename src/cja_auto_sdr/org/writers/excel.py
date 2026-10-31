@@ -122,7 +122,10 @@ def write_org_report_excel(
 
     file_path.parent.mkdir(parents=True, exist_ok=True)
 
-    with pd.ExcelWriter(file_path, engine="xlsxwriter") as writer:
+    # Imported lazily: the output package forwards to generator (import cycle).
+    from cja_auto_sdr.output.excel_staging import staged_excel_writer
+
+    with staged_excel_writer(file_path) as writer:
         # Sheet 1: Summary
         # Calculate total aggregates (non-unique counts across all data views)
         total_metrics_aggregate = sum(dv.metric_count for dv in result.data_view_summaries if dv.error is None)

@@ -237,3 +237,25 @@ def test_diff_excel_inventory_sheets_cells_and_fills_unchanged(temp_output_dir):
             assert actual_row == expected_row, f"{sheet_name} row {row_idx}"
             fill = ws.cell(row=row_idx, column=1).fill
             assert fill.fgColor.rgb == expected_rgb, f"{sheet_name} row {row_idx} fill"
+
+
+def test_diff_excel_interrupt_leaves_no_partial_file(tmp_path):
+    from unittest.mock import patch
+
+    import pandas as pd
+    import pytest
+
+    real_to_excel = pd.DataFrame.to_excel
+    calls = {"n": 0}
+
+    def interrupting(self, *args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 2:
+            raise KeyboardInterrupt
+        return real_to_excel(self, *args, **kwargs)
+
+    with patch.object(pd.DataFrame, "to_excel", interrupting), pytest.raises(KeyboardInterrupt):
+        write_diff_excel_output(_build_diff_result(), "d", str(tmp_path), logging.getLogger("t"))
+
+    assert not (tmp_path / "d.xlsx").exists()
+    assert list(tmp_path.iterdir()) == []
