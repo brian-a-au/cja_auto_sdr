@@ -178,6 +178,7 @@ def fetch_component_payload(
     *,
     inclType: Any = True,
     full: bool = True,
+    expansion: str | None = None,
 ) -> Any:
     """Fetch metrics or dimensions, surfacing API error bodies as failures.
 
@@ -187,8 +188,16 @@ def fetch_component_payload(
     without an ``id`` returns a :class:`ComponentFetchFailure` instead of an empty
     DataFrame. A genuine ``content: []`` still yields an empty DataFrame.
 
+    When ``expansion`` is set on a real client, it replaces ``full``: the
+    component list is paged directly with ``params={"page": n, "expansion":
+    expansion}`` (plus ``includeType`` when ``inclType == "hidden"``, as cjapy
+    does) instead of cjapy's fixed ``full=True`` expansion list, so callers can
+    request only the fields they read. Pages go through the same validating connector, and the
+    result is a DataFrame or a :class:`ComponentFetchFailure` as above.
+
     Any other client (test doubles, patched methods) is called directly and its
-    result returned unchanged for the existing payload classifiers.
+    result returned unchanged for the existing payload classifiers. Such clients
+    ignore ``expansion``.
     """
     method_name = _VALIDATED_COMPONENT_METHODS.get(component)
     if method_name is None:
@@ -203,9 +212,35 @@ def fetch_component_payload(
         _ValidatingConnector(cja.connector, component=component, data_view_id=data_view_id),
     )
     try:
-        return native_func(view, data_view_id, inclType=inclType, full=full)
+        if expansion is None:
+            return native_func(view, data_view_id, inclType=inclType, full=full)
+        return _fetch_component_pages(view, component, data_view_id, inclType=inclType, expansion=expansion)
     except _ComponentPageError as exc:
         return exc.failure
+
+
+def _fetch_component_pages(
+    view: _ValidatingClientView,
+    component: str,
+    data_view_id: str,
+    *,
+    inclType: Any,
+    expansion: str,
+) -> pd.DataFrame:
+    """Page a component list with a caller-chosen expansion, mirroring cjapy's loop."""
+    path = f"{view.endpoint}/data/dataviews/{data_view_id}/{component}"
+    params: dict[str, Any] = {"page": 0, "expansion": expansion}
+    if inclType == "hidden":
+        params["includeType"] = "hidden"
+    rows: list[Any] = []
+    while True:
+        page = view.connector.getData(path, params=dict(params))
+        rows += page.get("content", [])
+        # Same stop rule as cjapy's loop: continue only on an explicit ``lastPage: false``.
+        if page.get("lastPage", True) is not False:
+            break
+        params["page"] += 1
+    return pd.DataFrame(rows)
 
 
 @dataclass(frozen=True, slots=True)

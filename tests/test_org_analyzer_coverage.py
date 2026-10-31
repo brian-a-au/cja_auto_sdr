@@ -3407,3 +3407,29 @@ def test_order_summaries_unlisted_none_id_mixed_with_string_id(mock_cja, logger)
     result = analyzer._order_summaries_by_listing(summaries, [{"id": "dv_listed"}])
     assert result[0].data_view_id == "dv_listed"
     assert {s.data_view_id for s in result[1:]} == {None, "dv_x"}
+
+
+class TestFetchDataViewComponentsExpansion:
+    """The org report requests only the component fields it reads."""
+
+    def test_org_analyzer_requests_narrow_expansion(self, mock_cja, logger):
+        analyzer = _make_analyzer(mock_cja, logger)
+        frames = {
+            "metrics": pd.DataFrame({"id": ["m1"], "name": ["Revenue"], "type": ["int"]}),
+            "dimensions": pd.DataFrame({"id": ["d1"], "name": ["Browser"], "sourceFieldType": ["derived"]}),
+        }
+        with patch(
+            "cja_auto_sdr.org.analyzer.fetch_component_payload",
+            side_effect=lambda _cja, component, _dv_id, **_kwargs: frames[component],
+        ) as fetch:
+            result = analyzer._fetch_data_view_components({"id": "dv_test", "name": "Test DV"})
+
+        assert not result.error
+        assert result.metric_ids == {"m1"}
+        assert result.dimension_ids == {"d1"}
+        assert result.derived_dimension_count == 1
+        components = [call.args[1] for call in fetch.call_args_list]
+        assert components == ["metrics", "dimensions"]
+        for call in fetch.call_args_list:
+            assert call.args[2] == "dv_test"
+            assert call.kwargs["expansion"] == "type,sourceFieldType"
