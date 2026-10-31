@@ -2552,19 +2552,35 @@ def _run_family_scoped_quality(tmp_path, *, metrics_only=False, dimensions_only=
 
 
 def test_metrics_only_quality_gate_ignores_dimensions(tmp_path):
+    from cja_auto_sdr.api.quality_policy import has_quality_issues_at_or_above, write_quality_report_output
+
     result = _run_family_scoped_quality(
         tmp_path, metrics_only=True, output_format="json", fail_on_quality="HIGH", quality_report_only=True
     )
     assert result.success
     assert result.dq_severity_counts == {}
     assert not any(i["Type"] == "Dimensions" for i in result.dq_issues)
+    # Gate verdict is derived from these same issues: PASS means nothing at or above HIGH.
+    assert not has_quality_issues_at_or_above(result.dq_issues, "HIGH")
+
+    report_dir = tmp_path / "report"
+    report_dir.mkdir()
+    report_path = Path(write_quality_report_output(result.dq_issues, "csv", None, report_dir))
+    assert report_path.exists()
+    import pandas as pd
+
+    report = pd.read_csv(report_path)
+    assert "Type" in report.columns
+    assert "Dimensions" not in set(report["Type"])
 
 
 def test_metrics_only_sdr_json_has_no_dimensions_quality_rows(tmp_path):
-    result = _run_family_scoped_quality(tmp_path, metrics_only=True, output_format="json", fail_on_quality="HIGH")
+    result = _run_family_scoped_quality(
+        tmp_path, metrics_only=True, output_format="json", json_typed=True, fail_on_quality="HIGH"
+    )
     assert result.dq_severity_counts == {}
     js = json.loads(next(tmp_path.glob("*.json")).read_text())
-    assert js["coverage"]["quality"]["gate"] != "FAIL"
+    assert js["coverage"]["quality"]["gate"] == {"threshold": "HIGH", "verdict": "PASS"}
     assert not any(i["Type"] == "Dimensions" for i in js["data_quality"])
 
 
