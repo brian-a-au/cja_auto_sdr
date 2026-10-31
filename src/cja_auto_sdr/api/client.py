@@ -324,9 +324,6 @@ def initialize_cja(
         _bootstrap_dotenv(logger)
 
         # Resolve active profile (--profile > CJA_PROFILE > None)
-        # Imported lazily: core.profiles imports this module at load time.
-        from cja_auto_sdr.core.profiles import resolve_active_profile
-
         active_profile = resolve_active_profile(profile)
 
         # Use CredentialResolver for unified credential loading

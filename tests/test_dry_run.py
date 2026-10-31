@@ -317,3 +317,10 @@ class TestDryRunCredentialResolution:
         assert "✓" in step1
         assert "envprof" in step1
         assert "DRY-RUN FAILED - Fix configuration issues" not in out
+
+    def test_dry_run_missing_profile_uses_real_resolver_wording(self, tmp_path, monkeypatch, capsys):
+        self._clean_env(monkeypatch, tmp_path)
+        monkeypatch.setenv("CJA_HOME", str(tmp_path / "cjahome"))
+        result = run_dry_run(["dv_1"], "config.json", logging.getLogger("test_dry_run_ghost"), profile="ghost")
+        assert result is False
+        assert "✗ Profile 'ghost' not found" in capsys.readouterr().out

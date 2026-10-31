@@ -341,6 +341,18 @@ class TestResolveActiveProfile:
             result = resolve_active_profile(None)
             assert result is None
 
+    def test_profile_values_are_trimmed(self):
+        """Surrounding whitespace is stripped from CLI and env profiles."""
+        with patch.dict(os.environ, {"CJA_PROFILE": "  env-prof "}):
+            assert resolve_active_profile(" prod ") == "prod"
+            assert resolve_active_profile(None) == "env-prof"
+
+    def test_whitespace_only_profile_resolves_to_none(self):
+        """Whitespace-only CLI or env values are treated as unset."""
+        with patch.dict(os.environ, {"CJA_PROFILE": "   "}):
+            assert resolve_active_profile("   ") is None
+            assert resolve_active_profile(None) is None
+
 
 class TestMaskSensitiveValue:
     """Test sensitive value masking"""
