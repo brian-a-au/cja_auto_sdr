@@ -982,3 +982,6 @@ class TestProfileDotenvParsing:
         assert _parse_dotenv_line("SECRET='a#b'  # c") == ("SECRET", "a#b")
         assert _parse_dotenv_line("# comment") is None
         assert _parse_dotenv_line("   ") is None
+
+    def test_validate_profile_name_rejects_trailing_newline(self):
+        assert validate_profile_name("client-a\n")[0] is False

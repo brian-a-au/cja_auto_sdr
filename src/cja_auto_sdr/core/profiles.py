@@ -76,7 +76,7 @@ def validate_profile_name(name: str) -> tuple[bool, str | None]:
     if not name:
         return False, "Profile name cannot be empty"
 
-    if not re.match(r"^[a-zA-Z0-9][a-zA-Z0-9_-]*$", name):
+    if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_-]*", name):
         return False, (
             f"Profile name '{name}' is invalid. "
             "Must start with alphanumeric and contain only letters, numbers, dashes, and underscores."
