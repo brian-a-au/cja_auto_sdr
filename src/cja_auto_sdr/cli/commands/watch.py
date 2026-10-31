@@ -211,8 +211,12 @@ def run_watch(args: Any, *, cja: Any | None = None) -> int:
     try:
         while True:
             cycle += 1
-            interrupted = False
-            events = runner.run_cycle(cja=cja, data_view_ids=args.watch_data_views, cycle=cycle)
+            events = runner.run_cycle(
+                cja=cja,
+                data_view_ids=args.watch_data_views,
+                cycle=cycle,
+                should_stop=_stop_requested.is_set,
+            )
             try:
                 for event in events:
                     sys.stdout.write(serialize_event(event))
@@ -225,17 +229,15 @@ def run_watch(args: Any, *, cja: Any | None = None) -> int:
                             data_view_id=event.data_view_id,
                             total_changes=getattr(event, "total_changes", 0),
                         )
-                    # Stop after the current data view instead of finishing the cycle.
-                    if _stop_requested.is_set():
-                        interrupted = True
-                        break
+                # The runner checks should_stop before each data view, so a signal ends the
+                # cycle after the current data view even when no events are being emitted.
             finally:
                 # Close the generator so the cycle's cleanup runs when we stop early
                 # (plain iterators used as test doubles have no close()).
                 close = getattr(events, "close", None)
                 if close is not None:
                     close()
-            if interrupted:
+            if getattr(runner, "last_cycle_stopped_early", False) is True:
                 # Partial cycle: leave cycles_completed at the last full cycle.
                 break
             cycles_completed = cycle
@@ -248,7 +250,9 @@ def run_watch(args: Any, *, cja: Any | None = None) -> int:
                 break
         stop_reason = _stop_reason_holder.get("reason", "fatal")
     finally:
-        emitter.loop_stop(reason=stop_reason, cycles_completed=cycles_completed)
+        # A forced exit (second signal) raises before stop_reason is computed, so fall
+        # back to the recorded signal reason rather than reporting "fatal".
+        emitter.loop_stop(reason=_stop_reason_holder.get("reason", stop_reason), cycles_completed=cycles_completed)
         _stop_reason_holder.clear()
         _restore_signal_handlers()
 
