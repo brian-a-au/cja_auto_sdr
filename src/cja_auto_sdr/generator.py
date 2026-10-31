@@ -4652,28 +4652,28 @@ def run_dry_run(data_views: list[str], config_file: str, logger: logging.Logger,
 
     # Step 1: Validate credentials
     print("[1/3] Validating credentials...")
-    if profile:
-        # Validate profile credentials
-        try:
-            profile_creds = load_profile_credentials(profile, logger)
-            if profile_creds:
-                print(f"  ✓ Profile '{profile}' found and valid")
-            else:
-                print(f"  ✗ Profile '{profile}' has no valid credentials")
-                all_passed = False
-        except ProfileNotFoundError:
-            print(f"  ✗ Profile '{profile}' not found")
-            all_passed = False
-        except ProfileConfigError as e:
-            print(f"  ✗ Profile '{profile}' configuration error: {e}")
-            all_passed = False
-    else:
-        # Validate config file
-        if validate_config_file(config_file, logger):
-            print(f"  ✓ Configuration file '{config_file}' is valid")
+    try:
+        _, resolved_source = CredentialResolver(logger).resolve(
+            profile=resolve_active_profile(profile),
+            config_file=config_file,
+        )
+        if resolved_source.startswith("profile:"):
+            display_source = f"Profile: {resolved_source.split(':', 1)[1]}"
+        elif resolved_source == "environment":
+            display_source = "Environment variables"
+        elif resolved_source.startswith("config:"):
+            display_source = f"Config file: {os.path.abspath(config_file)}"
         else:
-            print("  ✗ Configuration file validation failed")
-            all_passed = False
+            display_source = resolved_source
+        print(f"  ✓ Credentials valid ({display_source})")
+    except CredentialSourceError as e:
+        if e.reason == "Profile directory not found":
+            print(f"  ✗ Profile '{resolve_active_profile(profile)}' not found")
+        else:
+            print(f"  ✗ {e.message}")
+            if e.reason:
+                print(f"    {e.reason}")
+        all_passed = False
 
     if not all_passed:
         print()

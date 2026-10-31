@@ -213,9 +213,12 @@ def load_profile_credentials(profile_name: str, logger: logging.Logger) -> dict[
 
 def resolve_active_profile(cli_profile: str | None = None) -> str | None:
     """Resolve active profile: ``--profile`` > ``CJA_PROFILE`` > ``None``."""
-    if cli_profile:
-        return cli_profile
-    return os.environ.get("CJA_PROFILE")
+    if isinstance(cli_profile, str) and cli_profile.strip():
+        return cli_profile.strip()
+    env_profile = os.environ.get("CJA_PROFILE")
+    if env_profile and env_profile.strip():
+        return env_profile.strip()
+    return None
 
 
 def _read_profile_org_id(profile_path: Path) -> str | None:

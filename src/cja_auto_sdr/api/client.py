@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import os
 import tempfile
 import time
 from collections.abc import Mapping, Sequence
@@ -168,11 +167,10 @@ def configure_cjapy(
 
         # Resolve active profile after dotenv bootstrap so CJA_PROFILE values coming
         # from .env are available to all callers, including those passing profile=None.
-        active_profile = profile.strip() if isinstance(profile, str) and profile.strip() else None
-        if active_profile is None:
-            env_profile = os.environ.get("CJA_PROFILE")
-            if env_profile and env_profile.strip():
-                active_profile = env_profile.strip()
+        # Imported lazily: core.profiles imports this module at load time.
+        from cja_auto_sdr.core.profiles import resolve_active_profile
+
+        active_profile = resolve_active_profile(profile)
 
         # Use CredentialResolver for unified credential resolution
         resolver = CredentialResolver(logger)
@@ -326,6 +324,9 @@ def initialize_cja(
         _bootstrap_dotenv(logger)
 
         # Resolve active profile (--profile > CJA_PROFILE > None)
+        # Imported lazily: core.profiles imports this module at load time.
+        from cja_auto_sdr.core.profiles import resolve_active_profile
+
         active_profile = resolve_active_profile(profile)
 
         # Use CredentialResolver for unified credential loading

@@ -35,9 +35,8 @@ from cja_auto_sdr.core.config import APITuningConfig, CircuitBreakerConfig
 from cja_auto_sdr.core.exceptions import (
     APIError,
     ConfigurationError,
+    CredentialSourceError,
     OutputError,
-    ProfileConfigError,
-    ProfileNotFoundError,
     RetryableHTTPError,
 )
 from cja_auto_sdr.generator import (
@@ -1777,43 +1776,51 @@ class TestRunDryRunProfileValidation:
     """Cover run_dry_run profile validation paths."""
 
     def test_profile_not_found(self, capsys):
-        """Lines 6506-6508: ProfileNotFoundError during profile validation."""
+        """Missing profile directory keeps the existing wording."""
         logger = logging.getLogger("test_dry_run_pnf")
         with patch(
-            "cja_auto_sdr.generator.load_profile_credentials",
-            side_effect=ProfileNotFoundError("myprofile"),
+            "cja_auto_sdr.generator.CredentialResolver.resolve",
+            side_effect=CredentialSourceError(
+                "Profile 'myprofile' not found", source="profile", reason="Profile directory not found"
+            ),
         ):
             result = run_dry_run(["dv_test"], "config.json", logger, profile="myprofile")
         assert result is False
         captured = capsys.readouterr()
-        assert "not found" in captured.out
+        assert "Profile 'myprofile' not found" in captured.out
 
     def test_profile_config_error(self, capsys):
-        """Lines 6509-6511: ProfileConfigError during profile validation."""
+        """Other resolver errors print the message and reason."""
         logger = logging.getLogger("test_dry_run_pce")
         with patch(
-            "cja_auto_sdr.generator.load_profile_credentials",
-            side_effect=ProfileConfigError("bad config"),
+            "cja_auto_sdr.generator.CredentialResolver.resolve",
+            side_effect=CredentialSourceError("bad config", source="profile", reason="Invalid profile configuration"),
         ):
             result = run_dry_run(["dv_test"], "config.json", logger, profile="badprofile")
         assert result is False
         captured = capsys.readouterr()
-        assert "configuration error" in captured.out
+        assert "bad config" in captured.out
+        assert "Invalid profile configuration" in captured.out
 
     def test_profile_no_valid_credentials(self, capsys):
-        """Lines 6503-6505: profile found but returns no valid credentials."""
+        """Incomplete profile is a hard error from the resolver."""
         logger = logging.getLogger("test_dry_run_nocreds")
-        with patch("cja_auto_sdr.generator.load_profile_credentials", return_value=None):
+        with patch(
+            "cja_auto_sdr.generator.CredentialResolver.resolve",
+            side_effect=CredentialSourceError(
+                "Profile 'emptycreds' is incomplete", source="profile", reason="Profile has no credential fields"
+            ),
+        ):
             result = run_dry_run(["dv_test"], "config.json", logger, profile="emptycreds")
         assert result is False
         captured = capsys.readouterr()
-        assert "no valid credentials" in captured.out
+        assert "Profile has no credential fields" in captured.out
 
     def test_profile_valid_credentials(self, capsys):
-        """Lines 6501-6502: profile found with valid credentials."""
+        """Profile found with valid credentials."""
         logger = logging.getLogger("test_dry_run_valid")
         with (
-            patch("cja_auto_sdr.generator.load_profile_credentials", return_value={"client_id": "x"}),
+            patch("cja_auto_sdr.generator.CredentialResolver.resolve", return_value=({}, "profile:goodprofile")),
             patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "profile", {})),
             patch("cja_auto_sdr.generator.cjapy") as mock_cjapy,
             patch("cja_auto_sdr.generator.make_api_call_with_retry") as mock_retry,
@@ -1828,7 +1835,7 @@ class TestRunDryRunProfileValidation:
             ]
             run_dry_run(["dv_test"], "config.json", logger, profile="goodprofile")
         captured = capsys.readouterr()
-        assert "Profile 'goodprofile' found and valid" in captured.out
+        assert "Credentials valid (Profile: goodprofile)" in captured.out
 
 
 class TestRunDryRunAPIValidation:
@@ -1838,7 +1845,7 @@ class TestRunDryRunAPIValidation:
         """Lines 6533-6538: configure_cjapy returns failure."""
         logger = logging.getLogger("test_dry_run_cjapy_fail")
         with (
-            patch("cja_auto_sdr.generator.validate_config_file", return_value=True),
+            patch("cja_auto_sdr.generator.CredentialResolver.resolve", return_value=({}, "config:config.json")),
             patch("cja_auto_sdr.generator.configure_cjapy", return_value=(False, "bad creds", {})),
         ):
             result = run_dry_run(["dv_test"], "config.json", logger)
@@ -1850,7 +1857,7 @@ class TestRunDryRunAPIValidation:
         """Lines 6558-6565: exception during API connection test."""
         logger = logging.getLogger("test_dry_run_api_exc")
         with (
-            patch("cja_auto_sdr.generator.validate_config_file", return_value=True),
+            patch("cja_auto_sdr.generator.CredentialResolver.resolve", return_value=({}, "config:config.json")),
             patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "config", {})),
             patch("cja_auto_sdr.generator.cjapy") as mock_cjapy,
         ):
@@ -1864,7 +1871,7 @@ class TestRunDryRunAPIValidation:
         """Missing cjapy methods should be reported as controlled dry-run failure."""
         logger = logging.getLogger("test_dry_run_api_missing_method")
         with (
-            patch("cja_auto_sdr.generator.validate_config_file", return_value=True),
+            patch("cja_auto_sdr.generator.CredentialResolver.resolve", return_value=({}, "config:config.json")),
             patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "config", {})),
             patch("cja_auto_sdr.generator.cjapy") as mock_cjapy,
         ):
@@ -1878,7 +1885,7 @@ class TestRunDryRunAPIValidation:
         """KeyError('content') during the step-[2/3] probe should include the remediation hint."""
         logger = logging.getLogger("test_dry_run_api_keyerror_hint")
         with (
-            patch("cja_auto_sdr.generator.validate_config_file", return_value=True),
+            patch("cja_auto_sdr.generator.CredentialResolver.resolve", return_value=({}, "config:config.json")),
             patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "config", {})),
             patch("cja_auto_sdr.generator.cjapy") as mock_cjapy,
             patch("cja_auto_sdr.generator.make_api_call_with_retry", side_effect=KeyError("content")),
@@ -1895,7 +1902,7 @@ class TestRunDryRunAPIValidation:
         """HTTP 401/403 text in the fallback branch should still surface the API hint."""
         logger = logging.getLogger("test_dry_run_api_runtime_hint")
         with (
-            patch("cja_auto_sdr.generator.validate_config_file", return_value=True),
+            patch("cja_auto_sdr.generator.CredentialResolver.resolve", return_value=({}, "config:config.json")),
             patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "config", {})),
             patch("cja_auto_sdr.generator.cjapy") as mock_cjapy,
             patch("cja_auto_sdr.generator.make_api_call_with_retry", side_effect=RuntimeError("HTTP 403 Forbidden")),
@@ -1911,7 +1918,7 @@ class TestRunDryRunAPIValidation:
         """Bare Exception auth failures during API probe should still fail gracefully with a hint."""
         logger = logging.getLogger("test_dry_run_api_plain_exception_hint")
         with (
-            patch("cja_auto_sdr.generator.validate_config_file", return_value=True),
+            patch("cja_auto_sdr.generator.CredentialResolver.resolve", return_value=({}, "config:config.json")),
             patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "config", {})),
             patch("cja_auto_sdr.generator.cjapy") as mock_cjapy,
             patch("cja_auto_sdr.generator.make_api_call_with_retry", side_effect=Exception("HTTP 403 Forbidden")),
@@ -1927,7 +1934,7 @@ class TestRunDryRunAPIValidation:
         """Unexpected runtime exceptions during API probe should still fail gracefully."""
         logger = logging.getLogger("test_dry_run_api_runtime")
         with (
-            patch("cja_auto_sdr.generator.validate_config_file", return_value=True),
+            patch("cja_auto_sdr.generator.CredentialResolver.resolve", return_value=({}, "config:config.json")),
             patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "config", {})),
             patch("cja_auto_sdr.generator.cjapy") as mock_cjapy,
             patch("cja_auto_sdr.generator.make_api_call_with_retry", side_effect=RuntimeError("runtime boom")),
@@ -1942,7 +1949,7 @@ class TestRunDryRunAPIValidation:
         """Lines 6611-6624: errors fetching metrics/dimensions counts are handled."""
         logger = logging.getLogger("test_dry_run_metric_err")
         with (
-            patch("cja_auto_sdr.generator.validate_config_file", return_value=True),
+            patch("cja_auto_sdr.generator.CredentialResolver.resolve", return_value=({}, "config:config.json")),
             patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "config", {})),
             patch("cja_auto_sdr.generator.cjapy") as mock_cjapy,
             patch("cja_auto_sdr.generator.make_api_call_with_retry") as mock_retry,
@@ -1978,7 +1985,7 @@ class TestRunDryRunAPIValidation:
             raise AssertionError(f"Unexpected operation: {op}")
 
         with (
-            patch("cja_auto_sdr.generator.validate_config_file", return_value=True),
+            patch("cja_auto_sdr.generator.CredentialResolver.resolve", return_value=({}, "config:config.json")),
             patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "config", {})),
             patch("cja_auto_sdr.generator.cjapy") as mock_cjapy,
             patch("cja_auto_sdr.generator.make_api_call_with_retry", side_effect=_mock_retry_call),
@@ -1998,7 +2005,7 @@ class TestRunDryRunAPIValidation:
         """Lines 6636-6638: data view getDataView returns None."""
         logger = logging.getLogger("test_dry_run_dv_not_found")
         with (
-            patch("cja_auto_sdr.generator.validate_config_file", return_value=True),
+            patch("cja_auto_sdr.generator.CredentialResolver.resolve", return_value=({}, "config:config.json")),
             patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "config", {})),
             patch("cja_auto_sdr.generator.cjapy") as mock_cjapy,
             patch("cja_auto_sdr.generator.make_api_call_with_retry") as mock_retry,
@@ -2020,7 +2027,7 @@ class TestRunDryRunAPIValidation:
         """Lines 6643-6646: generic exception during data view validation."""
         logger = logging.getLogger("test_dry_run_dv_exc")
         with (
-            patch("cja_auto_sdr.generator.validate_config_file", return_value=True),
+            patch("cja_auto_sdr.generator.CredentialResolver.resolve", return_value=({}, "config:config.json")),
             patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "config", {})),
             patch("cja_auto_sdr.generator.cjapy") as mock_cjapy,
             patch("cja_auto_sdr.generator.make_api_call_with_retry") as mock_retry,
@@ -2042,7 +2049,7 @@ class TestRunDryRunAPIValidation:
         """Unexpected runtime errors during per-view validation should not traceback."""
         logger = logging.getLogger("test_dry_run_dv_runtime_exc")
         with (
-            patch("cja_auto_sdr.generator.validate_config_file", return_value=True),
+            patch("cja_auto_sdr.generator.CredentialResolver.resolve", return_value=({}, "config:config.json")),
             patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "config", {})),
             patch("cja_auto_sdr.generator.cjapy") as mock_cjapy,
             patch("cja_auto_sdr.generator.make_api_call_with_retry") as mock_retry,
@@ -2064,7 +2071,7 @@ class TestRunDryRunAPIValidation:
         """Per-data-view 403 failures should mention no-access/not-found guidance."""
         logger = logging.getLogger("test_dry_run_dv_403_hint")
         with (
-            patch("cja_auto_sdr.generator.validate_config_file", return_value=True),
+            patch("cja_auto_sdr.generator.CredentialResolver.resolve", return_value=({}, "config:config.json")),
             patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "config", {})),
             patch("cja_auto_sdr.generator.cjapy") as mock_cjapy,
             patch("cja_auto_sdr.generator.make_api_call_with_retry") as mock_retry,
@@ -2088,7 +2095,7 @@ class TestRunDryRunAPIValidation:
         """Plain Exception 403s during per-view lookup should stay controlled and lookup-scoped."""
         logger = logging.getLogger("test_dry_run_dv_plain_403_hint")
         with (
-            patch("cja_auto_sdr.generator.validate_config_file", return_value=True),
+            patch("cja_auto_sdr.generator.CredentialResolver.resolve", return_value=({}, "config:config.json")),
             patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "config", {})),
             patch("cja_auto_sdr.generator.cjapy") as mock_cjapy,
             patch("cja_auto_sdr.generator.make_api_call_with_retry") as mock_retry,
@@ -2112,7 +2119,7 @@ class TestRunDryRunAPIValidation:
         """Later component-count 403s should not be mislabeled as lookup failures."""
         logger = logging.getLogger("test_dry_run_dv_component_403_hint")
         with (
-            patch("cja_auto_sdr.generator.validate_config_file", return_value=True),
+            patch("cja_auto_sdr.generator.CredentialResolver.resolve", return_value=({}, "config:config.json")),
             patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "config", {})),
             patch("cja_auto_sdr.generator.cjapy") as mock_cjapy,
             patch("cja_auto_sdr.generator.make_api_call_with_retry") as mock_retry,
@@ -2140,7 +2147,7 @@ class TestRunDryRunAPIValidation:
         """Plain Exception 403s during component counts should use the generic auth hint."""
         logger = logging.getLogger("test_dry_run_dv_component_plain_403_hint")
         with (
-            patch("cja_auto_sdr.generator.validate_config_file", return_value=True),
+            patch("cja_auto_sdr.generator.CredentialResolver.resolve", return_value=({}, "config:config.json")),
             patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "config", {})),
             patch("cja_auto_sdr.generator.cjapy") as mock_cjapy,
             patch("cja_auto_sdr.generator.make_api_call_with_retry") as mock_retry,
@@ -2168,7 +2175,7 @@ class TestRunDryRunAPIValidation:
         """Retryable transport failure for one data view should not abort the full loop."""
         logger = logging.getLogger("test_dry_run_retryable_continue")
         with (
-            patch("cja_auto_sdr.generator.validate_config_file", return_value=True),
+            patch("cja_auto_sdr.generator.CredentialResolver.resolve", return_value=({}, "config:config.json")),
             patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "config", {})),
             patch("cja_auto_sdr.generator.cjapy") as mock_cjapy,
             patch("cja_auto_sdr.generator.make_api_call_with_retry") as mock_retry,
@@ -2365,7 +2372,7 @@ class TestRunDryRunKeyboardInterrupt:
         """Lines 6554-6557: KeyboardInterrupt during API connection re-raises."""
         logger = logging.getLogger("test_dry_run_kbi_api")
         with (
-            patch("cja_auto_sdr.generator.validate_config_file", return_value=True),
+            patch("cja_auto_sdr.generator.CredentialResolver.resolve", return_value=({}, "config:config.json")),
             patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "config", {})),
             patch("cja_auto_sdr.generator.cjapy") as mock_cjapy,
         ):
@@ -2377,7 +2384,7 @@ class TestRunDryRunKeyboardInterrupt:
         """Lines 6639-6642: KeyboardInterrupt during DV validation re-raises."""
         logger = logging.getLogger("test_dry_run_kbi_dv")
         with (
-            patch("cja_auto_sdr.generator.validate_config_file", return_value=True),
+            patch("cja_auto_sdr.generator.CredentialResolver.resolve", return_value=({}, "config:config.json")),
             patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "config", {})),
             patch("cja_auto_sdr.generator.cjapy") as mock_cjapy,
             patch("cja_auto_sdr.generator.make_api_call_with_retry") as mock_retry,
@@ -2405,11 +2412,14 @@ class TestRunDryRunConfigFileValidation:
     def test_config_file_validation_fails(self, capsys):
         """Lines 6516-6518: config file validation fails."""
         logger = logging.getLogger("test_dry_run_config_fail")
-        with patch("cja_auto_sdr.generator.validate_config_file", return_value=False):
+        with patch(
+            "cja_auto_sdr.generator.CredentialResolver.resolve",
+            side_effect=CredentialSourceError("No valid credentials found", source="all", reason="Checked all"),
+        ):
             result = run_dry_run(["dv_test"], "config.json", logger)
         assert result is False
         captured = capsys.readouterr()
-        assert "Configuration file validation failed" in captured.out
+        assert "No valid credentials found" in captured.out
 
 
 # ============================================================================
@@ -2424,7 +2434,7 @@ class TestRunDryRunAPIReturnsNone:
         """Lines 6551-6553: API returns None - warning printed."""
         logger = logging.getLogger("test_dry_run_api_none")
         with (
-            patch("cja_auto_sdr.generator.validate_config_file", return_value=True),
+            patch("cja_auto_sdr.generator.CredentialResolver.resolve", return_value=({}, "config:config.json")),
             patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "config", {})),
             patch("cja_auto_sdr.generator.cjapy") as mock_cjapy,
             patch("cja_auto_sdr.generator.make_api_call_with_retry") as mock_retry,
