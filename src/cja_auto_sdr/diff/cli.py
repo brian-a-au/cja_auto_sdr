@@ -57,8 +57,10 @@ def _warn_diff_output_ignored(output_path: str | None, *, command: str) -> None:
     )
 
 
-def _warn_diff_stdout_non_json(output_path: str | None, *, output_format: str) -> None:
-    """Warn that ``--output -`` only streams JSON; console output writes no file, so it is skipped."""
+def _warn_diff_stdout_non_json(output_path: str | None, *, output_format: str, format_pr_comment: bool = False) -> None:
+    """Warn that ``--output -`` only streams JSON; console and PR-comment output write no file, so they are skipped."""
+    if format_pr_comment:
+        return
     if output_path in ("-", "stdout") and output_format not in ("json", "console"):
         print(
             _generator_module().ConsoleColors.warning(
@@ -271,7 +273,11 @@ def dispatch_cross_data_view_diff_cli_mode(
     resolved_output_path = _resolve_diff_output_path(args, output_format=diff_format)
     diff_quiet = _resolve_diff_quiet(args, output_path=resolved_output_path)
     _warn_diff_output_ignored(resolved_output_path, command="--diff")
-    _warn_diff_stdout_non_json(resolved_output_path, output_format=diff_format)
+    _warn_diff_stdout_non_json(
+        resolved_output_path,
+        output_format=diff_format,
+        format_pr_comment=getattr(args, "format_pr_comment", False),
+    )
     _diff_output_to_stdout = _diff_output_to_stdout_requested(
         args,
         output_format=diff_format,
@@ -558,7 +564,11 @@ def dispatch_snapshot_cli_modes(
         resolved_output_path = _resolve_diff_output_path(args, output_format=diff_format)
         diff_quiet = _resolve_diff_quiet(args, output_path=resolved_output_path)
         _warn_diff_output_ignored(resolved_output_path, command="--compare-snapshots")
-        _warn_diff_stdout_non_json(resolved_output_path, output_format=diff_format)
+        _warn_diff_stdout_non_json(
+            resolved_output_path,
+            output_format=diff_format,
+            format_pr_comment=getattr(args, "format_pr_comment", False),
+        )
         _cs_output_to_stdout = _diff_output_to_stdout_requested(
             args,
             output_format=diff_format,
@@ -716,7 +726,11 @@ def dispatch_snapshot_cli_modes(
         resolved_output_path = _resolve_diff_output_path(args, output_format=diff_format)
         diff_quiet = _resolve_diff_quiet(args, output_path=resolved_output_path)
         _warn_diff_output_ignored(resolved_output_path, command="--diff-snapshot")
-        _warn_diff_stdout_non_json(resolved_output_path, output_format=diff_format)
+        _warn_diff_stdout_non_json(
+            resolved_output_path,
+            output_format=diff_format,
+            format_pr_comment=getattr(args, "format_pr_comment", False),
+        )
         _ds_output_to_stdout = _diff_output_to_stdout_requested(
             args,
             output_format=diff_format,

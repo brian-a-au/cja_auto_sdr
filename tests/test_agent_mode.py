@@ -632,7 +632,18 @@ class TestAgentModeOutputFileLogRouting:
                 patch("cja_auto_sdr.generator.resolve_data_view_names", return_value=(["dv_test"], {})),
                 patch("cja_auto_sdr.generator.process_inventory_summary", return_value={}) as mock_summary,
             ):
-                self._run_tolerant(["dv_test", "--inventory-summary", "--include-segments", "--format", "json", "--output", out, *extra])
+                self._run_tolerant(
+                    [
+                        "dv_test",
+                        "--inventory-summary",
+                        "--include-segments",
+                        "--format",
+                        "json",
+                        "--output",
+                        out,
+                        *extra,
+                    ]
+                )
             assert mock_summary.call_args.kwargs["log_to_stderr"] is expected
 
     def test_main_passes_log_to_stderr_for_agent_mode_quality_report(self):

@@ -1224,6 +1224,17 @@ def test_compare_snapshots_stdout_non_json_warns(tmp_path, monkeypatch, capsys):
         "Warning: --output - is only supported with --format json for diff commands; "
         "writing markdown output to a file instead."
     ) in capsys.readouterr().err
+    assert list(tmp_path.glob("diff_*.md"))
+
+
+def test_compare_snapshots_pr_comment_stdout_does_not_warn(tmp_path, monkeypatch, capsys):
+    a, b = _write_two_snapshots(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    _run_main(
+        monkeypatch,
+        ["--compare-snapshots", a, b, "--format-pr-comment", "--format", "markdown", "--output", "-"],
+    )
+    assert "writing markdown output to a file instead" not in capsys.readouterr().err
 
 
 @pytest.mark.parametrize("mode", ["compare-snapshots", "diff-snapshot", "diff"])
