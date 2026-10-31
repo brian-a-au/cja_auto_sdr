@@ -470,8 +470,12 @@ def show_stats(
             for item in stats_data:
                 name = item["name"].replace('"', '""')
                 owner = item["owner"].replace('"', '""')
+                item_id = str(item["id"])
+                if any(ch in item_id for ch in (",", '"', "\r", "\n")):
+                    # Unresolved names land in the id column; quote them like name and owner
+                    item_id = '"' + item_id.replace('"', '""') + '"'
                 lines.append(
-                    f'{item["id"]},"{name}","{owner}",{item["metrics"]},{item["dimensions"]},{item["total_components"]}'
+                    f'{item_id},"{name}","{owner}",{item["metrics"]},{item["dimensions"]},{item["total_components"]}'
                 )
             output_data = "\n".join(lines)
             if is_stdout or not output_file:
