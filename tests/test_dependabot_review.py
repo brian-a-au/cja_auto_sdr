@@ -50,12 +50,15 @@ def locks() -> tuple[dict, dict]:
             {
                 "name": "cja-auto-sdr",
                 "dependencies": [{"name": "cjapy"}],
-                "dev-dependencies": {"dev": [{"name": "ruff"}, {"name": "pytest"}, {"name": "pytest-cov"}]},
+                "dev-dependencies": {
+                    "dev": [{"name": "ruff"}, {"name": "pytest"}, {"name": "pytest-cov"}, {"name": "pytest-xdist"}]
+                },
             },
             package("ruff", "0.16.8"),
             package("cjapy", "0.5.5"),
             package("pytest", "9.1.0"),
             package("pytest-cov", "7.1.0"),
+            package("pytest-xdist", "3.8.0"),
         ],
     }
     after = deepcopy(before)
@@ -80,7 +83,9 @@ def pr() -> dict:
     }
 
 
-@pytest.mark.parametrize(("name", "version"), [("ruff", "0.16.9"), ("pytest", "9.1.1"), ("pytest-cov", "7.1.1")])
+@pytest.mark.parametrize(
+    ("name", "version"), [("ruff", "0.16.9"), ("pytest", "9.1.1"), ("pytest-cov", "7.1.1"), ("pytest-xdist", "3.8.1")]
+)
 def test_allowlisted_dev_patches(locks, name, version):
     before, after = locks
     after = deepcopy(before)
@@ -149,6 +154,23 @@ def test_reject_artifact_substitution(locks, url):
     before, after = locks
     after["package"][1]["sdist"]["url"] = url
     assert not review.review_locks(before, after)[0]
+
+
+@pytest.mark.parametrize(("old", "new"), [(3, 5), (None, 5), (5, None), (5, 4)])
+def test_reject_lockfile_revision_change_with_named_reason(locks, old, new):
+    before, after = locks
+    for lock, revision in ((before, old), (after, new)):
+        if revision is not None:
+            lock["revision"] = revision
+    eligible, reason = review.review_locks(before, after)
+    assert not eligible
+    assert reason.startswith(f"uv lockfile format revision changed ({old} → {new})")
+
+
+def test_unchanged_lockfile_revision_still_qualifies(locks):
+    before, after = locks
+    before["revision"] = after["revision"] = 5
+    assert review.review_locks(before, after)[0]
 
 
 def test_reject_duplicate_resolution(locks):

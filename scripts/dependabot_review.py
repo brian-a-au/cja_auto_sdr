@@ -21,7 +21,7 @@ from typing import Any
 from urllib.parse import unquote, urlsplit
 from urllib.request import urlopen
 
-ALLOWED_PACKAGES = frozenset({"ruff", "pytest", "pytest-cov"})
+ALLOWED_PACKAGES = frozenset({"ruff", "pytest", "pytest-cov", "pytest-xdist"})
 REQUIRED_CHECKS = frozenset(
     {
         "dependabot-policy",
@@ -124,6 +124,14 @@ def _valid_artifact(artifact: dict[str, Any], name: str, version: str, *, wheel:
 
 def review_locks(before: dict[str, Any], after: dict[str, Any]) -> tuple[bool, str]:
     """Conservatively approve only direct dev patches with no other changes."""
+    # A newer uv on Dependabot's side bumps the format revision and rewrites
+    # unrelated entries (e.g. dependency markers), so it stays manual. Name it
+    # so the one-time manual merge is obvious.
+    if before.get("revision") != after.get("revision"):
+        return False, (
+            f"uv lockfile format revision changed ({before.get('revision')} → {after.get('revision')}); "
+            "merge once manually and later updates will qualify again"
+        )
     if {key: value for key, value in before.items() if key != "package"} != {
         key: value for key, value in after.items() if key != "package"
     }:

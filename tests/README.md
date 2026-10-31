@@ -187,7 +187,7 @@ tests/
 └── README.md                        # This file
 ```
 
-**Total: 9,410 comprehensive tests**
+**Total: 9,416 comprehensive tests**
 
 ### Test Count Breakdown
 
@@ -196,16 +196,16 @@ tests/
 
 | Category | Tests | Files | Notes |
 |----------|-------|-------|-------|
-| `unit` | 9,249 | 168 | Default primary category for files without explicit integration/e2e/smoke scope |
+| `unit` | 9,255 | 168 | Default primary category for files without explicit integration/e2e/smoke scope |
 | `integration` | 122 | 3 | Cross-module integration suites |
 | `e2e` | 23 | 2 | End-to-end suites with a mocked external boundary |
 | `smoke` | 16 | 2 | Lightweight command-mode coverage |
 | `slow` | 0 | 0 | Overlay marker; these tests are also counted in a primary category |
-| **Primary Total** | **9,410** | **175** | **unit + integration + e2e + smoke** |
+| **Primary Total** | **9,416** | **175** | **unit + integration + e2e + smoke** |
 
 | CI Slice | Tests | Files | Selector |
 |----------|-------|-------|----------|
-| `test-unit` | 9,249 | 168 | `-m "unit and not slow"` |
+| `test-unit` | 9,255 | 168 | `-m "unit and not slow"` |
 | `test-integration` | 145 | 5 | `-m "integration or e2e or slow"` |
 | `smoke-test` | 16 | 2 | `-m smoke` |
 
@@ -334,7 +334,7 @@ tests/
 | `test_diff_git_coverage.py` | 27 | Diff/git subprocess error path coverage |
 | `test_generator_trending_coverage.py` | 19 | Generator trending integration coverage |
 | `test_check_pypi_readme_links.py` | 10 | PyPI README link validation |
-| `test_dependabot_review.py` | 63 | Dependabot review and merge trust boundaries |
+| `test_dependabot_review.py` | 69 | Dependabot review and merge trust boundaries |
 | `test_check_version_sync.py` | 18 | Version string sync validation across files |
 | `test_cli_color_policy_e2e.py` | 7 | End-to-end CLI color policy behavior tests |
 | `test_discovery_exceptions.py` | 6 | Discovery exception classification contracts |
@@ -390,7 +390,7 @@ tests/
 | `test_diff_snapshot_retention.py` | 81 | Diff snapshot-retention parse-cache characterization test |
 | `test_diff_comparator_normalize.py` | 21 | Diff field-normalization type-fast-path characterization test |
 | `test_logging_diagnostics.py` | 2 | emit_diagnostic isEnabledFor guard characterization tests |
-| **Total** | **9,410** | **Collected via pytest --collect-only** |
+| **Total** | **9,416** | **Collected via pytest --collect-only** |
 
 ## Running Tests
 
@@ -848,7 +848,7 @@ the `tests/README.md` inventory tree or count table.
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (9,410 tests total)
+- [x] Comprehensive test coverage (9,416 tests total)
 - [x] Org-wide analysis tests (test_org_report.py) - 225 tests (including large org scaling, output path aliases, memory warnings, smart cache invalidation)
 - [x] Org-wide analysis integration tests (test_org_report_integration.py) - 46 tests (end-to-end flows, caching, filtering, governance thresholds)
 - [x] Profile management tests (test_profiles.py) - 88 tests
