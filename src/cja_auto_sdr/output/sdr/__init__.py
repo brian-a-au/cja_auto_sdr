@@ -437,7 +437,11 @@ def apply_excel_formatting(
                 # Apply bold Name column for Metrics/Dimensions sheets
                 if is_component_sheet:
                     name_format = name_bold_grey if idx % 2 == 0 else name_bold_white
-                    worksheet.write(excel_row, name_col_idx, name_values[idx], name_format)
+                    name_value = name_values[idx]
+                    if pd.isna(name_value):
+                        worksheet.write_blank(excel_row, name_col_idx, None, name_format)
+                    else:
+                        worksheet.write(excel_row, name_col_idx, name_value, name_format)
 
         # Add autofilter to data table (offset by summary rows)
         worksheet.autofilter(summary_rows, 0, summary_rows + len(df), len(df.columns) - 1)
