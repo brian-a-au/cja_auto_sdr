@@ -4260,3 +4260,135 @@ def test_functions_used_order_is_stable_across_hash_seeds():
     _display, internal, _dict_used = json.loads(outs.pop())
     assert len(internal) >= 4
     assert internal == sorted(internal)
+
+
+# ==================== REAL CJA DEFINITION SHAPES (segment-ref, cond, field) ====================
+
+
+class TestRealCjaDefinitionShapes:
+    """Real CJA shapes: segment-ref filters, cond branches, attr field children."""
+
+    SEGMENTED = {
+        "id": "cm_1",
+        "name": "Gift Orders per Person",
+        "definition": {
+            "formula": {
+                "func": "divide",
+                "col1": {
+                    "func": "calc-metric",
+                    "formula": {"func": "metric", "name": "metrics/orders"},
+                    "version": [1, 0, 0],
+                    "filters": [
+                        {
+                            "func": "segment-ref",
+                            "description": "Product Name contains gift",
+                            "id": "s123@AdobeOrg_63ba29d680d7d360f8edea5c",
+                        },
+                    ],
+                },
+                "col2": {"func": "metric", "name": "metrics/visitors"},
+            },
+            "func": "calc-metric",
+            "version": [1, 0, 0],
+        },
+    }
+    TOP_FILTER = {
+        "id": "cm_2",
+        "name": "Unique Products Purchased",
+        "definition": {
+            "formula": {"func": "count-distinct-metric", "field": {"func": "attr", "name": "variables/product_name"}},
+            "func": "calc-metric",
+            "version": [1, 0, 0],
+            "filters": [{"func": "segment-ref", "id": "s123@AdobeOrg_63ba294d80d7d360f8edea56"}],
+        },
+    }
+    COND = {
+        "id": "cm_3",
+        "name": "Unique Products Viewed per Person",
+        "definition": {
+            "formula": {
+                "func": "if",
+                "cond": {"func": "gt", "col1": {"func": "metric", "name": "metrics/orders"}, "col2": 0},
+                "then": 0,
+                "else": {"func": "metric", "name": "metrics/visitors"},
+            },
+            "func": "calc-metric",
+        },
+    }
+
+    def test_segment_ref_in_nested_calc_metric_filters(self):
+        builder = CalculatedMetricsInventoryBuilder()
+        s = builder._process_metric(self.SEGMENTED)
+        # Same normalization as the segments inventory (full org-qualified ID)
+        assert s.segment_references == [builder._normalize_reference_value("s123@AdobeOrg_63ba29d680d7d360f8edea5c")]
+        assert s.segment_references == ["s123@AdobeOrg_63ba29d680d7d360f8edea5c"]
+        assert sorted(s.metric_references) == ["orders", "visitors"]
+        assert s.formula_summary != "Ratio calculation"
+        assert "segment" in s.formula_summary
+        assert s.formula_summary == "orders[segment] / visitors"
+
+    def test_top_level_definition_filters_and_attr_field(self):
+        builder = CalculatedMetricsInventoryBuilder()
+        s = builder._process_metric(self.TOP_FILTER)
+        assert s.segment_references == ["s123@AdobeOrg_63ba294d80d7d360f8edea56"]
+        assert s.complexity_score > 1.0
+        assert "segment" in s.formula_summary
+        assert s.functions_used_internal.count("calc-metric") <= 1
+
+    def test_if_cond_branch_is_walked(self):
+        s = CalculatedMetricsInventoryBuilder()._process_metric(self.COND)
+        assert "orders" in s.metric_references
+        assert "gt" in s.functions_used_internal
+        assert s.conditional_count == 2
+
+    def test_segment_ref_without_id_is_ignored(self):
+        metric = {
+            "id": "cm_4",
+            "name": "No Id",
+            "definition": {
+                "formula": {"func": "metric", "name": "metrics/orders"},
+                "filters": [{"func": "segment-ref"}],
+            },
+        }
+        s = CalculatedMetricsInventoryBuilder()._process_metric(metric)
+        assert s.segment_references == []
+
+    @pytest.mark.parametrize("func", ["ge", "le", "gte", "lte"])
+    def test_ge_le_count_as_conditionals(self, func):
+        metric = {
+            "id": "cm_5",
+            "name": "Cmp",
+            "definition": {
+                "formula": {
+                    "func": "if",
+                    "cond": {"func": func, "col1": {"func": "metric", "name": "metrics/orders"}, "col2": 1},
+                    "then": 1,
+                    "else": 0,
+                },
+            },
+        }
+        s = CalculatedMetricsInventoryBuilder()._process_metric(metric)
+        assert s.conditional_count == 2
+
+
+def test_build_retries_transient_connection_error(mock_cja_instance):
+    """A transient ConnectionError on getCalculatedMetrics is retried, then the build succeeds."""
+    good = mock_cja_instance.getCalculatedMetrics.return_value
+    mock_cja_instance.getCalculatedMetrics.side_effect = [ConnectionError("reset"), good]
+
+    with patch("cja_auto_sdr.api.resilience.time.sleep"):
+        inventory = CalculatedMetricsInventoryBuilder().build(mock_cja_instance, "dv_test", "Test View")
+
+    assert mock_cja_instance.getCalculatedMetrics.call_count == 2
+    assert inventory.total_calculated_metrics == 2
+
+
+def test_build_does_not_retry_error_body_keyerror(mock_cja_instance):
+    """cjapy error bodies raise KeyError('content'); that is not transient, so no retry and it fails closed."""
+    mock_cja_instance.getCalculatedMetrics.side_effect = KeyError("content")
+
+    with patch("cja_auto_sdr.api.resilience.time.sleep") as sleep, pytest.raises(KeyError):
+        CalculatedMetricsInventoryBuilder().build(mock_cja_instance, "dv_test", "Test View")
+
+    assert mock_cja_instance.getCalculatedMetrics.call_count == 1
+    sleep.assert_not_called()

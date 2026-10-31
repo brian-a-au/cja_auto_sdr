@@ -106,3 +106,38 @@ def test_remove_orphaned_page_ids_drops_pruned(tmp_path: Path) -> None:
 def test_lookup_orphans_missing_dv_returns_empty(tmp_path: Path) -> None:
     path = get_registry_path(tmp_path)
     assert lookup_orphaned_page_ids(path, "nope") == []
+
+
+def test_lookup_takes_registry_lock(tmp_path: Path, monkeypatch) -> None:
+    from contextlib import contextmanager
+
+    from cja_auto_sdr.output import notion_registry
+
+    reg = tmp_path / ".notion_page_registry.json"
+    reg.write_text(json.dumps({"dv_1": {"page_id": "p", "database_row_id": "r", "orphaned_page_ids": ["o"]}}))
+    entered: list[Path] = []
+
+    @contextmanager
+    def recording_lock(path):
+        entered.append(path)
+        yield
+
+    monkeypatch.setattr(notion_registry, "_exclusive_registry_lock", recording_lock)
+    assert notion_registry.lookup_page_id(reg, "dv_1") == "p"
+    assert len(entered) == 1
+    assert notion_registry.lookup_database_row_id(reg, "dv_1") == "r"
+    assert len(entered) == 2
+    assert notion_registry.lookup_orphaned_page_ids(reg, "dv_1") == ["o"]
+    assert len(entered) == 3
+
+
+def test_lookup_missing_registry_creates_nothing(tmp_path: Path) -> None:
+    from cja_auto_sdr.output import notion_registry
+
+    folder = tmp_path / "does_not_exist"
+    reg = folder / ".notion_page_registry.json"
+    assert notion_registry.lookup_page_id(reg, "dv_1") is None
+    assert notion_registry.lookup_database_row_id(reg, "dv_1") is None
+    assert notion_registry.lookup_orphaned_page_ids(reg, "dv_1") == []
+    assert not folder.exists()
+    assert not notion_registry._lock_path_for(reg).exists()

@@ -8,7 +8,7 @@ CLI layer.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from typing import Any
 
 from cja_auto_sdr.diff.comparator import DataViewComparator
@@ -67,6 +67,8 @@ class WatchCycleRunner:
         self._comparator = comparator
         self._threshold = threshold
         self._prior: dict[str, Any] = {}
+        # True when the most recent run_cycle returned early because should_stop fired.
+        self.last_cycle_stopped_early = False
 
     def run_cycle(
         self,
@@ -74,8 +76,18 @@ class WatchCycleRunner:
         cja: Any,
         data_view_ids: list[str],
         cycle: int,
+        should_stop: Callable[[], bool] | None = None,
     ) -> Iterator[BaselineEvent | ChangeEvent | ErrorEvent]:
+        """Yield events for one cycle.
+
+        `should_stop`, when given, is checked before each data view; if it returns True
+        the cycle ends early and `last_cycle_stopped_early` is set.
+        """
+        self.last_cycle_stopped_early = False
         for dv_id in data_view_ids:
+            if should_stop is not None and should_stop():
+                self.last_cycle_stopped_early = True
+                return
             try:
                 current = self._snapshot_manager.create_snapshot(
                     cja,

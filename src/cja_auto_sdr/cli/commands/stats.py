@@ -373,6 +373,26 @@ def _collect_stats_row_with_fallback(cja: cjapy.CJA, data_view_id: str, logger: 
         return _stats_error_row(data_view_id, e)
 
 
+def _collect_stats_rows(
+    cja: cjapy.CJA, data_view_ids: list[str], logger: logging.Logger
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """Collect one row per data view, plus the IDs whose rows failed.
+
+    Failures are tracked by ID, not by the ``ERROR`` row name, because a real data view can be named ``ERROR``.
+    """
+    generator = _generator_module()
+    rows: list[dict[str, Any]] = []
+    failed_ids: list[str] = []
+    for data_view_id in data_view_ids:
+        try:
+            rows.append(_collect_stats_row(cja, data_view_id))
+        except generator.RECOVERABLE_STATS_ROW_EXCEPTIONS as e:
+            logger.debug("Failed to collect stats row for %s", data_view_id, exc_info=True)
+            rows.append(_stats_error_row(data_view_id, e))
+            failed_ids.append(data_view_id)
+    return rows, failed_ids
+
+
 def show_stats(
     data_views: list[str],
     config_file: str = "config.json",
@@ -380,8 +400,12 @@ def show_stats(
     output_file: str | None = None,
     quiet: bool = False,
     profile: str | None = None,
+    unresolved_names: list[str] | None = None,
 ) -> bool:
-    """Show quick statistics about data view(s) without generating full reports."""
+    """Show quick statistics about data view(s) without generating full reports.
+
+    ``unresolved_names`` are data view names that matched nothing; each becomes a failed ERROR row.
+    """
     generator = _generator_module()
     is_stdout = output_file in ("-", "stdout")
     is_machine_readable = generator._is_machine_readable_output(output_format, output_file)
@@ -418,7 +442,10 @@ def show_stats(
 
         cja = generator.cjapy.CJA()
         logger = logging.getLogger(__name__)
-        stats_data = [_collect_stats_row_with_fallback(cja, dv_id, logger) for dv_id in data_views]
+        stats_data, failed_ids = _collect_stats_rows(cja, data_views, logger)
+        for unresolved in unresolved_names or []:
+            stats_data.append(_stats_error_row(unresolved, ValueError("Data view name not found")))
+            failed_ids.append(unresolved)
 
         if output_format == "json" or (is_stdout and output_format != "csv"):
             output_data = json.dumps(
@@ -480,7 +507,8 @@ def show_stats(
             print()
             print("=" * generator.BANNER_WIDTH)
 
-        return True
+        # Every row is printed above; a failed row still makes the run exit 1.
+        return not failed_ids
     except FileNotFoundError:
         generator._emit_discovery_error(
             f"Configuration file '{config_file}' not found",

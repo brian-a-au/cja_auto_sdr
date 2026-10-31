@@ -1803,8 +1803,14 @@ def _handle_exit_codes_prevalidation() -> NoReturn:
 
 def _handle_sample_config_prevalidation(
     run_state: dict[str, Any] | None = None,
+    args: argparse.Namespace | None = None,
 ) -> NoReturn:
     """Handle sample-config generation after standalone semantic validation."""
+    _warn_output_ignored(
+        getattr(args, "output", None),
+        scope="with --sample-config",
+        hint="the sample is written to config.sample.json",
+    )
     success = generate_sample_config()
     if run_state is not None:
         run_state["details"] = {"operation_success": success}
@@ -1911,7 +1917,7 @@ def _dispatch_prevalidation_mode(
         _handle_exit_codes_prevalidation()
 
     elif inferred_mode == RunMode.SAMPLE_CONFIG:
-        _handle_sample_config_prevalidation(run_state=run_state)
+        _handle_sample_config_prevalidation(run_state=run_state, args=args)
 
 
 # Flags that --push-to-notion must reject explicitly. _run_mode_checks
@@ -2106,6 +2112,13 @@ def _validate_semantic_flag_relationships(
     if watch_active:
         if _normalize_output_format(getattr(args, "format", None)) == "notion":
             _exit_error("--watch is not supported with --format notion")
+        if (
+            getattr(args, "agent_mode", False)
+            and not _cli_option_specified("--format")
+            and not _cli_option_specified("--output")
+        ):
+            # The agent-mode preset fills in format/output; blame the flag the user typed.
+            _exit_error("--watch is incompatible with --agent-mode")
         if getattr(args, "format", None) is not None:
             _exit_error("--watch is incompatible with --format")
         if getattr(args, "output", None) is not None:
@@ -3127,6 +3140,7 @@ def process_inventory_summary(
     include_segments: bool = False,
     inventory_order: list[str] | None = None,
     output_file: str | None = None,
+    log_to_stderr: bool = False,
 ) -> dict[str, Any]:
     """
     Process inventory summary mode - fetch inventory data and display statistics.
@@ -3145,6 +3159,7 @@ def process_inventory_summary(
         include_segments: Include segments inventory
         inventory_order: Order of inventory types as specified in CLI
         output_file: Exact JSON output path, or "-"/"stdout" to print the JSON
+        log_to_stderr: Send log records to stderr (set under --agent-mode)
 
     Returns:
         Dictionary with summary statistics
@@ -3155,7 +3170,7 @@ def process_inventory_summary(
         batch_mode=False,
         log_level=log_level,
         log_format=log_format,
-        stream=sys.stderr if output_file in ("-", "stdout") else None,
+        stream=sys.stderr if (log_to_stderr or output_file in ("-", "stdout")) else None,
     )
     logger = with_log_context(base_logger, run_mode="inventory_summary", data_view_id=data_view_id)
 
@@ -3348,6 +3363,7 @@ def process_single_dataview(
     processing_config: ProcessingConfig | None = None,
     json_typed: bool = False,
     fail_on_quality: str | None = None,
+    log_to_stderr: bool = False,
 ) -> ProcessingResult:
     """
     Process a single data view and generate SDR in specified format(s)
@@ -3419,6 +3435,7 @@ def process_single_dataview(
             notion_create_database=notion_create_database,
             json_typed=json_typed,
             fail_on_quality=fail_on_quality,
+            log_to_stderr=log_to_stderr,
         )
 
     config_file = processing_config.config_file
@@ -3459,7 +3476,8 @@ def process_single_dataview(
     start_time = time.perf_counter()
 
     # When streaming the SDR JSON to stdout (--output stdout --format json),
-    # keep stdout clean by routing console logs to stderr.
+    # keep stdout clean by routing console logs to stderr. --agent-mode also
+    # routes logs to stderr (log_to_stderr) when the SDR is written to a file.
     stdout_json_output = output_file in ("-", "stdout") and output_format == "json"
 
     # Setup logging for this data view
@@ -3468,7 +3486,7 @@ def process_single_dataview(
         batch_mode=False,
         log_level=log_level,
         log_format=log_format,
-        stream=sys.stderr if stdout_json_output else None,
+        stream=sys.stderr if (stdout_json_output or processing_config.log_to_stderr) else None,
     )
     run_mode = "batch_worker" if batch_id else "single"
     logger = with_log_context(base_logger, run_mode=run_mode, data_view_id=data_view_id, batch_id=batch_id)
@@ -5827,9 +5845,11 @@ def show_stats(
     output_file: str | None = None,
     quiet: bool = False,
     profile: str | None = None,
+    unresolved_names: list[str] | None = None,
 ) -> bool:
     from cja_auto_sdr.cli.commands.stats import show_stats as _impl
 
+    extra: dict[str, Any] = {"unresolved_names": unresolved_names} if unresolved_names else {}
     return _impl(
         data_views=data_views,
         config_file=config_file,
@@ -5837,6 +5857,7 @@ def show_stats(
         output_file=output_file,
         quiet=quiet,
         profile=profile,
+        **extra,
     )
 
 
@@ -7177,6 +7198,11 @@ def _dispatch_post_validation_report_modes(
     """Handle config/status, interactive, stats, and org-report branches."""
     if getattr(args, "config_status", False) or getattr(args, "config_json", False):
         output_json = getattr(args, "config_json", False)
+        _warn_output_ignored(
+            getattr(args, "output", None),
+            scope="with --config-status",
+            hint="use --config-json and redirect stdout to save the status",
+        )
         success = show_config_status(args.config_file, profile=getattr(args, "profile", None), output_json=output_json)
         if run_state is not None:
             run_state["details"] = {"operation_success": success}
@@ -7225,19 +7251,48 @@ def _dispatch_post_validation_report_modes(
             print(ConsoleColors.error("ERROR: --stats requires at least one data view ID or name"), file=sys.stderr)
             sys.exit(1)
 
-        temp_logger = logging.getLogger("name_resolution")
-        temp_logger.setLevel(logging.WARNING)
-        resolved_ids, _ = resolve_data_view_names(
-            data_view_inputs,
-            args.config_file,
-            temp_logger,
-            profile=getattr(args, "profile", None),
-            match_mode=getattr(args, "name_match", "exact"),
-        )
+        stats_machine_readable = _is_machine_readable_output(args.format, getattr(args, "output", None))
+        if stats_machine_readable:
+            # Keep stderr machine-safe: mute resolution logs and report failures as a JSON envelope.
+            resolution_result = resolve_data_view_names(
+                data_view_inputs,
+                args.config_file,
+                _build_inspection_name_resolution_logger(),
+                profile=getattr(args, "profile", None),
+                match_mode=getattr(args, "name_match", "exact"),
+                include_diagnostics=True,
+                emit_api_hints=False,
+            )
+            resolved_ids, stats_name_map, stats_resolution_diagnostics = _coerce_name_resolution_result(
+                resolution_result
+            )
+            if not resolved_ids:
+                _emit_discovery_error(
+                    stats_resolution_diagnostics.error_message
+                    or f"Could not resolve data view(s): {', '.join(data_view_inputs)}",
+                    is_machine_readable=True,
+                    error_type=stats_resolution_diagnostics.error_type or "not_found",
+                    human_to_stderr=True,
+                )
+                sys.exit(1)
+        else:
+            temp_logger = logging.getLogger("name_resolution")
+            temp_logger.setLevel(logging.WARNING)
+            resolved_ids, stats_name_map = resolve_data_view_names(
+                data_view_inputs,
+                args.config_file,
+                temp_logger,
+                profile=getattr(args, "profile", None),
+                match_mode=getattr(args, "name_match", "exact"),
+            )
 
-        if not resolved_ids:
-            print(ConsoleColors.error("ERROR: No valid data views found"), file=sys.stderr)
-            sys.exit(1)
+            if not resolved_ids:
+                print(ConsoleColors.error("ERROR: No valid data views found"), file=sys.stderr)
+                sys.exit(1)
+        # A name that matched nothing must not vanish silently: report it as a failed row.
+        stats_unresolved_names = [
+            item for item in data_view_inputs if not is_data_view_id(item) and item not in stats_name_map
+        ]
         if run_state is not None:
             run_state["resolved_data_views"] = list(resolved_ids)
 
@@ -7254,6 +7309,7 @@ def _dispatch_post_validation_report_modes(
             output_file=getattr(args, "output", None),
             quiet=args.quiet,
             profile=getattr(args, "profile", None),
+            **({"unresolved_names": stats_unresolved_names} if stats_unresolved_names else {}),
         )
         if run_state is not None:
             run_state["output_format"] = stats_format
@@ -7889,7 +7945,9 @@ def _main_impl(run_state: dict[str, Any] | None = None):
     temp_logger = logging.getLogger("name_resolution")
     temp_logger.setLevel(logging.INFO if not args.quiet else logging.ERROR)
     handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter("%(levelname)s - %(message)s"))
+    handler.setFormatter(
+        JSONFormatter() if args.log_format == "json" else logging.Formatter("%(levelname)s - %(message)s"),
+    )
     temp_logger.addHandler(handler)
     temp_logger.propagate = False
 

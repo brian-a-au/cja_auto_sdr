@@ -68,6 +68,7 @@ class BatchProcessor:
         json_typed: bool = False,
         fail_on_quality: str | None = None,
         batch_config: BatchConfig | None = None,
+        log_to_stderr: bool = False,
     ):
         generator = _generator_module()
 
@@ -107,6 +108,7 @@ class BatchProcessor:
                 notion_create_database=notion_create_database,
                 json_typed=json_typed,
                 fail_on_quality=fail_on_quality,
+                log_to_stderr=log_to_stderr,
             )
 
         self.config_file = batch_config.config_file
@@ -143,8 +145,15 @@ class BatchProcessor:
         self.notion_create_database = batch_config.notion_create_database
         self.json_typed = batch_config.json_typed
         self.fail_on_quality = batch_config.fail_on_quality
+        self.log_to_stderr = batch_config.log_to_stderr
         self.batch_id = str(uuid.uuid4())[:8]
-        base_logger = generator.setup_logging(batch_mode=True, log_level=self.log_level, log_format=self.log_format)
+        logging_kwargs: dict[str, Any] = {}
+        if self.log_to_stderr:
+            # --agent-mode: keep stdout free of batch-level log records.
+            logging_kwargs["stream"] = sys.stderr
+        base_logger = generator.setup_logging(
+            batch_mode=True, log_level=self.log_level, log_format=self.log_format, **logging_kwargs
+        )
         self.logger = generator.with_log_context(base_logger, run_mode="batch", batch_id=self.batch_id)
         self.logger.info("Batch ID: %s", self.batch_id)
 
@@ -219,6 +228,7 @@ class BatchProcessor:
                 notion_create_database=self.notion_create_database,
                 json_typed=self.json_typed,
                 fail_on_quality=self.fail_on_quality,
+                log_to_stderr=self.log_to_stderr,
             )
             for dv_id in data_view_ids
         ]

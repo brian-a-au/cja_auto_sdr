@@ -381,3 +381,57 @@ def test_generator_creates_missing_output_dir_for_default_excel(generate, tmp_pa
     assert len(workbooks) == 1
     assert workbooks[0].read_bytes().startswith(b"PK")
     assert not list(output_dir.glob(".xlsx-*"))
+
+
+def _sheet_formulas_and_strings(path):
+    import zipfile
+
+    with zipfile.ZipFile(path) as zf:
+        sheets = [zf.read(n).decode() for n in zf.namelist() if n.startswith("xl/worksheets/sheet")]
+        shared = zf.read("xl/sharedStrings.xml").decode()
+    return sheets, shared
+
+
+def test_staged_writer_writes_equals_strings_as_text(tmp_path):
+    from cja_auto_sdr.output.excel_staging import staged_excel_writer
+
+    destination = tmp_path / "formula.xlsx"
+    df = pd.DataFrame({"name": ["=Revenue per visit", '=HYPERLINK("http://e.com","click")']})
+    with staged_excel_writer(destination) as writer:
+        df.to_excel(writer, sheet_name="Sheet1", index=False)
+        writer.sheets["Sheet1"].write(5, 1, "=x")
+
+    sheets, shared = _sheet_formulas_and_strings(destination)
+    assert all("<f>" not in sheet for sheet in sheets)
+    assert "=Revenue per visit" in shared
+    assert "HYPERLINK" in shared
+    assert "=x" in shared
+
+
+def test_diff_excel_writes_equals_component_name_as_text(tmp_path):
+    from cja_auto_sdr.diff.models import ChangeType, ComponentDiff
+    from cja_auto_sdr.output.diff.excel import write_diff_excel_output
+    from tests.test_diff_excel import _build_diff_result
+
+    result = _build_diff_result()
+    result.metric_diffs.append(
+        ComponentDiff(id="m_eq", name="=Rev", change_type=ChangeType.ADDED, source_data=None, target_data={})
+    )
+    path = write_diff_excel_output(result, "d", str(tmp_path), logging.getLogger("t"))
+
+    sheets, shared = _sheet_formulas_and_strings(path)
+    assert all("<f>" not in sheet for sheet in sheets)
+    assert "=Rev" in shared
+
+
+def test_org_excel_writes_equals_name_as_text(tmp_path):
+    from cja_auto_sdr.org.writers.excel import write_org_report_excel
+    from tests.test_org_writer_coverage import _make_org_result
+
+    result = _make_org_result()
+    result.data_view_summaries[0].data_view_name = "=Rev"
+    path = write_org_report_excel(result, tmp_path / "o.xlsx", str(tmp_path), logging.getLogger("t"))
+
+    sheets, shared = _sheet_formulas_and_strings(path)
+    assert all("<f>" not in sheet for sheet in sheets)
+    assert "=Rev" in shared

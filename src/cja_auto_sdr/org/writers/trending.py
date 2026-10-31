@@ -147,15 +147,11 @@ def _render_markdown_trending_table(
 
 def _escape_markdown_table_cell(value: Any) -> str:
     """Escape Markdown table cell content without changing readable text."""
-    return (
-        str(value)
-        .replace("\\", "\\\\")
-        .replace("|", "\\|")
-        .replace("`", "\\`")
-        .replace("\r\n", "<br>")
-        .replace("\n", "<br>")
-        .replace("\r", "<br>")
-    )
+    # Imported lazily: importing cja_auto_sdr.output at module load re-enters this
+    # package through output/__init__ while generator is still importing.
+    from cja_auto_sdr.output.markdown_escape import escape_markdown_table_cell
+
+    return escape_markdown_table_cell(value)
 
 
 def _render_html_trending_table(

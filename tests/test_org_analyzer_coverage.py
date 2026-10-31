@@ -2696,6 +2696,86 @@ class TestFetchAllLockOwnershipLost:
 
 
 # ===================================================================
+# Shutdown semantics of _fetch_all_data_views (lock held until fetches finish)
+# ===================================================================
+
+
+class _RecordingExecutor:
+    """Executor stand-in that records shutdown() and returns pending futures."""
+
+    last_instance = None
+
+    def __init__(self, *args, **kwargs):
+        from concurrent.futures import Future
+
+        self._future_cls = Future
+        self.submitted = []
+        self.shutdown_calls = []
+        _RecordingExecutor.last_instance = self
+
+    def submit(self, fn, dv):
+        future = self._future_cls()
+        future.set_running_or_notify_cancel()  # simulate a fetch already running
+        self.submitted.append(future)
+        return future
+
+    def shutdown(self, wait=True, cancel_futures=False):
+        self.shutdown_calls.append((wait, cancel_futures))
+
+
+class TestFetchAllShutdownSemantics:
+    def _analyzer(self, mock_cja, logger):
+        config = OrgReportConfig(skip_lock=True, cja_per_thread=False, quiet=True)
+        analyzer = _make_analyzer(mock_cja, logger, config=config)
+        analyzer.cache = None
+        return analyzer
+
+    def test_fetch_interrupt_waits_for_in_flight_before_returning(self, mock_cja, logger, caplog):
+        analyzer = self._analyzer(mock_cja, logger)
+        with (
+            patch("cja_auto_sdr.org.analyzer.ThreadPoolExecutor", _RecordingExecutor),
+            patch("cja_auto_sdr.org.analyzer.wait", side_effect=KeyboardInterrupt),
+            caplog.at_level(logging.WARNING, logger=logger.name),
+            pytest.raises(KeyboardInterrupt),
+        ):
+            analyzer._fetch_all_data_views([{"id": "dv1", "name": "DV 1"}, {"id": "dv2", "name": "DV 2"}])
+        assert _RecordingExecutor.last_instance.shutdown_calls == [(True, True)]
+        assert "Waiting for" in caplog.text
+        assert "in-flight data view fetch(es)" in caplog.text
+
+    def test_fetch_lock_lost_does_not_wait(self, mock_cja, logger):
+        from cja_auto_sdr.core.exceptions import LockOwnershipLostError
+
+        analyzer = self._analyzer(mock_cja, logger)
+        analyzer._assert_lock_healthy = Mock(side_effect=LockOwnershipLostError("/tmp/x.lock", reason="lost"))
+        with (
+            patch("cja_auto_sdr.org.analyzer.ThreadPoolExecutor", _RecordingExecutor),
+            pytest.raises(LockOwnershipLostError),
+        ):
+            analyzer._fetch_all_data_views([{"id": "dv1", "name": "DV 1"}])
+        assert _RecordingExecutor.last_instance.shutdown_calls == [(False, True)]
+
+    def test_fetch_normal_completion_waits_without_cancel(self, mock_cja, logger):
+        analyzer = self._analyzer(mock_cja, logger)
+        summary = DataViewSummary(data_view_id="dv1", data_view_name="DV 1")
+        with (
+            patch("cja_auto_sdr.org.analyzer.ThreadPoolExecutor", _RecordingExecutor),
+            patch("cja_auto_sdr.org.analyzer.wait", side_effect=lambda fs, timeout=None, return_when=None: (fs, set())),
+        ):
+            # Futures need results for the loop to consume them.
+            orig_submit = _RecordingExecutor.submit
+
+            def _submit(self, fn, dv):
+                f = orig_submit(self, fn, dv)
+                f.set_result(summary)
+                return f
+
+            with patch.object(_RecordingExecutor, "submit", _submit):
+                analyzer._fetch_all_data_views([{"id": "dv1", "name": "DV 1"}])
+        assert _RecordingExecutor.last_instance.shutdown_calls == [(True, False)]
+
+
+# ===================================================================
 # 30. Thread-local CJA client (lines 605-611)
 # ===================================================================
 
@@ -3433,3 +3513,83 @@ class TestFetchDataViewComponentsExpansion:
         for call in fetch.call_args_list:
             assert call.args[2] == "dv_test"
             assert call.kwargs["expansion"] == "type,sourceFieldType"
+
+
+def test_component_index_order_is_sorted_within_each_summary(mock_cja, logger):
+    ids_m = {"metrics/m3", "metrics/m1", "metrics/m2"}
+    ids_d = {"variables/d3", "variables/d1", "variables/d2"}
+    s1 = DataViewSummary(data_view_id="dv_1", data_view_name="One", metric_ids=set(ids_m), dimension_ids=set(ids_d))
+    s2 = DataViewSummary(
+        data_view_id="dv_2",
+        data_view_name="Two",
+        metric_ids=ids_m | {"metrics/m5", "metrics/m4"},
+        dimension_ids=ids_d | {"variables/d5", "variables/d4"},
+    )
+    index = _make_analyzer(mock_cja, logger)._build_component_index([s1, s2])
+    assert list(index) == [
+        "metrics/m1",
+        "metrics/m2",
+        "metrics/m3",
+        "variables/d1",
+        "variables/d2",
+        "variables/d3",
+        "metrics/m4",
+        "metrics/m5",
+        "variables/d4",
+        "variables/d5",
+    ]
+
+
+_HASH_SEED_SCRIPT = """
+import hashlib, logging, os, sys, tempfile, json
+from cja_auto_sdr.org.analyzer import OrgComponentAnalyzer
+from cja_auto_sdr.org.models import DataViewSummary, OrgReportConfig, OrgReportResult
+from cja_auto_sdr.org.writers.markdown import write_org_report_markdown
+from cja_auto_sdr.org.writers.json import build_org_report_json_data
+
+log = logging.getLogger("t")
+cfg = OrgReportConfig(skip_lock=True)
+mids = {f"metrics/m{i:02d}" for i in range(40)}
+dids = {f"variables/d{i:02d}" for i in range(40)}
+sums = [
+    DataViewSummary(data_view_id=f"dv_{k}", data_view_name=f"DV {k}", metric_ids=set(mids),
+                    dimension_ids=set(dids), metric_count=40, dimension_count=40)
+    for k in range(3)
+]
+an = OrgComponentAnalyzer(None, cfg, log)
+idx = an._build_component_index(sums)
+dist = an._compute_distribution(idx, 3)
+for cid, info in idx.items():
+    info.name = cid + " old"
+stale = an._detect_stale_components(idx)
+res = OrgReportResult(timestamp="2026-01-01T00:00:00+00:00", org_id="o@AdobeOrg", parameters=cfg,
+    data_view_summaries=sums, component_index=idx, distribution=dist, similarity_pairs=None,
+    recommendations=[], duration=1.0, stale_components=stale)
+out = tempfile.mkdtemp()
+md = write_org_report_markdown(res, None, out, log)
+print(open(md, "rb").read().decode())
+data = build_org_report_json_data(res)
+print(json.dumps([c["component_id"] for c in data["stale_components"]]))
+print(json.dumps(list(idx)), json.dumps([dist.core_metrics, dist.core_dimensions]))
+"""
+
+
+def _run_with_hash_seed(seed: str) -> str:
+    import os
+    import subprocess
+
+    env = {**os.environ, "PYTHONHASHSEED": seed}
+    proc = subprocess.run(
+        [sys.executable, "-c", _HASH_SEED_SCRIPT], env=env, capture_output=True, text=True, timeout=60, check=False
+    )
+    assert proc.returncode == 0, proc.stderr
+    return proc.stdout
+
+
+def test_org_report_output_independent_of_hash_seed():
+    import re
+
+    # Strip the generated timestamp-like or tmp path text if any appear.
+    first = re.sub(r"/tmp\S*|/var/\S*", "", _run_with_hash_seed("1"))
+    second = re.sub(r"/tmp\S*|/var/\S*", "", _run_with_hash_seed("2"))
+    assert first == second

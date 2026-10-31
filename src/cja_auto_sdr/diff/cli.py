@@ -57,6 +57,28 @@ def _warn_diff_output_ignored(output_path: str | None, *, command: str) -> None:
     )
 
 
+def _warn_diff_stdout_non_json(output_path: str | None, *, output_format: str, format_pr_comment: bool = False) -> None:
+    """Warn that ``--output -`` only streams JSON; console and PR-comment output write no file, so they are skipped."""
+    if format_pr_comment:
+        return
+    if output_path in ("-", "stdout") and output_format not in ("json", "console"):
+        print(
+            _generator_module().ConsoleColors.warning(
+                "Warning: --output - is only supported with --format json for diff commands; "
+                f"writing {output_format} output to a file instead."
+            ),
+            file=sys.stderr,
+        )
+
+
+def _reject_diff_output_stdout(args: argparse.Namespace) -> None:
+    """Exit before any work when ``--diff-output -`` is requested (it would create a file named ``-``)."""
+    if getattr(args, "diff_output", None) == "-":
+        _generator_module()._exit_error(
+            "--diff-output does not accept '-'; use --format json --output - to write the diff to stdout"
+        )
+
+
 def _exit_with_diff_result(
     *,
     success: bool,
@@ -192,6 +214,7 @@ def dispatch_cross_data_view_diff_cli_mode(
 ) -> None:
     """Handle the cross-data-view ``--diff`` CLI branch and exit."""
     generator = _generator_module()
+    _reject_diff_output_stdout(args)
 
     if len(data_view_inputs) != 2:
         print(generator.ConsoleColors.error("ERROR: --diff requires exactly 2 data view IDs or names"), file=sys.stderr)
@@ -250,6 +273,11 @@ def dispatch_cross_data_view_diff_cli_mode(
     resolved_output_path = _resolve_diff_output_path(args, output_format=diff_format)
     diff_quiet = _resolve_diff_quiet(args, output_path=resolved_output_path)
     _warn_diff_output_ignored(resolved_output_path, command="--diff")
+    _warn_diff_stdout_non_json(
+        resolved_output_path,
+        output_format=diff_format,
+        format_pr_comment=getattr(args, "format_pr_comment", False),
+    )
     _diff_output_to_stdout = _diff_output_to_stdout_requested(
         args,
         output_format=diff_format,
@@ -324,6 +352,12 @@ def dispatch_snapshot_cli_modes(
 ) -> list[str]:
     """Handle snapshot/diff CLI branches that still exit directly from main."""
     generator = _generator_module()
+    if (
+        getattr(args, "compare_snapshots", None)
+        or getattr(args, "compare_with_prev", False)
+        or getattr(args, "diff_snapshot", None)
+    ):
+        _reject_diff_output_stdout(args)
 
     if getattr(args, "list_snapshots", False):
         generator._preflight_output_file(getattr(args, "output", None), output_to_stdout)
@@ -530,6 +564,11 @@ def dispatch_snapshot_cli_modes(
         resolved_output_path = _resolve_diff_output_path(args, output_format=diff_format)
         diff_quiet = _resolve_diff_quiet(args, output_path=resolved_output_path)
         _warn_diff_output_ignored(resolved_output_path, command="--compare-snapshots")
+        _warn_diff_stdout_non_json(
+            resolved_output_path,
+            output_format=diff_format,
+            format_pr_comment=getattr(args, "format_pr_comment", False),
+        )
         _cs_output_to_stdout = _diff_output_to_stdout_requested(
             args,
             output_format=diff_format,
@@ -687,6 +726,11 @@ def dispatch_snapshot_cli_modes(
         resolved_output_path = _resolve_diff_output_path(args, output_format=diff_format)
         diff_quiet = _resolve_diff_quiet(args, output_path=resolved_output_path)
         _warn_diff_output_ignored(resolved_output_path, command="--diff-snapshot")
+        _warn_diff_stdout_non_json(
+            resolved_output_path,
+            output_format=diff_format,
+            format_pr_comment=getattr(args, "format_pr_comment", False),
+        )
         _ds_output_to_stdout = _diff_output_to_stdout_requested(
             args,
             output_format=diff_format,
