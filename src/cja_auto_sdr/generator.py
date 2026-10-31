@@ -978,6 +978,8 @@ def _run_data_quality_validation(
     max_issues: int,
     skip_validation: bool,
     execution_policy: ProcessingExecutionPolicy,
+    metrics_only: bool = False,
+    dimensions_only: bool = False,
 ) -> DataQualityValidationResult:
     """Execute validation and issue extraction with fail-closed semantics."""
     if not execution_policy.run_data_quality_validation:
@@ -1035,6 +1037,8 @@ def _run_data_quality_validation(
             metrics_required_fields=VALIDATION_SCHEMA["required_metric_fields"],
             dimensions_required_fields=VALIDATION_SCHEMA["required_dimension_fields"],
             critical_fields=VALIDATION_SCHEMA["critical_fields"],
+            include_metrics=not dimensions_only,
+            include_dimensions=not metrics_only,
         )
         dq_checker.log_summary()
 
@@ -3764,6 +3768,8 @@ def process_single_dataview(
             max_issues=max_issues,
             skip_validation=skip_validation,
             execution_policy=execution_policy,
+            metrics_only=metrics_only,
+            dimensions_only=dimensions_only,
         )
         data_quality_df = validation_result.data_quality_df
         dq_issues = validation_result.dq_issues

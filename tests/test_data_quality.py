@@ -453,3 +453,15 @@ class TestIssueOrderingIsDeterministic:
         expected = ["Metrics", "Dimensions", "Metrics", "Dimensions"]
         assert self._issue_types(["Metrics", "Dimensions"]) == expected
         assert self._issue_types(["Dimensions", "Metrics"]) == expected
+
+
+def test_check_all_parallel_skips_excluded_family():
+    checker = _identity_checker()
+    checker.check_all_parallel(_metrics_df(n=2), pd.DataFrame(), REQ, REQ, CRIT, include_dimensions=False)
+    assert checker.issues
+    assert not any(i["Type"] == "Dimensions" for i in checker.issues)
+
+    other = _identity_checker()
+    other.check_all_parallel(pd.DataFrame(), _metrics_df(n=2), REQ, REQ, CRIT, include_metrics=False)
+    assert other.issues
+    assert not any(i["Type"] == "Metrics" for i in other.issues)
