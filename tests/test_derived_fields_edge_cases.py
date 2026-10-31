@@ -232,6 +232,70 @@ class TestDescribeMatchDefault:
         assert "default" in summary.logic_summary.lower() or "Default Value" in summary.logic_summary
 
 
+class TestConcatenateHelperMatchSkipped:
+    """API-2: the helper match of a concatenate rule is not the user's Case When."""
+
+    def test_concatenate_helper_match_is_skipped_in_logic_summary(self):
+        defn = [
+            {"func": "raw-field", "id": "web.webPageDetails.URL", "label": "web.webPageDetails.URL"},
+            {
+                "func": "match",
+                "field": "web.webPageDetails.URL",
+                "branches": [{"pred": {"func": "true"}, "map-to": "unknown"}],
+                "label": "rule-0-0",
+                "#rule_id": "rule-0",
+            },
+            {
+                "func": "join",
+                "fields": ["rule-0-0", "web.webPageDetails.URL"],
+                "separator": ": ",
+                "label": "rule-0",
+                "#rule_type": "concatenate",
+            },
+            {
+                "func": "match",
+                "field": "rule-0",
+                "branches": [
+                    {
+                        "pred": {"func": "contains", "field": "web.webPageDetails.URL", "val": "/shop/"},
+                        "map-to": "category",
+                    },
+                    {
+                        "pred": {"func": "contains", "field": "web.webPageDetails.URL", "val": "basket.html"},
+                        "map-to": "cart",
+                    },
+                    {
+                        "pred": {"func": "contains", "field": "web.webPageDetails.URL", "val": "ordercompleted.html"},
+                        "map-to": "order",
+                    },
+                    {"pred": {"func": "true"}, "map-to": {"type": "field", "value": "rule-0"}},
+                ],
+                "#rule_type": "caseWhen",
+            },
+        ]
+        summary = _build_one(defn)
+        assert "/shop/" in summary.logic_summary
+        assert "category" in summary.logic_summary
+        assert not summary.logic_summary.startswith('Case When (1): default→"unknown"')
+        assert summary.branch_count == 5
+
+    def test_single_match_field_summary_unchanged(self):
+        definition = [
+            {"func": "raw-field", "id": "test.field", "label": "f"},
+            {"func": "match", "field": "f", "branches": [{"pred": {"func": "true"}, "map-to": "Default Value"}]},
+        ]
+        summary = _build_one(definition)
+        assert summary.logic_summary == 'Case When (1): default→"Default Value"'
+
+    def test_all_helper_matches_fall_back_to_first(self):
+        definition = [
+            {"func": "raw-field", "id": "a", "label": "a"},
+            {"func": "match", "field": "a", "branches": [{"pred": {"func": "true"}, "map-to": "x"}], "label": "m1"},
+            {"func": "join", "fields": ["m1", "a"], "separator": ":", "label": "j"},
+        ]
+        assert "Case When (1)" in _build_one(definition).logic_summary
+
+
 # ==================== _resolve_first_arg_field: no id ====================
 
 
