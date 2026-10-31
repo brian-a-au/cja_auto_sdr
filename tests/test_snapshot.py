@@ -944,3 +944,45 @@ class TestStrictJsonSnapshots:
         json.loads(out, parse_constant=_raise_on_constant)
         write_diff_output(result, "json", "d", str(tmp_path), logger)
         json.loads((tmp_path / "d.json").read_text(encoding="utf-8"), parse_constant=_raise_on_constant)
+
+
+class TestUndatedSnapshot:
+    @pytest.mark.parametrize("variant", ["missing", "null", "empty"])
+    def test_load_snapshot_without_created_at_uses_file_mtime(self, manager, tmp_path, variant):
+        payload = {
+            "snapshot_version": "1.0",
+            "data_view_id": "dv_1",
+            "data_view_name": "DV",
+            "metrics": [],
+            "dimensions": [],
+        }
+        if variant == "null":
+            payload["created_at"] = None
+        elif variant == "empty":
+            payload["created_at"] = ""
+        path = tmp_path / "undated.json"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        mtime = datetime(2020, 1, 1, 12, 0, tzinfo=UTC).timestamp()
+        os.utime(path, (mtime, mtime))
+
+        loaded = manager.load_snapshot(str(path))
+
+        assert loaded.created_at.startswith("2020-01-01")
+        assert loaded.created_at.endswith("+00:00")
+
+    def test_load_snapshot_keeps_existing_created_at(self, manager, tmp_path):
+        path = tmp_path / "dated.json"
+        path.write_text(
+            json.dumps(
+                {
+                    "snapshot_version": "1.0",
+                    "data_view_id": "dv_1",
+                    "data_view_name": "DV",
+                    "created_at": "2024-05-05T00:00:00+00:00",
+                    "metrics": [],
+                    "dimensions": [],
+                },
+            ),
+            encoding="utf-8",
+        )
+        assert manager.load_snapshot(str(path)).created_at == "2024-05-05T00:00:00+00:00"

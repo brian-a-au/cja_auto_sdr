@@ -277,6 +277,9 @@ class SnapshotManager:
             data = json.load(f)
 
         DataViewSnapshot.validate_payload(data)
+        if not data.get("created_at"):
+            # Undated snapshot: date it from the file, not from "now" (DataViewSnapshot.__post_init__).
+            data["created_at"] = datetime.fromtimestamp(os.path.getmtime(filepath), UTC).isoformat()
         self._parse_snapshot_created_at(data.get("created_at"))
 
         snapshot = DataViewSnapshot.from_dict(data)
