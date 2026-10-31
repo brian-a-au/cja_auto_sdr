@@ -1113,7 +1113,7 @@ class OrgComponentAnalyzer:
                 continue
 
             # Index metrics
-            for metric_id in summary.metric_ids:
+            for metric_id in sorted(summary.metric_ids):
                 if metric_id not in index:
                     # Get name from summary if available (first encountered wins)
                     metric_name = None
@@ -1128,7 +1128,7 @@ class OrgComponentAnalyzer:
                 index[metric_id].data_views.add(summary.data_view_id)
 
             # Index dimensions
-            for dim_id in summary.dimension_ids:
+            for dim_id in sorted(summary.dimension_ids):
                 if dim_id not in index:
                     # Get name from summary if available (first encountered wins)
                     dim_name = None
