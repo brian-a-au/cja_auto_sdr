@@ -3348,6 +3348,7 @@ def process_single_dataview(
     processing_config: ProcessingConfig | None = None,
     json_typed: bool = False,
     fail_on_quality: str | None = None,
+    log_to_stderr: bool = False,
 ) -> ProcessingResult:
     """
     Process a single data view and generate SDR in specified format(s)
@@ -3419,6 +3420,7 @@ def process_single_dataview(
             notion_create_database=notion_create_database,
             json_typed=json_typed,
             fail_on_quality=fail_on_quality,
+            log_to_stderr=log_to_stderr,
         )
 
     config_file = processing_config.config_file
@@ -3459,7 +3461,8 @@ def process_single_dataview(
     start_time = time.perf_counter()
 
     # When streaming the SDR JSON to stdout (--output stdout --format json),
-    # keep stdout clean by routing console logs to stderr.
+    # keep stdout clean by routing console logs to stderr. --agent-mode also
+    # routes logs to stderr (log_to_stderr) when the SDR is written to a file.
     stdout_json_output = output_file in ("-", "stdout") and output_format == "json"
 
     # Setup logging for this data view
@@ -3468,7 +3471,7 @@ def process_single_dataview(
         batch_mode=False,
         log_level=log_level,
         log_format=log_format,
-        stream=sys.stderr if stdout_json_output else None,
+        stream=sys.stderr if (stdout_json_output or processing_config.log_to_stderr) else None,
     )
     run_mode = "batch_worker" if batch_id else "single"
     logger = with_log_context(base_logger, run_mode=run_mode, data_view_id=data_view_id, batch_id=batch_id)

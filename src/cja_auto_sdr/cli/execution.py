@@ -574,6 +574,7 @@ def _run_batch_mode(
         notion_create_database=getattr(args, "notion_create_database", False),
         json_typed=getattr(args, "json_typed", False),
         fail_on_quality=getattr(args, "fail_on_quality", None),
+        log_to_stderr=bool(getattr(args, "agent_mode", False)),
     )
 
     results = processor.process_batch(data_views)
@@ -818,6 +819,7 @@ def _run_single_mode(
         notion_create_database=getattr(args, "notion_create_database", False),
         json_typed=getattr(args, "json_typed", False),
         fail_on_quality=getattr(args, "fail_on_quality", None),
+        log_to_stderr=bool(getattr(args, "agent_mode", False)),
     )
     processed_results = [result]
     git_step_ok = True
