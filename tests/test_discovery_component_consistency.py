@@ -142,7 +142,7 @@ def test_show_stats_error_shaped_component_payload_falls_back_to_error_row(
 
     stats_out = io.StringIO()
     with redirect_stdout(stats_out):
-        assert show_stats(["dv_1"], output_format="json", output_file="-", quiet=True) is True
+        assert show_stats(["dv_1"], output_format="json", output_file="-", quiet=True) is False
     payload = json.loads(stats_out.getvalue())
 
     assert payload["count"] == 1

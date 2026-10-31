@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import logging
 import sys
 from unittest.mock import patch
 
@@ -531,3 +532,175 @@ class TestAgentModeFileOnlyNeverSilent:
         assert exit_code == 0
         assert mock_diff.call_args.kwargs["output_to_stdout"] is False
         assert mock_diff.call_args.kwargs["quiet"] is False
+
+
+class TestAgentModeOutputFileLogRouting:
+    """--agent-mode keeps stdout free of log records even when the SDR goes to a file."""
+
+    def test_agent_mode_output_file_keeps_stdout_free_of_logs(self, tmp_path):
+        from cja_auto_sdr.generator import ProcessingConfig, process_single_dataview
+
+        captured: dict = {}
+
+        class _Stop(Exception):
+            pass
+
+        def fake_setup_logging(*_args, **kwargs):
+            captured["stream"] = kwargs.get("stream")
+            raise _Stop
+
+        config = ProcessingConfig(
+            output_format="json",
+            output_file=str(tmp_path / "x.json"),
+            log_format="json",
+            log_to_stderr=True,
+        )
+        with patch("cja_auto_sdr.generator.setup_logging", side_effect=fake_setup_logging):
+            with pytest.raises(_Stop):
+                process_single_dataview("dv_test", processing_config=config)
+
+        assert captured["stream"] is sys.stderr
+
+    def test_default_processing_config_keeps_logs_on_stdout(self, tmp_path):
+        from cja_auto_sdr.generator import ProcessingConfig, process_single_dataview
+
+        captured: dict = {}
+
+        class _Stop(Exception):
+            pass
+
+        def fake_setup_logging(*_args, **kwargs):
+            captured["stream"] = kwargs.get("stream")
+            raise _Stop
+
+        config = ProcessingConfig(output_format="json", output_file=str(tmp_path / "x.json"))
+        with patch("cja_auto_sdr.generator.setup_logging", side_effect=fake_setup_logging):
+            with pytest.raises(_Stop):
+                process_single_dataview("dv_test", processing_config=config)
+
+        assert captured["stream"] is None
+
+    @staticmethod
+    def _run_tolerant(argv_tail: list[str]) -> None:
+        from cja_auto_sdr.generator import _main_impl
+
+        with patch.object(sys, "argv", ["cja_auto_sdr", *argv_tail]):
+            try:
+                _main_impl()
+            except SystemExit:
+                pass
+
+    def test_main_passes_log_to_stderr_for_agent_mode_single(self, tmp_path):
+        from cja_auto_sdr.pipeline.models import ProcessingResult
+
+        out = str(tmp_path / "x.json")
+        result = ProcessingResult(data_view_id="dv_test", data_view_name="n", success=True, duration=0.1)
+        with (
+            patch("cja_auto_sdr.generator.resolve_data_view_names", return_value=(["dv_test"], {})),
+            patch("cja_auto_sdr.generator.process_single_dataview", return_value=result) as mock_single,
+        ):
+            self._run_tolerant(["dv_test", "--agent-mode", "--output", out])
+        assert mock_single.call_args.kwargs["log_to_stderr"] is True
+
+        with (
+            patch("cja_auto_sdr.generator.resolve_data_view_names", return_value=(["dv_test"], {})),
+            patch("cja_auto_sdr.generator.process_single_dataview", return_value=result) as mock_single,
+        ):
+            self._run_tolerant(["dv_test", "--output", out, "--format", "json"])
+        assert mock_single.call_args.kwargs["log_to_stderr"] is False
+
+    def test_inventory_summary_logs_to_stderr_when_requested(self, tmp_path):
+        from cja_auto_sdr.generator import process_inventory_summary
+
+        for log_to_stderr, expected in ((True, sys.stderr), (False, None)):
+            with (
+                patch("cja_auto_sdr.generator.setup_logging", return_value=logging.getLogger("t")) as mock_setup,
+                patch("cja_auto_sdr.generator.initialize_cja", return_value=None),
+            ):
+                process_inventory_summary(
+                    "dv_test",
+                    output_format="json",
+                    output_file=str(tmp_path / "s.json"),
+                    log_to_stderr=log_to_stderr,
+                )
+            assert mock_setup.call_args.kwargs["stream"] is expected
+
+    def test_main_passes_log_to_stderr_for_agent_mode_inventory_summary(self, tmp_path):
+        out = str(tmp_path / "s.json")
+        for extra, expected in ((["--agent-mode"], True), ([], False)):
+            with (
+                patch("cja_auto_sdr.generator.resolve_data_view_names", return_value=(["dv_test"], {})),
+                patch("cja_auto_sdr.generator.process_inventory_summary", return_value={}) as mock_summary,
+            ):
+                self._run_tolerant(
+                    [
+                        "dv_test",
+                        "--inventory-summary",
+                        "--include-segments",
+                        "--format",
+                        "json",
+                        "--output",
+                        out,
+                        *extra,
+                    ]
+                )
+            assert mock_summary.call_args.kwargs["log_to_stderr"] is expected
+
+    def test_main_passes_log_to_stderr_for_agent_mode_quality_report(self, tmp_path, monkeypatch):
+        from cja_auto_sdr.pipeline.models import ProcessingResult
+
+        monkeypatch.chdir(tmp_path)
+
+        result = ProcessingResult(data_view_id="dv_test", data_view_name="n", success=True, duration=0.1)
+        for extra, expected in ((["--agent-mode"], True), ([], False)):
+            with (
+                patch("cja_auto_sdr.generator.resolve_data_view_names", return_value=(["dv_test"], {})),
+                patch("cja_auto_sdr.generator.process_single_dataview", return_value=result) as mock_single,
+            ):
+                self._run_tolerant(["dv_test", "--quality-report", "json", "--output-dir", str(tmp_path), *extra])
+            assert mock_single.call_args.kwargs["log_to_stderr"] is expected
+
+    def test_batch_worker_inherits_log_to_stderr(self):
+        from cja_auto_sdr.pipeline.models import ProcessingResult, WorkerArgs
+        from cja_auto_sdr.pipeline.workers import process_single_dataview_worker
+
+        result = ProcessingResult(data_view_id="dv_test", data_view_name="n", success=True, duration=0.1)
+        with patch("cja_auto_sdr.generator.process_single_dataview", return_value=result) as mock_single:
+            process_single_dataview_worker(WorkerArgs(data_view_id="dv_test", log_to_stderr=True))
+        assert mock_single.call_args.kwargs["processing_config"].log_to_stderr is True
+
+    def test_batch_processor_logs_to_stderr_only_when_requested(self, tmp_path):
+        from cja_auto_sdr.pipeline.batch import BatchProcessor
+
+        with patch("cja_auto_sdr.generator.setup_logging") as mock_setup:
+            BatchProcessor(config_file="config.json", output_dir=str(tmp_path), log_to_stderr=True)
+        assert mock_setup.call_args.kwargs["stream"] is sys.stderr
+
+        with patch("cja_auto_sdr.generator.setup_logging") as mock_setup:
+            BatchProcessor(config_file="config.json", output_dir=str(tmp_path))
+        assert "stream" not in mock_setup.call_args.kwargs
+
+    def test_agent_mode_batch_passes_log_to_stderr_to_processor(self, tmp_path):
+        with (
+            patch("cja_auto_sdr.generator.resolve_data_view_names", return_value=(["dv_a", "dv_b"], {})),
+            patch("cja_auto_sdr.generator.BatchProcessor") as mock_processor,
+        ):
+            mock_processor.return_value.process_batch.return_value = {"successful": [], "failed": []}
+            self._run_tolerant(["--batch", "dv_a", "dv_b", "--agent-mode", "--output", str(tmp_path / "x.json")])
+        assert mock_processor.call_args.kwargs["log_to_stderr"] is True
+
+    def test_agent_mode_output_file_log_record_lands_on_stderr(self, tmp_path, capfd, monkeypatch):
+        from cja_auto_sdr.generator import ProcessingConfig, process_single_dataview
+
+        monkeypatch.chdir(tmp_path)
+        config = ProcessingConfig(
+            config_file=str(tmp_path / "missing_config.json"),
+            output_format="json",
+            output_file=str(tmp_path / "x.json"),
+            log_format="json",
+            log_to_stderr=True,
+        )
+        process_single_dataview("dv_test", processing_config=config)
+        captured = capfd.readouterr()
+        assert '"level"' in captured.err
+        assert '"level"' not in captured.out

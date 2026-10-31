@@ -204,7 +204,7 @@ Use `--explain-exit-code CODE` to get a human-readable explanation of any exit c
 |-------------------|-----------------------------------|----------------------|
 | SDR reports       | Current directory (default)       | `--output-dir PATH`  |
 | Snapshots         | `./snapshots/`                    | `--snapshot-dir DIR` |
-| Log output        | stderr (structured or text)       | `--log-level`, `--log-format json` |
+| Log output        | stderr with `--agent-mode` or `--output -`; otherwise stdout | `--log-level`, `--log-format json` |
 | Org-report cache  | `~/.cja_auto_sdr/cache/`          | n/a                  |
 | Profiles          | `~/.cja/orgs/<name>/`             | `--profile`, `CJA_PROFILE`, `CJA_HOME` |
 

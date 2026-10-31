@@ -169,7 +169,7 @@ def test_show_stats_continues_after_unexpected_runtime_error(capsys: pytest.Capt
 
         result = generator.show_stats(["dv_bad", "dv_ok"], output_format="json")
 
-    assert result is True
+    assert result is False
     payload = json.loads(capsys.readouterr().out)
     assert payload["count"] == 2
     error_row = next(item for item in payload["stats"] if item["id"] == "dv_bad")
