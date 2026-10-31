@@ -204,3 +204,51 @@ def test_console_truncation_marks_ellipsis():
 
     assert _format_diff_value("x" * 40) == "x" * 30 + "..."
     assert _format_diff_value("x" * 30) == "x" * 30
+
+
+def _inventory_result() -> DiffResult:
+    from cja_auto_sdr.diff.models import ChangeType, InventoryItemDiff
+
+    def item(i, n, ct, kind, fields=None):
+        return InventoryItemDiff(id=i, name=n, change_type=ct, inventory_type=kind, changed_fields=fields)
+
+    segs = [
+        item("s_new", "New seg", ChangeType.ADDED, "segment"),
+        item("s_old", "Old seg", ChangeType.REMOVED, "segment"),
+        item("s_mod", "Mod seg", ChangeType.MODIFIED, "segment", {"description": ("a", "b")}),
+    ]
+    cms = [item("cm_new", "New cm", ChangeType.ADDED, "calculated_metric")]
+    return DiffResult(
+        summary=DiffSummary(
+            segments_added=1,
+            segments_removed=1,
+            segments_modified=1,
+            calc_metrics_added=1,
+        ),
+        metadata_diff=MetadataDiff(source_name="A", target_name="B", source_id="dv_a", target_id="dv_b"),
+        metric_diffs=[],
+        dimension_diffs=[],
+        calc_metrics_diffs=cms,
+        segments_diffs=segs,
+    )
+
+
+def test_grouped_lists_inventory_changes():
+    from cja_auto_sdr.output.diff.grouped import write_diff_grouped_by_field_output
+
+    out = write_diff_grouped_by_field_output(_inventory_result(), use_color=False)
+    seg_section = out.split("Segments")[1]
+    for text in ("s_new", "New seg", "s_old", "Old seg", "s_mod", "Mod seg"):
+        assert text in seg_section
+    assert "Calculated Metrics" in out
+    assert "cm_new" in out.split("Calculated Metrics")[1]
+    assert "Total changes: 4" in out
+
+
+def test_grouped_inventory_follows_limit():
+    from cja_auto_sdr.output.diff.grouped import write_diff_grouped_by_field_output
+
+    out = write_diff_grouped_by_field_output(_inventory_result(), use_color=False, limit=1)
+    assert "... and 2 more" in out.split("Segments")[1]
+    unlimited = write_diff_grouped_by_field_output(_inventory_result(), use_color=False, limit=0)
+    assert "more" not in unlimited.split("Segments")[1]
