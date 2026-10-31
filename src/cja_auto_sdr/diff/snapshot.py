@@ -14,7 +14,7 @@ from cja_auto_sdr.core.discovery_payloads import (
     assess_dataview_lookup_payload,
 )
 from cja_auto_sdr.core.exceptions import attach_api_connection_hint_context
-from cja_auto_sdr.core.json_io import load_json_cached, write_json_atomic
+from cja_auto_sdr.core.json_io import load_json_cached, replace_non_finite, write_json_atomic
 from cja_auto_sdr.diff.models import DataViewSnapshot
 
 _SNAPSHOT_FAILURE_STAGE_ATTR = "_cja_snapshot_failure_stage"
@@ -261,7 +261,7 @@ class SnapshotManager:
     def save_snapshot(self, snapshot: DataViewSnapshot, filepath: str) -> str:
         """Save a snapshot to a JSON file."""
         filepath = os.path.abspath(filepath)
-        write_json_atomic(filepath, snapshot.to_dict(), indent=2, ensure_ascii=False)
+        write_json_atomic(filepath, replace_non_finite(snapshot.to_dict()), indent=2, ensure_ascii=False)
 
         self.logger.info(f"Snapshot saved to: {filepath}")
         return filepath
