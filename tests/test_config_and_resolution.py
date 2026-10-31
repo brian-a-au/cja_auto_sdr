@@ -1863,6 +1863,62 @@ class TestStatsResolutionFailureContract:
         assert [row["id"] for row in data["stats"]] == ["dv_ok", "dv_missing"]
         assert data["stats"][1]["name"] == "ERROR"
 
+    @staticmethod
+    def _mock_one_healthy_dv(mock_config, mock_cjapy) -> None:
+        mock_config.return_value = (True, "file", None)
+        mock_cja = MagicMock()
+        mock_cja.getDataView.return_value = {"name": "Healthy DV", "owner": {"name": "Alice"}, "description": ""}
+        mock_cja.getMetrics.return_value = pd.DataFrame({"id": ["m1"]})
+        mock_cja.getDimensions.return_value = pd.DataFrame({"id": ["d1"]})
+        mock_cjapy.CJA.return_value = mock_cja
+
+    @patch("cja_auto_sdr.generator.cjapy")
+    @patch("cja_auto_sdr.generator.configure_cjapy")
+    def test_stats_unresolved_name_becomes_failed_row_json(
+        self, mock_config, mock_cjapy, capsys: pytest.CaptureFixture
+    ) -> None:
+        self._mock_one_healthy_dv(mock_config, mock_cjapy)
+
+        code, captured = self._run_stats(
+            ["--stats", "dv_good", "Missing Name", "--format", "json"], (["dv_good"], {}), capsys
+        )
+
+        assert code == 1
+        data = json.loads(captured.out)
+        assert data["count"] == 2
+        assert [row["id"] for row in data["stats"]] == ["dv_good", "Missing Name"]
+        assert data["stats"][1]["name"] == "ERROR"
+        assert "Data view name not found" in data["stats"][1]["description"]
+
+    @patch("cja_auto_sdr.generator.cjapy")
+    @patch("cja_auto_sdr.generator.configure_cjapy")
+    def test_stats_unresolved_name_becomes_failed_row_human(
+        self, mock_config, mock_cjapy, capsys: pytest.CaptureFixture
+    ) -> None:
+        self._mock_one_healthy_dv(mock_config, mock_cjapy)
+
+        code, captured = self._run_stats(["--stats", "dv_good", "Missing Name"], (["dv_good"], {}), capsys)
+
+        assert code == 1
+        assert "dv_good" in captured.out
+        assert "Missing Name" in captured.out
+        assert "ERROR" in captured.out
+
+    @patch("cja_auto_sdr.generator.cjapy")
+    @patch("cja_auto_sdr.generator.configure_cjapy")
+    def test_stats_ambiguous_name_still_expands_without_error_row(
+        self, mock_config, mock_cjapy, capsys: pytest.CaptureFixture
+    ) -> None:
+        self._mock_one_healthy_dv(mock_config, mock_cjapy)
+
+        code, captured = self._run_stats(
+            ["--stats", "Dup", "--format", "json"], (["dv_a", "dv_b"], {"Dup": ["dv_a", "dv_b"]}), capsys
+        )
+
+        assert code == 0
+        data = json.loads(captured.out)
+        assert [row["id"] for row in data["stats"]] == ["dv_a", "dv_b"]
+
     def test_stats_resolution_failure_human_output_unchanged(self, capsys: pytest.CaptureFixture) -> None:
         code, captured = self._run_stats(["--stats", "dv_a", "--format", "console"], ([], {}), capsys)
 

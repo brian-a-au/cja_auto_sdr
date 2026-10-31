@@ -5843,9 +5843,11 @@ def show_stats(
     output_file: str | None = None,
     quiet: bool = False,
     profile: str | None = None,
+    unresolved_names: list[str] | None = None,
 ) -> bool:
     from cja_auto_sdr.cli.commands.stats import show_stats as _impl
 
+    extra: dict[str, Any] = {"unresolved_names": unresolved_names} if unresolved_names else {}
     return _impl(
         data_views=data_views,
         config_file=config_file,
@@ -5853,6 +5855,7 @@ def show_stats(
         output_file=output_file,
         quiet=quiet,
         profile=profile,
+        **extra,
     )
 
 
@@ -7258,7 +7261,9 @@ def _dispatch_post_validation_report_modes(
                 include_diagnostics=True,
                 emit_api_hints=False,
             )
-            resolved_ids, _, stats_resolution_diagnostics = _coerce_name_resolution_result(resolution_result)
+            resolved_ids, stats_name_map, stats_resolution_diagnostics = _coerce_name_resolution_result(
+                resolution_result
+            )
             if not resolved_ids:
                 _emit_discovery_error(
                     stats_resolution_diagnostics.error_message
@@ -7271,7 +7276,7 @@ def _dispatch_post_validation_report_modes(
         else:
             temp_logger = logging.getLogger("name_resolution")
             temp_logger.setLevel(logging.WARNING)
-            resolved_ids, _ = resolve_data_view_names(
+            resolved_ids, stats_name_map = resolve_data_view_names(
                 data_view_inputs,
                 args.config_file,
                 temp_logger,
@@ -7282,6 +7287,10 @@ def _dispatch_post_validation_report_modes(
             if not resolved_ids:
                 print(ConsoleColors.error("ERROR: No valid data views found"), file=sys.stderr)
                 sys.exit(1)
+        # A name that matched nothing must not vanish silently: report it as a failed row.
+        stats_unresolved_names = [
+            item for item in data_view_inputs if not is_data_view_id(item) and item not in stats_name_map
+        ]
         if run_state is not None:
             run_state["resolved_data_views"] = list(resolved_ids)
 
@@ -7298,6 +7307,7 @@ def _dispatch_post_validation_report_modes(
             output_file=getattr(args, "output", None),
             quiet=args.quiet,
             profile=getattr(args, "profile", None),
+            **({"unresolved_names": stats_unresolved_names} if stats_unresolved_names else {}),
         )
         if run_state is not None:
             run_state["output_format"] = stats_format

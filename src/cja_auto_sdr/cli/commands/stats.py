@@ -389,8 +389,12 @@ def show_stats(
     output_file: str | None = None,
     quiet: bool = False,
     profile: str | None = None,
+    unresolved_names: list[str] | None = None,
 ) -> bool:
-    """Show quick statistics about data view(s) without generating full reports."""
+    """Show quick statistics about data view(s) without generating full reports.
+
+    ``unresolved_names`` are data view names that matched nothing; each becomes a failed ERROR row.
+    """
     generator = _generator_module()
     is_stdout = output_file in ("-", "stdout")
     is_machine_readable = generator._is_machine_readable_output(output_format, output_file)
@@ -428,6 +432,9 @@ def show_stats(
         cja = generator.cjapy.CJA()
         logger = logging.getLogger(__name__)
         stats_data, failed_ids = _collect_stats_rows(cja, data_views, logger)
+        for unresolved in unresolved_names or []:
+            stats_data.append(_stats_error_row(unresolved, ValueError("Data view name not found")))
+            failed_ids.append(unresolved)
 
         if output_format == "json" or (is_stdout and output_format != "csv"):
             output_data = json.dumps(
