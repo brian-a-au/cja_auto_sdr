@@ -746,11 +746,15 @@ def handle_diff_snapshot_command(
             if not quiet and not quiet_diff:
                 print()
 
+        # Default labels belong to the roles before the swap: the saved snapshot is
+        # the source and the live data view is the target. They swap with the snapshots.
+        source_label = f"Snapshot ({source_snapshot.created_at[:10]})"
+        target_label = "Current"
         if reverse_diff:
             source_snapshot, target_snapshot = target_snapshot, source_snapshot
-
-        source_label = labels[0] if labels else f"Snapshot ({source_snapshot.created_at[:10]})"
-        target_label = labels[1] if labels else "Current"
+            source_label, target_label = target_label, source_label
+        if labels:
+            source_label, target_label = labels
         diff_result = comparator.compare(source_snapshot, target_snapshot, source_label, target_label)
 
         exit_code_override = None
