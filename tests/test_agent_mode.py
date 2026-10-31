@@ -616,3 +616,39 @@ class TestAgentModeOutputFileLogRouting:
         with patch("cja_auto_sdr.generator.process_single_dataview", return_value=result) as mock_single:
             process_single_dataview_worker(WorkerArgs(data_view_id="dv_test", log_to_stderr=True))
         assert mock_single.call_args.kwargs["processing_config"].log_to_stderr is True
+
+    def test_batch_processor_logs_to_stderr_only_when_requested(self, tmp_path):
+        from cja_auto_sdr.pipeline.batch import BatchProcessor
+
+        with patch("cja_auto_sdr.generator.setup_logging") as mock_setup:
+            BatchProcessor(config_file="config.json", output_dir=str(tmp_path), log_to_stderr=True)
+        assert mock_setup.call_args.kwargs["stream"] is sys.stderr
+
+        with patch("cja_auto_sdr.generator.setup_logging") as mock_setup:
+            BatchProcessor(config_file="config.json", output_dir=str(tmp_path))
+        assert "stream" not in mock_setup.call_args.kwargs
+
+    def test_agent_mode_batch_passes_log_to_stderr_to_processor(self, tmp_path):
+        with (
+            patch("cja_auto_sdr.generator.resolve_data_view_names", return_value=(["dv_a", "dv_b"], {})),
+            patch("cja_auto_sdr.generator.BatchProcessor") as mock_processor,
+        ):
+            mock_processor.return_value.process_batch.return_value = {"successful": [], "failed": []}
+            self._run_tolerant(["--batch", "dv_a", "dv_b", "--agent-mode", "--output", str(tmp_path / "x.json")])
+        assert mock_processor.call_args.kwargs["log_to_stderr"] is True
+
+    def test_agent_mode_output_file_log_record_lands_on_stderr(self, tmp_path, capfd, monkeypatch):
+        from cja_auto_sdr.generator import ProcessingConfig, process_single_dataview
+
+        monkeypatch.chdir(tmp_path)
+        config = ProcessingConfig(
+            config_file=str(tmp_path / "missing_config.json"),
+            output_format="json",
+            output_file=str(tmp_path / "x.json"),
+            log_format="json",
+            log_to_stderr=True,
+        )
+        process_single_dataview("dv_test", processing_config=config)
+        captured = capfd.readouterr()
+        assert '"level"' in captured.err
+        assert '"level"' not in captured.out
