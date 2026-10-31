@@ -58,8 +58,8 @@ def _warn_diff_output_ignored(output_path: str | None, *, command: str) -> None:
 
 
 def _warn_diff_stdout_non_json(output_path: str | None, *, output_format: str) -> None:
-    """Warn that ``--output -`` only streams JSON for diff-family commands."""
-    if output_path in ("-", "stdout") and output_format != "json":
+    """Warn that ``--output -`` only streams JSON; console output writes no file, so it is skipped."""
+    if output_path in ("-", "stdout") and output_format not in ("json", "console"):
         print(
             _generator_module().ConsoleColors.warning(
                 "Warning: --output - is only supported with --format json for diff commands; "

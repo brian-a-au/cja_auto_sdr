@@ -108,6 +108,7 @@ def resolve_inventory_mode_configuration(args: argparse.Namespace, *, argv: list
     return inventory_order
 
 
+# Imports generator directly: tests stub the generator module and its attributes.
 def _warn_output_ignored(output_file: str | None, *, scope: str, hint: str) -> None:
     from cja_auto_sdr.generator import _warn_output_ignored as _impl
 

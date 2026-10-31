@@ -1239,3 +1239,11 @@ def test_diff_output_dash_rejected(tmp_path, monkeypatch, capsys, mode):
     assert code == 1
     assert "--diff-output does not accept '-'" in capsys.readouterr().err
     assert not (tmp_path / "-").exists()
+
+
+def test_compare_snapshots_console_stdout_does_not_warn(tmp_path, monkeypatch, capsys):
+    a, b = _write_two_snapshots(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    code = _run_main(monkeypatch, ["--compare-snapshots", a, b, "--output", "-"])
+    assert code == 0
+    assert "only supported with --format json" not in capsys.readouterr().err

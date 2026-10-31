@@ -2162,6 +2162,17 @@ class TestSingleModeFailure:
 # =========================================================================
 
 
+def _hermetic_env(tmp_path):
+    """Environment with HOME in tmp_path and no CJA credentials, so a dev machine's config cannot leak in."""
+    import os
+
+    drop = ("CJA_", "ORG_ID", "CLIENT_ID", "SECRET", "SCOPES", "SANDBOX")
+    env = {k: v for k, v in os.environ.items() if not k.startswith(drop)}
+    env["HOME"] = str(tmp_path)
+    env["USERPROFILE"] = str(tmp_path)
+    return env
+
+
 class TestOutputIgnoredWarnings:
     """Modes that never write --output FILE warn instead of silently ignoring it."""
 
@@ -2173,13 +2184,21 @@ class TestOutputIgnoredWarnings:
     @patch("cja_auto_sdr.generator.build_quality_step_summary", return_value="")
     def test_batch_output_file_warns(self, _bqs, _aghs, _aqi, mock_bp_cls, _resolve, capsys):
         mock_bp_cls.return_value.process_batch.return_value = {"successful": [], "failed": [], "total": 0}
-        args = _make_args(data_views=["dv_1", "dv_2"], batch=True, output="report.xlsx")
-        with patch("cja_auto_sdr.generator.parse_arguments", return_value=args):
-            try:
-                _main_impl()
-            except SystemExit:
-                pass
-        err = capsys.readouterr().err
+
+        def run(**kw):
+            args = _make_args(data_views=["dv_1", "dv_2"], batch=True, **kw)
+            code = None
+            with patch("cja_auto_sdr.generator.parse_arguments", return_value=args):
+                try:
+                    _main_impl()
+                except SystemExit as e:
+                    code = e.code
+            return code, capsys.readouterr().err
+
+        plain_code, plain_err = run()
+        code, err = run(output="report.xlsx")
+        assert code == plain_code
+        assert "--output is ignored" not in plain_err
         assert (
             "Warning: --output is ignored with --batch; use --output-dir to choose the folder for batch output." in err
         )
@@ -2223,6 +2242,7 @@ class TestOutputIgnoredWarnings:
             text=True,
             check=False,
             cwd=tmp_path,
+            env=_hermetic_env(tmp_path),
         )
         assert result.returncode == 0
         assert (
@@ -2237,8 +2257,17 @@ class TestOutputIgnoredWarnings:
         import sys
 
         base = [sys.executable, "-m", "cja_auto_sdr", "--config-status"]
-        plain = subprocess.run(base, capture_output=True, text=True, check=False, cwd=tmp_path)
-        result = subprocess.run([*base, "--output", "x.txt"], capture_output=True, text=True, check=False, cwd=tmp_path)
+        plain = subprocess.run(
+            base, capture_output=True, text=True, check=False, cwd=tmp_path, env=_hermetic_env(tmp_path)
+        )
+        result = subprocess.run(
+            [*base, "--output", "x.txt"],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=tmp_path,
+            env=_hermetic_env(tmp_path),
+        )
         assert result.returncode == plain.returncode
         assert (
             "Warning: --output is ignored with --config-status; "
