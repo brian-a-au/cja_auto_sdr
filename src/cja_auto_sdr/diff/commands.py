@@ -87,6 +87,28 @@ def _write_diff_report(
         )
 
 
+def _print_cross_data_view_inventory_error(
+    generator: Any,
+    source_snapshot: Any,
+    target_name: str | None,
+    target_id: str,
+) -> None:
+    """Explain why inventory comparison needs both sides to be the same data view."""
+    print(
+        generator.ConsoleColors.error("ERROR: Inventory comparison requires snapshots from the same data view."),
+        file=sys.stderr,
+    )
+    print(f"  Source: {source_snapshot.data_view_name} ({source_snapshot.data_view_id})", file=sys.stderr)
+    target_text = f"{target_name} ({target_id})" if target_name else target_id
+    print(f"  Target: {target_text}", file=sys.stderr)
+    print(file=sys.stderr)
+    print("Inventory IDs are data-view-scoped and cannot be matched across different data views.", file=sys.stderr)
+    print(
+        "Remove --include-segments, --include-calculated, --include-derived for cross-data-view comparison.",
+        file=sys.stderr,
+    )
+
+
 def _populate_diff_advisory_rollup(
     runtime_details: dict[str, Any] | None,
     diff_result: DiffResult,
@@ -605,6 +627,10 @@ def handle_diff_snapshot_command(
         snapshot_manager = generator.SnapshotManager(logger)
         source_snapshot = snapshot_manager.load_snapshot(snapshot_file)
 
+        if (include_calc_metrics or include_segments) and source_snapshot.data_view_id != data_view_id:
+            _print_cross_data_view_inventory_error(generator, source_snapshot, None, data_view_id)
+            return False, False, None
+
         missing_inventory = []
         if include_calc_metrics and not source_snapshot.has_calculated_metrics_inventory:
             missing_inventory.append("calculated metrics")
@@ -882,21 +908,11 @@ def handle_compare_snapshots_command(
         target_snapshot = snapshot_manager.load_snapshot(target_file)
 
         if (include_calc_metrics or include_segments) and source_snapshot.data_view_id != target_snapshot.data_view_id:
-            print(
-                generator.ConsoleColors.error(
-                    "ERROR: Inventory comparison requires snapshots from the same data view."
-                ),
-                file=sys.stderr,
-            )
-            print(f"  Source: {source_snapshot.data_view_name} ({source_snapshot.data_view_id})", file=sys.stderr)
-            print(f"  Target: {target_snapshot.data_view_name} ({target_snapshot.data_view_id})", file=sys.stderr)
-            print(file=sys.stderr)
-            print(
-                "Inventory IDs are data-view-scoped and cannot be matched across different data views.", file=sys.stderr
-            )
-            print(
-                "Remove --include-segments, --include-calculated, --include-derived for cross-data-view comparison.",
-                file=sys.stderr,
+            _print_cross_data_view_inventory_error(
+                generator,
+                source_snapshot,
+                target_snapshot.data_view_name,
+                target_snapshot.data_view_id,
             )
             return False, False, None
 

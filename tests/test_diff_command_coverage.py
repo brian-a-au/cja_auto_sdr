@@ -941,3 +941,35 @@ class TestDiffSnapshotReverseLabels:
     def test_diff_snapshot_user_labels_unchanged_under_reverse(self, tmp_path):
         _, captured = self._run(tmp_path, reverse_diff=True, labels=("L1", "L2"))
         assert captured["labels"] == ("L1", "L2")
+
+
+def test_diff_snapshot_inventory_requires_same_data_view(tmp_path, capsys):
+    from cja_auto_sdr.diff.commands import handle_diff_snapshot_command
+    from cja_auto_sdr.diff.models import DataViewSnapshot
+
+    saved = DataViewSnapshot(
+        created_at="2025-06-01T00:00:00+00:00",
+        data_view_id="dv_A",
+        data_view_name="DV A",
+        metrics=[],
+        dimensions=[],
+    )
+    snap_file = tmp_path / "baseline.json"
+    snap_file.write_text(json.dumps(saved.to_dict()))
+
+    with (
+        patch("cja_auto_sdr.generator.configure_cjapy") as configure,
+        patch("cja_auto_sdr.generator.cjapy"),
+        patch("cja_auto_sdr.generator.SnapshotManager.create_snapshot") as create,
+    ):
+        result = handle_diff_snapshot_command(
+            data_view_id="dv_B",
+            snapshot_file=str(snap_file),
+            include_segments=True,
+            quiet=True,
+            quiet_diff=True,
+        )
+    assert result == (False, False, None)
+    assert "Inventory comparison requires snapshots from the same data view." in capsys.readouterr().err
+    configure.assert_not_called()
+    create.assert_not_called()
