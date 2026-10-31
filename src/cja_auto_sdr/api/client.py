@@ -40,7 +40,7 @@ CredentialConfigValue = str | Sequence[str] | None
 def _bootstrap_dotenv(logger: logging.Logger) -> None:
     """Load .env variables if python-dotenv is available."""
     try:
-        from dotenv import load_dotenv
+        from dotenv import find_dotenv, load_dotenv
     except ImportError:
         logger.debug("python-dotenv not installed (.env files will not be auto-loaded)")
         return
@@ -49,7 +49,7 @@ def _bootstrap_dotenv(logger: logging.Logger) -> None:
         return
 
     try:
-        dotenv_loaded = load_dotenv()
+        dotenv_loaded = load_dotenv(find_dotenv(usecwd=True))
         if dotenv_loaded:
             logger.debug(".env file found and loaded")
         else:
