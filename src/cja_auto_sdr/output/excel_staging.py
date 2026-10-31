@@ -43,7 +43,12 @@ def staged_excel_writer(destination: str | Path) -> Iterator[pd.ExcelWriter]:
     try:
         workbook_file = staged.open("wb")
         try:
-            writer = pd.ExcelWriter(workbook_file, engine="xlsxwriter")
+            # Cell text from the API is data, never a formula (e.g. a name like "=Revenue").
+            writer = pd.ExcelWriter(
+                workbook_file,
+                engine="xlsxwriter",
+                engine_kwargs={"options": {"strings_to_formulas": False}},
+            )
             try:
                 yield writer
             except BaseException:
