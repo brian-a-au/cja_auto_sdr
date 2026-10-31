@@ -646,8 +646,10 @@ class TestAgentModeOutputFileLogRouting:
                 )
             assert mock_summary.call_args.kwargs["log_to_stderr"] is expected
 
-    def test_main_passes_log_to_stderr_for_agent_mode_quality_report(self):
+    def test_main_passes_log_to_stderr_for_agent_mode_quality_report(self, tmp_path, monkeypatch):
         from cja_auto_sdr.pipeline.models import ProcessingResult
+
+        monkeypatch.chdir(tmp_path)
 
         result = ProcessingResult(data_view_id="dv_test", data_view_name="n", success=True, duration=0.1)
         for extra, expected in ((["--agent-mode"], True), ([], False)):
@@ -655,7 +657,7 @@ class TestAgentModeOutputFileLogRouting:
                 patch("cja_auto_sdr.generator.resolve_data_view_names", return_value=(["dv_test"], {})),
                 patch("cja_auto_sdr.generator.process_single_dataview", return_value=result) as mock_single,
             ):
-                self._run_tolerant(["dv_test", "--quality-report", "json", *extra])
+                self._run_tolerant(["dv_test", "--quality-report", "json", "--output-dir", str(tmp_path), *extra])
             assert mock_single.call_args.kwargs["log_to_stderr"] is expected
 
     def test_batch_worker_inherits_log_to_stderr(self):
