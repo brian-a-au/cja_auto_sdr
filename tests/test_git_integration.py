@@ -307,6 +307,36 @@ class TestSaveGitFriendlySnapshot:
 
         assert metadata["snapshot_version"] == "2.0"
 
+    def test_all_files_are_strict_json_without_nan(self, tmp_path):
+        """DIFF-1: NaN from pandas records must not reach any git-friendly file."""
+
+        def _raise(token):
+            raise ValueError(f"non-RFC-8259 token {token}")
+
+        nan = float("nan")
+        snapshot = DataViewSnapshot(
+            data_view_id="dv_12345",
+            data_view_name="Test",
+            owner=nan,
+            metrics=[{"id": "m1", "description": nan}],
+            dimensions=[{"id": "d1", "description": nan}],
+            calculated_metrics_inventory=[{"id": "c1", "description": nan}],
+            segments_inventory=[{"id": "s1", "description": nan}],
+        )
+
+        saved_files = save_git_friendly_snapshot(snapshot, tmp_path)
+
+        assert set(saved_files) == {"metrics", "dimensions", "calculated_metrics", "segments", "metadata"}
+        parsed = {
+            name: json.loads(Path(path).read_text(encoding="utf-8"), parse_constant=_raise)
+            for name, path in saved_files.items()
+        }
+        assert parsed["metrics"][0]["description"] is None
+        assert parsed["dimensions"][0]["description"] is None
+        assert parsed["calculated_metrics"][0]["description"] is None
+        assert parsed["segments"][0]["description"] is None
+        assert parsed["metadata"]["owner"] is None
+
 
 class TestGenerateGitCommitMessage:
     """Tests for generate_git_commit_message function."""

@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Literal
 
 from cja_auto_sdr.core.error_policies import RECOVERABLE_GIT_SUBPROCESS_EXCEPTIONS
+from cja_auto_sdr.core.json_io import replace_non_finite
 from cja_auto_sdr.core.version import __version__
 from cja_auto_sdr.diff.models import DataViewSnapshot, DiffResult
 
@@ -150,14 +151,14 @@ def save_git_friendly_snapshot(
     metrics_sorted = sorted(snapshot.metrics, key=lambda x: x.get("id", ""))
     metrics_file = dv_dir / "metrics.json"
     with open(metrics_file, "w", encoding="utf-8") as f:
-        json.dump(metrics_sorted, f, indent=2, ensure_ascii=False, default=str)
+        json.dump(replace_non_finite(metrics_sorted), f, indent=2, ensure_ascii=False, default=str)
     saved_files["metrics"] = metrics_file
     logger.debug(f"Saved {len(metrics_sorted)} metrics to {metrics_file}")
 
     dimensions_sorted = sorted(snapshot.dimensions, key=lambda x: x.get("id", ""))
     dimensions_file = dv_dir / "dimensions.json"
     with open(dimensions_file, "w", encoding="utf-8") as f:
-        json.dump(dimensions_sorted, f, indent=2, ensure_ascii=False, default=str)
+        json.dump(replace_non_finite(dimensions_sorted), f, indent=2, ensure_ascii=False, default=str)
     saved_files["dimensions"] = dimensions_file
     logger.debug(f"Saved {len(dimensions_sorted)} dimensions to {dimensions_file}")
 
@@ -168,7 +169,7 @@ def save_git_friendly_snapshot(
         )
         calc_metrics_file = dv_dir / "calculated-metrics.json"
         with open(calc_metrics_file, "w", encoding="utf-8") as f:
-            json.dump(calc_metrics_sorted, f, indent=2, ensure_ascii=False, default=str)
+            json.dump(replace_non_finite(calc_metrics_sorted), f, indent=2, ensure_ascii=False, default=str)
         saved_files["calculated_metrics"] = calc_metrics_file
         logger.debug(f"Saved {len(calc_metrics_sorted)} calculated metrics to {calc_metrics_file}")
 
@@ -176,7 +177,7 @@ def save_git_friendly_snapshot(
         segments_sorted = sorted(snapshot.segments_inventory, key=lambda x: x.get("id", x.get("segment_id", "")))
         segments_file = dv_dir / "segments.json"
         with open(segments_file, "w", encoding="utf-8") as f:
-            json.dump(segments_sorted, f, indent=2, ensure_ascii=False, default=str)
+            json.dump(replace_non_finite(segments_sorted), f, indent=2, ensure_ascii=False, default=str)
         saved_files["segments"] = segments_file
         logger.debug(f"Saved {len(segments_sorted)} segments to {segments_file}")
 
@@ -211,7 +212,7 @@ def save_git_friendly_snapshot(
 
     metadata_file = dv_dir / "metadata.json"
     with open(metadata_file, "w", encoding="utf-8") as f:
-        json.dump(metadata, f, indent=2, ensure_ascii=False, default=str)
+        json.dump(replace_non_finite(metadata), f, indent=2, ensure_ascii=False, default=str)
     saved_files["metadata"] = metadata_file
     logger.debug(f"Saved metadata to {metadata_file}")
 
