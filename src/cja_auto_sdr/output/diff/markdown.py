@@ -20,6 +20,7 @@ from cja_auto_sdr.output.diff.common import (
     _get_change_emoji,
     _get_inventory_change_detail,
 )
+from cja_auto_sdr.output.markdown_escape import escape_markdown_table_cell as _esc
 
 
 def _format_markdown_side_by_side(diff: ComponentDiff, source_label: str, target_label: str) -> list[str]:
@@ -42,23 +43,24 @@ def _format_markdown_side_by_side(diff: ComponentDiff, source_label: str, target
     lines.append(f"\n**`{diff.id}`** - {diff.name}\n")
 
     # Side-by-side table
-    lines.append(f"| Field | {source_label} | {target_label} |")
+    lines.append(f"| Field | {_esc(source_label)} | {_esc(target_label)} |")
     lines.append("| --- | --- | --- |")
 
     for field_name, (old_val, new_val) in diff.changed_fields.items():
         old_formatted = _format_diff_value(old_val, truncate=False)
         new_formatted = _format_diff_value(new_val, truncate=False)
+
+        # Truncate very long values (before escaping so an escape is never cut)
+        if len(old_formatted) > 50:
+            old_formatted = old_formatted[:47] + "..."
+        if len(new_formatted) > 50:
+            new_formatted = new_formatted[:47] + "..."
+
         # Use italic for empty values in markdown
-        old_str = "*(empty)*" if old_formatted == "(empty)" else old_formatted.replace("|", "\\|")
-        new_str = "*(empty)*" if new_formatted == "(empty)" else new_formatted.replace("|", "\\|")
+        old_str = "*(empty)*" if old_formatted == "(empty)" else _esc(old_formatted)
+        new_str = "*(empty)*" if new_formatted == "(empty)" else _esc(new_formatted)
 
-        # Truncate very long values
-        if len(old_str) > 50:
-            old_str = old_str[:47] + "..."
-        if len(new_str) > 50:
-            new_str = new_str[:47] + "..."
-
-        lines.append(f"| `{field_name}` | {old_str} | {new_str} |")
+        lines.append(f"| `{_esc(field_name)}` | {old_str} | {new_str} |")
 
     lines.append("")
     return lines
@@ -106,7 +108,7 @@ def write_diff_markdown_output(
         # Summary table
         md_parts.append("## Summary\n")
         md_parts.append(
-            f"| Component | {diff_result.source_label} | {diff_result.target_label} | Added | Removed | Modified | Unchanged | Changed |",
+            f"| Component | {_esc(diff_result.source_label)} | {_esc(diff_result.target_label)} | Added | Removed | Modified | Unchanged | Changed |",
         )
         md_parts.append("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
         md_parts.append(
@@ -152,8 +154,8 @@ def write_diff_markdown_output(
                 md_parts.append("| --- | --- | --- | --- |")
                 for diff in metric_changes:
                     symbol = _get_change_emoji(diff.change_type)
-                    detail = _get_change_detail(diff).replace("|", "\\|")
-                    md_parts.append(f"| {symbol} | `{diff.id}` | {diff.name} | {detail} |")
+                    detail = _get_change_detail(diff)
+                    md_parts.append(f"| {symbol} | `{_esc(diff.id)}` | {_esc(diff.name)} | {_esc(detail)} |")
 
                 # Add side-by-side detail for modified items
                 if side_by_side:
@@ -177,8 +179,8 @@ def write_diff_markdown_output(
                 md_parts.append("| --- | --- | --- | --- |")
                 for diff in dim_changes:
                     symbol = _get_change_emoji(diff.change_type)
-                    detail = _get_change_detail(diff).replace("|", "\\|")
-                    md_parts.append(f"| {symbol} | `{diff.id}` | {diff.name} | {detail} |")
+                    detail = _get_change_detail(diff)
+                    md_parts.append(f"| {symbol} | `{_esc(diff.id)}` | {_esc(diff.name)} | {_esc(detail)} |")
 
                 # Add side-by-side detail for modified items
                 if side_by_side:
@@ -207,8 +209,8 @@ def write_diff_markdown_output(
                     md_parts.append("| --- | --- | --- | --- |")
                     for diff in calc_changes:
                         symbol = _get_change_emoji(diff.change_type)
-                        detail = _get_inventory_change_detail(diff).replace("|", "\\|")
-                        md_parts.append(f"| {symbol} | `{diff.id}` | {diff.name} | {detail} |")
+                        detail = _get_inventory_change_detail(diff)
+                        md_parts.append(f"| {symbol} | `{_esc(diff.id)}` | {_esc(diff.name)} | {_esc(detail)} |")
                 else:
                     md_parts.append("*No changes*")
                 md_parts.append("")
@@ -222,8 +224,8 @@ def write_diff_markdown_output(
                     md_parts.append("| --- | --- | --- | --- |")
                     for diff in seg_changes:
                         symbol = _get_change_emoji(diff.change_type)
-                        detail = _get_inventory_change_detail(diff).replace("|", "\\|")
-                        md_parts.append(f"| {symbol} | `{diff.id}` | {diff.name} | {detail} |")
+                        detail = _get_inventory_change_detail(diff)
+                        md_parts.append(f"| {symbol} | `{_esc(diff.id)}` | {_esc(diff.name)} | {_esc(detail)} |")
                 else:
                     md_parts.append("*No changes*")
                 md_parts.append("")
