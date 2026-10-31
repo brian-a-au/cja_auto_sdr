@@ -1077,7 +1077,7 @@ class TestJsonTypedGeneration:
         payload = json.loads(open(result.output_file, encoding="utf-8").read())
         assert "schema_version" not in payload
         assert payload["metrics"][0]["fieldDefinition"] == json.dumps(_TYPED_METRICS[0]["fieldDefinition"], indent=2)
-        assert payload["data_view"]["components"] == "c1"
+        assert payload["data_view"]["components"] == "c1, c2, c3"
 
     def test_typed_capture_does_not_change_other_writers(self, tmp_path, mock_config_file):
         """Excel/CSV/HTML/Markdown from the same run are the same with or without typed capture."""

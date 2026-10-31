@@ -170,6 +170,24 @@ class TestCSVContentValidation:
 class TestJSONContentValidation:
     """Validate JSON files have correct structure and data."""
 
+    def test_json_data_view_joins_list_values(self, tmp_path, rich_metadata_dict):
+        details = pd.DataFrame(
+            [
+                {"name": "DV", "segmentList": "s@Org_aaa", "owner": "Ann"},
+                {"name": None, "segmentList": "s@Org_bbb", "owner": None},
+                {"name": "", "segmentList": "s@Org_ccc", "owner": float("nan")},
+            ]
+        )
+        logger = logging.getLogger("json_test")
+        path = write_json_output({"DataView Details": details}, rich_metadata_dict, "test", str(tmp_path), logger)
+
+        with open(path) as f:
+            data = json.load(f)
+
+        assert data["data_view"]["segmentList"] == "s@Org_aaa, s@Org_bbb, s@Org_ccc"
+        assert data["data_view"]["name"] == "DV"
+        assert data["data_view"]["owner"] == "Ann"
+
     def test_json_metrics_count_and_fields(self, tmp_path, rich_data_dict, rich_metadata_dict):
         logger = logging.getLogger("json_test")
         path = write_json_output(rich_data_dict, rich_metadata_dict, "test", str(tmp_path), logger)

@@ -594,6 +594,33 @@ def _frame_records(df: pd.DataFrame) -> list[dict[str, Any]]:
     return df.astype(object).where(df.notna(), None).to_dict(orient="records")
 
 
+def _merge_data_view_records(records: list[dict[str, Any]]) -> dict[str, Any]:
+    """Collapse split DataView Details rows into one object.
+
+    List fields are split across rows (one value per row); keep every value by
+    joining the non-empty ones with ``", "``. A single value is kept as is and
+    a field with no values keeps the first row's value.
+    """
+    if not records:
+        return {}
+    merged: dict[str, Any] = {}
+    for key, first in records[0].items():
+        values = [
+            value
+            for record in records
+            if (value := record.get(key)) is not None
+            and value != ""
+            and not (isinstance(value, float) and math.isnan(value))
+        ]
+        if len(values) > 1:
+            merged[key] = ", ".join(str(value) for value in values)
+        elif values:
+            merged[key] = values[0]
+        else:
+            merged[key] = first
+    return merged
+
+
 def _shared_json_section(
     sheet_name: str,
     records: list[dict[str, Any]],
@@ -659,7 +686,7 @@ def build_json_payload(
             json_data["dimensions"] = records
         elif sheet_name == "DataView Details":
             # For single-record sheets, store as object not array
-            json_data["data_view"] = records[0] if records else {}
+            json_data["data_view"] = _merge_data_view_records(records)
 
     _add_coverage_sections(json_data, coverage)
     return json_data
