@@ -478,7 +478,7 @@ class SegmentsInventoryBuilder:
 
         # Extract timestamps
         created = self._coerce_display_text(
-            segment_data.get("created", segment_data.get("createdDate", "")),
+            segment_data.get("created") or segment_data.get("createdDate") or segment_data.get("createDate", ""),
             fallback="",
         )
         modified = self._coerce_display_text(
