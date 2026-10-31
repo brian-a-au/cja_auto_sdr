@@ -106,6 +106,17 @@ def resolve_data_view_names(
                 resolution_diagnostics,
                 include_diagnostics=include_diagnostics,
             )
+
+        if identifiers and all(generator.is_data_view_id(identifier) for identifier in identifiers):
+            # IDs pass through unchanged; the listing would only feed a log line.
+            logger.debug("All identifiers are data view IDs; skipping client creation and listing")
+            return _build_name_resolution_result(
+                list(identifiers),
+                {},
+                generator.NameResolutionDiagnostics(),
+                include_diagnostics=include_diagnostics,
+            )
+
         cja = generator.cjapy.CJA()
 
         logger.debug("Fetching all data views for name resolution")
