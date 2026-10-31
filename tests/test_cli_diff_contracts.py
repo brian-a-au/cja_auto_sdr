@@ -1192,3 +1192,50 @@ def test_org_report_include_metadata_flag_is_unchanged():
     args = parse_arguments(["--org-report", "--include-metadata"])
     assert args.org_include_metadata is True
     assert args.include_metadata_changes is False
+
+
+def _write_two_snapshots(tmp_path: Path) -> list[str]:
+    from cja_auto_sdr.diff.models import DataViewSnapshot
+
+    paths = []
+    for label in ("source", "target"):
+        snapshot = DataViewSnapshot(data_view_id="dv_1", data_view_name="Test", metrics=[], dimensions=[])
+        path = tmp_path / f"{label}.json"
+        path.write_text(json.dumps(snapshot.to_dict()))
+        paths.append(str(path))
+    return paths
+
+
+def _run_main(monkeypatch, argv: list[str]) -> int:
+    from cja_auto_sdr.generator import main
+
+    monkeypatch.setattr(sys, "argv", ["cja_auto_sdr", *argv])
+    with pytest.raises(SystemExit) as exc_info:
+        main()
+    return exc_info.value.code
+
+
+def test_compare_snapshots_stdout_non_json_warns(tmp_path, monkeypatch, capsys):
+    a, b = _write_two_snapshots(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    code = _run_main(monkeypatch, ["--compare-snapshots", a, b, "--format", "markdown", "--output", "-"])
+    assert code == 0
+    assert (
+        "Warning: --output - is only supported with --format json for diff commands; "
+        "writing markdown output to a file instead."
+    ) in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("mode", ["compare-snapshots", "diff-snapshot", "diff"])
+def test_diff_output_dash_rejected(tmp_path, monkeypatch, capsys, mode):
+    a, b = _write_two_snapshots(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    argv = {
+        "compare-snapshots": ["--compare-snapshots", a, b],
+        "diff-snapshot": ["dv_1", "--diff-snapshot", a],
+        "diff": ["--diff", "dv_1", "dv_2"],
+    }[mode]
+    code = _run_main(monkeypatch, [*argv, "--diff-output", "-"])
+    assert code == 1
+    assert "--diff-output does not accept '-'" in capsys.readouterr().err
+    assert not (tmp_path / "-").exists()
