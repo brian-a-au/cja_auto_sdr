@@ -1291,3 +1291,28 @@ def test_diff_output_format_all_warns(tmp_path, capsys):
     )
     assert not target.exists()
     assert "--diff-output does not apply to --format all" in capsys.readouterr().err
+
+
+def test_short_quiet_flag_suppresses_compare_snapshots_banner(tmp_path, monkeypatch, capsys):
+    """-q must behave exactly like --quiet for diff commands."""
+    import json as _json
+    import sys as _sys
+    from unittest.mock import patch as _patch
+
+    from cja_auto_sdr.diff.models import DataViewSnapshot
+    from cja_auto_sdr.generator import main
+
+    for name in ("a.json", "b.json"):
+        snapshot = DataViewSnapshot(data_view_id="dv_1", data_view_name="DV", metrics=[], dimensions=[])
+        (tmp_path / name).write_text(_json.dumps(snapshot.to_dict()))
+    monkeypatch.chdir(tmp_path)
+
+    outputs = {}
+    for flag in ("-q", "--quiet"):
+        argv = ["cja_auto_sdr", "--compare-snapshots", "a.json", "b.json", flag]
+        with _patch.object(_sys, "argv", argv), pytest.raises(SystemExit):
+            main()
+        outputs[flag] = capsys.readouterr().out
+
+    assert "COMPARING TWO SNAPSHOTS" not in outputs["-q"]
+    assert outputs["-q"] == outputs["--quiet"]

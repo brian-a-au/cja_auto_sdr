@@ -249,6 +249,25 @@ class TestResolveAgentQuiet:
         assert resolve_agent_quiet(args, output_path=None) is True
 
     @patch("cja_auto_sdr.cli.agent_output._cli_option_specified_fn")
+    def test_resolve_agent_quiet_honors_quiet_explicit(self, mock_fn):
+        """-q has no long token in argv; the value recorded at parse time still counts."""
+        mock_fn.return_value = lambda opt, **kw: False
+        args = argparse.Namespace(run_summary_json=None, quiet_explicit=True)
+        assert resolve_agent_quiet(args, output_path=None) is True
+
+    @patch("cja_auto_sdr.cli.agent_output._cli_option_specified_fn")
+    def test_agent_mode_file_output_not_quiet_without_flag(self, mock_fn):
+        mock_fn.return_value = lambda opt, **kw: False
+        args = argparse.Namespace(run_summary_json=None, quiet_explicit=False, agent_mode=True)
+        assert resolve_agent_quiet(args, output_path="report.json") is False
+
+    def test_short_quiet_flag_is_recorded_at_parse_time(self):
+        from cja_auto_sdr.generator import parse_arguments
+
+        assert parse_arguments(["--compare-snapshots", "a", "b", "-q"]).quiet_explicit is True
+        assert parse_arguments(["--compare-snapshots", "a", "b"]).quiet_explicit is False
+
+    @patch("cja_auto_sdr.cli.agent_output._cli_option_specified_fn")
     def test_run_summary_json_stdout_implies_quiet(self, mock_fn):
         mock_fn.return_value = lambda opt, **kw: False
         args = argparse.Namespace(run_summary_json="-")
