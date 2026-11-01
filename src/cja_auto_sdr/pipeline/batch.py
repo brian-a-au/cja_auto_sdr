@@ -246,57 +246,79 @@ class BatchProcessor:
                     bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]",
                     disable=self.quiet,
                 ) as pbar:
+                    handled: set = set()
+                    stop_warned: list[bool] = []
+
+                    def _warn_stop(message: str) -> None:
+                        """Log the stop warning for the first failure only."""
+                        if not stop_warned:
+                            stop_warned.append(True)
+                            self.logger.warning(message, self.batch_id)
+
+                    def _record(future) -> bool:
+                        """Record one finished future; return True when the batch should stop."""
+                        handled.add(future)
+                        dv_id = future_to_dv[future]
+                        try:
+                            result = future.result()
+
+                            if result.success:
+                                results["successful"].append(result)
+                                pbar.set_postfix_str(f"✓ {dv_id[:20]}", refresh=True)
+                                self.logger.info("[%s] ✓ %s: SUCCESS (%.1fs)", self.batch_id, dv_id, result.duration)
+                                return False
+
+                            results["failed"].append(result)
+                            pbar.set_postfix_str(f"✗ {dv_id[:20]}", refresh=True)
+                            self.logger.error("[%s] ✗ %s: FAILED - %s", self.batch_id, dv_id, result.error_message)
+
+                            if not self.continue_on_error:
+                                _warn_stop(
+                                    "[%s] Stopping batch processing due to error (use --continue-on-error to continue)"
+                                )
+                                return True
+                            return False
+
+                        except Exception as e:  # Intentional: batch worker resilience boundary
+                            is_expected = isinstance(e, generator.RECOVERABLE_BATCH_WORKER_EXCEPTIONS)
+                            prefix = "EXCEPTION" if is_expected else "UNEXPECTED EXCEPTION"
+                            self.logger.error("[%s] ✗ %s: %s - %s", self.batch_id, dv_id, prefix, e)
+                            if not is_expected:
+                                self.logger.debug("Unexpected batch worker error", exc_info=True)
+                            results["failed"].append(
+                                generator.ProcessingResult(
+                                    data_view_id=dv_id,
+                                    data_view_name="Unknown",
+                                    success=False,
+                                    duration=0,
+                                    error_message=str(e),
+                                    failure_code=generator.FAILURE_CODE_BATCH_WORKER_EXCEPTION,
+                                    failure_reason=f"batch_worker_exception:{type(e).__name__}",
+                                ),
+                            )
+
+                            if not self.continue_on_error:
+                                _warn_stop("[%s] Stopping batch processing due to error")
+                                return True
+                            return False
+
+                    def _stop_and_collect_running() -> None:
+                        """Cancel queued futures, then record those already running (cancel() is False).
+
+                        Blocks on running workers like the executor's own ``with`` exit would.
+                        """
+                        cancelled = {f: f.cancel() for f in future_to_dv}
+                        for f in [
+                            f for f, was_cancelled in cancelled.items() if not was_cancelled and f not in handled
+                        ]:
+                            _record(f)
+                            pbar.update(1)
+
                     try:
                         for future in generator.as_completed(future_to_dv):
-                            dv_id = future_to_dv[future]
-                            try:
-                                result = future.result()
-
-                                if result.success:
-                                    results["successful"].append(result)
-                                    pbar.set_postfix_str(f"✓ {dv_id[:20]}", refresh=True)
-                                    self.logger.info(
-                                        "[%s] ✓ %s: SUCCESS (%.1fs)", self.batch_id, dv_id, result.duration
-                                    )
-                                else:
-                                    results["failed"].append(result)
-                                    pbar.set_postfix_str(f"✗ {dv_id[:20]}", refresh=True)
-                                    self.logger.error(
-                                        "[%s] ✗ %s: FAILED - %s", self.batch_id, dv_id, result.error_message
-                                    )
-
-                                    if not self.continue_on_error:
-                                        self.logger.warning(
-                                            "[%s] Stopping batch processing due to error (use --continue-on-error to continue)",
-                                            self.batch_id,
-                                        )
-                                        for pending in future_to_dv:
-                                            pending.cancel()
-                                        break
-
-                            except Exception as e:  # Intentional: batch worker resilience boundary
-                                is_expected = isinstance(e, generator.RECOVERABLE_BATCH_WORKER_EXCEPTIONS)
-                                prefix = "EXCEPTION" if is_expected else "UNEXPECTED EXCEPTION"
-                                self.logger.error("[%s] ✗ %s: %s - %s", self.batch_id, dv_id, prefix, e)
-                                if not is_expected:
-                                    self.logger.debug("Unexpected batch worker error", exc_info=True)
-                                results["failed"].append(
-                                    generator.ProcessingResult(
-                                        data_view_id=dv_id,
-                                        data_view_name="Unknown",
-                                        success=False,
-                                        duration=0,
-                                        error_message=str(e),
-                                        failure_code=generator.FAILURE_CODE_BATCH_WORKER_EXCEPTION,
-                                        failure_reason=f"batch_worker_exception:{type(e).__name__}",
-                                    ),
-                                )
-
-                                if not self.continue_on_error:
-                                    self.logger.warning("[%s] Stopping batch processing due to error", self.batch_id)
-                                    for pending in future_to_dv:
-                                        pending.cancel()
-                                    break
+                            if _record(future):
+                                _stop_and_collect_running()
+                                break
 
                             pbar.update(1)
                     except (KeyboardInterrupt, SystemExit):

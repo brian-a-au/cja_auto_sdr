@@ -101,7 +101,7 @@ def rich_data_dict():
 @pytest.fixture
 def rich_metadata_dict():
     return {
-        "Generated At": "2025-01-15 10:30:00 PST",
+        "Generated Date & timestamp and timezone": "2025-01-15 10:30:00 PST",
         "Data View ID": "dv_content_test",
         "Data View Name": "Test DataView",
         "Tool Version": "3.13.7",
@@ -169,6 +169,24 @@ class TestCSVContentValidation:
 
 class TestJSONContentValidation:
     """Validate JSON files have correct structure and data."""
+
+    def test_json_data_view_joins_list_values(self, tmp_path, rich_metadata_dict):
+        details = pd.DataFrame(
+            [
+                {"name": "DV", "segmentList": "s@Org_aaa", "owner": "Ann"},
+                {"name": None, "segmentList": "s@Org_bbb", "owner": None},
+                {"name": "", "segmentList": "s@Org_ccc", "owner": float("nan")},
+            ]
+        )
+        logger = logging.getLogger("json_test")
+        path = write_json_output({"DataView Details": details}, rich_metadata_dict, "test", str(tmp_path), logger)
+
+        with open(path) as f:
+            data = json.load(f)
+
+        assert data["data_view"]["segmentList"] == "s@Org_aaa, s@Org_bbb, s@Org_ccc"
+        assert data["data_view"]["name"] == "DV"
+        assert data["data_view"]["owner"] == "Ann"
 
     def test_json_metrics_count_and_fields(self, tmp_path, rich_data_dict, rich_metadata_dict):
         logger = logging.getLogger("json_test")
@@ -262,6 +280,16 @@ class TestHTMLContentValidation:
         # The dimension "OS & Device <Type>" should be escaped in HTML table
         assert "<Type>" not in content, "Unescaped angle brackets in HTML table"
         assert "&amp;" in content  # & should be escaped
+
+    def test_html_footer_shows_generated_timestamp(self, tmp_path, rich_data_dict):
+        logger = logging.getLogger("html_test")
+        metadata = {"Generated Date & timestamp and timezone": "2026-10-31 12:00:00 UTC"}
+        path = write_html_output(rich_data_dict, metadata, "test", str(tmp_path), logger)
+
+        with open(path, encoding="utf-8") as f:
+            content = f.read()
+
+        assert "Generated at 2026-10-31 12:00:00 UTC" in content
 
     def test_html_contains_all_metric_names(self, tmp_path, rich_data_dict, rich_metadata_dict):
         logger = logging.getLogger("html_test")

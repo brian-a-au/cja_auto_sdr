@@ -307,6 +307,8 @@ console.log(`Metrics: ${data.metrics.length}`);
 
 The default JSON keeps the shape shown above. In that shape, nested metric and dimension settings (for example a `fieldDefinition` array) arrive as indented JSON text, and the `data_view` section is a first-row view of the data view settings. That default does not change.
 
+The legacy JSON `data_view` section joins multi-value fields (such as a segment list) with `", "` into one string. `--json-typed` keeps them as native lists.
+
 Add `--json-typed` to get a versioned contract that keeps those values native instead. It works only for SDR generation with `--format json` (or `--agent-mode`, which defaults to JSON on stdout). With any other format, including `all` and the aliases, the run exits 1 with `ERROR: --json-typed requires --format json` before any API call. File output and `--output -` stdout use the same payload builder, so both carry the same content.
 
 ```bash

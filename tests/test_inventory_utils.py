@@ -69,6 +69,13 @@ class TestExtractOwner:
         assert name == "Jane Doe"
         assert owner_id == "jane@example.com"
 
+    def test_extract_owner_real_shape(self):
+        owner = {"imsUserId": "838B@AdobeID", "ownerId": "838B@AdobeID", "name": "Ann", "type": "imsUser"}
+        assert extract_owner(owner) == ("Ann", "838B@AdobeID")
+        assert extract_owner({"id": 7, "name": "B"}) == ("B", 7)
+        assert extract_owner({"ownerId": "o1", "imsUserId": "i1", "login": "l"}) == ("", "o1")
+        assert extract_owner({"imsUserId": "i1", "login": "l"}) == ("", "i1")
+
     def test_string_owner(self):
         name, owner_id = extract_owner("Simple Owner")
         assert name == "Simple Owner"

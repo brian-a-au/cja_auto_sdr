@@ -1941,6 +1941,26 @@ class TestStatsResolutionFailureContract:
 
     @patch("cja_auto_sdr.generator.cjapy")
     @patch("cja_auto_sdr.generator.configure_cjapy")
+    def test_stats_csv_quotes_unresolved_name(self, mock_config, mock_cjapy, capsys: pytest.CaptureFixture) -> None:
+        import csv
+        import io
+
+        self._mock_one_healthy_dv(mock_config, mock_cjapy)
+        name = 'Prod, EU "main"'
+
+        code, captured = self._run_stats(
+            ["--stats", "dv_good", name, "--format", "csv", "--output", "-"], (["dv_good"], {}), capsys
+        )
+
+        assert code == 1
+        rows = list(csv.reader(io.StringIO(captured.out.strip())))
+        assert [len(row) for row in rows] == [6, 6, 6]
+        assert rows[2][0] == name
+        # Existing dv_ rows keep their exact unquoted-id format
+        assert captured.out.splitlines()[1].startswith('dv_good,"Healthy DV","Alice",')
+
+    @patch("cja_auto_sdr.generator.cjapy")
+    @patch("cja_auto_sdr.generator.configure_cjapy")
     def test_stats_ambiguous_name_still_expands_without_error_row(
         self, mock_config, mock_cjapy, capsys: pytest.CaptureFixture
     ) -> None:

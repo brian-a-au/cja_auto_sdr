@@ -1074,6 +1074,26 @@ def _segment(context: str, pred: dict) -> dict:
     }
 
 
+class TestSegmentCreateDate:
+    def _process(self, extra):
+        builder = SegmentsInventoryBuilder()
+        data = {
+            "id": "s1",
+            "name": "Seg",
+            "definition": _segment("visitors", {"func": "streq", "val": _attr("a"), "str": "x"}),
+        }
+        data.update(extra)
+        return builder._process_segment(data)
+
+    def test_segment_created_reads_createDate(self):
+        summary = self._process({"createDate": "2022-08-05T16:10:22Z"})
+        assert summary.created == "2022-08-05T16:10:22Z"
+
+    def test_created_wins_over_other_keys(self):
+        summary = self._process({"created": "A", "createdDate": "B", "createDate": "C"})
+        assert summary.created == "A"
+
+
 class TestCjaPayloadShapes:
     @pytest.fixture
     def builder(self):

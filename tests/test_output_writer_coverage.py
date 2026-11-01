@@ -467,7 +467,9 @@ def test_output_writer_branches_cover_remaining_value_and_attribute_errors(
         patch.object(pd.DataFrame, "to_dict", side_effect=AttributeError("missing to_dict")),
         pytest.raises(AttributeError, match="missing to_dict"),
     ):
-        write_json_output(data, {"Generated At": "2026-03-19"}, "json", str(tmp_path), logger)
+        write_json_output(
+            data, {"Generated Date & timestamp and timezone": "2026-03-19"}, "json", str(tmp_path), logger
+        )
 
     html_table = """
 <table>
@@ -483,7 +485,7 @@ def test_output_writer_branches_cover_remaining_value_and_attribute_errors(
     with patch.object(pd.DataFrame, "to_html", return_value=html_table):
         html_path = write_html_output(
             {"Data Quality": quality_df},
-            {"Generated At": "2026-03-19"},
+            {"Generated Date & timestamp and timezone": "2026-03-19"},
             "html",
             str(tmp_path),
             logger,
@@ -497,14 +499,20 @@ def test_output_writer_branches_cover_remaining_value_and_attribute_errors(
         pytest.raises(ValueError, match="bad html"),
     ):
         write_html_output(
-            {"Data Quality": quality_df}, {"Generated At": "2026-03-19"}, "html_err", str(tmp_path), logger
+            {"Data Quality": quality_df},
+            {"Generated Date & timestamp and timezone": "2026-03-19"},
+            "html_err",
+            str(tmp_path),
+            logger,
         )
 
     with (
         patch.object(pd.DataFrame, "astype", side_effect=TypeError("bad markdown")),
         pytest.raises(TypeError, match="bad markdown"),
     ):
-        write_markdown_output(data, {"Generated At": "2026-03-19"}, "md", str(tmp_path), logger)
+        write_markdown_output(
+            data, {"Generated Date & timestamp and timezone": "2026-03-19"}, "md", str(tmp_path), logger
+        )
 
 
 # ---------------------------------------------------------------------------
