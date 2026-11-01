@@ -165,8 +165,9 @@ class SnapshotManager:
         dv_description = dv_info.get("description", "")
 
         self.logger.info("Fetching metrics...")
-        # Dimensions are prefetched on one worker while metrics load; results, errors and log lines
-        # surface at the same points as the sequential flow. The with-block joins the worker on any exit.
+        # Prefetch dimensions on one worker while metrics load. On a metrics failure the with-exit waits
+        # for the in-flight dimensions fetch, so no thread outlives this call. On success the exit also
+        # joins, so the later .result() returns at once and its errors surface at the dimensions try.
         with ThreadPoolExecutor(max_workers=1) as prefetch_pool:
             dimensions_future = prefetch_pool.submit(
                 fetch_component_payload, cja, "dimensions", data_view_id, inclType=True, full=True
@@ -176,32 +177,32 @@ class SnapshotManager:
             except Exception as exc:
                 raise _annotate_snapshot_failure(exc, stage="metrics_fetch") from exc
 
-            metrics_outcome = classify_component_payload(raw_metrics)
-            # Duck-typing shim for pre-classification cjapy DataFrame returns; unwrap without the classifier.
-            legacy_metrics_like_frame = (
-                metrics_outcome.status == "failed"
-                and metrics_outcome.reason == "unsupported_payload_type"
-                and hasattr(raw_metrics, "empty")
-                and hasattr(raw_metrics, "to_dict")
+        metrics_outcome = classify_component_payload(raw_metrics)
+        # Duck-typing shim for pre-classification cjapy DataFrame returns; unwrap without the classifier.
+        legacy_metrics_like_frame = (
+            metrics_outcome.status == "failed"
+            and metrics_outcome.reason == "unsupported_payload_type"
+            and hasattr(raw_metrics, "empty")
+            and hasattr(raw_metrics, "to_dict")
+        )
+        if metrics_outcome.status == "failed" and not legacy_metrics_like_frame:
+            raise _annotate_snapshot_failure(
+                ValueError(
+                    f"Metrics fetch returned error payload ({metrics_outcome.reason}): {metrics_outcome.error_message}"
+                ),
+                stage="metrics_fetch",
             )
-            if metrics_outcome.status == "failed" and not legacy_metrics_like_frame:
-                raise _annotate_snapshot_failure(
-                    ValueError(
-                        f"Metrics fetch returned error payload ({metrics_outcome.reason}): {metrics_outcome.error_message}"
-                    ),
-                    stage="metrics_fetch",
-                )
-            if legacy_metrics_like_frame:
-                metrics_list = raw_metrics.to_dict("records") if not raw_metrics.empty else []
-            else:
-                metrics_list = metrics_outcome.frame.to_dict("records") if not metrics_outcome.frame.empty else []
-            self.logger.info(f"  Fetched {len(metrics_list)} metrics")
+        if legacy_metrics_like_frame:
+            metrics_list = raw_metrics.to_dict("records") if not raw_metrics.empty else []
+        else:
+            metrics_list = metrics_outcome.frame.to_dict("records") if not metrics_outcome.frame.empty else []
+        self.logger.info(f"  Fetched {len(metrics_list)} metrics")
 
-            self.logger.info("Fetching dimensions...")
-            try:
-                raw_dimensions = dimensions_future.result()
-            except Exception as exc:
-                raise _annotate_snapshot_failure(exc, stage="dimensions_fetch") from exc
+        self.logger.info("Fetching dimensions...")
+        try:
+            raw_dimensions = dimensions_future.result()
+        except Exception as exc:
+            raise _annotate_snapshot_failure(exc, stage="dimensions_fetch") from exc
         dimensions_outcome = classify_component_payload(raw_dimensions)
         legacy_dimensions_like_frame = (
             dimensions_outcome.status == "failed"

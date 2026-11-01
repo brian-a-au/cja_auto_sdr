@@ -165,3 +165,24 @@ def test_inventory_summary_metrics_error_still_reported_and_dimensions_joined(mo
     assert "metrics fetch returned error payload" in warning_text
     assert "503" in warning_text
     assert dims_finished.is_set()
+
+
+def test_inventory_summary_dimensions_exception_surfaces_after_metrics_with_same_message(mock_cja, caplog):
+    calls = []
+
+    def fake_fetch(cja, kind, data_view_id, **kwargs):
+        calls.append(kind)
+        if kind == "dimensions":
+            raise RuntimeError("dims boom")
+        return pd.DataFrame([])
+
+    with caplog.at_level(logging.INFO, logger="test.inventory_summary"):
+        result = _run_derived_summary(mock_cja, fake_fetch)
+
+    assert "error" not in result
+    assert "derived_fields" not in result.get("inventories", {})
+    assert sorted(calls) == ["dimensions", "metrics"]
+    warnings = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+    assert len(warnings) == 1
+    assert "derived fields inventory" in warnings[0]
+    assert "dims boom" in warnings[0]
