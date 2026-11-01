@@ -25,6 +25,9 @@ from cja_auto_sdr.output.diff.common import (
     _get_inventory_change_detail,
 )
 
+# Header for per-component diff CSVs, written even when no row qualifies.
+_DIFF_ROW_COLUMNS = ["status", "id", "name", "details"]
+
 
 def write_diff_csv_output(
     diff_result: DiffResult,
@@ -160,7 +163,9 @@ def write_diff_csv_output(
                 for diff in diffs
             ]
 
-            pd.DataFrame(rows).to_csv(os.path.join(csv_dir, filename), index=False, encoding="utf-8")
+            pd.DataFrame(rows, columns=_DIFF_ROW_COLUMNS).to_csv(
+                os.path.join(csv_dir, filename), index=False, encoding="utf-8"
+            )
             logger.info(f"  Created: {filename}")
 
         write_diff_csv(diff_result.metric_diffs, "metrics_diff.csv")
@@ -184,7 +189,9 @@ def write_diff_csv_output(
                 for diff in diffs
             ]
 
-            pd.DataFrame(rows).to_csv(os.path.join(csv_dir, filename), index=False, encoding="utf-8")
+            pd.DataFrame(rows, columns=_DIFF_ROW_COLUMNS).to_csv(
+                os.path.join(csv_dir, filename), index=False, encoding="utf-8"
+            )
             logger.info(f"  Created: {filename}")
 
         # Write inventory diff CSVs if present

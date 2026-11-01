@@ -528,6 +528,37 @@ class TestDiffOutputWriters:
         assert os.path.exists(os.path.join(dirpath, "metrics_diff.csv"))
         assert os.path.exists(os.path.join(dirpath, "dimensions_diff.csv"))
 
+    def test_diff_csv_without_rows_writes_header(self, logger, sample_metrics, sample_dimensions, temp_output_dir):
+        """A diff with no rows to list still writes a parseable CSV header."""
+        import pandas as pd
+
+        segments = [{"segment_id": "s_1", "name": "Segment", "definition_summary": "x"}]
+        source = DataViewSnapshot(
+            data_view_id="dv_1",
+            data_view_name="Test",
+            metrics=sample_metrics,
+            dimensions=sample_dimensions,
+            segments_inventory=segments,
+        )
+        target = DataViewSnapshot(
+            data_view_id="dv_1",
+            data_view_name="Test",
+            metrics=[dict(m) for m in sample_metrics],
+            dimensions=[dict(d) for d in sample_dimensions],
+            segments_inventory=[dict(s) for s in segments],
+        )
+        diff_result = DataViewComparator(logger, include_segments=True).compare(source, target)
+
+        dirpath = write_diff_csv_output(diff_result, "test_diff", temp_output_dir, logger, changes_only=True)
+
+        for filename in ("metrics_diff.csv", "segments_diff.csv"):
+            path = os.path.join(dirpath, filename)
+            with open(path, encoding="utf-8") as f:
+                assert f.read() == "status,id,name,details\n"
+            frame = pd.read_csv(path)
+            assert list(frame.columns) == ["status", "id", "name", "details"]
+            assert len(frame) == 0
+
 
 class TestDiffStepSummary:
     """Tests for GitHub step summary generation for diff output."""
