@@ -4105,11 +4105,13 @@ def process_single_dataview(
             logger.error(_format_error_msg("applying JSON formatting", error=e))
 
         # Create Excel file name
+        raw_dv_name = lookup_data.get("name", "Unknown") if isinstance(lookup_data, dict) else "Unknown"
+        # Results and summaries show the real name; only the file name is sanitized.
+        dv_name = raw_dv_name if isinstance(raw_dv_name, str) else "Unknown"
         try:
-            dv_name = lookup_data.get("name", "Unknown") if isinstance(lookup_data, dict) else "Unknown"
             # Sanitize filename
-            dv_name = "".join(c for c in dv_name if c.isalnum() or c in (" ", "-", "_")).rstrip()
-            excel_file_name = f"CJA_DataView_{dv_name}_{data_view_id}_SDR.xlsx"
+            safe_name = "".join(c for c in raw_dv_name if c.isalnum() or c in (" ", "-", "_")).rstrip()
+            excel_file_name = f"CJA_DataView_{safe_name}_{data_view_id}_SDR.xlsx"
 
             # Add output directory path
             output_path = Path(output_dir) / excel_file_name
