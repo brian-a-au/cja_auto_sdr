@@ -79,8 +79,8 @@ def write_diff_excel_output(
             summary_rows = [
                 {
                     "Component": "Metrics",
-                    diff_result.source_label: summary.source_metrics_count,
-                    diff_result.target_label: summary.target_metrics_count,
+                    "__source__": summary.source_metrics_count,
+                    "__target__": summary.target_metrics_count,
                     "Added": summary.metrics_added,
                     "Removed": summary.metrics_removed,
                     "Modified": summary.metrics_modified,
@@ -89,8 +89,8 @@ def write_diff_excel_output(
                 },
                 {
                     "Component": "Dimensions",
-                    diff_result.source_label: summary.source_dimensions_count,
-                    diff_result.target_label: summary.target_dimensions_count,
+                    "__source__": summary.source_dimensions_count,
+                    "__target__": summary.target_dimensions_count,
                     "Added": summary.dimensions_added,
                     "Removed": summary.dimensions_removed,
                     "Modified": summary.dimensions_modified,
@@ -104,8 +104,8 @@ def write_diff_excel_output(
                 summary_rows.append(
                     {
                         "Component": "Calc Metrics",
-                        diff_result.source_label: summary.source_calc_metrics_count,
-                        diff_result.target_label: summary.target_calc_metrics_count,
+                        "__source__": summary.source_calc_metrics_count,
+                        "__target__": summary.target_calc_metrics_count,
                         "Added": summary.calc_metrics_added,
                         "Removed": summary.calc_metrics_removed,
                         "Modified": summary.calc_metrics_modified,
@@ -117,8 +117,8 @@ def write_diff_excel_output(
                 summary_rows.append(
                     {
                         "Component": "Segments",
-                        diff_result.source_label: summary.source_segments_count,
-                        diff_result.target_label: summary.target_segments_count,
+                        "__source__": summary.source_segments_count,
+                        "__target__": summary.target_segments_count,
                         "Added": summary.segments_added,
                         "Removed": summary.segments_removed,
                         "Modified": summary.segments_modified,
@@ -128,6 +128,16 @@ def write_diff_excel_output(
                 )
 
             summary_df = pd.DataFrame(summary_rows)
+            # Fixed keys, then the real labels: equal labels (same data view, same day)
+            # must not collapse the source and target count columns into one.
+            summary_df.columns = [
+                diff_result.source_label
+                if col == "__source__"
+                else diff_result.target_label
+                if col == "__target__"
+                else col
+                for col in summary_df.columns
+            ]
             summary_df.to_excel(writer, sheet_name="Summary", index=False)
 
             # Metadata sheet

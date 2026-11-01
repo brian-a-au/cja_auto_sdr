@@ -283,3 +283,51 @@ def test_diff_excel_writes_none_inventory_name(temp_output_dir):
     ws = load_workbook(filepath)["Segments Diff"]
     assert ws.cell(row=2, column=2).value == "s_added"
     assert ws.cell(row=2, column=3).value in (None, "")
+
+
+SUMMARY_TAIL = ["Added", "Removed", "Modified", "Unchanged", "Changed %"]
+
+
+def _summary_rows(filepath):
+    ws = load_workbook(filepath)["Summary"]
+    return [[cell.value for cell in row] for row in ws.iter_rows()]
+
+
+def test_summary_sheet_with_equal_labels_keeps_both_counts(temp_output_dir):
+    """Same-day snapshots of one data view share a label; both count columns must survive."""
+    diff_result = _build_diff_result()
+    diff_result.segments_diffs = None
+    diff_result.calc_metrics_diffs = None
+    diff_result.source_label = diff_result.target_label = "Web (2026-11-01)"
+    diff_result.summary.source_metrics_count = 2
+    diff_result.summary.target_metrics_count = 3
+
+    rows = _summary_rows(write_diff_excel_output(diff_result, "test_diff", temp_output_dir, logger))
+
+    assert rows[0] == ["Component", "Web (2026-11-01)", "Web (2026-11-01)", *SUMMARY_TAIL]
+    assert rows[1][:3] == ["Metrics", 2, 3]
+
+
+def test_summary_sheet_equal_labels_with_inventory_rows(temp_output_dir):
+    """Inventory summary rows keep both counts when the labels match."""
+    diff_result = _build_diff_result()
+    diff_result.source_label = diff_result.target_label = "Same"
+    diff_result.summary.source_segments_count = 4
+    diff_result.summary.target_segments_count = 5
+
+    rows = _summary_rows(write_diff_excel_output(diff_result, "test_diff", temp_output_dir, logger))
+
+    assert rows[0] == ["Component", "Same", "Same", *SUMMARY_TAIL]
+    by_component = {row[0]: row for row in rows[1:]}
+    assert by_component["Calc Metrics"][1:3] == [4, 4]
+    assert by_component["Segments"][1:3] == [4, 5]
+
+
+def test_summary_sheet_distinct_labels_unchanged(temp_output_dir):
+    """Distinct labels keep today's header row and counts."""
+    diff_result = _build_diff_result()
+
+    rows = _summary_rows(write_diff_excel_output(diff_result, "test_diff", temp_output_dir, logger))
+
+    assert rows[0] == ["Component", diff_result.source_label, diff_result.target_label, *SUMMARY_TAIL]
+    assert rows[1][:3] == ["Metrics", 4, 4]
