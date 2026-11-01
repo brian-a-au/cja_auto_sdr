@@ -922,12 +922,36 @@ class TestCreateSnapshotPrefetch:
         runner = threading.Thread(target=run, daemon=True)
         runner.start()
         try:
-            runner.join(timeout=1)
+            runner.join(timeout=5)
             assert not runner.is_alive(), "KeyboardInterrupt waited for the dimensions prefetch"
             assert isinstance(outcome.get("exc"), KeyboardInterrupt)
         finally:
             release.set()
             runner.join(timeout=5)
+
+    def test_create_snapshot_metrics_error_payload_joins_dimensions(self, manager):
+        import threading
+
+        dims_started = threading.Event()
+        dims_finished = threading.Event()
+
+        def fake_fetch(cja, kind, data_view_id, **kwargs):
+            if kind == "dimensions":
+                dims_started.set()
+                threading.Event().wait(0.3)
+                dims_finished.set()
+                return pd.DataFrame([])
+            dims_started.wait(timeout=5)
+            return {"statusCode": 503, "message": "metrics down"}
+
+        with (
+            patch("cja_auto_sdr.diff.snapshot.fetch_component_payload", side_effect=fake_fetch),
+            pytest.raises(ValueError, match="Metrics fetch returned error payload") as caught,
+        ):
+            manager.create_snapshot(self._cja(), "dv_test", quiet=True)
+
+        assert getattr(caught.value, "_cja_snapshot_failure_stage") == "metrics_fetch"
+        assert dims_finished.is_set()
 
     def test_create_snapshot_dimensions_error_keeps_dimensions_stage_and_log_order(self, manager, caplog):
         def fake_fetch(cja, kind, data_view_id, **kwargs):

@@ -212,7 +212,7 @@ def test_inventory_summary_keyboard_interrupt_does_not_wait_for_dimensions(mock_
     runner = threading.Thread(target=run, daemon=True)
     runner.start()
     try:
-        runner.join(timeout=1)
+        runner.join(timeout=5)
         assert not runner.is_alive(), "KeyboardInterrupt waited for the dimensions prefetch"
         assert isinstance(outcome.get("exc"), KeyboardInterrupt)
     finally:

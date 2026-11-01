@@ -186,6 +186,7 @@ class SnapshotManager:
             and hasattr(raw_metrics, "to_dict")
         )
         if metrics_outcome.status == "failed" and not legacy_metrics_like_frame:
+            wait([dimensions_future])
             raise _annotate_snapshot_failure(
                 ValueError(
                     f"Metrics fetch returned error payload ({metrics_outcome.reason}): {metrics_outcome.error_message}"
