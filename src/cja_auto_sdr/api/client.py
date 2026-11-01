@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import os
 import tempfile
 import time
 from collections.abc import Mapping, Sequence
@@ -40,7 +39,7 @@ CredentialConfigValue = str | Sequence[str] | None
 def _bootstrap_dotenv(logger: logging.Logger) -> None:
     """Load .env variables if python-dotenv is available."""
     try:
-        from dotenv import load_dotenv
+        from dotenv import find_dotenv, load_dotenv
     except ImportError:
         logger.debug("python-dotenv not installed (.env files will not be auto-loaded)")
         return
@@ -49,7 +48,7 @@ def _bootstrap_dotenv(logger: logging.Logger) -> None:
         return
 
     try:
-        dotenv_loaded = load_dotenv()
+        dotenv_loaded = load_dotenv(find_dotenv(usecwd=True))
         if dotenv_loaded:
             logger.debug(".env file found and loaded")
         else:
@@ -168,11 +167,10 @@ def configure_cjapy(
 
         # Resolve active profile after dotenv bootstrap so CJA_PROFILE values coming
         # from .env are available to all callers, including those passing profile=None.
-        active_profile = profile.strip() if isinstance(profile, str) and profile.strip() else None
-        if active_profile is None:
-            env_profile = os.environ.get("CJA_PROFILE")
-            if env_profile and env_profile.strip():
-                active_profile = env_profile.strip()
+        # Imported lazily: core.profiles imports this module at load time.
+        from cja_auto_sdr.core.profiles import resolve_active_profile
+
+        active_profile = resolve_active_profile(profile)
 
         # Use CredentialResolver for unified credential resolution
         resolver = CredentialResolver(logger)
@@ -180,12 +178,9 @@ def configure_cjapy(
 
         # Configure cjapy with the resolved credentials
         # Source format from resolver: "profile:name", "environment", "config:filename"
-        if source.startswith("profile:") or source == "environment":
-            # Profile or environment credentials use the direct in-memory cjapy path.
-            _config_from_env(credentials, logger)
-        else:
-            # Config file can be imported directly
-            cjapy.importConfigFile(config_file)
+        # Every source (profile, environment, config file) goes through the direct
+        # in-memory path so cjapy receives the same normalized values the resolver validated.
+        _config_from_env(credentials, logger)
 
         # Format source for display (convert resolver format to user-friendly format)
         if source.startswith("profile:"):
@@ -350,14 +345,12 @@ def initialize_cja(
             return None
 
         # Configure cjapy with resolved credentials
+        # All sources go through direct in-memory configuration with normalized values.
         if source.startswith("config:"):
-            # Config file - use cjapy's native loading
             logger.info("Loading CJA configuration from %s...", config_file)
-            cjapy.importConfigFile(config_file)
         else:
-            # Profile or environment credentials go through direct in-memory configuration.
             logger.info("Loading CJA configuration from %s...", source)
-            _config_from_env(credentials, logger)
+        _config_from_env(credentials, logger)
 
         logger.info("Configuration loaded successfully")
 

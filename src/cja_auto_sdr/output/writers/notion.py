@@ -286,9 +286,9 @@ def resolve_notion_credentials(*, require_parent: bool = True) -> tuple[str, str
     that only do that pass ``require_parent=False``.
     """
     try:
-        from dotenv import load_dotenv
+        from dotenv import find_dotenv, load_dotenv
 
-        load_dotenv()
+        load_dotenv(find_dotenv(usecwd=True))
     except ImportError:
         pass
 
@@ -727,9 +727,9 @@ def repair_notion_database(
     # error wins when neither is set. resolve_notion_credentials loads .env too
     # (idempotent), but it runs later, so do it here for the id lookup.
     try:
-        from dotenv import load_dotenv
+        from dotenv import find_dotenv, load_dotenv
 
-        load_dotenv()
+        load_dotenv(find_dotenv(usecwd=True))
     except ImportError:
         pass
 

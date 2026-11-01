@@ -254,3 +254,73 @@ def test_pipeline_dry_run_wrapper_uses_real_generator_module() -> None:
 
     assert result is True
     mock_run.assert_called_once_with(["dv_1"], "config.json", logger, profile="team-a")
+
+
+class TestDryRunCredentialResolution:
+    """CFG-5/PIPE-1: dry-run step 1 uses the same resolver as real runs."""
+
+    @staticmethod
+    def _clean_env(monkeypatch, tmp_path):
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("HOME", str(tmp_path))
+        for key in ("ORG_ID", "CLIENT_ID", "SECRET", "SCOPES", "SANDBOX", "CJA_PROFILE"):
+            monkeypatch.delenv(key, raising=False)
+
+    @staticmethod
+    def _run(capsys):
+        logger = logging.getLogger("test_dry_run_resolution")
+        with (
+            patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "x", {})),
+            patch("cja_auto_sdr.generator.cjapy") as mock_cjapy,
+            patch("cja_auto_sdr.generator.make_api_call_with_retry") as mock_retry,
+        ):
+            mock_cjapy.CJA.return_value = MagicMock()
+            mock_retry.side_effect = [
+                [{"id": "dv_1", "name": "X"}],
+                {"name": "X", "id": "dv_1"},
+                [],
+                [],
+            ]
+            run_dry_run(["dv_1"], "config.json", logger, profile=None)
+        return capsys.readouterr().out
+
+    def test_dry_run_accepts_env_credentials(self, tmp_path, monkeypatch, capsys):
+        self._clean_env(monkeypatch, tmp_path)
+        monkeypatch.setenv("ORG_ID", "ABCDEF0123456789ABCDEF01@AdobeOrg")
+        monkeypatch.setenv("CLIENT_ID", "0123456789abcdef0123456789abcdef")
+        monkeypatch.setenv("SECRET", "test-secret-not-real-0123456789ab")
+        monkeypatch.setenv("SCOPES", "openid, AdobeID, additional_info.projectedProductContext")
+        out = self._run(capsys)
+        step1 = out.split("[2/3]")[0]
+        assert "✓" in step1
+        assert "Environment variables" in step1
+        assert "[2/3]" in out
+        assert "DRY-RUN FAILED - Fix configuration issues" not in out
+
+    def test_dry_run_accepts_cja_profile_env(self, tmp_path, monkeypatch, capsys):
+        self._clean_env(monkeypatch, tmp_path)
+        pdir = tmp_path / ".cja" / "orgs" / "envprof"
+        pdir.mkdir(parents=True)
+        (pdir / "config.json").write_text(
+            json.dumps(
+                {
+                    "org_id": "ABCDEF0123456789ABCDEF01@AdobeOrg",
+                    "client_id": "0123456789abcdef0123456789abcdef",
+                    "secret": "test-secret-not-real-0123456789ab",
+                    "scopes": "openid, AdobeID, additional_info.projectedProductContext",
+                },
+            ),
+        )
+        monkeypatch.setenv("CJA_PROFILE", "envprof")
+        out = self._run(capsys)
+        step1 = out.split("[2/3]")[0]
+        assert "✓" in step1
+        assert "envprof" in step1
+        assert "DRY-RUN FAILED - Fix configuration issues" not in out
+
+    def test_dry_run_missing_profile_uses_real_resolver_wording(self, tmp_path, monkeypatch, capsys):
+        self._clean_env(monkeypatch, tmp_path)
+        monkeypatch.setenv("CJA_HOME", str(tmp_path / "cjahome"))
+        result = run_dry_run(["dv_1"], "config.json", logging.getLogger("test_dry_run_ghost"), profile="ghost")
+        assert result is False
+        assert "✗ Profile 'ghost' not found" in capsys.readouterr().out

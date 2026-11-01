@@ -309,7 +309,7 @@ Note:
 Exit Codes:
   0 - Success (diff: no differences found)
   1 - Error occurred
-  2 - Policy threshold exceeded (diff changes, quality gate, or governance threshold)
+  2 - Policy threshold exceeded or invalid command-line usage (diff changes, quality gate, or governance threshold)
   3 - Diff warning threshold exceeded (--warn-threshold)
 
 Requirements:

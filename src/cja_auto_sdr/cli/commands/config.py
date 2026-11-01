@@ -478,10 +478,7 @@ def validate_config_only(
     print()
     print("[4/5] Testing API connection...")
     try:
-        if credential_source in ("profile", "env"):
-            generator._config_from_env(active_credentials, logger)
-        else:
-            generator.cjapy.importConfigFile(config_file)
+        generator._config_from_env(generator.filter_credentials(active_credentials), logger)
 
         cja = generator.cjapy.CJA()
         print(generator.ConsoleColors.success("  \u2713 CJA client initialized"))

@@ -91,7 +91,7 @@ uv run cja_auto_sdr --sample-config
 |-----------|---------|---------------|
 | `0` | Success | Command completed successfully (diff: no changes found) |
 | `1` | General Error | Configuration errors, missing arguments, validation failures |
-| `2` | Policy Threshold Exceeded | Diff changes found, quality gate failed (`--fail-on-quality`), or org governance threshold failed (`--fail-on-threshold`) |
+| `2` | Policy Threshold Exceeded or Invalid Usage | Diff changes found, quality gate failed (`--fail-on-quality`), org governance threshold failed (`--fail-on-threshold`), or invalid command-line usage (unknown or malformed option) |
 | `3` | Diff: Threshold Exceeded | Changes exceeded `--warn-threshold` percentage |
 
 **Policy-aware exit codes** are designed for CI/CD integration:

@@ -93,7 +93,13 @@ class TestInitializeCjaSuccess:
         result = initialize_cja(mock_config_file, mock_logger)
 
         assert result is not None
-        mock_cjapy.importConfigFile.assert_called_once_with(mock_config_file)
+        mock_cjapy.importConfigFile.assert_not_called()
+        mock_cjapy.configure.assert_called_once_with(
+            org_id="test_org@AdobeOrg",
+            client_id="test_client_id",
+            secret="test_secret",  # noqa: S106
+            scopes="openid",
+        )
 
     @patch("cja_auto_sdr.api.client.CredentialResolver")
     @patch("cja_auto_sdr.api.client.cjapy")
@@ -270,7 +276,7 @@ class TestInitializeCjaFailures:
         )
         mock_resolver_class.return_value = mock_resolver
 
-        mock_cjapy.importConfigFile.side_effect = ImportError("Module not found")
+        mock_cjapy.configure.side_effect = ImportError("Module not found")
 
         result = initialize_cja(mock_config_file, mock_logger)
 
@@ -307,7 +313,7 @@ class TestInitializeCjaFailures:
         )
         mock_resolver_class.return_value = mock_resolver
 
-        mock_cjapy.importConfigFile.side_effect = PermissionError("Access denied")
+        mock_cjapy.configure.side_effect = PermissionError("Access denied")
 
         result = initialize_cja(mock_config_file, mock_logger)
 
@@ -892,7 +898,13 @@ class TestInitializeCjaEnvFallback:
         result = initialize_cja(mock_config_file, mock_logger)
 
         assert result is not None
-        mock_cjapy.importConfigFile.assert_called_once()
+        mock_cjapy.importConfigFile.assert_not_called()
+        mock_cjapy.configure.assert_called_once_with(
+            org_id="test@AdobeOrg",
+            client_id="x",
+            secret="y",  # noqa: S106
+            scopes=None,
+        )
 
     @patch("cja_auto_sdr.api.client.CredentialResolver")
     def test_fails_when_both_env_and_config_invalid(self, mock_resolver_class, mock_logger, mock_config_file):
@@ -979,3 +991,179 @@ class TestInitializeCjaConnectionProbeContract:
         assert result is not None
         info_calls = [str(call) for call in mock_logger.info.call_args_list]
         assert any("API connection successful" in c for c in info_calls)
+
+
+class TestConfigFileCredentialsNormalized:
+    """CFG-9: root config.json credentials reach cjapy normalized, never via importConfigFile."""
+
+    @staticmethod
+    def _write_padded_config(tmp_path, monkeypatch):
+        for key in ("ORG_ID", "CLIENT_ID", "SECRET", "SCOPES", "SANDBOX", "CJA_PROFILE"):
+            monkeypatch.delenv(key, raising=False)
+        monkeypatch.setenv("HOME", str(tmp_path / "home"))
+        monkeypatch.chdir(tmp_path)
+        config_file = tmp_path / "config.json"
+        config_file.write_text(
+            json.dumps(
+                {
+                    "org_id": " ORG@AdobeOrg ",
+                    "client_id": " client_id_value ",
+                    "secret": "  padded-secret\n",
+                    "scopes": "openid, AdobeID",
+                },
+            ),
+        )
+        return str(config_file)
+
+    @staticmethod
+    def _assert_normalized(mock_config_from_env):
+        mock_config_from_env.assert_called_once()
+        passed = mock_config_from_env.call_args.args[0]
+        assert passed["org_id"] == "ORG@AdobeOrg"
+        assert passed["client_id"] == "client_id_value"
+        assert passed["secret"] == "padded-secret"
+        assert passed["scopes"] == "openid, AdobeID"  # compacted later by _build_cjapy_config_kwargs
+
+    @patch("cja_auto_sdr.api.client._config_from_env")
+    @patch("cja_auto_sdr.api.client.cjapy")
+    def test_config_file_credentials_are_normalized(self, mock_cjapy, mock_config_from_env, tmp_path, monkeypatch):
+        config_file = self._write_padded_config(tmp_path, monkeypatch)
+
+        success, _source, _creds = configure_cjapy(config_file=config_file, logger=logging.getLogger("t"))
+
+        assert success is True
+        self._assert_normalized(mock_config_from_env)
+        mock_cjapy.importConfigFile.assert_not_called()
+
+    @patch("cja_auto_sdr.api.client._config_from_env")
+    @patch("cja_auto_sdr.api.client.cjapy")
+    def test_initialize_cja_config_file_credentials_are_normalized(
+        self, mock_cjapy, mock_config_from_env, tmp_path, monkeypatch, mock_logger
+    ):
+        config_file = self._write_padded_config(tmp_path, monkeypatch)
+
+        result = initialize_cja(config_file, mock_logger, verify_connection=False)
+
+        assert result is mock_cjapy.CJA.return_value
+        self._assert_normalized(mock_config_from_env)
+        mock_cjapy.importConfigFile.assert_not_called()
+
+
+class TestConfigCommandsProfileResolution:
+    """--config-status / --validate-config resolve the profile like real runs do."""
+
+    @staticmethod
+    def _setup_profile(tmp_path, monkeypatch):
+        for key in ("ORG_ID", "CLIENT_ID", "SECRET", "SCOPES", "SANDBOX", "CJA_PROFILE"):
+            monkeypatch.delenv(key, raising=False)
+        monkeypatch.setenv("CJA_HOME", str(tmp_path / "cjahome"))
+        monkeypatch.chdir(tmp_path)
+        pdir = tmp_path / "cjahome" / "orgs" / "pa"
+        pdir.mkdir(parents=True)
+        (pdir / "config.json").write_text(
+            json.dumps({"org_id": "ORG@AdobeOrg", "client_id": "client_id_value", "secret": "s-1234567890abcdef"}),
+        )
+
+    @staticmethod
+    def _args(**overrides):
+        import argparse
+
+        base = {
+            "config_status": False,
+            "config_json": False,
+            "validate_config": False,
+            "config_file": "config.json",
+            "profile": " pa ",
+            "output": None,
+            "output_dir": ".",
+            "data_views": [],
+        }
+        base.update(overrides)
+        return argparse.Namespace(**base)
+
+    def test_config_status_trims_profile(self, tmp_path, monkeypatch, capsys):
+        from cja_auto_sdr.generator import _dispatch_post_validation_report_modes
+
+        self._setup_profile(tmp_path, monkeypatch)
+        args = self._args(config_status=True, config_json=True)
+
+        with pytest.raises(SystemExit) as exc:
+            _dispatch_post_validation_report_modes(args, output_to_stdout=False)
+
+        assert exc.value.code == 0
+        out = json.loads(capsys.readouterr().out)
+        assert out["source_type"] == "profile"
+        assert out["profile"] == "pa"
+
+    @patch("cja_auto_sdr.generator._config_from_env")
+    @patch("cja_auto_sdr.generator.cjapy")
+    def test_validate_config_trims_profile(self, mock_cjapy, _mock_cfg, tmp_path, monkeypatch, capsys):
+        from cja_auto_sdr.generator import _dispatch_post_validation_report_modes
+
+        self._setup_profile(tmp_path, monkeypatch)
+        mock_cjapy.CJA.return_value.getDataViews.return_value = [{"id": "dv_1", "name": "x"}]
+        args = self._args(validate_config=True, output_dir=str(tmp_path))
+
+        with pytest.raises(SystemExit) as exc:
+            _dispatch_post_validation_report_modes(args, output_to_stdout=False)
+
+        out = capsys.readouterr().out
+        assert "Profile 'pa' found" in out
+        assert exc.value.code == 0
+
+
+class TestConfigFileListSecret:
+    @patch("cja_auto_sdr.api.client._config_from_env")
+    @patch("cja_auto_sdr.api.client.cjapy")
+    def test_config_file_list_secret_uses_first_item(self, _mock_cjapy, mock_config_from_env, tmp_path, monkeypatch):
+        for key in ("ORG_ID", "CLIENT_ID", "SECRET", "SCOPES", "SANDBOX", "CJA_PROFILE"):
+            monkeypatch.delenv(key, raising=False)
+        monkeypatch.setenv("HOME", str(tmp_path / "home"))
+        monkeypatch.chdir(tmp_path)
+        config_file = tmp_path / "config.json"
+        config_file.write_text(
+            json.dumps(
+                {
+                    "org_id": "ORG@AdobeOrg",
+                    "client_id": "client_id_value",
+                    "secret": ["s-first-1234567890", "s-second"],
+                },
+            ),
+        )
+
+        success, _source, _creds = configure_cjapy(config_file=str(config_file), logger=logging.getLogger("t"))
+
+        assert success is True
+        assert mock_config_from_env.call_args.args[0]["secret"] == "s-first-1234567890"
+
+
+class TestValidateConfigFileNormalization:
+    @patch("cja_auto_sdr.generator._config_from_env")
+    @patch("cja_auto_sdr.generator.cjapy")
+    def test_validate_config_file_source_passes_stripped_values(
+        self, mock_cjapy, mock_config_from_env, tmp_path, monkeypatch
+    ):
+        for key in ("ORG_ID", "CLIENT_ID", "SECRET", "SCOPES", "SANDBOX", "CJA_PROFILE"):
+            monkeypatch.delenv(key, raising=False)
+        monkeypatch.setenv("HOME", str(tmp_path / "home"))
+        monkeypatch.chdir(tmp_path)
+        config_file = tmp_path / "config.json"
+        config_file.write_text(
+            json.dumps(
+                {
+                    "org_id": " ORG@AdobeOrg ",
+                    "client_id": " client_id_value ",
+                    "secret": "  padded-secret\n",
+                    "scopes": "openid, AdobeID",
+                },
+            ),
+        )
+        mock_cjapy.CJA.return_value.getDataViews.return_value = [{"id": "dv_1", "name": "x"}]
+
+        result = validate_config_only(str(config_file), output_dir=str(tmp_path))
+
+        assert result is True
+        passed = mock_config_from_env.call_args.args[0]
+        assert passed["org_id"] == "ORG@AdobeOrg"
+        assert passed["client_id"] == "client_id_value"
+        assert passed["secret"] == "padded-secret"
