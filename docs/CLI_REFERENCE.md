@@ -719,6 +719,7 @@ Three new `INFO`-level diagnostic events are emitted via `emit_diagnostic()` (vi
 | Snapshot / diff family | `--snapshot`, `--list-snapshots`, `--prune-snapshots`, `--diff-snapshot`, `--compare-with-prev`, `--compare-snapshots`, `--diff-labels` |
 | Profile management | `--profile-list`, `--profile-add`, `--profile-import`, `--profile-test`, `--profile-show` |
 | Git integration | `--git-init`, `--git-commit`, `--git-push` |
+| One-shot modes | `--dry-run`, `--config-status`, `--config-json`, `--validate-config`, `--interactive` |
 
 In addition, `--watch` requires a data view ID matching the `dv_*` prefix; names and numeric-only inputs are rejected with the same exit code `1` semantic rejection.
 

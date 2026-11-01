@@ -195,3 +195,13 @@ def test_agent_mode_with_interactive_exits_1(interactive_flag, tmp_path):
     assert result.returncode == 1, result.stdout
     assert "--agent-mode cannot be used with --interactive" in result.stderr
     assert "INTERACTIVE MODE" not in result.stdout
+
+
+def test_cli_reference_lists_watch_one_shot_rejections():
+    """The documented --watch incompatible-flags table names the one-shot modes it rejects."""
+    from pathlib import Path
+
+    doc = (Path(__file__).resolve().parents[1] / "docs" / "CLI_REFERENCE.md").read_text(encoding="utf-8")
+    section = doc.split("#### Incompatible Flags", 1)[1].split("###", 1)[0]
+    for flag in ("--dry-run", "--config-status", "--config-json", "--validate-config", "--interactive"):
+        assert f"`{flag}`" in section, flag
