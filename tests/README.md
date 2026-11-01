@@ -188,7 +188,7 @@ tests/
 └── README.md                        # This file
 ```
 
-**Total: 9,519 comprehensive tests**
+**Total: 9,526 comprehensive tests**
 
 ### Test Count Breakdown
 
@@ -197,16 +197,16 @@ tests/
 
 | Category | Tests | Files | Notes |
 |----------|-------|-------|-------|
-| `unit` | 9,358 | 169 | Default primary category for files without explicit integration/e2e/smoke scope |
+| `unit` | 9,365 | 169 | Default primary category for files without explicit integration/e2e/smoke scope |
 | `integration` | 122 | 3 | Cross-module integration suites |
 | `e2e` | 23 | 2 | End-to-end suites with a mocked external boundary |
 | `smoke` | 16 | 2 | Lightweight command-mode coverage |
 | `slow` | 0 | 0 | Overlay marker; these tests are also counted in a primary category |
-| **Primary Total** | **9,519** | **176** | **unit + integration + e2e + smoke** |
+| **Primary Total** | **9,526** | **176** | **unit + integration + e2e + smoke** |
 
 | CI Slice | Tests | Files | Selector |
 |----------|-------|-------|----------|
-| `test-unit` | 9,358 | 169 | `-m "unit and not slow"` |
+| `test-unit` | 9,365 | 169 | `-m "unit and not slow"` |
 | `test-integration` | 145 | 5 | `-m "integration or e2e or slow"` |
 | `smoke-test` | 16 | 2 | `-m smoke` |
 
@@ -230,7 +230,7 @@ tests/
 | `test_inventory_utils.py` | 57 | Inventory utilities and helpers |
 | `test_segments_inventory.py` | 67 | Segments inventory feature |
 | `test_edge_cases.py` | 35 | Edge cases, configuration dataclasses, custom exceptions |
-| `test_calculated_metrics_inventory.py` | 384 | Calculated metrics inventory feature |
+| `test_calculated_metrics_inventory.py` | 390 | Calculated metrics inventory feature |
 | `test_git_integration.py` | 61 | Git integration, snapshot management, inventory snapshots |
 | `test_output_formats.py` | 37 | CSV, JSON, HTML, Markdown output generation |
 | `test_cja_initialization.py` | 52 | CJA connection and configuration validation |
@@ -244,7 +244,7 @@ tests/
 | `test_explain_exit_code.py` | 44 | --explain-exit-code shared explainer, parser, fast-path, and run-summary behavior |
 | `test_circuit_breaker.py` | 25 | Circuit breaker pattern |
 | `test_retry.py` | 25 | Retry with exponential backoff |
-| `test_batch_processor.py` | 32 | Batch processing of multiple data views |
+| `test_batch_processor.py` | 33 | Batch processing of multiple data views |
 | `test_validation_cache.py` | 32 | Validation result caching |
 | `test_process_single_dataview.py` | 53 | End-to-end single data view processing |
 | `test_process_liveness_smoke.py` | 6 | Cross-platform lock PID liveness probes (Windows-safe) |
@@ -392,7 +392,7 @@ tests/
 | `test_diff_snapshot_retention.py` | 81 | Diff snapshot-retention parse-cache characterization test |
 | `test_diff_comparator_normalize.py` | 21 | Diff field-normalization type-fast-path characterization test |
 | `test_logging_diagnostics.py` | 2 | emit_diagnostic isEnabledFor guard characterization tests |
-| **Total** | **9,519** | **Collected via pytest --collect-only** |
+| **Total** | **9,526** | **Collected via pytest --collect-only** |
 
 ## Running Tests
 
@@ -850,14 +850,14 @@ the `tests/README.md` inventory tree or count table.
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (9,519 tests total)
+- [x] Comprehensive test coverage (9,526 tests total)
 - [x] Org-wide analysis tests (test_org_report.py) - 225 tests (including large org scaling, output path aliases, memory warnings, smart cache invalidation)
 - [x] Org-wide analysis integration tests (test_org_report_integration.py) - 46 tests (end-to-end flows, caching, filtering, governance thresholds)
 - [x] Profile management tests (test_profiles.py) - 88 tests
 - [x] API worker auto-tuning tests (test_api_tuning.py) - 25 tests
 - [x] Circuit breaker pattern tests (test_circuit_breaker.py) - 25 tests
 - [x] Shared validation cache tests (test_shared_cache.py) - 30 tests
-- [x] Calculated metrics inventory tests (test_calculated_metrics_inventory.py) - 384 tests
+- [x] Calculated metrics inventory tests (test_calculated_metrics_inventory.py) - 390 tests
 - [x] Segments inventory tests (test_segments_inventory.py) - 67 tests
 - [x] Derived fields inventory tests (test_derived_inventory.py) - 64 tests
 - [x] Inventory utilities tests (test_inventory_utils.py) - 57 tests
