@@ -30,7 +30,9 @@ from cja_auto_sdr.output.diff.common import (
 
 
 def _excel_text(value: Any) -> Any:
-    """Return "" for a non-finite float, which xlsxwriter cannot write as a number."""
+    """Return "" for a non-finite float or a pandas missing marker, which xlsxwriter cannot write."""
+    if value is pd.NA or value is pd.NaT:
+        return ""
     if isinstance(value, (float, np.floating)) and not math.isfinite(float(value)):
         return ""
     return value

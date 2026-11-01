@@ -331,3 +331,18 @@ def test_summary_sheet_distinct_labels_unchanged(temp_output_dir):
 
     assert rows[0] == ["Component", diff_result.source_label, diff_result.target_label, *SUMMARY_TAIL]
     assert rows[1][:3] == ["Metrics", 4, 4]
+
+
+def test_diff_excel_writes_pandas_missing_markers_as_blank(temp_output_dir):
+    """pd.NA and pd.NaT names (nullable cjapy dtypes) must not crash the workbook."""
+    import pandas as pd
+
+    diff_result = _build_diff_result()
+    diff_result.metric_diffs[0].name = pd.NA
+    diff_result.metric_diffs[1].name = pd.NaT
+
+    filepath = write_diff_excel_output(diff_result, "test_diff", temp_output_dir, logger)
+
+    ws = load_workbook(filepath)["Metrics Diff"]
+    assert ws.cell(row=2, column=3).value in (None, "")
+    assert ws.cell(row=3, column=3).value in (None, "")
