@@ -188,7 +188,7 @@ tests/
 └── README.md                        # This file
 ```
 
-**Total: 9,627 comprehensive tests**
+**Total: 9,646 comprehensive tests**
 
 ### Test Count Breakdown
 
@@ -197,16 +197,16 @@ tests/
 
 | Category | Tests | Files | Notes |
 |----------|-------|-------|-------|
-| `unit` | 9,465 | 169 | Default primary category for files without explicit integration/e2e/smoke scope |
+| `unit` | 9,484 | 169 | Default primary category for files without explicit integration/e2e/smoke scope |
 | `integration` | 123 | 3 | Cross-module integration suites |
 | `e2e` | 23 | 2 | End-to-end suites with a mocked external boundary |
 | `smoke` | 16 | 2 | Lightweight command-mode coverage |
 | `slow` | 0 | 0 | Overlay marker; these tests are also counted in a primary category |
-| **Primary Total** | **9,627** | **176** | **unit + integration + e2e + smoke** |
+| **Primary Total** | **9,646** | **176** | **unit + integration + e2e + smoke** |
 
 | CI Slice | Tests | Files | Selector |
 |----------|-------|-------|----------|
-| `test-unit` | 9,465 | 169 | `-m "unit and not slow"` |
+| `test-unit` | 9,484 | 169 | `-m "unit and not slow"` |
 | `test-integration` | 146 | 5 | `-m "integration or e2e or slow"` |
 | `smoke-test` | 16 | 2 | `-m smoke` |
 
@@ -216,7 +216,7 @@ tests/
 
 | Test File | Tests | Coverage Area |
 |-----------|-------|---------------|
-| `test_diff_comparison.py` | 186 | Data view diff comparison feature with inventory support |
+| `test_diff_comparison.py` | 191 | Data view diff comparison feature with inventory support |
 | `test_ux_features.py` | 133 | UX features: --open, --stats, --output, --list-dataviews formats, inventory validation, inventory summary, include-all-inventory |
 | `test_org_report.py` | 225 | Org-wide component analysis: config, distribution, similarity, output formats, large org scaling, output path aliases |
 | `test_org_governance_checks.py` | 26 | Governance evaluation statuses, evidence scope, strict exits, and writer contracts |
@@ -295,13 +295,13 @@ tests/
 | `test_generator_coverage.py` | 161 | Generator utility functions — coercion, normalization, diff formatting |
 | `test_generator_discovery_compat_coverage.py` | 44 | Generator discovery helper parity with extracted list-command implementations |
 | `test_segments_coverage.py` | 78 | Segment comparison operators, container types, sequence variants |
-| `test_diff_inventory_output.py` | 101 | Inventory diff output across all formats (console, JSON, HTML, Excel, MD, CSV) |
+| `test_diff_inventory_output.py` | 105 | Inventory diff output across all formats (console, JSON, HTML, Excel, MD, CSV) |
 | `test_cli_command_handlers.py` | 166 | CLI dispatch for --stats, --org-report, --list-snapshots, discovery inspection, diff config unpacking |
 | `test_profile_management.py` | 54 | Interactive profile creation, import, test, show |
 | `test_snapshot_commands.py` | 94 | Snapshot creation, comparison, name resolution |
 | `test_config_and_resolution.py` | 130 | Config status, validation, stats, name resolution |
 | `test_derived_fields_edge_cases.py` | 37 | Derived fields edge cases and coverage |
-| `test_diff_command_coverage.py` | 50 | Diff command edge cases and coverage |
+| `test_diff_command_coverage.py` | 54 | Diff command edge cases and coverage |
 | `test_generator_interactive_and_console.py` | 41 | Generator interactive and console tests |
 | `test_generator_remaining_coverage.py` | 88 | Generator remaining coverage edge cases |
 | `test_interactive_discovery_coverage.py` | 118 | Interactive discovery and helpers coverage |
@@ -385,14 +385,14 @@ tests/
 | `test_org_writers_csv.py` | 2 | Org components-CSV bucket-lookup characterization test |
 | `test_csv_staging.py` | 16 | Staged CSV bundle publication and completion manifest tests |
 | `test_sdr_markdown_escaping.py` | 6 | SDR markdown vectorized cell-escaping characterization test |
-| `test_diff_excel.py` | 4 | Diff Excel row-coloring characterization tests |
+| `test_diff_excel.py` | 10 | Diff Excel row-coloring characterization tests |
 | `test_diff_report_coverage.py` | 28 | Metadata policy and coverage in HTML/CSV/Excel diffs |
 | `test_diff_markdown_escaping.py` | 3 | Diff Markdown and PR comment table-cell escaping |
 | `test_org_snapshot_parse_cache.py` | 3 | Org snapshot JSON parse-cache characterization test |
 | `test_diff_snapshot_retention.py` | 89 | Diff snapshot-retention parse-cache characterization test |
 | `test_diff_comparator_normalize.py` | 22 | Diff field-normalization type-fast-path characterization test |
 | `test_logging_diagnostics.py` | 2 | emit_diagnostic isEnabledFor guard characterization tests |
-| **Total** | **9,627** | **Collected via pytest --collect-only** |
+| **Total** | **9,646** | **Collected via pytest --collect-only** |
 
 ## Running Tests
 
@@ -850,7 +850,7 @@ the `tests/README.md` inventory tree or count table.
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (9,627 tests total)
+- [x] Comprehensive test coverage (9,646 tests total)
 - [x] Org-wide analysis tests (test_org_report.py) - 225 tests (including large org scaling, output path aliases, memory warnings, smart cache invalidation)
 - [x] Org-wide analysis integration tests (test_org_report_integration.py) - 46 tests (end-to-end flows, caching, filtering, governance thresholds)
 - [x] Profile management tests (test_profiles.py) - 94 tests
@@ -862,7 +862,7 @@ the `tests/README.md` inventory tree or count table.
 - [x] Derived fields inventory tests (test_derived_inventory.py) - 64 tests
 - [x] Inventory utilities tests (test_inventory_utils.py) - 57 tests
 - [x] Git integration tests (test_git_integration.py) - 62 tests
-- [x] Inventory diff support in snapshot comparisons (test_diff_comparison.py) - 186 tests
+- [x] Inventory diff support in snapshot comparisons (test_diff_comparison.py) - 191 tests
 - [x] Inventory summary and include-all-inventory tests (test_ux_features.py) - 133 tests
 - [x] Parallel validation tests (test_parallel_validation.py)
 - [x] Validation caching tests (test_validation_cache.py)
@@ -878,7 +878,7 @@ the `tests/README.md` inventory tree or count table.
 - [x] Excel formatting tests (test_excel_formatting.py)
 - [x] CJA initialization tests (test_cja_initialization.py)
 - [x] Name resolution tests (test_name_resolution.py)
-- [x] Data view diff comparison tests (test_diff_comparison.py) - 186 tests covering snapshots, comparison logic, output formats, CLI arguments, name resolution
+- [x] Data view diff comparison tests (test_diff_comparison.py) - 191 tests covering snapshots, comparison logic, output formats, CLI arguments, name resolution
 - [x] Edge case tests (test_edge_cases.py) - 35 tests covering custom exceptions, configuration dataclasses, OutputWriter Protocol, boundary conditions
 
 ## Future Enhancements

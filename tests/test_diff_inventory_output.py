@@ -210,6 +210,32 @@ class TestConsoleOutputWithInventory:
 
         assert "Calc Metrics" in output
 
+    def test_console_summary_shows_segments_row_without_changes(self):
+        """A segments-only diff with no segment changes still shows its Segments row."""
+        summary = _make_summary_with_inventory(
+            source_calc_metrics_count=0,
+            target_calc_metrics_count=0,
+            calc_metrics_added=0,
+            calc_metrics_modified=0,
+            calc_metrics_unchanged=0,
+            source_segments_count=2,
+            target_segments_count=2,
+            segments_added=0,
+            segments_modified=0,
+            segments_unchanged=2,
+        )
+        segments = [
+            InventoryItemDiff(id=f"s{i}", name=f"Seg {i}", change_type=ChangeType.UNCHANGED, inventory_type="segment")
+            for i in range(2)
+        ]
+        result = _make_diff_result_with_inventory(summary=summary, calc_metrics_diffs=None, segments_diffs=segments)
+
+        output = write_diff_console_output(result, use_color=False)
+
+        lines = output.splitlines()
+        assert "INVENTORY" in lines
+        assert any(line.startswith("Segments") for line in lines)
+
     def test_console_output_includes_segments_summary_row(self):
         result = _make_diff_result_with_inventory()
         output = write_diff_console_output(result, use_color=False)
@@ -952,6 +978,32 @@ class TestPrCommentOutputWithInventory:
         output = write_diff_pr_comment_output(result)
 
         assert "CJA SDR Generator" in output
+
+    def test_pr_comment_includes_segment_rows_and_details(self):
+        result = _make_diff_result_with_inventory()
+        output = write_diff_pr_comment_output(result)
+
+        assert "| Segments | 8 | 9 | +1 | -0 | ~2 | 6 |" in output
+        assert "<summary>🧩 Segments Changes (2)</summary>" in output
+        assert "`s1`" in output
+        assert "`s3`" not in output  # unchanged items are not listed
+
+    def test_pr_comment_includes_calc_metric_rows_and_details(self):
+        result = _make_diff_result_with_inventory()
+        output = write_diff_pr_comment_output(result)
+
+        assert "| Calc Metrics | 5 | 7 | +2 | -0 | ~1 | 4 |" in output
+        assert "<summary>🧮 Calculated Metrics Changes (3)</summary>" in output
+        assert "`cm4`" in output
+
+    def test_pr_comment_without_inventory_unchanged(self):
+        result = _make_diff_result_with_inventory(calc_metrics_diffs=None, segments_diffs=None)
+        output = write_diff_pr_comment_output(result)
+
+        assert "Calc Metrics" not in output
+        assert "| Segments |" not in output
+        assert "Segments Changes" not in output
+        assert output.count("<details>") == 2
 
     def test_pr_comment_accepts_public_changes_only_keyword(self):
         result = _make_diff_result_with_inventory()

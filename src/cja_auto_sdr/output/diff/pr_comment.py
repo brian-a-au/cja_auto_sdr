@@ -54,6 +54,18 @@ def write_diff_pr_comment_output(
         f"+{summary.dimensions_added} | -{summary.dimensions_removed} | ~{summary.dimensions_modified} | "
         f"{summary.dimensions_unchanged} | {summary.dimensions_change_percent:.1f}% |",
     )
+    if diff_result.calc_metrics_diffs is not None:
+        lines.append(
+            f"| Calc Metrics | {summary.source_calc_metrics_count} | {summary.target_calc_metrics_count} | "
+            f"+{summary.calc_metrics_added} | -{summary.calc_metrics_removed} | ~{summary.calc_metrics_modified} | "
+            f"{summary.calc_metrics_unchanged} | {summary.calc_metrics_change_percent:.1f}% |",
+        )
+    if diff_result.segments_diffs is not None:
+        lines.append(
+            f"| Segments | {summary.source_segments_count} | {summary.target_segments_count} | "
+            f"+{summary.segments_added} | -{summary.segments_removed} | ~{summary.segments_modified} | "
+            f"{summary.segments_unchanged} | {summary.segments_change_percent:.1f}% |",
+        )
     lines.append("")
 
     # Use shared detect_breaking_changes for breaking change detection
@@ -114,6 +126,30 @@ def write_diff_pr_comment_output(
             lines.append(f"| {symbol} | `{_esc(diff.id)}` | {_esc(diff.name)} |")
         if len(dim_changes) > 25:
             lines.append(f"| ... | | +{len(dim_changes) - 25} more |")
+        lines.append("")
+        lines.append("</details>")
+        lines.append("")
+
+    for title, inventory_diffs in (
+        ("🧮 Calculated Metrics Changes", diff_result.calc_metrics_diffs),
+        ("🧩 Segments Changes", diff_result.segments_diffs),
+    ):
+        inventory_changes = [d for d in inventory_diffs or [] if d.change_type != ChangeType.UNCHANGED]
+        if not inventory_changes:
+            continue
+        lines.append("<details>")
+        lines.append(f"<summary>{title} ({len(inventory_changes)})</summary>")
+        lines.append("")
+        lines.append("| Change | ID | Name |")
+        lines.append("|--------|----|----- |")
+        for diff in inventory_changes[:25]:
+            symbol = {ChangeType.ADDED: "➕", ChangeType.REMOVED: "➖", ChangeType.MODIFIED: "✏️"}.get(
+                diff.change_type,
+                "",
+            )
+            lines.append(f"| {symbol} | `{_esc(diff.id)}` | {_esc(diff.name)} |")
+        if len(inventory_changes) > 25:
+            lines.append(f"| ... | | +{len(inventory_changes) - 25} more |")
         lines.append("")
         lines.append("</details>")
         lines.append("")
