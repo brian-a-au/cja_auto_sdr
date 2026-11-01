@@ -6342,6 +6342,15 @@ def run_org_report(
 
         # Handle org-stats mode (Feature 2) - minimal output
         if org_config.org_stats_only:
+            if output_format not in ("console", "json"):
+                # Shown even under --quiet: the requested artifact will not exist.
+                print(
+                    ConsoleColors.warning(
+                        f"Warning: --org-stats only writes console or JSON output; "
+                        f"--format {output_format} was ignored."
+                    ),
+                    file=sys.stderr,
+                )
             with contextlib.redirect_stdout(status_stream):
                 write_org_report_stats_only(result, quiet=console_writer_quiet, trending=trending)
             # Still output JSON if requested for CI integration
