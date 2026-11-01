@@ -2506,3 +2506,84 @@ class TestLoadQualityPolicyUnsearchableParent:
 
         with pytest.raises(FileNotFoundError, match="Policy file not found"):
             load_quality_policy(unsearchable_dir / "policy.json")
+
+
+def _run_family_scoped_quality(tmp_path, *, metrics_only=False, dimensions_only=False, **kwargs):
+    import pandas as pd
+
+    from cja_auto_sdr import generator
+
+    lookup = {"id": "dv_test", "name": "Store"}
+    clean = pd.DataFrame([{"id": "metrics/a", "name": "A", "type": "int", "description": "d"}])
+    dup_dims = pd.DataFrame(
+        [
+            {"id": "variables/b", "name": "B", "type": "string", "description": "d"},
+            {"id": "variables/c", "name": "B", "type": "string", "description": "d"},
+        ]
+    )
+    dup_metrics = pd.DataFrame(
+        [
+            {"id": "metrics/b", "name": "B", "type": "int", "description": "d"},
+            {"id": "metrics/c", "name": "B", "type": "int", "description": "d"},
+        ]
+    )
+    metrics, dims = (
+        (clean, dup_dims)
+        if metrics_only
+        else (dup_metrics, pd.DataFrame([{"id": "variables/a", "name": "A", "type": "string", "description": "d"}]))
+    )
+    fetcher = MagicMock()
+    fetcher.fetch_all_data.return_value = (metrics, dims, lookup)
+    fetcher.get_tuner_statistics.return_value = None
+    fetcher.get_fetch_statuses.return_value = {}
+    with (
+        patch.object(generator, "initialize_cja", return_value=MagicMock()),
+        patch.object(generator, "ParallelAPIFetcher", return_value=fetcher),
+    ):
+        return generator.process_single_dataview(
+            "dv_test",
+            output_dir=str(tmp_path),
+            quiet=True,
+            log_level="ERROR",
+            metrics_only=metrics_only,
+            dimensions_only=dimensions_only,
+            **kwargs,
+        )
+
+
+def test_metrics_only_quality_gate_ignores_dimensions(tmp_path):
+    from cja_auto_sdr.api.quality_policy import has_quality_issues_at_or_above, write_quality_report_output
+
+    result = _run_family_scoped_quality(
+        tmp_path, metrics_only=True, output_format="json", fail_on_quality="HIGH", quality_report_only=True
+    )
+    assert result.success
+    assert result.dq_severity_counts == {}
+    assert not any(i["Type"] == "Dimensions" for i in result.dq_issues)
+    # Gate verdict is derived from these same issues: PASS means nothing at or above HIGH.
+    assert not has_quality_issues_at_or_above(result.dq_issues, "HIGH")
+
+    report_dir = tmp_path / "report"
+    report_dir.mkdir()
+    report_path = Path(write_quality_report_output(result.dq_issues, "csv", None, report_dir))
+    assert report_path.exists()
+    import pandas as pd
+
+    report = pd.read_csv(report_path)
+    assert "Type" in report.columns
+    assert "Dimensions" not in set(report["Type"])
+
+
+def test_metrics_only_sdr_json_has_no_dimensions_quality_rows(tmp_path):
+    result = _run_family_scoped_quality(
+        tmp_path, metrics_only=True, output_format="json", json_typed=True, fail_on_quality="HIGH"
+    )
+    assert result.dq_severity_counts == {}
+    js = json.loads(next(tmp_path.glob("*.json")).read_text())
+    assert js["coverage"]["quality"]["gate"] == {"threshold": "HIGH", "verdict": "PASS"}
+    assert not any(i["Type"] == "Dimensions" for i in js["data_quality"])
+
+
+def test_dimensions_only_quality_ignores_metrics(tmp_path):
+    result = _run_family_scoped_quality(tmp_path, dimensions_only=True, output_format="json", quality_report_only=True)
+    assert not any(i["Type"] == "Metrics" for i in result.dq_issues)

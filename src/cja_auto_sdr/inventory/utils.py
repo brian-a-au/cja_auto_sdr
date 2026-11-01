@@ -64,10 +64,14 @@ def extract_owner(owner_data: Any) -> tuple[str, str]:
         Tuple of (owner_name, owner_id)
     """
     if isinstance(owner_data, dict):
-        return (
-            owner_data.get("name", ""),
-            owner_data.get("id", owner_data.get("login", "")),
-        )
+        owner_id: Any = ""
+        # Real CJA owner objects carry {imsUserId, ownerId, name, type}
+        for key in ("id", "ownerId", "imsUserId", "login"):
+            candidate = owner_data.get(key)
+            if candidate is not None and candidate != "":
+                owner_id = candidate
+                break
+        return (owner_data.get("name", ""), owner_id)
     if owner_data:
         return (str(owner_data), "")
     return ("", "")

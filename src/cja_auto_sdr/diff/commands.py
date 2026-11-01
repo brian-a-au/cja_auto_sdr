@@ -14,6 +14,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from cja_auto_sdr.core.colors import ConsoleColors
 from cja_auto_sdr.core.exceptions import OutputError
 from cja_auto_sdr.core.json_io import write_text_atomic_compatible
 from cja_auto_sdr.diff.snapshot import _annotate_snapshot_failure
@@ -73,8 +74,9 @@ def _write_diff_report(
         return
 
     output_content = render(output_dir)
-    if diff_output and output_content:
-        write_text_atomic_compatible(diff_output, output_content)
+    if diff_output and output_content and output_format != "all":
+        # Terminal color codes are for stdout; the file gets plain text.
+        write_text_atomic_compatible(diff_output, ConsoleColors.ANSI_ESCAPE.sub("", output_content))
         if not quiet:
             print(f"Diff output written to: {diff_output}")
     elif diff_output and not output_to_stdout:
@@ -83,6 +85,28 @@ def _write_diff_report(
             f"wrote the report under {output_dir} instead.",
             file=sys.stderr,
         )
+
+
+def _print_cross_data_view_inventory_error(
+    generator: Any,
+    source_snapshot: Any,
+    target_name: str | None,
+    target_id: str,
+) -> None:
+    """Explain why inventory comparison needs both sides to be the same data view."""
+    print(
+        generator.ConsoleColors.error("ERROR: Inventory comparison requires snapshots from the same data view."),
+        file=sys.stderr,
+    )
+    print(f"  Source: {source_snapshot.data_view_name} ({source_snapshot.data_view_id})", file=sys.stderr)
+    target_text = f"{target_name} ({target_id})" if target_name else target_id
+    print(f"  Target: {target_text}", file=sys.stderr)
+    print(file=sys.stderr)
+    print("Inventory IDs are data-view-scoped and cannot be matched across different data views.", file=sys.stderr)
+    print(
+        "Remove --include-segments, --include-calculated, --include-derived for cross-data-view comparison.",
+        file=sys.stderr,
+    )
 
 
 def _populate_diff_advisory_rollup(
@@ -603,6 +627,10 @@ def handle_diff_snapshot_command(
         snapshot_manager = generator.SnapshotManager(logger)
         source_snapshot = snapshot_manager.load_snapshot(snapshot_file)
 
+        if (include_calc_metrics or include_segments) and source_snapshot.data_view_id != data_view_id:
+            _print_cross_data_view_inventory_error(generator, source_snapshot, None, data_view_id)
+            return False, False, None
+
         missing_inventory = []
         if include_calc_metrics and not source_snapshot.has_calculated_metrics_inventory:
             missing_inventory.append("calculated metrics")
@@ -746,11 +774,15 @@ def handle_diff_snapshot_command(
             if not quiet and not quiet_diff:
                 print()
 
+        # Default labels belong to the roles before the swap: the saved snapshot is
+        # the source and the live data view is the target. They swap with the snapshots.
+        source_label = f"Snapshot ({source_snapshot.created_at[:10]})"
+        target_label = "Current"
         if reverse_diff:
             source_snapshot, target_snapshot = target_snapshot, source_snapshot
-
-        source_label = labels[0] if labels else f"Snapshot ({source_snapshot.created_at[:10]})"
-        target_label = labels[1] if labels else "Current"
+            source_label, target_label = target_label, source_label
+        if labels:
+            source_label, target_label = labels
         diff_result = comparator.compare(source_snapshot, target_snapshot, source_label, target_label)
 
         exit_code_override = None
@@ -876,21 +908,11 @@ def handle_compare_snapshots_command(
         target_snapshot = snapshot_manager.load_snapshot(target_file)
 
         if (include_calc_metrics or include_segments) and source_snapshot.data_view_id != target_snapshot.data_view_id:
-            print(
-                generator.ConsoleColors.error(
-                    "ERROR: Inventory comparison requires snapshots from the same data view."
-                ),
-                file=sys.stderr,
-            )
-            print(f"  Source: {source_snapshot.data_view_name} ({source_snapshot.data_view_id})", file=sys.stderr)
-            print(f"  Target: {target_snapshot.data_view_name} ({target_snapshot.data_view_id})", file=sys.stderr)
-            print(file=sys.stderr)
-            print(
-                "Inventory IDs are data-view-scoped and cannot be matched across different data views.", file=sys.stderr
-            )
-            print(
-                "Remove --include-segments, --include-calculated, --include-derived for cross-data-view comparison.",
-                file=sys.stderr,
+            _print_cross_data_view_inventory_error(
+                generator,
+                source_snapshot,
+                target_snapshot.data_view_name,
+                target_snapshot.data_view_id,
             )
             return False, False, None
 

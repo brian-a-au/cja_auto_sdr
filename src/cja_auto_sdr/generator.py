@@ -978,6 +978,8 @@ def _run_data_quality_validation(
     max_issues: int,
     skip_validation: bool,
     execution_policy: ProcessingExecutionPolicy,
+    metrics_only: bool = False,
+    dimensions_only: bool = False,
 ) -> DataQualityValidationResult:
     """Execute validation and issue extraction with fail-closed semantics."""
     if not execution_policy.run_data_quality_validation:
@@ -1035,6 +1037,8 @@ def _run_data_quality_validation(
             metrics_required_fields=VALIDATION_SCHEMA["required_metric_fields"],
             dimensions_required_fields=VALIDATION_SCHEMA["required_dimension_fields"],
             critical_fields=VALIDATION_SCHEMA["critical_fields"],
+            include_metrics=not dimensions_only,
+            include_dimensions=not metrics_only,
         )
         dq_checker.log_summary()
 
@@ -3775,6 +3779,8 @@ def process_single_dataview(
             max_issues=max_issues,
             skip_validation=skip_validation,
             execution_policy=execution_policy,
+            metrics_only=metrics_only,
+            dimensions_only=dimensions_only,
         )
         data_quality_df = validation_result.data_quality_df
         dq_issues = validation_result.dq_issues
@@ -4663,28 +4669,28 @@ def run_dry_run(data_views: list[str], config_file: str, logger: logging.Logger,
 
     # Step 1: Validate credentials
     print("[1/3] Validating credentials...")
-    if profile:
-        # Validate profile credentials
-        try:
-            profile_creds = load_profile_credentials(profile, logger)
-            if profile_creds:
-                print(f"  ✓ Profile '{profile}' found and valid")
-            else:
-                print(f"  ✗ Profile '{profile}' has no valid credentials")
-                all_passed = False
-        except ProfileNotFoundError:
-            print(f"  ✗ Profile '{profile}' not found")
-            all_passed = False
-        except ProfileConfigError as e:
-            print(f"  ✗ Profile '{profile}' configuration error: {e}")
-            all_passed = False
-    else:
-        # Validate config file
-        if validate_config_file(config_file, logger):
-            print(f"  ✓ Configuration file '{config_file}' is valid")
+    try:
+        _, resolved_source = CredentialResolver(logger).resolve(
+            profile=resolve_active_profile(profile),
+            config_file=config_file,
+        )
+        if resolved_source.startswith("profile:"):
+            display_source = f"Profile: {resolved_source.split(':', 1)[1]}"
+        elif resolved_source == "environment":
+            display_source = "Environment variables"
+        elif resolved_source.startswith("config:"):
+            display_source = f"Config file: {os.path.abspath(config_file)}"
         else:
-            print("  ✗ Configuration file validation failed")
-            all_passed = False
+            display_source = resolved_source
+        print(f"  ✓ Credentials valid ({display_source})")
+    except CredentialSourceError as e:
+        if e.reason == "Profile directory not found":
+            print(f"  ✗ Profile '{resolve_active_profile(profile)}' not found")
+        else:
+            print(f"  ✗ {e.message}")
+            if e.reason:
+                print(f"    {e.reason}")
+        all_passed = False
 
     if not all_passed:
         print()
@@ -7214,7 +7220,11 @@ def _dispatch_post_validation_report_modes(
             scope="with --config-status",
             hint="use --config-json and redirect stdout to save the status",
         )
-        success = show_config_status(args.config_file, profile=getattr(args, "profile", None), output_json=output_json)
+        success = show_config_status(
+            args.config_file,
+            profile=resolve_active_profile(getattr(args, "profile", None)),
+            output_json=output_json,
+        )
         if run_state is not None:
             run_state["details"] = {"operation_success": success}
         sys.exit(0 if success else 1)
@@ -7222,7 +7232,7 @@ def _dispatch_post_validation_report_modes(
     if args.validate_config:
         success = validate_config_only(
             args.config_file,
-            profile=getattr(args, "profile", None),
+            profile=resolve_active_profile(getattr(args, "profile", None)),
             output_dir=getattr(args, "output_dir", "."),
         )
         if run_state is not None:

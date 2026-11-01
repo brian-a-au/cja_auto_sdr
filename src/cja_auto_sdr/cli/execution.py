@@ -755,9 +755,15 @@ def _handle_single_mode_git_commit(args: argparse.Namespace, result: Any) -> boo
         if commit_result == "no_changes":
             print(generator.ConsoleColors.info("  No changes to commit (snapshot unchanged)"))
         else:
-            print(generator.ConsoleColors.success(f"  Committed: {commit_result}"))
+            push_marker = " (push failed: "
+            sha, _, push_tail = commit_result.partition(push_marker)
+            print(generator.ConsoleColors.success(f"  Committed: {sha}"))
             if getattr(args, "git_push", False):
-                print(generator.ConsoleColors.success("  Pushed to remote"))
+                if push_marker in commit_result:
+                    push_reason = push_tail.removesuffix(")").strip() or "unknown error"
+                    print(generator.ConsoleColors.warning(f"  Push failed: {push_reason}"))
+                else:
+                    print(generator.ConsoleColors.success("  Pushed to remote"))
     else:
         print(generator.ConsoleColors.error(f"  Git commit failed: {commit_result}"))
         return False

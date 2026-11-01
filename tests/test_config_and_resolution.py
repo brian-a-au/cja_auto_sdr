@@ -80,6 +80,37 @@ class TestShowConfigStatusEnvVars:
         assert "Environment variables" in output
 
 
+class TestShowConfigStatusStrictEnv:
+    """CFG-2: config status must reject env credentials that real runs skip."""
+
+    def test_config_status_skips_env_credentials_that_real_runs_reject(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        from cja_auto_sdr.generator import show_config_status
+
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.delenv("CJA_PROFILE", raising=False)
+        monkeypatch.setenv("ORG_ID", "ENVORG")  # no @AdobeOrg suffix
+        monkeypatch.setenv("CLIENT_ID", "envclient00000000000000000000000c")
+        monkeypatch.setenv("SECRET", "env-secret-00000000000000000000000")
+        monkeypatch.setenv("SCOPES", "openid")
+        config = tmp_path / "config.json"
+        config.write_text(
+            json.dumps(
+                {
+                    "org_id": "FILEORG11111111111111111@AdobeOrg",
+                    "client_id": "fileclient000000000000000000000b",
+                    "secret": "file-secret-000000000000000000000",
+                    "scopes": "openid",
+                },
+            ),
+        )
+        result = show_config_status(config_file=str(config), output_json=True)
+        assert result is True
+        data = json.loads(capsys.readouterr().out)
+        assert data["source"].startswith("Config file")
+
+
 class TestShowConfigStatusFile:
     """Lines 9918-9954: config file loading and error paths."""
 
@@ -354,7 +385,9 @@ class TestValidateConfigOnly:
 
         config = tmp_path / "config.json"
         config.write_text(
-            json.dumps({"org_id": "org@Adobe", "client_id": "abcd1234efgh", "secret": "secret12345678"}),
+            json.dumps(
+                {"org_id": "org@Adobe", "client_id": "abcd1234efgh", "secret": "secret12345678", "scopes": "openid"}
+            ),
         )
         mock_cja = MagicMock()
         mock_cja.getDataViews.side_effect = RuntimeError("unexpected auth bootstrap failure")
@@ -386,7 +419,9 @@ class TestValidateConfigOnly:
 
         config = tmp_path / "config.json"
         config.write_text(
-            json.dumps({"org_id": "org@Adobe", "client_id": "abcd1234efgh", "secret": "secret12345678"}),
+            json.dumps(
+                {"org_id": "org@Adobe", "client_id": "abcd1234efgh", "secret": "secret12345678", "scopes": "openid"}
+            ),
         )
         mock_cjapy.CJA.side_effect = Exception("auth bootstrap failed")
         with patch("cja_auto_sdr.generator.load_credentials_from_env", return_value=None):
@@ -1903,6 +1938,26 @@ class TestStatsResolutionFailureContract:
         assert "dv_good" in captured.out
         assert "Missing Name" in captured.out
         assert "ERROR" in captured.out
+
+    @patch("cja_auto_sdr.generator.cjapy")
+    @patch("cja_auto_sdr.generator.configure_cjapy")
+    def test_stats_csv_quotes_unresolved_name(self, mock_config, mock_cjapy, capsys: pytest.CaptureFixture) -> None:
+        import csv
+        import io
+
+        self._mock_one_healthy_dv(mock_config, mock_cjapy)
+        name = 'Prod, EU "main"'
+
+        code, captured = self._run_stats(
+            ["--stats", "dv_good", name, "--format", "csv", "--output", "-"], (["dv_good"], {}), capsys
+        )
+
+        assert code == 1
+        rows = list(csv.reader(io.StringIO(captured.out.strip())))
+        assert [len(row) for row in rows] == [6, 6, 6]
+        assert rows[2][0] == name
+        # Existing dv_ rows keep their exact unquoted-id format
+        assert captured.out.splitlines()[1].startswith('dv_good,"Healthy DV","Alice",')
 
     @patch("cja_auto_sdr.generator.cjapy")
     @patch("cja_auto_sdr.generator.configure_cjapy")

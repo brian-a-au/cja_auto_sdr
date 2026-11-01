@@ -460,27 +460,33 @@ class DataQualityChecker:
         dimensions_required_fields: list[str],
         critical_fields: list[str],
         max_workers: int = DEFAULT_VALIDATION_WORKERS,
+        include_metrics: bool = True,
+        include_dimensions: bool = True,
     ):
         """
-        Run validation checks in parallel for metrics and dimensions
+        Run validation checks in parallel for metrics and dimensions.
+
+        ``include_metrics`` / ``include_dimensions`` skip a family the caller excluded
+        (for example via ``--metrics-only``); both default to True.
         """
         try:
             self.logger.info("Starting parallel validation (metrics and dimensions)")
 
-            tasks = {
-                "metrics": lambda: self.check_all_quality_issues_optimized(
+            tasks = {}
+            if include_metrics:
+                tasks["metrics"] = lambda: self.check_all_quality_issues_optimized(
                     metrics_df,
                     "Metrics",
                     metrics_required_fields,
                     critical_fields,
-                ),
-                "dimensions": lambda: self.check_all_quality_issues_optimized(
+                )
+            if include_dimensions:
+                tasks["dimensions"] = lambda: self.check_all_quality_issues_optimized(
                     dimensions_df,
                     "Dimensions",
                     dimensions_required_fields,
                     critical_fields,
-                ),
-            }
+                )
 
             failures: list[tuple[str, Exception]] = []
             with ThreadPoolExecutor(max_workers=max_workers) as executor:

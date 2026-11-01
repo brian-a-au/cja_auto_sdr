@@ -14,7 +14,7 @@ from typing import Any
 
 from cja_auto_sdr.core.advisory_builders import build_diff_advisories
 from cja_auto_sdr.core.colors import _format_error_msg
-from cja_auto_sdr.core.json_io import write_json_atomic_compatible
+from cja_auto_sdr.core.json_io import replace_non_finite, write_json_atomic_compatible
 from cja_auto_sdr.diff.models import (
     ChangeType,
     ComponentDiff,
@@ -182,7 +182,7 @@ def write_diff_json_output(
     try:
         logger.info("Generating diff JSON output...")
 
-        json_data = build_diff_json_data(diff_result, changes_only=changes_only)
+        json_data = replace_non_finite(build_diff_json_data(diff_result, changes_only=changes_only))
 
         json_file = os.path.join(output_dir, f"{base_filename}.json")
         write_json_atomic_compatible(json_file, json_data, indent=2, ensure_ascii=False, trailing_newline=False)

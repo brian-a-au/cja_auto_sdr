@@ -281,11 +281,11 @@ def test_build_sdr_blocks_dq_section_omitted_when_empty():
 def _neutralize_dotenv(monkeypatch):
     """Install a no-op ``dotenv`` so a developer's local .env can't leak into
     these resolver tests. ``resolve_notion_credentials`` calls
-    ``from dotenv import load_dotenv; load_dotenv()``, and python-dotenv's
-    ``find_dotenv`` searches upward from the source file (not the cwd), so
-    chdir is not enough — we replace the module with a no-op loader. Works
-    whether or not python-dotenv is installed."""
+    ``load_dotenv(find_dotenv(usecwd=True))``, which would pick up a ``.env``
+    from the cwd or any parent directory, so we replace the module with a
+    no-op loader. Works whether or not python-dotenv is installed."""
     fake = types.ModuleType("dotenv")
+    fake.find_dotenv = lambda *args, **kwargs: ""
     fake.load_dotenv = lambda *args, **kwargs: False
     monkeypatch.setitem(sys.modules, "dotenv", fake)
 
@@ -1510,3 +1510,45 @@ def test_push_to_notion_from_typed_json_with_lists(tmp_path):
     with patch("cja_auto_sdr.output.writers.notion.write_notion_output", side_effect=fake_write):
         _push_to_notion_from_json(str(artifact), output_dir=str(tmp_path))
     assert "m1, m2" in _all_text(captured["blocks"])
+
+
+def _recording_dotenv(monkeypatch):
+    """Install a fake ``dotenv`` that records find_dotenv/load_dotenv calls."""
+    fake = types.ModuleType("dotenv")
+    fake.find_calls = []
+    fake.load_calls = []
+
+    def find_dotenv(*args, **kwargs):
+        fake.find_calls.append(kwargs)
+        return "/work/proj/.env"
+
+    def load_dotenv(*args, **kwargs):
+        fake.load_calls.append(args)
+        return True
+
+    fake.find_dotenv = find_dotenv
+    fake.load_dotenv = load_dotenv
+    monkeypatch.setitem(sys.modules, "dotenv", fake)
+    return fake
+
+
+def test_notion_dotenv_searches_from_cwd_resolve_credentials(monkeypatch):
+    fake = _recording_dotenv(monkeypatch)
+    monkeypatch.setenv("NOTION_TOKEN", "tok")
+    monkeypatch.setenv("NOTION_PARENT_PAGE_ID", "pid")
+    from cja_auto_sdr.output.writers.notion import resolve_notion_credentials
+
+    resolve_notion_credentials()
+    assert fake.find_calls == [{"usecwd": True}]
+    assert fake.load_calls == [("/work/proj/.env",)]
+
+
+def test_notion_dotenv_searches_from_cwd_repair_database(monkeypatch):
+    fake = _recording_dotenv(monkeypatch)
+    monkeypatch.delenv("NOTION_DATABASE_ID", raising=False)
+    from cja_auto_sdr.output.writers.notion import NotionConfigurationError, repair_notion_database
+
+    with pytest.raises(NotionConfigurationError):
+        repair_notion_database(None, logging.getLogger("t"))
+    assert fake.find_calls == [{"usecwd": True}]
+    assert fake.load_calls == [("/work/proj/.env",)]

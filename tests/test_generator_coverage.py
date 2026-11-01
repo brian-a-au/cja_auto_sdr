@@ -387,8 +387,7 @@ class TestFormatDiffValue:
     def test_truncation_at_default_max(self):
         long_val = "a" * 50
         result = _format_diff_value(long_val, truncate=True, max_len=30)
-        assert len(result) == 30
-        assert result == "a" * 30
+        assert result == "a" * 30 + "..."
 
     def test_no_truncation(self):
         long_val = "a" * 50
@@ -397,7 +396,7 @@ class TestFormatDiffValue:
 
     def test_custom_max_len(self):
         result = _format_diff_value("abcdefghij", truncate=True, max_len=5)
-        assert result == "abcde"
+        assert result == "abcde..."
 
     def test_exact_max_len_not_truncated(self):
         result = _format_diff_value("abcde", truncate=True, max_len=5)
@@ -1077,7 +1076,7 @@ class TestJsonTypedGeneration:
         payload = json.loads(open(result.output_file, encoding="utf-8").read())
         assert "schema_version" not in payload
         assert payload["metrics"][0]["fieldDefinition"] == json.dumps(_TYPED_METRICS[0]["fieldDefinition"], indent=2)
-        assert payload["data_view"]["components"] == "c1"
+        assert payload["data_view"]["components"] == "c1, c2, c3"
 
     def test_typed_capture_does_not_change_other_writers(self, tmp_path, mock_config_file):
         """Excel/CSV/HTML/Markdown from the same run are the same with or without typed capture."""

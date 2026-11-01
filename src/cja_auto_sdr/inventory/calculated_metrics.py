@@ -135,6 +135,21 @@ COMPLEXITY_MAX_VALUES = {
 # ==================== DATA CLASSES ====================
 
 
+def _is_single_group(expr: str) -> bool:
+    """True only when ``expr`` starts with ``(`` and that paren closes at the last character."""
+    if not expr.startswith("("):
+        return False
+    depth = 0
+    for index, char in enumerate(expr):
+        if char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+            if depth == 0:
+                return index == len(expr) - 1
+    return False
+
+
 @dataclass
 class CalculatedMetricSummary:
     """Summary of a single calculated metric for inventory output.
@@ -853,7 +868,12 @@ class CalculatedMetricsInventoryBuilder:
 
         if func == "add":
             operands = self._get_add_operands(actual_formula)
-            if operands:
+            child_count = sum(1 for key in ("col1", "col2") if key in actual_formula)
+            extra_operands = actual_formula.get("operands")
+            if isinstance(extra_operands, list):
+                child_count += len(extra_operands)
+            # Some operands have no simple name; listing only the named ones would misstate the sum.
+            if operands and len(operands) == child_count:
                 if len(operands) <= 3:
                     return " + ".join(operands)
                 return f"{' + '.join(operands[:2])} + {len(operands) - 2} more"
@@ -880,6 +900,11 @@ class CalculatedMetricsInventoryBuilder:
                 return f"{inner_metric} filtered by segment"
             if inner_metric:
                 return f"{inner_metric} (filtered)"
+            inner_summary = self._generate_formula_summary(actual_formula.get("formula"), parsed)
+            if inner_summary and inner_summary != "Custom calculated metric":
+                if "filtered" in inner_summary:
+                    return inner_summary
+                return f"{inner_summary} (filtered)"
             return "Segmented metric"
 
         if func == "segment":
@@ -1002,10 +1027,10 @@ class CalculatedMetricsInventoryBuilder:
             left = self._build_formula_expression(node.get("col1", {}), max_depth - 1)
             right = self._build_formula_expression(node.get("col2", {}), max_depth - 1)
             if left and right:
-                # Add parens if operands are complex
-                if " " in left and not left.startswith("("):
+                # Add parens if operands are complex, unless one group already spans the whole operand
+                if " " in left and not _is_single_group(left):
                     left = f"({left})"
-                if " " in right and not right.startswith("("):
+                if " " in right and not _is_single_group(right):
                     right = f"({right})"
                 return f"{left} / {right}"
 
@@ -1017,17 +1042,23 @@ class CalculatedMetricsInventoryBuilder:
 
         if func == "add":
             operands = []
+            incomplete = False
             for key in ["col1", "col2"]:
                 if key in node:
                     expr = self._build_formula_expression(node[key], max_depth - 1)
                     if expr:
                         operands.append(expr)
+                    else:
+                        incomplete = True
             if "operands" in node and isinstance(node["operands"], list):
                 for op in node["operands"]:
                     expr = self._build_formula_expression(op, max_depth - 1)
                     if expr:
                         operands.append(expr)
-            if operands:
+                    else:
+                        incomplete = True
+            # A dropped operand would make the sum look complete; let the caller fall back instead.
+            if operands and not incomplete:
                 return " + ".join(operands)
 
         if func == "subtract":
@@ -1037,7 +1068,8 @@ class CalculatedMetricsInventoryBuilder:
                 return f"{left} - {right}"
 
         if func == "calc-metric":
-            inner = self._build_formula_expression(node.get("formula", {}), max_depth - 1)
+            # The wrapper is not part of the user's formula, so it must not spend depth budget.
+            inner = self._build_formula_expression(node.get("formula", {}), max_depth)
             filters = node.get("filters")
             has_segment = isinstance(filters, list) and any(
                 isinstance(f, dict) and self._normalize_func_name(f.get("func", "")) in ("segment", "segment-ref")
