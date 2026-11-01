@@ -541,6 +541,47 @@ class TestProfileImport:
         assert config["client_id"] == "1234567890abcdef1234567890abcdef"
         assert config["secret"] == "abcdefghijklmnop1234567890"
 
+    def test_profile_import_normalizes_list_secret_and_scopes(self, tmp_path):
+        """List-shaped secret and scopes import the way --config-file reads them."""
+        from cja_auto_sdr.core.credentials import normalize_scopes_value
+
+        scopes = ["openid", "AdobeID", "read_organizations"]
+        source = tmp_path / "credentials.json"
+        source.write_text(
+            json.dumps(
+                {
+                    "org_id": "test@AdobeOrg",
+                    "client_id": "1234567890abcdef1234567890abcdef",
+                    "secret": ["test-secret-not-real-0001"],
+                    "scopes": scopes,
+                },
+            ),
+        )
+
+        credentials = load_profile_import_source(source)
+
+        assert credentials["secret"] == "test-secret-not-real-0001"
+        assert credentials["scopes"] == normalize_scopes_value(scopes) == "openid,AdobeID,read_organizations"
+
+    def test_profile_import_string_values_unchanged(self, tmp_path):
+        source = tmp_path / "credentials.json"
+        source.write_text(
+            json.dumps(
+                {
+                    "org_id": " test@AdobeOrg ",
+                    "client_id": "1234567890abcdef1234567890abcdef",
+                    "secret": '"abcdefghijklmnop1234567890"',
+                    "scopes": "openid, AdobeID",
+                },
+            ),
+        )
+
+        credentials = load_profile_import_source(source)
+
+        assert credentials["org_id"] == "test@AdobeOrg"
+        assert credentials["secret"] == "abcdefghijklmnop1234567890"
+        assert credentials["scopes"] == "openid, AdobeID"
+
     def test_import_profile_non_interactive_rejects_existing_without_overwrite(self, tmp_path):
         """Existing profile should not be replaced without overwrite."""
         source = tmp_path / "credentials.json"
