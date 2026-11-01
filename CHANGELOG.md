@@ -9,6 +9,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.13.8] - 2026-11-01
+
+This patch fixes bugs in credential handling, diff and snapshot output, SDR output, data quality, and batch runs. It also makes snapshot-based commands faster. The diagnostic commands (`--config-status`, `--validate-config`, `--dry-run`) now check credentials the same way real runs do. Snapshot files and diff JSON are now always valid JSON. Several results change on purpose:
+- An explicit `--profile` or `CJA_PROFILE` that is missing a required field is now an error. Before, the run quietly used env vars or `config.json` instead.
+- A `.env` file is found starting from the current folder.
+- Diff CSV, Excel, HTML, and Markdown output now show full changed values instead of the first 30 characters.
+- Quality checks follow `--metrics-only` and `--dimensions-only`, so filtered runs can pass `--fail-on-quality` where they failed before.
+- Calculated metric `formula_summary` text changes for some filtered metrics. `formula_summary` is compared in diffs, so a diff against a v3.13.7 snapshot shows those metrics as modified once.
+
+### Fixed
+
+- **`.env` on installed builds:** on a pip, pipx, or `uv tool` install, a `.env` file in the current folder was never loaded. The search started from the installed package's folder instead of the current folder. Notion credentials had the same problem. `.env` is now found from the current folder upward. Variables that are already set in the shell still take priority.
+  - **Behavior change:** an editable install no longer loads the repo's `.env` when you run the tool from another folder.
+- **Incomplete profile:** a profile chosen with `--profile` or `CJA_PROFILE` that lacked a required field logged a warning, and the run then used env vars or `config.json`, which could belong to another org. It is now an error, the same as a missing profile. The message says how to fix the profile or unset `CJA_PROFILE`.
+  - **Behavior change:** runs with an incomplete profile now stop instead of falling back.
+- **Profile `.env` parsing:** the profile `.env` loader dropped `export KEY=value` lines and kept inline `# comments` in values. `--profile-import` also kept the comments. Both now parse these lines the way python-dotenv does.
+- **Profile names:** a profile name with a trailing newline passed validation. It is now rejected. Profile names are also trimmed on every path (`" prod "` resolves to `prod`), as `configure_cjapy` already did.
+- **`--config-status` and `--validate-config`:** they checked env credentials more loosely than real runs. So they could report env vars as the source while real runs used `config.json`. They now use the same strict check, and they trim the profile name the same way.
+- **`--dry-run` credentials:** step 1 checked only `config.json` or `--profile`. With credentials from env vars, or a profile set only through `CJA_PROFILE`, it always failed. It now uses the same resolver as real runs.
+- **`config.json` values:** credentials in the root `config.json` skipped the whitespace and quote cleanup that profile and env values get. They are now cleaned the same way. A `secret` given as a list now uses its first item, as before.
+- **Exit code 2:** the `--exit-codes` and `--explain-exit-code 2` text, the `--help` epilog, and the docs described code 2 only as a policy threshold. Usage errors such as an unknown option also exit 2, and the text now says so. The config precedence docs now show that `--config-file` replaces the default `config.json`.
+- **Invalid JSON in snapshots and diffs:** components with missing fields produced bare `NaN` tokens in snapshot files, git snapshot files, and diff JSON (including `--output -`). That is not valid JSON, and strict parsers rejected it. These values are now written as `null`. Old snapshot files that contain `NaN` still load.
+- **Cut diff values:** diff details cut each value to 30 characters with no marker. So a change after character 30 showed as `'X' -> 'X'`. CSV, Excel, HTML, and Markdown now show the full values. Console and grouped output still cut at 30 characters, and they now add `...`.
+  - **Behavior change:** diff report files are longer when values are long. Excel still limits a cell to 32,767 characters.
+- **`--reverse-diff` labels:** with `--diff-snapshot` or `--compare-with-prev`, each side got the other side's default label. Labels now stay with their snapshots. Labels you pass yourself are unchanged.
+- **Failed git push:** with `--git-push`, a failed push still printed a green "Pushed to remote". It now prints the commit and then a warning with the reason. The exit code is unchanged.
+- **`--keep-since` with `--auto-snapshot`:** an invalid value was ignored, so old snapshots were never removed. It now exits 1 with `Invalid --keep-since value`, before any API call, the same as `--prune-snapshots`.
+  - **Behavior change:** scripts that pass an invalid `--keep-since` with `--auto-snapshot` now see exit 1.
+- **`--diff-output` files:** `--format all --diff-output report.json` wrote console text into the `.json` file. It now prints the existing warning that names the output folder. Console text saved with `--diff-output` no longer contains color codes.
+- **`--diff-snapshot` inventory across data views:** inventory comparison did not check that the snapshot came from the same data view, though the other diff modes did. It now gives the same error.
+- **`--group-by-field`:** inventory changes were counted in the totals but never listed. They now have Calculated Metrics and Segments sections.
+- **Undated snapshots:** a snapshot file with no `created_at` loaded as created now, so its labels showed today's date. Its date now comes from the file's modification time.
+- **Quality checks with `--metrics-only` or `--dimensions-only`:** checks still ran on the family that was left out. Those issues could fail `--fail-on-quality`, and an empty family added a false CRITICAL "No dimensions found". Quality checks, `--quality-report`, and the gate now follow the requested family.
+  - **Behavior change:** filtered runs report fewer quality issues and can pass a gate they failed before.
+- **List values in SDR JSON:** the legacy JSON `data_view` section kept only the first value of list fields such as `segmentList`. Values are now joined with `", "`, so the field is still a string. `--json-typed` is unchanged and keeps native lists.
+- **Segment dates and owners:** segment inventory `created` and `owner_id` were blank for every segment on the real API shape. Calculated metric `owner_id` was blank too. They are now filled in.
+- **HTML footer:** the SDR HTML footer always said "Generated at N/A". It now shows the generation time.
+- **`--stats` CSV:** the error row for a name that did not resolve broke the CSV columns when the name contained a comma or a quote. The name is now quoted when needed. Other rows are unchanged.
+- **Batch stop on error:** without `--continue-on-error`, data views that were already running when the batch stopped still wrote their files, but their results were left out of the summary and the run summary JSON. They are now reported. The stop warning is logged once.
+- **Calculated metric summaries under filters:** in v3.13.7, metrics with top-level segment filters could get a vague summary such as `Segmented metric`, or a wrong partial formula such as `c / d[segment]`. Summaries now keep the full formula. A sum with an operand that has no simple name now reads `Sum of metrics` instead of a partial sum. A ratio whose operand is itself a grouped expression is now wrapped in parentheses, so `x / ((a + b) / c[segment])` no longer reads as `x / (a + b) / c`.
+  - **Behavior change:** `formula_summary` changes for the affected metrics, so a diff against a v3.13.7 snapshot shows them as modified once.
+
+### Performance
+
+- **Snapshots:** building a snapshot now fetches dimensions while the metrics fetch runs. This covers `--diff`, `--diff-snapshot`, `--compare-with-prev`, `--snapshot`, and each `--watch` cycle. On a rich data view, `--diff` went from 2.75s to 2.20s median, and `--diff-snapshot` went from 1.94s to 1.68s. Output and the number of API calls are unchanged. Ctrl+C still stops at once. When the metrics fetch fails, the dimensions request still completes before the error is shown.
+- **`--inventory-summary`:** the same overlap for the derived field summary, from 2.29s to 2.08s median.
+- **Markdown and Excel writers:** Markdown tables and Excel column sizing now use plain Python instead of several pandas string passes per column. That is about 28 ms and 29 ms less per SDR on a rich data view. Output is byte-identical.
+- **Diff comparison:** reference masking is skipped when no `*_references` field is ignored.
+
 ## [3.13.7] - 2026-10-31
 
 This patch fixes bugs in CLI output contracts, interrupt handling, and several writers, and it makes two runs faster. Ctrl+C now stops `--watch` after the current data view. A Ctrl+C in an org report keeps the lock until in-flight fetches finish. Excel output no longer turns text into formulas or leaves a partial workbook behind. Several results change on purpose:
