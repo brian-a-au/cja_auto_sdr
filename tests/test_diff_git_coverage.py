@@ -771,6 +771,20 @@ class TestGitPushFailureReporting:
         assert "Pushed to remote" not in out
         assert "Committed: abc12345" in out
 
+    def test_git_push_failure_committed_line_has_only_sha(self, capsys):
+        _, out = self._run("abc12345 (push failed: no remote)", capsys)
+        committed = next(line for line in out.splitlines() if "Committed:" in line)
+        assert "push failed" not in committed.lower()
+        assert committed.rstrip().endswith("abc12345")
+
+    def test_git_push_failure_reason_keeps_trailing_paren(self, capsys):
+        _, out = self._run("abc12345 (push failed: rejected (see 'git help push'))", capsys)
+        assert "Push failed: rejected (see 'git help push')" in out
+
+    def test_git_push_failure_empty_reason_says_unknown(self, capsys):
+        _, out = self._run("abc12345 (push failed: )", capsys)
+        assert "Push failed: unknown error" in out
+
     def test_git_push_success_still_reports_pushed(self, capsys):
         handled, out = self._run("abc12345", capsys)
         assert handled is True
