@@ -188,7 +188,7 @@ tests/
 └── README.md                        # This file
 ```
 
-**Total: 9,623 comprehensive tests**
+**Total: 9,624 comprehensive tests**
 
 ### Test Count Breakdown
 
@@ -197,16 +197,16 @@ tests/
 
 | Category | Tests | Files | Notes |
 |----------|-------|-------|-------|
-| `unit` | 9,461 | 169 | Default primary category for files without explicit integration/e2e/smoke scope |
+| `unit` | 9,462 | 169 | Default primary category for files without explicit integration/e2e/smoke scope |
 | `integration` | 123 | 3 | Cross-module integration suites |
 | `e2e` | 23 | 2 | End-to-end suites with a mocked external boundary |
 | `smoke` | 16 | 2 | Lightweight command-mode coverage |
 | `slow` | 0 | 0 | Overlay marker; these tests are also counted in a primary category |
-| **Primary Total** | **9,623** | **176** | **unit + integration + e2e + smoke** |
+| **Primary Total** | **9,624** | **176** | **unit + integration + e2e + smoke** |
 
 | CI Slice | Tests | Files | Selector |
 |----------|-------|-------|----------|
-| `test-unit` | 9,461 | 169 | `-m "unit and not slow"` |
+| `test-unit` | 9,462 | 169 | `-m "unit and not slow"` |
 | `test-integration` | 146 | 5 | `-m "integration or e2e or slow"` |
 | `smoke-test` | 16 | 2 | `-m smoke` |
 
@@ -385,14 +385,14 @@ tests/
 | `test_org_writers_csv.py` | 2 | Org components-CSV bucket-lookup characterization test |
 | `test_csv_staging.py` | 16 | Staged CSV bundle publication and completion manifest tests |
 | `test_sdr_markdown_escaping.py` | 6 | SDR markdown vectorized cell-escaping characterization test |
-| `test_diff_excel.py` | 9 | Diff Excel row-coloring characterization tests |
+| `test_diff_excel.py` | 10 | Diff Excel row-coloring characterization tests |
 | `test_diff_report_coverage.py` | 28 | Metadata policy and coverage in HTML/CSV/Excel diffs |
 | `test_diff_markdown_escaping.py` | 3 | Diff Markdown and PR comment table-cell escaping |
 | `test_org_snapshot_parse_cache.py` | 3 | Org snapshot JSON parse-cache characterization test |
 | `test_diff_snapshot_retention.py` | 89 | Diff snapshot-retention parse-cache characterization test |
 | `test_diff_comparator_normalize.py` | 22 | Diff field-normalization type-fast-path characterization test |
 | `test_logging_diagnostics.py` | 2 | emit_diagnostic isEnabledFor guard characterization tests |
-| **Total** | **9,623** | **Collected via pytest --collect-only** |
+| **Total** | **9,624** | **Collected via pytest --collect-only** |
 
 ## Running Tests
 
@@ -850,7 +850,7 @@ the `tests/README.md` inventory tree or count table.
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (9,623 tests total)
+- [x] Comprehensive test coverage (9,624 tests total)
 - [x] Org-wide analysis tests (test_org_report.py) - 225 tests (including large org scaling, output path aliases, memory warnings, smart cache invalidation)
 - [x] Org-wide analysis integration tests (test_org_report_integration.py) - 46 tests (end-to-end flows, caching, filtering, governance thresholds)
 - [x] Profile management tests (test_profiles.py) - 94 tests
