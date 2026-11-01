@@ -10,6 +10,19 @@ from cja_auto_sdr.core.colors import ConsoleColors
 from cja_auto_sdr.core.constants import FORMAT_ALIASES
 
 
+def threshold_percent(fraction: float) -> str:
+    """Render a 0-1 threshold as a whole percent without the % sign (0.57 -> "57")."""
+    return f"{fraction * 100:.0f}"
+
+
+def common_band_label(core_threshold: float, core_min_count: int | None, *, prefix: str = "") -> str:
+    """Label the common band, which runs from 25% of data views up to the core cut."""
+    core_percent = round(core_threshold * 100)
+    if core_min_count is None and core_percent > 25:
+        return f"Common ({prefix}25-{core_percent - 1}% DVs)"
+    return f"Common ({prefix}25%+ DVs, below core)"
+
+
 def _render_distribution_bar(count: int, total: int, width: int = 30) -> str:
     """Render ASCII progress bar for distribution visualization.
 

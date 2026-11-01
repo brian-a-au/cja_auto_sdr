@@ -19,7 +19,7 @@ from cja_auto_sdr.org.models import (
 from cja_auto_sdr.org.writers.common import (
     _format_recommendation_context_entries as _format_recommendation_context_entries_impl,
 )
-from cja_auto_sdr.org.writers.common import _governance_check_rows
+from cja_auto_sdr.org.writers.common import _governance_check_rows, common_band_label, threshold_percent
 from cja_auto_sdr.org.writers.common import (
     _normalize_recommendation_for_json as _normalize_recommendation_for_json_impl,
 )
@@ -229,15 +229,20 @@ def write_org_report_html(
 
     # Build correct label for core threshold
     if result.parameters.core_min_count is None:
-        core_label = f"{int(result.parameters.core_threshold * 100)}%+"
-        core_desc = f"{int(result.parameters.core_threshold * 100)}% or more of"
+        core_label = f"{threshold_percent(result.parameters.core_threshold)}%+"
+        core_desc = f"{threshold_percent(result.parameters.core_threshold)}% or more of"
     else:
         core_label = f"&gt;={result.parameters.core_min_count}"
         core_desc = f"{result.parameters.core_min_count} or more"
 
     for bucket, m_list, d_list, badge_class in [
         (f"Core ({core_label} DVs)", dist.core_metrics, dist.core_dimensions, "core"),
-        ("Common (25-49% DVs)", dist.common_metrics, dist.common_dimensions, "common"),
+        (
+            common_band_label(result.parameters.core_threshold, result.parameters.core_min_count),
+            dist.common_metrics,
+            dist.common_dimensions,
+            "common",
+        ),
         ("Limited (2+ DVs)", dist.limited_metrics, dist.limited_dimensions, "limited"),
         ("Isolated (1 DV)", dist.isolated_metrics, dist.isolated_dimensions, "isolated"),
     ]:
@@ -313,12 +318,10 @@ def write_org_report_html(
         effective_threshold = effective_governance_overlap_threshold(result.parameters.overlap_threshold)
         threshold_note = ""
         if result.parameters.overlap_threshold > 0.9:
-            threshold_note = (
-                f" (configured {int(result.parameters.overlap_threshold * 100)}%, capped at 90% for governance checks)"
-            )
+            threshold_note = f" (configured {threshold_percent(result.parameters.overlap_threshold)}%, capped at 90% for governance checks)"
         html_out += f"""
         <h2>High Overlap Pairs</h2>
-        <p>Data view pairs with &gt;= {int(effective_threshold * 100)}% Jaccard similarity{threshold_note}.</p>
+        <p>Data view pairs with &gt;= {threshold_percent(effective_threshold)}% Jaccard similarity{threshold_note}.</p>
         <div class="card">
             <table>
                 <thead>

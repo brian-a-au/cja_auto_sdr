@@ -2762,3 +2762,59 @@ class TestBuildOrgReportJsonDataSkipSimilarity:
         data = build_org_report_json_data(result)
 
         assert data["summary"]["similarity_analysis_mode"] == "org_stats_only"
+
+
+class TestOrgThresholdLabels:
+    """Band and threshold labels follow the thresholds the report used."""
+
+    @staticmethod
+    def _render_all(tmp_path, capsys, **params):
+        import dataclasses
+
+        result = _make_org_result(include_similarity=True)
+        result.parameters = dataclasses.replace(result.parameters, **params)
+        logger = logging.getLogger("test_org_labels")
+        write_org_report_console(result, result.parameters)
+        console = capsys.readouterr().out
+        markdown = Path(write_org_report_markdown(result, None, str(tmp_path), logger)).read_text(encoding="utf-8")
+        html_text = Path(write_org_report_html(result, None, str(tmp_path), logger)).read_text(encoding="utf-8")
+        return console, markdown, html_text
+
+    def test_core_label_rounds_threshold(self, tmp_path, capsys):
+        console, markdown, html_text = self._render_all(tmp_path, capsys, core_threshold=0.57)
+
+        assert "Core (in 57%+ DVs)" in console
+        assert "Core (57%+ DVs)" in markdown
+        assert "Core (57%+ DVs)" in html_text
+        assert "56%+" not in console + markdown + html_text
+        assert "Common (in 25-56% DVs)" in console
+
+    def test_overlap_label_consistent_across_formats(self, tmp_path, capsys):
+        console, markdown, html_text = self._render_all(tmp_path, capsys, overlap_threshold=0.58)
+
+        assert ">= 58% Jaccard" in console
+        assert ">= 58% Jaccard" in markdown
+        assert "&gt;= 58% Jaccard" in html_text
+
+    def test_common_band_follows_core_threshold(self, tmp_path, capsys):
+        console, markdown, html_text = self._render_all(tmp_path, capsys, core_threshold=0.8)
+
+        assert "Common (in 25-79% DVs)" in console
+        assert "Common (25-79% DVs)" in markdown
+        assert "Common (25-79% DVs)" in html_text
+
+    def test_common_band_with_core_min_count(self, tmp_path, capsys):
+        console, markdown, html_text = self._render_all(tmp_path, capsys, core_min_count=5)
+
+        assert "Common (in 25%+ DVs, below core)" in console
+        assert "Common (25%+ DVs, below core)" in markdown
+        assert "Common (25%+ DVs, below core)" in html_text
+
+    def test_default_labels_unchanged(self, tmp_path, capsys):
+        console, markdown, html_text = self._render_all(tmp_path, capsys)
+
+        assert "Common (in 25-49% DVs)" in console
+        assert "Common (25-49% DVs)" in markdown
+        assert "Common (25-49% DVs)" in html_text
+        assert "Core (in 50%+ DVs)" in console
+        assert "Core (50%+ DVs)" in markdown
