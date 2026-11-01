@@ -1168,7 +1168,7 @@ Requirements:
 
     org_group.add_argument(
         "--core-threshold",
-        type=float,
+        type=_bounded_float(0.0, 1.0),
         default=0.5,
         metavar="PERCENT",
         help='Threshold for "core" components as fraction of data views '

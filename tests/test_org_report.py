@@ -5230,3 +5230,38 @@ class TestOrgReportRunSummaryDetails:
         details = self._merge_details({})
         assert "lock" not in details
         assert "execution_settings" in details
+
+
+def _run_main(argv, tmp_path, monkeypatch):
+    from cja_auto_sdr.generator import main
+
+    monkeypatch.chdir(tmp_path)
+    with patch.object(sys, "argv", ["cja_auto_sdr", *argv]), pytest.raises(SystemExit) as exc_info:
+        main()
+    return exc_info.value.code
+
+
+def test_org_report_negative_limit_exits_1(tmp_path, monkeypatch, capsys):
+    with patch("cja_auto_sdr.generator.run_org_report", return_value=(True, False)) as run:
+        code = _run_main(["--org-report", "--limit", "-1"], tmp_path, monkeypatch)
+
+    assert code == 1
+    assert "--limit cannot be negative" in capsys.readouterr().err
+    run.assert_not_called()
+
+
+def test_core_threshold_out_of_range_exits_2(tmp_path, monkeypatch, capsys):
+    with patch("cja_auto_sdr.generator.run_org_report", return_value=(True, False)) as run:
+        code = _run_main(["--org-report", "--core-threshold", "50"], tmp_path, monkeypatch)
+
+    assert code == 2
+    assert "must be between 0.0 and 1.0" in capsys.readouterr().err
+    run.assert_not_called()
+
+
+@pytest.mark.parametrize("value", ["0.0", "1.0", "0.57"])
+def test_core_threshold_bounds_accepted(value):
+    from cja_auto_sdr.generator import parse_arguments
+
+    args = parse_arguments(["--org-report", "--core-threshold", value])
+    assert args.core_threshold == float(value)
