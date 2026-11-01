@@ -381,6 +381,9 @@ def apply_excel_formatting(
         # Use pandas' nullable string dtype so missing values become empty
         # strings instead of floating NaN values that reject the .str accessor.
         df_str = df.astype("string").fillna("")
+        # Per-column Python lists, taken once: len/count in plain Python beat
+        # per-column pandas .str passes.
+        df_str_cols = [df_str.iloc[:, i].tolist() for i in range(df_str.shape[1])]
 
         # Set column widths with appropriate caps (vectorized)
         for idx, col in enumerate(df.columns):
@@ -389,7 +392,7 @@ def apply_excel_formatting(
             if len(df) > 0:
                 # Only the first line matters for width; n=1 avoids splitting
                 # the remainder of multi-line cells.
-                content_max = int(df_str[col].str.split("\n", n=1).str[0].str.len().max())
+                content_max = max(len(s.split("\n", 1)[0]) for s in df_str_cols[idx])
             else:
                 content_max = 0
             max_len = min(max(content_max, len(str(col))) + 2, max_cap)
@@ -406,7 +409,10 @@ def apply_excel_formatting(
 
         # Row line counts computed once (vectorized) instead of per-row string scans
         if len(df) > 0:
-            row_line_counts = df_str.apply(lambda s: s.str.count("\n")).max(axis=1).astype(int).tolist()
+            if df_str_cols:
+                row_line_counts = [max(s.count("\n") for s in row) for row in zip(*df_str_cols, strict=True)]
+            else:
+                row_line_counts = [0] * len(df)
         else:
             row_line_counts = []
         severity_values = df_str["Severity"].tolist() if is_data_quality_sheet else None
