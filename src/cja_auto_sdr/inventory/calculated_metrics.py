@@ -135,6 +135,21 @@ COMPLEXITY_MAX_VALUES = {
 # ==================== DATA CLASSES ====================
 
 
+def _is_single_group(expr: str) -> bool:
+    """True only when ``expr`` starts with ``(`` and that paren closes at the last character."""
+    if not expr.startswith("("):
+        return False
+    depth = 0
+    for index, char in enumerate(expr):
+        if char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+            if depth == 0:
+                return index == len(expr) - 1
+    return False
+
+
 @dataclass
 class CalculatedMetricSummary:
     """Summary of a single calculated metric for inventory output.
@@ -887,6 +902,8 @@ class CalculatedMetricsInventoryBuilder:
                 return f"{inner_metric} (filtered)"
             inner_summary = self._generate_formula_summary(actual_formula.get("formula"), parsed)
             if inner_summary and inner_summary != "Custom calculated metric":
+                if "filtered" in inner_summary:
+                    return inner_summary
                 return f"{inner_summary} (filtered)"
             return "Segmented metric"
 
@@ -1010,10 +1027,10 @@ class CalculatedMetricsInventoryBuilder:
             left = self._build_formula_expression(node.get("col1", {}), max_depth - 1)
             right = self._build_formula_expression(node.get("col2", {}), max_depth - 1)
             if left and right:
-                # Add parens if operands are complex
-                if " " in left and not left.startswith("("):
+                # Add parens if operands are complex, unless one group already spans the whole operand
+                if " " in left and not _is_single_group(left):
                     left = f"({left})"
-                if " " in right and not right.startswith("("):
+                if " " in right and not _is_single_group(right):
                     right = f"({right})"
                 return f"{left} / {right}"
 

@@ -4489,3 +4489,56 @@ class TestFilteredFormulaSummaryRegression:
             summary = _cm_summary(formula, filters=filters).formula_summary
             assert summary != "d / e"
             assert summary != "d / e[segment]"
+
+
+class TestRatioOperandGrouping:
+    """Ratio operands that hold a grouped sub-expression must stay unambiguous."""
+
+    @staticmethod
+    def _grouped_ratio_with_segment():
+        add_ab = {"func": "add", "col1": _cm_metric("a"), "col2": _cm_metric("b")}
+        grouped = {"func": "divide", "col1": add_ab, "col2": _cm_metric("c")}
+        return {"func": "calc-metric", "formula": grouped, "filters": _CM_SEGMENT_FILTER}
+
+    def test_denominator_with_leading_group_is_wrapped(self):
+        formula = {"func": "divide", "col1": _cm_metric("x"), "col2": self._grouped_ratio_with_segment()}
+        assert _cm_summary(formula).formula_summary == "x / ((a + b) / c[segment])"
+
+    def test_numerator_with_leading_group_is_wrapped(self):
+        formula = {"func": "divide", "col1": self._grouped_ratio_with_segment(), "col2": _cm_metric("x")}
+        assert _cm_summary(formula).formula_summary == "((a + b) / c[segment]) / x"
+
+    def test_current_good_cases_keep_text(self):
+        add_ab = {"func": "add", "col1": _cm_metric("a"), "col2": _cm_metric("b")}
+        cases = [
+            ({"func": "divide", "col1": _cm_metric("a"), "col2": _cm_metric("b")}, "a / b"),
+            ({"func": "divide", "col1": add_ab, "col2": _cm_metric("c")}, "(a + b) / c"),
+            ({"func": "divide", "col1": _cm_metric("c"), "col2": add_ab}, "c / (a + b)"),
+        ]
+        for formula, expected in cases:
+            assert _cm_summary(formula).formula_summary == expected
+        ratio = {"func": "divide", "col1": _cm_metric("orders"), "col2": _cm_metric("visits")}
+        assert _cm_summary(ratio, filters=_CM_SEGMENT_FILTER).formula_summary == "orders / visits[segment]"
+
+    def test_is_single_group(self):
+        from cja_auto_sdr.inventory.calculated_metrics import _is_single_group
+
+        assert _is_single_group("(a + b)")
+        assert _is_single_group("((a) + (b))")
+        assert not _is_single_group("(a + b) / c")
+        assert not _is_single_group("(a) / (b)")
+        assert not _is_single_group("a + b")
+        assert not _is_single_group("")
+
+
+class TestSummaryFallbacks:
+    def test_sum_with_unnamed_operand_is_sum_of_metrics(self):
+        unnamed = {"func": "percentile", "col": _cm_metric("b"), "val": 90}
+        formula = {"func": "add", "col1": _cm_metric("a"), "col2": unnamed}
+        assert _cm_summary(formula).formula_summary == "Sum of metrics"
+
+    def test_calc_metric_fallback_does_not_double_filtered_suffix(self):
+        ratio = {"func": "divide", "col1": _cm_metric("a" * 45), "col2": _cm_metric("b" * 45)}
+        nested = {"func": "calc-metric", "formula": {"func": "calc-metric", "formula": ratio}}
+        summary = _cm_summary(nested).formula_summary
+        assert summary == f"{'a' * 45} / {'b' * 45} (filtered)"
