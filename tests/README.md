@@ -188,7 +188,7 @@ tests/
 └── README.md                        # This file
 ```
 
-**Total: 9,622 comprehensive tests**
+**Total: 9,627 comprehensive tests**
 
 ### Test Count Breakdown
 
@@ -197,16 +197,16 @@ tests/
 
 | Category | Tests | Files | Notes |
 |----------|-------|-------|-------|
-| `unit` | 9,460 | 169 | Default primary category for files without explicit integration/e2e/smoke scope |
+| `unit` | 9,465 | 169 | Default primary category for files without explicit integration/e2e/smoke scope |
 | `integration` | 123 | 3 | Cross-module integration suites |
 | `e2e` | 23 | 2 | End-to-end suites with a mocked external boundary |
 | `smoke` | 16 | 2 | Lightweight command-mode coverage |
 | `slow` | 0 | 0 | Overlay marker; these tests are also counted in a primary category |
-| **Primary Total** | **9,622** | **176** | **unit + integration + e2e + smoke** |
+| **Primary Total** | **9,627** | **176** | **unit + integration + e2e + smoke** |
 
 | CI Slice | Tests | Files | Selector |
 |----------|-------|-------|----------|
-| `test-unit` | 9,460 | 169 | `-m "unit and not slow"` |
+| `test-unit` | 9,465 | 169 | `-m "unit and not slow"` |
 | `test-integration` | 146 | 5 | `-m "integration or e2e or slow"` |
 | `smoke-test` | 16 | 2 | `-m smoke` |
 
@@ -230,7 +230,7 @@ tests/
 | `test_inventory_utils.py` | 57 | Inventory utilities and helpers |
 | `test_segments_inventory.py` | 67 | Segments inventory feature |
 | `test_edge_cases.py` | 35 | Edge cases, configuration dataclasses, custom exceptions |
-| `test_calculated_metrics_inventory.py` | 396 | Calculated metrics inventory feature |
+| `test_calculated_metrics_inventory.py` | 398 | Calculated metrics inventory feature |
 | `test_git_integration.py` | 62 | Git integration, snapshot management, inventory snapshots |
 | `test_output_formats.py` | 38 | CSV, JSON, HTML, Markdown output generation |
 | `test_cja_initialization.py` | 58 | CJA connection and configuration validation |
@@ -267,12 +267,12 @@ tests/
 | `test_output_content_validation.py` | 47 | Output format content validation (CSV, JSON, HTML, Excel, Markdown roundtrip) |
 | `test_excel_publication.py` | 52 | Excel render/close/publication failures, destination integrity, and filesystem compatibility |
 | `test_component_fetch_validation.py` | 31 | Metrics/dimensions error payloads classified as failed, not empty |
-| `test_sdr_coverage.py` | 49 | SDR Coverage sheet/section, collected_components, quality gate rows |
+| `test_sdr_coverage.py` | 50 | SDR Coverage sheet/section, collected_components, quality gate rows |
 | `test_inventory_operation_status.py` | 16 | Optional inventory completed/failed status, unavailable placeholders, run summary parity |
 | `test_output_extraction_contracts.py` | 347 | Extraction contracts for output.diff and output.inventory |
 | `test_malformed_api_responses.py` | 21 | Negative tests for malformed/unexpected API responses |
 | `test_main_entry_points.py` | 51 | main() and _main_impl() entry points, dispatch, run_state, run summary |
-| `test_quality_policy_and_run_summary.py` | 181 | Quality policy functions and run summary/status inference |
+| `test_quality_policy_and_run_summary.py` | 183 | Quality policy functions and run summary/status inference |
 | `test_e2e_integration.py` | 16 | End-to-end integration tests with real pipeline, mocked API boundary |
 | `test_api_client.py` | 39 | API client exception paths and error handling |
 | `test_config_validation.py` | 60 | Configuration validation logic |
@@ -392,7 +392,7 @@ tests/
 | `test_diff_snapshot_retention.py` | 89 | Diff snapshot-retention parse-cache characterization test |
 | `test_diff_comparator_normalize.py` | 22 | Diff field-normalization type-fast-path characterization test |
 | `test_logging_diagnostics.py` | 2 | emit_diagnostic isEnabledFor guard characterization tests |
-| **Total** | **9,622** | **Collected via pytest --collect-only** |
+| **Total** | **9,627** | **Collected via pytest --collect-only** |
 
 ## Running Tests
 
@@ -850,14 +850,14 @@ the `tests/README.md` inventory tree or count table.
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (9,622 tests total)
+- [x] Comprehensive test coverage (9,627 tests total)
 - [x] Org-wide analysis tests (test_org_report.py) - 225 tests (including large org scaling, output path aliases, memory warnings, smart cache invalidation)
 - [x] Org-wide analysis integration tests (test_org_report_integration.py) - 46 tests (end-to-end flows, caching, filtering, governance thresholds)
 - [x] Profile management tests (test_profiles.py) - 94 tests
 - [x] API worker auto-tuning tests (test_api_tuning.py) - 25 tests
 - [x] Circuit breaker pattern tests (test_circuit_breaker.py) - 25 tests
 - [x] Shared validation cache tests (test_shared_cache.py) - 30 tests
-- [x] Calculated metrics inventory tests (test_calculated_metrics_inventory.py) - 396 tests
+- [x] Calculated metrics inventory tests (test_calculated_metrics_inventory.py) - 398 tests
 - [x] Segments inventory tests (test_segments_inventory.py) - 67 tests
 - [x] Derived fields inventory tests (test_derived_inventory.py) - 64 tests
 - [x] Inventory utilities tests (test_inventory_utils.py) - 57 tests
