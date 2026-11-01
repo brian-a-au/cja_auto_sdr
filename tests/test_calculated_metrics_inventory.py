@@ -1076,6 +1076,42 @@ class TestBuildFormulaExpression:
         }
         assert self.builder._build_formula_expression(node) == "a / b x 100"
 
+    def test_multiply_does_not_rewrap_grouped_product(self):
+        """Operators already inside parentheses do not force another group."""
+        add_ab = {
+            "func": "add",
+            "col1": {"func": "metric", "name": "metrics/a"},
+            "col2": {"func": "metric", "name": "metrics/b"},
+        }
+        add_cd = {
+            "func": "add",
+            "col1": {"func": "metric", "name": "metrics/c"},
+            "col2": {"func": "metric", "name": "metrics/d"},
+        }
+        node = {
+            "func": "multiply",
+            "col1": {"func": "multiply", "col1": add_ab, "col2": add_cd},
+            "col2": {"func": "metric", "name": "metrics/e"},
+        }
+        assert self.builder._build_formula_expression(node, max_depth=6) == "(a + b) x (c + d) x e"
+
+    def test_subtract_does_not_wrap_ratio_of_grouped_sum(self):
+        """a - (b + c) / d already reads correctly."""
+        node = {
+            "func": "subtract",
+            "col1": {"func": "metric", "name": "metrics/a"},
+            "col2": {
+                "func": "divide",
+                "col1": {
+                    "func": "add",
+                    "col1": {"func": "metric", "name": "metrics/b"},
+                    "col2": {"func": "metric", "name": "metrics/c"},
+                },
+                "col2": {"func": "metric", "name": "metrics/d"},
+            },
+        }
+        assert self.builder._build_formula_expression(node) == "a - (b + c) / d"
+
     def test_add_with_col1_col2(self):
         """Addition with col1 and col2."""
         node = {

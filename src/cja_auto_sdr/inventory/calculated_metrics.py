@@ -151,8 +151,16 @@ def _is_single_group(expr: str) -> bool:
 
 
 def _needs_operator_parens(expr: str) -> bool:
-    """True when ``expr`` is an ungrouped sum or difference that binds looser than its parent."""
-    return (" + " in expr or " - " in expr) and not _is_single_group(expr)
+    """True when ``expr`` has a ``+`` or ``-`` outside any ``()`` or ``[]`` group."""
+    depth = 0
+    for index, char in enumerate(expr):
+        if char in "([":
+            depth += 1
+        elif char in ")]":
+            depth -= 1
+        elif depth == 0 and char in "+-" and expr[index - 1 : index + 2] == f" {char} ":
+            return True
+    return False
 
 
 @dataclass
