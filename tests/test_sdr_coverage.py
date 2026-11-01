@@ -275,6 +275,16 @@ class TestCoverageSerialization:
         assert frame.iloc[-1]["Count"] == 1
         assert "Quality gate FAIL" in frame.iloc[-1]["Detail"]
 
+    def test_coverage_frame_keeps_integer_counts(self):
+        frame = self._coverage().to_frame()
+
+        assert frame["Count"].tolist()[:2] == [2, None]
+        assert type(frame["Count"].iloc[0]) is int
+        csv_text = frame.to_csv(index=False)
+        assert "Metrics,collected,2," in csv_text
+        assert "2.0" not in csv_text
+        assert "NaN" not in csv_text
+
     def test_to_json(self):
         payload = self._coverage().to_json()
         assert payload["families"][0] == {
