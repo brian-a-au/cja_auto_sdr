@@ -1606,7 +1606,7 @@ Throughput: 9.7 data views per minute
 |------|---------|
 | 0 | Success (SDR generated, validation passed, or diff found no changes) |
 | 1 | General error (authentication, data view not found, API/processing/file I/O failures) |
-| 2 | Policy threshold exceeded (diff changes found, quality gate failed, or org governance threshold exceeded) |
+| 2 | Policy threshold exceeded or invalid command-line usage (diff changes found, quality gate failed, or org governance threshold exceeded) |
 | 3 | Diff warning threshold exceeded (`--warn-threshold`) |
 | 130 | Interrupted by SIGINT (for example, Ctrl+C) |
 

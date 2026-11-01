@@ -152,7 +152,7 @@ def test_show_stats_error_shaped_component_payload_falls_back_to_error_row(
     assert payload["totals"]["components"] == 0
 
 
-@patch("cja_auto_sdr.generator.validate_config_file", return_value=True)
+@patch("cja_auto_sdr.generator.CredentialResolver.resolve", return_value=({}, "config:config.json"))
 @patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "config", {}))
 @patch("cja_auto_sdr.generator.cjapy")
 @patch("cja_auto_sdr.cli.commands.discovery.make_api_call_with_retry")

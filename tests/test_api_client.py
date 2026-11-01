@@ -411,7 +411,7 @@ class TestConfigureCjapyUnknownSource:
         mock_resolver_class.return_value = mock_resolver
 
         # "custom_source_unknown" does not start with "profile:", "config:", or equal "environment"
-        # so the else branch calls cjapy.importConfigFile, and display_source falls through to line 132
+        # so the generic else branch still configures via _config_from_env, and display_source falls through to line 132
         success, display_source, _creds = configure_cjapy(logger=mock_logger)
 
         assert success is True
@@ -541,7 +541,7 @@ class TestInitializeCjaFileNotFound:
         )
         mock_resolver_class.return_value = mock_resolver
 
-        mock_cjapy.importConfigFile.side_effect = FileNotFoundError("No such file: config.json")
+        mock_cjapy.configure.side_effect = FileNotFoundError("No such file: config.json")
 
         result = initialize_cja(mock_config_file, mock_logger)
 
@@ -652,7 +652,7 @@ class TestInitializeCjaGenericException:
         # so to reach line 273, we need an error OUTSIDE that inner try.
         # Let's raise an error from cjapy.importConfigFile that is not
         # FileNotFoundError, ImportError, AttributeError, or PermissionError.
-        mock_cjapy.importConfigFile.side_effect = ConnectionError("Network down")
+        mock_cjapy.configure.side_effect = ConnectionError("Network down")
 
         result = initialize_cja(mock_config_file, mock_logger)
 
