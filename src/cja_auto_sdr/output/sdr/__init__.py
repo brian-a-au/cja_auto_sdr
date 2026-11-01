@@ -1062,7 +1062,7 @@ def write_html_output(
             html_parts.append(f"<h2>{icon} {html.escape(sheet_name)}</h2>")
 
             # Convert DataFrame to HTML with custom styling
-            df_html = df.to_html(index=False, escape=True, classes="data-table")
+            df_html = df.to_html(index=False, escape=True, classes="data-table", na_rep="")
 
             # Add severity-based row classes for Data Quality sheet
             if sheet_name == "Data Quality" and "Severity" in df.columns:
