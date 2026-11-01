@@ -416,13 +416,13 @@ class BatchProcessor:
             for result in results["successful"]:
                 size_str = result.file_size_formatted
                 line = (
-                    f"{result.data_view_id:20s}  {result.data_view_name:30s}  {size_str:>10s}  {result.duration:5.1f}s"
+                    f"{result.data_view_id:20s}  {result.data_view_name or 'Unknown':30s}  {size_str:>10s}  {result.duration:5.1f}s"
                 )
                 _say(f"  {generator.ConsoleColors.success('✓')} {line}")
                 self.logger.info(
                     "  ✓ %-20s  %-30s  %10s  %5.1fs",
                     result.data_view_id,
-                    result.data_view_name,
+                    result.data_view_name or "Unknown",
                     size_str,
                     result.duration,
                 )

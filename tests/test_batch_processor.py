@@ -1095,3 +1095,27 @@ class TestBatchStopOnErrorCollectsRunningViews:
         assert sorted(r.data_view_id for r in results["failed"]) == ["dv_a", "dv_b"]
         stop_warnings = [c for c in logger.warning.call_args_list if "Stopping batch processing" in c.args[0]]
         assert len(stop_warnings) == 1
+
+
+class TestPrintSummaryMissingName:
+    """A result with no data view name must not crash the batch summary."""
+
+    @patch("cja_auto_sdr.generator.setup_logging")
+    @patch("builtins.print")
+    def test_print_summary_handles_missing_name(self, mock_print, mock_setup_logging, mock_config_file, temp_output_dir):
+        mock_setup_logging.return_value = Mock()
+        processor = BatchProcessor(config_file=mock_config_file, output_dir=temp_output_dir)
+        result = ProcessingResult(
+            data_view_id="dv_1",
+            data_view_name=None,
+            success=True,
+            duration=1.0,
+            output_file="/path/to/output.xlsx",
+            file_size_bytes=10,
+        )
+
+        processor.print_summary({"successful": [result], "failed": [], "total": 1, "total_duration": 1.0})
+
+        printed = " ".join(str(c) for c in mock_print.call_args_list)
+        assert "dv_1" in printed
+        assert "Unknown" in printed
