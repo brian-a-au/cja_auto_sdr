@@ -995,10 +995,15 @@ class TestBatchStopOnErrorCollectsRunningViews:
                 return False
 
         started = []
+        slow_running = threading.Event()
 
         def fake_worker(wa):
             started.append(wa.data_view_id)
+            if wa.data_view_id != "dv_fail":
+                slow_running.set()
             if wa.data_view_id == "dv_fail":
+                # Fail only once dv_slow is running, so the stop always finds it in flight.
+                slow_running.wait(5)
                 fail_done.set()
                 return ProcessingResult(
                     data_view_id="dv_fail", data_view_name="F", success=False, duration=0.0, error_message="boom"
