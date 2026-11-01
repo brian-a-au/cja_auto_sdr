@@ -158,3 +158,40 @@ def test_watch_agent_mode_with_explicit_format_names_format():
     result = _run(["--watch", "dv_abc", "--interval", "1h", "--agent-mode", "--format", "json"])
     assert result.returncode == 1
     assert "--watch is incompatible with --format" in result.stderr
+
+
+def _run_isolated(args, tmp_path):
+    """Run with no reachable credentials, so a mode that slips past validation cannot call the API."""
+    import os
+
+    env = {k: v for k, v in os.environ.items() if k not in {"ORG_ID", "CLIENT_ID", "SECRET", "SCOPES", "CJA_PROFILE"}}
+    env["HOME"] = str(tmp_path)
+    env["CJA_HOME"] = str(tmp_path / ".cja")
+    return subprocess.run(
+        [sys.executable, "-m", "cja_auto_sdr", *args],
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=tmp_path,
+        env=env,
+        timeout=60,
+    )
+
+
+@pytest.mark.parametrize(
+    "one_shot_flag",
+    ["--dry-run", "--config-status", "--config-json", "--validate-config", "--interactive"],
+)
+def test_watch_rejects_one_shot_mode(one_shot_flag, tmp_path):
+    result = _run_isolated(["--watch", "dv_abc", "--interval", "1h", one_shot_flag], tmp_path)
+    assert result.returncode == 1, result.stderr
+    assert f"--watch is incompatible with {one_shot_flag}" in result.stderr
+    assert "cja-watch-event" not in result.stdout
+
+
+@pytest.mark.parametrize("interactive_flag", ["--interactive", "-i"])
+def test_agent_mode_with_interactive_exits_1(interactive_flag, tmp_path):
+    result = _run_isolated(["--agent-mode", interactive_flag], tmp_path)
+    assert result.returncode == 1, result.stdout
+    assert "--agent-mode cannot be used with --interactive" in result.stderr
+    assert "INTERACTIVE MODE" not in result.stdout
