@@ -150,6 +150,11 @@ def _is_single_group(expr: str) -> bool:
     return False
 
 
+def _needs_operator_parens(expr: str) -> bool:
+    """True when ``expr`` is an ungrouped sum or difference that binds looser than its parent."""
+    return (" + " in expr or " - " in expr) and not _is_single_group(expr)
+
+
 @dataclass
 class CalculatedMetricSummary:
     """Summary of a single calculated metric for inventory output.
@@ -1038,6 +1043,10 @@ class CalculatedMetricsInventoryBuilder:
             left = self._build_formula_expression(node.get("col1", {}), max_depth - 1)
             right = self._build_formula_expression(node.get("col2", {}), max_depth - 1)
             if left and right:
+                if _needs_operator_parens(left):
+                    left = f"({left})"
+                if _needs_operator_parens(right):
+                    right = f"({right})"
                 return f"{left} x {right}"
 
         if func == "add":
@@ -1065,6 +1074,9 @@ class CalculatedMetricsInventoryBuilder:
             left = self._build_formula_expression(node.get("col1", {}), max_depth - 1)
             right = self._build_formula_expression(node.get("col2", {}), max_depth - 1)
             if left and right:
+                # Subtraction is left-associative, so only the right side needs grouping.
+                if _needs_operator_parens(right):
+                    right = f"({right})"
                 return f"{left} - {right}"
 
         if func == "calc-metric":
