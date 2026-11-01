@@ -202,3 +202,29 @@ class TestInventoryDefinitions:
             "calculated_metric",
             ("metric_references", "segment_references"),
         )
+
+
+class TestMaskSkipping:
+    def test_mask_skipped_without_reference_ignores(self):
+        from unittest.mock import patch
+
+        from cja_auto_sdr.diff.comparator import DataViewComparator
+
+        for ignores in ([], ["description"], ["name", "definition_summary"]):
+            comparator = DataViewComparator(ignore_fields=ignores)
+            with patch.object(DataViewComparator, "_mask_definition_references") as masker:
+                comparator._find_inventory_changed_fields(
+                    {"id": "one", "definition_json": '{"a": 1}'},
+                    {"id": "one", "definition_json": '{"a": 2}'},
+                    "segment",
+                )
+            masker.assert_not_called()
+
+        comparator = DataViewComparator(ignore_fields=["segment_references"])
+        with patch.object(DataViewComparator, "_mask_definition_references") as masker:
+            comparator._find_inventory_changed_fields(
+                {"id": "one", "definition_json": '{"a": 1}'},
+                {"id": "one", "definition_json": '{"a": 2}'},
+                "segment",
+            )
+        assert masker.call_count == 2
