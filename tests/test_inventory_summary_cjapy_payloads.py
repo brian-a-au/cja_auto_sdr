@@ -186,3 +186,35 @@ def test_inventory_summary_dimensions_exception_surfaces_after_metrics_with_same
     assert len(warnings) == 1
     assert "derived fields inventory" in warnings[0]
     assert "dims boom" in warnings[0]
+
+
+def test_inventory_summary_keyboard_interrupt_does_not_wait_for_dimensions(mock_cja):
+    import threading
+
+    dims_started = threading.Event()
+    release = threading.Event()
+    outcome = {}
+
+    def fake_fetch(cja, kind, data_view_id, **kwargs):
+        if kind == "dimensions":
+            dims_started.set()
+            release.wait(timeout=30)
+            return pd.DataFrame([])
+        dims_started.wait(timeout=5)
+        raise KeyboardInterrupt
+
+    def run():
+        try:
+            _run_derived_summary(mock_cja, fake_fetch)
+        except BaseException as exc:
+            outcome["exc"] = exc
+
+    runner = threading.Thread(target=run, daemon=True)
+    runner.start()
+    try:
+        runner.join(timeout=1)
+        assert not runner.is_alive(), "KeyboardInterrupt waited for the dimensions prefetch"
+        assert isinstance(outcome.get("exc"), KeyboardInterrupt)
+    finally:
+        release.set()
+        runner.join(timeout=5)

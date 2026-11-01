@@ -6,7 +6,7 @@ import logging
 import threading
 import time
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, replace
 from typing import Any
 
@@ -169,6 +169,24 @@ def _native_cjapy_method(cja: Any, method_name: str) -> Callable[..., Any] | Non
     if not callable(getattr(connector, "getData", None)):
         return None
     return native_func
+
+
+def start_background_call(fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Future[Any]:
+    """Run ``fn`` on a daemon thread and return a Future for its outcome.
+
+    Unlike a ThreadPoolExecutor, a daemon thread is not joined at interpreter exit, so a caller
+    interrupted by Ctrl+C is not held up by the in-flight call.
+    """
+    future: Future[Any] = Future()
+
+    def _run() -> None:
+        try:
+            future.set_result(fn(*args, **kwargs))
+        except BaseException as exc:
+            future.set_exception(exc)
+
+    threading.Thread(target=_run, name="cja-background-call", daemon=True).start()
+    return future
 
 
 def fetch_component_payload(

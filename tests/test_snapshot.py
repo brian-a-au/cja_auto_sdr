@@ -897,6 +897,38 @@ class TestCreateSnapshotPrefetch:
         # The worker was joined before the error propagated: no thread left running.
         assert dims_finished.is_set()
 
+    def test_create_snapshot_keyboard_interrupt_does_not_wait_for_dimensions(self, manager):
+        import threading
+
+        dims_started = threading.Event()
+        release = threading.Event()
+        outcome = {}
+
+        def fake_fetch(cja, kind, data_view_id, **kwargs):
+            if kind == "dimensions":
+                dims_started.set()
+                release.wait(timeout=30)
+                return pd.DataFrame([])
+            dims_started.wait(timeout=5)
+            raise KeyboardInterrupt
+
+        def run():
+            try:
+                with patch("cja_auto_sdr.diff.snapshot.fetch_component_payload", side_effect=fake_fetch):
+                    manager.create_snapshot(self._cja(), "dv_test", quiet=True)
+            except BaseException as exc:
+                outcome["exc"] = exc
+
+        runner = threading.Thread(target=run, daemon=True)
+        runner.start()
+        try:
+            runner.join(timeout=1)
+            assert not runner.is_alive(), "KeyboardInterrupt waited for the dimensions prefetch"
+            assert isinstance(outcome.get("exc"), KeyboardInterrupt)
+        finally:
+            release.set()
+            runner.join(timeout=5)
+
     def test_create_snapshot_dimensions_error_keeps_dimensions_stage_and_log_order(self, manager, caplog):
         def fake_fetch(cja, kind, data_view_id, **kwargs):
             if kind == "dimensions":
