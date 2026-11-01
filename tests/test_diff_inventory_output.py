@@ -953,6 +953,32 @@ class TestPrCommentOutputWithInventory:
 
         assert "CJA SDR Generator" in output
 
+    def test_pr_comment_includes_segment_rows_and_details(self):
+        result = _make_diff_result_with_inventory()
+        output = write_diff_pr_comment_output(result)
+
+        assert "| Segments | 8 | 9 | +1 | -0 | ~2 | 6 |" in output
+        assert "<summary>🧩 Segments Changes (2)</summary>" in output
+        assert "`s1`" in output
+        assert "`s3`" not in output  # unchanged items are not listed
+
+    def test_pr_comment_includes_calc_metric_rows_and_details(self):
+        result = _make_diff_result_with_inventory()
+        output = write_diff_pr_comment_output(result)
+
+        assert "| Calc Metrics | 5 | 7 | +2 | -0 | ~1 | 4 |" in output
+        assert "<summary>🧮 Calculated Metrics Changes (3)</summary>" in output
+        assert "`cm4`" in output
+
+    def test_pr_comment_without_inventory_unchanged(self):
+        result = _make_diff_result_with_inventory(calc_metrics_diffs=None, segments_diffs=None)
+        output = write_diff_pr_comment_output(result)
+
+        assert "Calc Metrics" not in output
+        assert "| Segments |" not in output
+        assert "Segments Changes" not in output
+        assert output.count("<details>") == 2
+
     def test_pr_comment_accepts_public_changes_only_keyword(self):
         result = _make_diff_result_with_inventory()
         output = write_diff_pr_comment_output(result, changes_only=True)
