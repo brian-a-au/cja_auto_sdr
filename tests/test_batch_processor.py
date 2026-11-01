@@ -1102,7 +1102,9 @@ class TestPrintSummaryMissingName:
 
     @patch("cja_auto_sdr.generator.setup_logging")
     @patch("builtins.print")
-    def test_print_summary_handles_missing_name(self, mock_print, mock_setup_logging, mock_config_file, temp_output_dir):
+    def test_print_summary_handles_missing_name(
+        self, mock_print, mock_setup_logging, mock_config_file, temp_output_dir
+    ):
         mock_setup_logging.return_value = Mock()
         processor = BatchProcessor(config_file=mock_config_file, output_dir=temp_output_dir)
         result = ProcessingResult(
