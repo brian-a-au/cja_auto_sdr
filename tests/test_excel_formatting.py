@@ -5,6 +5,7 @@ import os
 import sys
 from unittest.mock import Mock, patch
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -631,3 +632,73 @@ def test_excel_metrics_sheet_with_missing_name_writes_blank_cell(tmp_path):
     name_col = next(c for c in back.columns if str(c).lower() == "name")
     assert back[name_col].iloc[0] == "Orders"
     assert pd.isna(back[name_col].iloc[1])
+
+
+def _reference_sizing(df, max_cap=100):
+    """Copy of the pandas-vectorized column width / row height computation."""
+    df_str = df.astype("string").fillna("")
+    widths = []
+    for col in df.columns:
+        if len(df) > 0:
+            content_max = int(df_str[col].str.split("\n", n=1).str[0].str.len().max())
+        else:
+            content_max = 0
+        widths.append(min(max(content_max, len(str(col))) + 2, max_cap))
+    if len(df) > 0:
+        counts = df_str.apply(lambda s: s.str.count("\n")).max(axis=1).astype(int).tolist()
+    else:
+        counts = []
+    heights = [min((c + 1) * 15, 400) for c in counts]
+    return widths, heights
+
+
+def _captured_sizing(df, tmp_path, mock_logger):
+    from xlsxwriter.worksheet import Worksheet
+
+    cols, rows = {}, {}
+    orig_col, orig_row = Worksheet.set_column, Worksheet.set_row
+
+    def spy_col(self, first, last, width=None, *a, **k):
+        cols[first] = width
+        return orig_col(self, first, last, width, *a, **k)
+
+    def spy_row(self, row, height=None, *a, **k):
+        rows[row] = height
+        return orig_row(self, row, height, *a, **k)
+
+    with (
+        patch.object(Worksheet, "set_column", spy_col),
+        patch.object(Worksheet, "set_row", spy_row),
+        pd.ExcelWriter(str(tmp_path / "o.xlsx"), engine="xlsxwriter") as writer,
+    ):
+        apply_excel_formatting(writer, df, "Other", mock_logger)
+    return [cols[i] for i in sorted(cols)], [rows[i] for i in sorted(rows)]
+
+
+def test_excel_sizing_matches_reference(tmp_path, mock_logger):
+    frames = [
+        pd.DataFrame(
+            {
+                "name": ["short", "a\nb\nc", "café", "日本語テスト", None, np.nan, "x" * 300],
+                "n": [1, 22, 333, 4, 5, 6, 7],
+                "f": [1.5, np.nan, 3.0, 4.25, 5.0, 6.0, 7.0],
+                "b": [True, False, True, False, True, False, True],
+                "ml": ["l1\nl2", "", "\n\n\n", "x", "y\n", "\U0001f600", "z"],
+            }
+        ),
+        pd.DataFrame(
+            {
+                "i": pd.array([1, None, 3], dtype="Int64"),
+                "s": pd.array(["x", pd.NA, "y\nz"], dtype="string"),
+                "o": [None, pd.NA, np.nan],
+            }
+        ),
+        pd.DataFrame({"lines": ["\n" * 500]}),
+        pd.DataFrame({"a": []}),
+        pd.DataFrame(),
+    ]
+    for df in frames:
+        got_w, got_h = _captured_sizing(df, tmp_path, mock_logger)
+        ref_w, ref_h = _reference_sizing(df)
+        assert got_w == ref_w
+        assert got_h == ref_h

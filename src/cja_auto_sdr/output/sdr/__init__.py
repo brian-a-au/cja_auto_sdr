@@ -1153,17 +1153,21 @@ def df_to_markdown_table(df: pd.DataFrame, sheet_name: str, empty_message: str |
     # on the object-cast frame still agrees with `.notna()` on the original.
     df_obj = df.astype(object)
     df_esc = df_obj.where(df_obj.notna(), "").astype(str)
-    for col in df_esc.columns:
-        df_esc[col] = (
-            df_esc[col]
-            .str.replace("\\", "\\\\", regex=False)
-            .str.replace("|", "\\|", regex=False)
-            .str.replace("`", "\\`", regex=False)
-            .str.replace("\n", " ", regex=False)
-            .str.replace("\r", " ", regex=False)
-            .str.strip()
+
+    # Plain-Python escaping over each column's list: faster than six per-column
+    # pandas `.str` passes, with identical results.
+    def _esc(text: str) -> str:
+        return (
+            text.replace("\\", "\\\\")
+            .replace("|", "\\|")
+            .replace("`", "\\`")
+            .replace("\n", " ")
+            .replace("\r", " ")
+            .strip()
         )
-    data_rows = ["| " + " | ".join(row) + " |" for row in df_esc.itertuples(index=False)]
+
+    escaped_cols = [[_esc(cell) for cell in df_esc.iloc[:, i].tolist()] for i in range(df_esc.shape[1])]
+    data_rows = ["| " + " | ".join(row) + " |" for row in zip(*escaped_cols, strict=True)]
 
     return "\n".join([header_row, separator_row, *data_rows])
 
