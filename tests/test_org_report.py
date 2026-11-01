@@ -5265,3 +5265,13 @@ def test_core_threshold_bounds_accepted(value):
 
     args = parse_arguments(["--org-report", "--core-threshold", value])
     assert args.core_threshold == float(value)
+
+
+@pytest.mark.parametrize("option", ["--core-threshold", "--overlap-threshold"])
+def test_threshold_nan_is_rejected(option, tmp_path, monkeypatch, capsys):
+    with patch("cja_auto_sdr.generator.run_org_report", return_value=(True, False)) as run:
+        code = _run_main(["--org-report", option, "nan"], tmp_path, monkeypatch)
+
+    assert code == 2
+    assert "must be between 0.0 and 1.0" in capsys.readouterr().err
+    run.assert_not_called()
