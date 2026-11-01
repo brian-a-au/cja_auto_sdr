@@ -1057,12 +1057,16 @@ def write_html_output(
                 html_parts.append("</div>")
                 continue
             df = to_display_frame(sheet_df)
+            # na_rep only blanks float NaN; None and pd.NA in object columns need it too.
+            for col in df.columns:
+                if df[col].dtype == object:
+                    df[col] = df[col].where(df[col].notna(), "")
 
             html_parts.append('<div class="section">')
             html_parts.append(f"<h2>{icon} {html.escape(sheet_name)}</h2>")
 
             # Convert DataFrame to HTML with custom styling
-            df_html = df.to_html(index=False, escape=True, classes="data-table")
+            df_html = df.to_html(index=False, escape=True, classes="data-table", na_rep="")
 
             # Add severity-based row classes for Data Quality sheet
             if sheet_name == "Data Quality" and "Severity" in df.columns:

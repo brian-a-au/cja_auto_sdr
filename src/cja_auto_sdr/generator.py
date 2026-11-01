@@ -2728,6 +2728,7 @@ from cja_auto_sdr.diff.models import (
     MetadataDiff,
 )
 from cja_auto_sdr.diff.snapshot import SnapshotManager, parse_retention_period
+from cja_auto_sdr.output.markdown_escape import escape_markdown_table_cell
 
 # write_run_summary_output, append_github_step_summary,
 # build_diff_step_summary, build_org_step_summary -> output/run_summary.py
@@ -2776,7 +2777,7 @@ def build_quality_step_summary(results: list[ProcessingResult]) -> str:
                 highest = severity
                 break
         lines.append(
-            f"| {result.data_view_name or '-'} | `{result.data_view_id}` | {result.dq_issues_count} | {highest} |",
+            f"| {escape_markdown_table_cell(result.data_view_name or '-')} | `{result.data_view_id}` | {result.dq_issues_count} | {highest} |",
         )
 
     return "\n".join(lines)
@@ -4107,11 +4108,13 @@ def process_single_dataview(
             logger.error(_format_error_msg("applying JSON formatting", error=e))
 
         # Create Excel file name
+        raw_dv_name = lookup_data.get("name", "Unknown") if isinstance(lookup_data, dict) else "Unknown"
+        # Results and summaries show the real name; only the file name is sanitized.
+        dv_name = raw_dv_name if isinstance(raw_dv_name, str) else "Unknown"
         try:
-            dv_name = lookup_data.get("name", "Unknown") if isinstance(lookup_data, dict) else "Unknown"
             # Sanitize filename
-            dv_name = "".join(c for c in dv_name if c.isalnum() or c in (" ", "-", "_")).rstrip()
-            excel_file_name = f"CJA_DataView_{dv_name}_{data_view_id}_SDR.xlsx"
+            safe_name = "".join(c for c in raw_dv_name if c.isalnum() or c in (" ", "-", "_")).rstrip()
+            excel_file_name = f"CJA_DataView_{safe_name}_{data_view_id}_SDR.xlsx"
 
             # Add output directory path
             output_path = Path(output_dir) / excel_file_name

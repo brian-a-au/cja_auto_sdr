@@ -205,6 +205,25 @@ class TestHTMLOutput:
         assert os.path.exists(output_path)
         assert output_path.endswith(".html")
 
+    def test_html_sdr_renders_missing_values_blank(self, tmp_path, sample_data_dict, sample_metadata_dict):
+        """Missing values render as empty cells, as they do in every other format."""
+        logger = logging.getLogger("test")
+        data_dict = dict(sample_data_dict)
+        data_dict["Metrics"] = pd.DataFrame(
+            [
+                {"id": "metrics/a", "name": "A", "type": "int", "description": None},
+                {"id": "metrics/b", "name": "B", "type": "int", "description": float("nan")},
+            ],
+        )
+
+        output_path = write_html_output(data_dict, sample_metadata_dict, "test_dataview", str(tmp_path), logger)
+
+        with open(output_path) as f:
+            html_content = f.read()
+        assert "<td>NaN</td>" not in html_content
+        assert "<td>None</td>" not in html_content
+        assert "<td></td>" in html_content
+
     def test_html_contains_required_elements(self, tmp_path, sample_data_dict, sample_metadata_dict):
         """Test that HTML contains required HTML elements"""
         logger = logging.getLogger("test")
