@@ -201,6 +201,27 @@ def _resolve_diff_input_or_exit(
     sys.exit(1)
 
 
+def _validate_keep_since(
+    args: argparse.Namespace,
+    *,
+    keep_last_specified: bool,
+    keep_since_specified: bool,
+) -> None:
+    """Exit 1 on an invalid effective ``--keep-since`` when ``--auto-snapshot`` retention will run."""
+    if not getattr(args, "auto_snapshot", False):
+        return
+    generator = _generator_module()
+    _, effective_keep_since = generator.resolve_auto_prune_retention(
+        keep_last=getattr(args, "keep_last", 0),
+        keep_since=getattr(args, "keep_since", None),
+        auto_prune=getattr(args, "auto_prune", False),
+        keep_last_specified=keep_last_specified,
+        keep_since_specified=keep_since_specified,
+    )
+    if effective_keep_since and generator.parse_retention_period(effective_keep_since) is None:
+        generator._exit_error(f"Invalid --keep-since value: {effective_keep_since}")
+
+
 def dispatch_cross_data_view_diff_cli_mode(
     args: argparse.Namespace,
     *,
@@ -215,6 +236,7 @@ def dispatch_cross_data_view_diff_cli_mode(
     """Handle the cross-data-view ``--diff`` CLI branch and exit."""
     generator = _generator_module()
     _reject_diff_output_stdout(args)
+    _validate_keep_since(args, keep_last_specified=keep_last_specified, keep_since_specified=keep_since_specified)
 
     if len(data_view_inputs) != 2:
         print(generator.ConsoleColors.error("ERROR: --diff requires exactly 2 data view IDs or names"), file=sys.stderr)
@@ -655,6 +677,7 @@ def dispatch_snapshot_cli_modes(
         sys.exit(0 if success else 1)
 
     if getattr(args, "compare_with_prev", False):
+        _validate_keep_since(args, keep_last_specified=keep_last_specified, keep_since_specified=keep_since_specified)
         if getattr(args, "inventory_only", False):
             print(
                 generator.ConsoleColors.error(
@@ -697,6 +720,7 @@ def dispatch_snapshot_cli_modes(
         args.diff_snapshot = prev_snapshot
 
     if hasattr(args, "diff_snapshot") and args.diff_snapshot:
+        _validate_keep_since(args, keep_last_specified=keep_last_specified, keep_since_specified=keep_since_specified)
         if getattr(args, "metrics_only", False) and getattr(args, "dimensions_only", False):
             print(
                 generator.ConsoleColors.error("ERROR: Cannot use both --metrics-only and --dimensions-only"),

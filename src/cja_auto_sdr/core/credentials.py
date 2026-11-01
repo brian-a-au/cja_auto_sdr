@@ -77,6 +77,12 @@ def normalize_credential_field(name: str, value: Any) -> str:
     """Normalize a credential field according to its expected cjapy contract."""
     if name == "scopes":
         return normalize_scopes_value(value)
+    if name == "secret" and isinstance(value, (list, tuple)):
+        # cjapy.importConfigFile used secret[0] for list-valued secrets
+        for item in value:
+            if isinstance(item, str) and item.strip():
+                return normalize_credential_value(item)
+        return ""
     return normalize_credential_value(value)
 
 
@@ -227,6 +233,9 @@ class EnvironmentCredentialLoader(CredentialLoader):
 # ==================== CREDENTIAL RESOLVER ====================
 
 
+_INCOMPLETE_PROFILE_HINT = "Fix the profile with --profile-show / --profile-add, or omit --profile / unset CJA_PROFILE"
+
+
 class CredentialResolver:
     """Resolves credentials using priority-based strategy.
 
@@ -294,10 +303,12 @@ class CredentialResolver:
             profile_name: Name of the profile
 
         Returns:
-            Tuple of (credentials or None, source_name)
+            Tuple of (credentials, source_name). Credentials are never None;
+            a missing or incomplete profile raises instead.
 
         Raises:
-            CredentialSourceError: If profile loading fails critically
+            CredentialSourceError: If the profile cannot be loaded, has no
+                credential fields, or is missing required fields
         """
         # Import here to avoid circular dependency — profile functions are still in generator.py
         from cja_auto_sdr.generator import load_profile_credentials
@@ -305,17 +316,28 @@ class CredentialResolver:
         self.logger.info("Loading credentials from profile '%s'...", profile_name)
         try:
             creds = load_profile_credentials(profile_name, self.logger)
-            if creds:
-                is_valid, issues = validate_credentials(
-                    creds,
-                    self.logger,
-                    strict=False,
+            if not creds:
+                raise CredentialSourceError(
+                    f"Profile '{profile_name}' credentials are incomplete",
                     source=f"profile:{profile_name}",
+                    reason="Profile has no credential fields",
+                    details=_INCOMPLETE_PROFILE_HINT,
                 )
-                if is_valid:
-                    self.logger.info("Using credentials from profile '%s'", profile_name)
-                    return creds, f"profile:{profile_name}"
-                self.logger.warning("Profile '%s' credentials have issues: %s", profile_name, issues)
+            is_valid, issues = validate_credentials(
+                creds,
+                self.logger,
+                strict=False,
+                source=f"profile:{profile_name}",
+            )
+            if is_valid:
+                self.logger.info("Using credentials from profile '%s'", profile_name)
+                return creds, f"profile:{profile_name}"
+            raise CredentialSourceError(
+                f"Profile '{profile_name}' credentials are incomplete",
+                source=f"profile:{profile_name}",
+                reason="; ".join(issues[:3]),
+                details=_INCOMPLETE_PROFILE_HINT,
+            )
         except ProfileNotFoundError as e:
             raise CredentialSourceError(
                 str(e),
@@ -330,8 +352,6 @@ class CredentialResolver:
                 reason="Invalid profile configuration",
                 details=e.details,
             ) from e
-
-        return None, ""
 
     def _try_environment(self) -> tuple[dict[str, str] | None, str]:
         """Try to load credentials from environment variables.
@@ -454,6 +474,6 @@ def validate_env_credentials(credentials: dict[str, str], logger: logging.Logger
             return False
 
     # Use unified validation function
-    is_valid, _issues = validate_credentials(credentials, logger, strict=False, source="environment")
+    is_valid, _issues = validate_credentials(credentials, logger, strict=True, source="environment")
 
     return is_valid

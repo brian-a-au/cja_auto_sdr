@@ -310,7 +310,7 @@ def write_diff_html_output(
                 row_class = f"row-{diff.change_type.value}"
                 badge_class = f"badge-{diff.change_type.value}"
                 badge_text = diff.change_type.value.upper()
-                detail = _get_change_detail(diff)
+                detail = _get_change_detail(diff, truncate=False)
                 detail_escaped = _html_escape(detail)
 
                 html_out += f"""
@@ -354,7 +354,7 @@ def write_diff_html_output(
                     row_class = f"row-{diff.change_type.value}"
                     badge_class = f"badge-{diff.change_type.value}"
                     badge_text = diff.change_type.value.upper()
-                    detail = _get_inventory_change_detail(diff)
+                    detail = _get_inventory_change_detail(diff, truncate=False)
                     detail_escaped = _html_escape(detail)
 
                     html_out += f"""

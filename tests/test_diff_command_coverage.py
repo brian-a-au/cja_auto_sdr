@@ -109,7 +109,8 @@ class TestFormatDiffValue:
         """List value that exceeds max_len is truncated."""
         long_list = list(range(50))
         result = _format_diff_value(long_list, truncate=True, max_len=20)
-        assert len(result) == 20
+        assert len(result) == 23
+        assert result.endswith("...")
 
     def test_list_no_truncation(self):
         """List value without truncation returns full string."""
@@ -872,3 +873,103 @@ class TestPRCommentBreakingChanges:
         )
         output = write_diff_pr_comment_output(dr)
         assert "+5 more" in output
+
+
+class TestDiffSnapshotReverseLabels:
+    """DIFF-3: default labels stay with their snapshots under --reverse-diff.
+
+    --compare-with-prev sets args.diff_snapshot and calls the same handler, so
+    this path covers it too.
+    """
+
+    @staticmethod
+    def _run(tmp_path, **kwargs):
+        from cja_auto_sdr.diff.commands import handle_diff_snapshot_command
+        from cja_auto_sdr.diff.models import DataViewSnapshot
+
+        saved = DataViewSnapshot(
+            created_at="2025-06-01T00:00:00+00:00",
+            data_view_id="dv_1",
+            data_view_name="DV One",
+            metrics=[{"id": "metrics/a", "name": "A"}],
+            dimensions=[],
+        )
+        live = DataViewSnapshot(
+            created_at="2026-10-31T12:00:00+00:00",
+            data_view_id="dv_1",
+            data_view_name="DV One",
+            metrics=[{"id": "metrics/a", "name": "A"}, {"id": "metrics/b", "name": "B"}],
+            dimensions=[],
+        )
+        snap_file = tmp_path / "baseline.json"
+        snap_file.write_text(json.dumps(saved.to_dict()))
+        captured = {}
+
+        from cja_auto_sdr.diff.comparator import DataViewComparator
+
+        real_compare = DataViewComparator.compare
+
+        def spy(self, source, target, source_label="Source", target_label="Target"):
+            captured["labels"] = (source_label, target_label)
+            captured["source_created"] = source.created_at
+            return real_compare(self, source, target, source_label, target_label)
+
+        with (
+            patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "config", None)),
+            patch("cja_auto_sdr.generator.cjapy"),
+            patch("cja_auto_sdr.generator.SnapshotManager.create_snapshot", return_value=live),
+            patch.object(DataViewComparator, "compare", spy),
+        ):
+            handle_diff_snapshot_command(
+                data_view_id="dv_1",
+                snapshot_file=str(snap_file),
+                quiet=True,
+                quiet_diff=True,
+                **kwargs,
+            )
+        return saved, captured
+
+    def test_diff_snapshot_reverse_labels(self, tmp_path):
+        saved, captured = self._run(tmp_path, reverse_diff=True)
+        assert captured["labels"] == ("Current", f"Snapshot ({saved.created_at[:10]})")
+        assert captured["source_created"] == "2026-10-31T12:00:00+00:00"
+
+    def test_diff_snapshot_forward_labels(self, tmp_path):
+        saved, captured = self._run(tmp_path)
+        assert captured["labels"] == (f"Snapshot ({saved.created_at[:10]})", "Current")
+
+    def test_diff_snapshot_user_labels_unchanged_under_reverse(self, tmp_path):
+        _, captured = self._run(tmp_path, reverse_diff=True, labels=("L1", "L2"))
+        assert captured["labels"] == ("L1", "L2")
+
+
+def test_diff_snapshot_inventory_requires_same_data_view(tmp_path, capsys):
+    from cja_auto_sdr.diff.commands import handle_diff_snapshot_command
+    from cja_auto_sdr.diff.models import DataViewSnapshot
+
+    saved = DataViewSnapshot(
+        created_at="2025-06-01T00:00:00+00:00",
+        data_view_id="dv_A",
+        data_view_name="DV A",
+        metrics=[],
+        dimensions=[],
+    )
+    snap_file = tmp_path / "baseline.json"
+    snap_file.write_text(json.dumps(saved.to_dict()))
+
+    with (
+        patch("cja_auto_sdr.generator.configure_cjapy") as configure,
+        patch("cja_auto_sdr.generator.cjapy"),
+        patch("cja_auto_sdr.generator.SnapshotManager.create_snapshot") as create,
+    ):
+        result = handle_diff_snapshot_command(
+            data_view_id="dv_B",
+            snapshot_file=str(snap_file),
+            include_segments=True,
+            quiet=True,
+            quiet_diff=True,
+        )
+    assert result == (False, False, None)
+    assert "Inventory comparison requires snapshots from the same data view." in capsys.readouterr().err
+    configure.assert_not_called()
+    create.assert_not_called()

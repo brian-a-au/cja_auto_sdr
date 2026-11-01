@@ -673,7 +673,7 @@ See [CONFIGURATION.md](CONFIGURATION.md) for detailed setup of `config.json` and
 |------|---------|
 | 0 | Success (SDR/diff/org command completed) |
 | 1 | Error (config, API, validation, or processing failure) |
-| 2 | Policy threshold exceeded (diff changes found, `--fail-on-quality`, or `--fail-on-threshold`) |
+| 2 | Policy threshold exceeded or invalid command-line usage (diff changes found, `--fail-on-quality`, or `--fail-on-threshold`) |
 | 3 | Diff warning threshold exceeded (`--warn-threshold`) |
 | 130 | Interrupted by SIGINT (for example, Ctrl+C) |
 

@@ -51,8 +51,22 @@ class TestExplainExitCodeFunction:
         buf = StringIO()
         explain_exit_code(2, file=buf)
         output = buf.getvalue()
-        assert "Policy threshold exceeded" in output
+        assert "Policy threshold exceeded or invalid usage" in output
         assert "Diff mode found changes" in output
+
+    def test_exit_code_2_mentions_usage_errors(self):
+        from cja_auto_sdr.core.exit_codes import print_exit_codes
+
+        usage_line = "Invalid command-line usage (unknown or malformed option)"
+
+        buf = StringIO()
+        explain_exit_code(2, file=buf)
+        assert usage_line in buf.getvalue()
+
+        out = StringIO()
+        with redirect_stdout(out):
+            print_exit_codes()
+        assert usage_line in out.getvalue()
 
     def test_code_three_warning(self):
         buf = StringIO()
@@ -180,7 +194,7 @@ class TestExplainExitCodeFastPath:
 
         captured = capsys.readouterr()
         assert "Exit code 2:" in captured.out
-        assert "Policy threshold exceeded" in captured.out
+        assert "Policy threshold exceeded or invalid usage" in captured.out
 
     def test_fast_path_main_keeps_tolerated_wrapper_quality_policy(self, capsys):
         from cja_auto_sdr.__main__ import main as fast_main

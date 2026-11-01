@@ -403,21 +403,21 @@ When both config.json and environment variables are present:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    Configuration Precedence                      │
-│                    (highest to lowest)                          │
+│                     Configuration Precedence                    │
+│                       (highest to lowest)                       │
 ├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
+│                                                                 │
 │  1. Environment Variables (ORG_ID, CLIENT_ID, etc.)             │
 │     ↓ (if not set, falls back to...)                            │
-│                                                                  │
+│                                                                 │
 │  2. .env file (loaded via python-dotenv)                        │
 │     ↓ (if not set, falls back to...)                            │
-│                                                                  │
-│  3. config.json in current directory                            │
-│     ↓ (if not set, falls back to...)                            │
-│                                                                  │
-│  4. --config-file PATH (explicit path)                          │
-│                                                                  │
+│                                                                 │
+│  3. --config-file PATH (explicit path)                          │
+│     Replaces the default config.json. Step 4 is skipped.        │
+│                                                                 │
+│  4. config.json in current directory (default)                  │
+│                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -604,24 +604,24 @@ When profiles are enabled, the complete credential loading order is:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    Configuration Precedence                      │
-│                    (highest to lowest)                          │
+│                     Configuration Precedence                    │
+│                       (highest to lowest)                       │
 ├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
+│                                                                 │
 │  1. Profile credentials (if --profile or CJA_PROFILE)           │
 │     ↓ (if not set, falls back to...)                            │
-│                                                                  │
+│                                                                 │
 │  2. Environment Variables (ORG_ID, CLIENT_ID, etc.)             │
 │     ↓ (if not set, falls back to...)                            │
-│                                                                  │
+│                                                                 │
 │  3. .env file (loaded via python-dotenv)                        │
 │     ↓ (if not set, falls back to...)                            │
-│                                                                  │
-│  4. config.json in current directory                            │
-│     ↓ (if not set, falls back to...)                            │
-│                                                                  │
-│  5. --config-file PATH (explicit path)                          │
-│                                                                  │
+│                                                                 │
+│  4. --config-file PATH (explicit path)                          │
+│     Replaces the default config.json. Step 5 is skipped.        │
+│                                                                 │
+│  5. config.json in current directory (default)                  │
+│                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -630,7 +630,7 @@ When profiles are enabled, the complete credential loading order is:
 The profile feature is fully backwards compatible:
 - Existing `config.json` files work when no profile is specified
 - Existing environment variables work when no profile is active
-- The `--config-file` flag still works as a fallback
+- The `--config-file` flag still works and replaces the default `config.json` path
 
 ---
 

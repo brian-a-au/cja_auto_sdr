@@ -86,12 +86,13 @@ _KNOWN_EXIT_CODES: dict[int, tuple[str, str, list[str], str]] = {
         "Check stderr output or --run-summary-json for diagnostics.",
     ),
     2: (
-        "Policy threshold exceeded",
-        "A policy or governance condition failed, but the CLI did not crash.",
+        "Policy threshold exceeded or invalid usage",
+        "A policy or governance condition failed, or the command line was invalid. The CLI did not crash.",
         [
             "Diff mode found changes",
             "--fail-on-quality threshold was reached",
             "--fail-on-threshold was reached in org-report mode",
+            "Invalid command-line usage (unknown or malformed option)",
         ],
         (
             "Treat as actionable, not as an infrastructure failure.\n"
@@ -199,10 +200,11 @@ def print_exit_codes(banner_width: int = 60) -> None:
     print("        - Validation failed")
     print("        - File I/O error")
     print()
-    print("    2   Policy threshold exceeded (not a runtime error)")
+    print("    2   Policy threshold exceeded or invalid usage (not a runtime error)")
     print("        - Diff mode: changes found")
     print("        - SDR mode: quality gate failed (--fail-on-quality)")
     print("        - Org mode: governance threshold failed (--fail-on-threshold)")
+    print("        - Invalid command-line usage (unknown or malformed option)")
     print()
     print("    3   Diff: Warning threshold exceeded")
     print("        - Triggered by --warn-threshold PERCENT")

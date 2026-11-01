@@ -6,6 +6,8 @@ import os
 import sys
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from cja_auto_sdr.core.config_validation import validate_credentials
@@ -73,8 +75,8 @@ class TestValidateEnvCredentials:
         """Test validation passes for complete OAuth credentials"""
         credentials = {
             "org_id": "test_org@AdobeOrg",
-            "client_id": "test_client_id",
-            "secret": "test_secret",
+            "client_id": "0123456789abcdef0123456789abcdef",
+            "secret": "test-secret-not-real-0123456789ab",
             "scopes": "openid, AdobeID",
         }
         logger = MagicMock()
@@ -104,8 +106,8 @@ class TestValidateEnvCredentials:
         """Test validation passes with warning when only base credentials present"""
         credentials = {
             "org_id": "test_org@AdobeOrg",
-            "client_id": "test_client_id",
-            "secret": "test_secret",
+            "client_id": "0123456789abcdef0123456789abcdef",
+            "secret": "test-secret-not-real-0123456789ab",
             # No scopes specified
         }
         logger = MagicMock()
@@ -213,3 +215,35 @@ class TestEnvVarMapping:
         for config_key, env_var in ENV_VAR_MAPPING.items():
             # Env var should be uppercase version of config key
             assert env_var == config_key.upper()
+
+
+class TestBootstrapDotenvCwd:
+    """CFG-1: .env discovery must start at the cwd, not at the installed package."""
+
+    def test_bootstrap_dotenv_searches_from_cwd(self):
+        from cja_auto_sdr.api.client import _bootstrap_dotenv
+
+        mock_find = MagicMock(return_value="/work/proj/.env")
+        mock_load = MagicMock(return_value=True)
+        fake = MagicMock(find_dotenv=mock_find, load_dotenv=mock_load)
+        with patch.dict("sys.modules", {"dotenv": fake}):
+            _bootstrap_dotenv(logging.getLogger("test"))
+
+        mock_find.assert_called_once_with(usecwd=True)
+        mock_load.assert_called_once_with("/work/proj/.env")
+
+    def test_bootstrap_dotenv_does_not_override_existing_env(self, tmp_path, monkeypatch):
+        pytest.importorskip("dotenv")
+        from cja_auto_sdr.api.client import _bootstrap_dotenv
+
+        (tmp_path / ".env").write_text("ORG_ID=fromfile@AdobeOrg\nCJA_CFG1_ONLY=fromfile\n")
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("ORG_ID", "fromshell@AdobeOrg")
+        # Record the absent state so monkeypatch removes the var at teardown.
+        monkeypatch.setenv("CJA_CFG1_ONLY", "x")
+        monkeypatch.delenv("CJA_CFG1_ONLY")
+
+        _bootstrap_dotenv(logging.getLogger("test"))
+
+        assert os.environ["ORG_ID"] == "fromshell@AdobeOrg"
+        assert os.environ["CJA_CFG1_ONLY"] == "fromfile"
