@@ -20,7 +20,7 @@ def common_band_label(core_threshold: float, core_min_count: int | None, *, pref
     core_percent = round(core_threshold * 100)
     if core_min_count is None and core_percent > 25:
         return f"Common ({prefix}25-{core_percent - 1}% DVs)"
-    return f"Common ({prefix}25%+ DVs, below core)"
+    return f"Common ({prefix}25%+ DVs, < core)"
 
 
 def _render_distribution_bar(count: int, total: int, width: int = 30) -> str:

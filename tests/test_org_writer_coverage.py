@@ -2806,9 +2806,13 @@ class TestOrgThresholdLabels:
     def test_common_band_with_core_min_count(self, tmp_path, capsys):
         console, markdown, html_text = self._render_all(tmp_path, capsys, core_min_count=5)
 
-        assert "Common (in 25%+ DVs, below core)" in console
-        assert "Common (25%+ DVs, below core)" in markdown
-        assert "Common (25%+ DVs, below core)" in html_text
+        assert "Common (in 25%+ DVs, < core)" in console
+        assert "Common (25%+ DVs, < core)" in markdown
+        assert "Common (25%+ DVs, < core)" in html_text
+        # The console table keeps its 30-character label column aligned.
+        common_row = next(line for line in console.splitlines() if line.startswith("Common ("))
+        core_row = next(line for line in console.splitlines() if line.startswith("Core ("))
+        assert common_row.index(common_row.split()[-3]) == core_row.index(core_row.split()[-3])
 
     def test_default_labels_unchanged(self, tmp_path, capsys):
         console, markdown, html_text = self._render_all(tmp_path, capsys)
