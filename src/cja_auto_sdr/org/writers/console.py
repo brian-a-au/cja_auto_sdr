@@ -337,7 +337,7 @@ def write_org_report_console(
         styles = audit.get("case_styles", {})
         print("Case styles distribution:")
         for style, count in sorted(styles.items(), key=lambda x: -x[1]):
-            pct = count / audit.get("total_components", 1) * 100
+            pct = count / (audit.get("total_components") or 1) * 100
             print(f"  {style:<15} {count:>6} ({pct:>5.1f}%)")
         if audit.get("recommendations"):
             print("\nNaming Recommendations:")

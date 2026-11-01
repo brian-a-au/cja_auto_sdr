@@ -992,6 +992,17 @@ class TestWriteOrgReportConsole:
         assert "HIGH OVERLAP PAIRS" in captured
         assert "RECOMMENDATIONS" in captured
 
+    def test_console_naming_audit_with_zero_components(self, capsys):
+        """An empty component index must not divide by zero in the naming audit."""
+        result = _make_org_result()
+        result.naming_audit = {"total_components": 0, "case_styles": {"snake_case": 0}, "recommendations": []}
+
+        write_org_report_console(result, OrgReportConfig())
+
+        captured = capsys.readouterr().out
+        assert "Case styles distribution:" in captured
+        assert "snake_case" in captured
+
     def test_console_quiet_mode(self, capsys):
         result = _make_org_result()
         config = OrgReportConfig()
