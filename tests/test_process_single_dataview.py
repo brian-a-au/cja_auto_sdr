@@ -2630,3 +2630,64 @@ class TestSingleModeOutputTarget:
         assert result.success is False
         assert result.failure_code == "OUTPUT_PERMISSION_DENIED"
         assert result.failure_reason == "output_permission_denied"
+
+
+class TestProcessSingleDataviewDisplayName:
+    """The result keeps the real data view name; only the file name is sanitized."""
+
+    def _run(self, tmp_path, mock_config_file, metrics_df, dimensions_df, lookup):
+        output_dir = tmp_path / "out"
+        output_dir.mkdir()
+        mock_dq_checker = Mock()
+        mock_dq_checker.issues = []
+        mock_dq_checker.get_issues_dataframe.return_value = pd.DataFrame(
+            columns=["Severity", "Category", "Type", "Item Name", "Issue", "Details"],
+        )
+        mock_fetcher = Mock()
+        mock_fetcher.fetch_all_data.return_value = (metrics_df, dimensions_df, lookup)
+        mock_writer = MagicMock()
+        with (
+            patch("cja_auto_sdr.generator.setup_logging", return_value=Mock()),
+            patch("cja_auto_sdr.generator.initialize_cja", return_value=Mock()),
+            patch("cja_auto_sdr.generator.ParallelAPIFetcher", return_value=mock_fetcher),
+            patch("cja_auto_sdr.generator.DataQualityChecker", return_value=mock_dq_checker),
+            patch("cja_auto_sdr.generator.apply_excel_formatting"),
+            patch("pandas.ExcelWriter") as mock_excel_writer,
+        ):
+            mock_excel_writer.return_value.__enter__ = Mock(return_value=mock_writer)
+            mock_excel_writer.return_value.__exit__ = Mock(return_value=False)
+            return process_single_dataview(
+                data_view_id="dv_1",
+                config_file=mock_config_file,
+                output_dir=str(output_dir),
+            )
+
+    def test_result_keeps_real_data_view_name(
+        self, tmp_path, mock_config_file, sample_metrics_df, sample_dimensions_df
+    ):
+        lookup = {"id": "dv_1", "name": "Prod: Web/App (EU) & Co.", "owner": {"name": "Owner"}}
+        result = self._run(tmp_path, mock_config_file, sample_metrics_df, sample_dimensions_df, lookup)
+
+        assert result.success is True
+        assert result.data_view_name == "Prod: Web/App (EU) & Co."
+        assert Path(result.output_file).name == "CJA_DataView_Prod WebApp EU  Co_dv_1_SDR.xlsx"
+
+    def test_result_name_for_punctuation_only_name(
+        self, tmp_path, mock_config_file, sample_metrics_df, sample_dimensions_df
+    ):
+        lookup = {"id": "dv_1", "name": "::", "owner": {"name": "Owner"}}
+        result = self._run(tmp_path, mock_config_file, sample_metrics_df, sample_dimensions_df, lookup)
+
+        assert result.success is True
+        assert result.data_view_name == "::"
+        assert Path(result.output_file).name == "CJA_DataView__dv_1_SDR.xlsx"
+
+    def test_null_data_view_name_uses_unknown(
+        self, tmp_path, mock_config_file, sample_metrics_df, sample_dimensions_df
+    ):
+        lookup = {"id": "dv_1", "name": None, "owner": {"name": "Owner"}}
+        result = self._run(tmp_path, mock_config_file, sample_metrics_df, sample_dimensions_df, lookup)
+
+        assert result.success is True
+        assert result.data_view_name == "Unknown"
+        assert Path(result.output_file).name == "CJA_DataView_dv_1_SDR.xlsx"

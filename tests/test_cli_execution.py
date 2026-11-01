@@ -1,6 +1,8 @@
 """Tests for CLI execution preflight helpers."""
 
 import argparse
+import contextlib
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -362,6 +364,41 @@ class TestResolveInventoryModeConfiguration:
         with patch("cja_auto_sdr.cli.execution._generator_module", return_value=gen):
             result = resolve_inventory_mode_configuration(args, argv=argv)
         assert result == ["segments", "calculated", "derived"]
+
+    def _all_flags_args(self, *, derived=True, calculated=True, segments=True):
+        return argparse.Namespace(
+            include_derived_inventory=derived,
+            include_calculated_metrics=calculated,
+            include_segments_inventory=segments,
+            inventory_only=False,
+            inventory_summary=False,
+        )
+
+    def test_abbreviated_inventory_flag_is_ordered(self):
+        """An argparse abbreviation of an inventory flag still places that inventory."""
+        args = self._all_flags_args(derived=False)
+        gen = self._make_gen_for_resolve()
+        argv = ["dv_1", "--include-segments", "--include-calc"]
+        with patch("cja_auto_sdr.cli.execution._generator_module", return_value=gen):
+            result = resolve_inventory_mode_configuration(args, argv=argv)
+        assert result == ["segments", "calculated"]
+
+    def test_all_inventory_plus_specific_flag_keeps_all_types(self):
+        """--include-all-inventory plus one flag lists every enabled inventory."""
+        args = self._all_flags_args()
+        gen = self._make_gen_for_resolve()
+        argv = ["dv_1", "--include-all-inventory", "--include-segments"]
+        with patch("cja_auto_sdr.cli.execution._generator_module", return_value=gen):
+            result = resolve_inventory_mode_configuration(args, argv=argv)
+        assert result == ["segments", "derived", "calculated"]
+
+    def test_all_inventory_alone_keeps_default_order(self):
+        """--include-all-inventory alone leaves ordering to each consumer's default."""
+        args = self._all_flags_args()
+        gen = self._make_gen_for_resolve()
+        with patch("cja_auto_sdr.cli.execution._generator_module", return_value=gen):
+            result = resolve_inventory_mode_configuration(args, argv=["dv_1", "--include-all-inventory"])
+        assert result == []
 
     def test_derived_and_calculated_order_preserved(self):
         """Two flags: derived before calculated in argv => ['derived', 'calculated']."""
@@ -907,3 +944,37 @@ class TestBatchModeQuietRuntime:
         assert ("Total runtime:" in out) is not quiet
         if quiet:
             assert out == ""
+
+
+class TestInventoryOrderThroughMain:
+    """End to end: main() hands every requested inventory to SDR processing."""
+
+    @pytest.mark.parametrize(
+        ("flags", "expected"),
+        [
+            (["--include-segments", "--include-calc"], ["segments", "calculated"]),
+            (["--include-all-inventory", "--include-segments"], ["segments", "derived", "calculated"]),
+        ],
+    )
+    @patch("cja_auto_sdr.generator.process_single_dataview")
+    @patch("cja_auto_sdr.generator.resolve_data_view_names")
+    def test_inventory_order_reaches_processing(
+        self, mock_resolve, mock_process, flags, expected, tmp_path, monkeypatch
+    ):
+        from cja_auto_sdr.generator import ProcessingResult, main
+
+        monkeypatch.chdir(tmp_path)
+        mock_resolve.return_value = (["dv_test"], {})
+        mock_process.return_value = ProcessingResult(
+            data_view_id="dv_test",
+            data_view_name="Test View",
+            success=True,
+            duration=0.1,
+            output_file="report.xlsx",
+            file_size_bytes=1,
+        )
+
+        with patch.object(sys, "argv", ["cja_auto_sdr", "dv_test", *flags]), contextlib.suppress(SystemExit):
+            main()
+
+        assert mock_process.call_args.kwargs["inventory_order"] == expected
