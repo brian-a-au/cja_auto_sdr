@@ -285,6 +285,17 @@ class TestCoverageSerialization:
         assert "2.0" not in csv_text
         assert "NaN" not in csv_text
 
+    def test_html_coverage_section_renders_missing_counts_blank(self, tmp_path):
+        """Families that were not requested have no count; HTML must show a blank, not None."""
+        data_dict = {COVERAGE_SHEET_NAME: self._coverage().to_frame()}
+
+        output_path = write_html_output(data_dict, {"Generated At": "now"}, "cov", str(tmp_path), LOGGER)
+
+        html_text = open(output_path, encoding="utf-8").read()
+        assert "<td>None</td>" not in html_text
+        assert "<td>NaN</td>" not in html_text
+        assert "<td>2</td>" in html_text
+
     def test_to_json(self):
         payload = self._coverage().to_json()
         assert payload["families"][0] == {

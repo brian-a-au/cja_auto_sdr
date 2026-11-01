@@ -1057,6 +1057,10 @@ def write_html_output(
                 html_parts.append("</div>")
                 continue
             df = to_display_frame(sheet_df)
+            # na_rep only blanks float NaN; None and pd.NA in object columns need it too.
+            for col in df.columns:
+                if df[col].dtype == object:
+                    df[col] = df[col].where(df[col].notna(), "")
 
             html_parts.append('<div class="section">')
             html_parts.append(f"<h2>{icon} {html.escape(sheet_name)}</h2>")
