@@ -259,3 +259,27 @@ def test_diff_excel_interrupt_leaves_no_partial_file(tmp_path):
 
     assert not (tmp_path / "d.xlsx").exists()
     assert list(tmp_path.iterdir()) == []
+
+
+def test_diff_excel_writes_nan_component_name(temp_output_dir):
+    """A NaN component name (cjapy DataFrame gap, legacy snapshot) writes as a blank cell."""
+    diff_result = _build_diff_result()
+    diff_result.metric_diffs[0].name = float("nan")
+
+    filepath = write_diff_excel_output(diff_result, "test_diff", temp_output_dir, logger)
+
+    ws = load_workbook(filepath)["Metrics Diff"]
+    assert ws.cell(row=2, column=2).value == "m_added"
+    assert ws.cell(row=2, column=3).value in (None, "")
+
+
+def test_diff_excel_writes_none_inventory_name(temp_output_dir):
+    """A missing inventory name writes as a blank cell."""
+    diff_result = _build_diff_result()
+    diff_result.segments_diffs[0].name = None
+
+    filepath = write_diff_excel_output(diff_result, "test_diff", temp_output_dir, logger)
+
+    ws = load_workbook(filepath)["Segments Diff"]
+    assert ws.cell(row=2, column=2).value == "s_added"
+    assert ws.cell(row=2, column=3).value in (None, "")

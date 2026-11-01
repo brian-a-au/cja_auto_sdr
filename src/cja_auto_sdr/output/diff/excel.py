@@ -7,9 +7,12 @@ Extracted from generator.py. Provides:
 from __future__ import annotations
 
 import logging
+import math
 import os
 from pathlib import Path
+from typing import Any
 
+import numpy as np
 import pandas as pd
 
 from cja_auto_sdr.core.colors import _format_error_msg
@@ -24,6 +27,13 @@ from cja_auto_sdr.output.diff.common import (
     _get_change_detail,
     _get_inventory_change_detail,
 )
+
+
+def _excel_text(value: Any) -> Any:
+    """Return "" for a non-finite float, which xlsxwriter cannot write as a number."""
+    if isinstance(value, (float, np.floating)) and not math.isfinite(float(value)):
+        return ""
+    return value
 
 
 def write_diff_excel_output(
@@ -166,8 +176,8 @@ def write_diff_excel_output(
                 rows = [
                     {
                         "Status": diff.change_type.value.upper(),
-                        "ID": diff.id,
-                        "Name": diff.name,
+                        "ID": _excel_text(diff.id),
+                        "Name": _excel_text(diff.name),
                         "Details": _get_change_detail(diff, truncate=False),
                     }
                     for diff in diffs
@@ -211,8 +221,8 @@ def write_diff_excel_output(
                 rows = [
                     {
                         "Status": diff.change_type.value.upper(),
-                        "ID": diff.id,
-                        "Name": diff.name,
+                        "ID": _excel_text(diff.id),
+                        "Name": _excel_text(diff.name),
                         "Details": _get_inventory_change_detail(diff, truncate=False),
                     }
                     for diff in diffs
