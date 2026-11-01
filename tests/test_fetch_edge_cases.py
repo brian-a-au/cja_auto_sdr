@@ -5,12 +5,14 @@ task count alignment, error context propagation.
 """
 
 import logging
+import threading
 from concurrent.futures import Future
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
+import pytest
 
-from cja_auto_sdr.api.fetch import API_FETCH_TASK_COUNT, ParallelAPIFetcher
+from cja_auto_sdr.api.fetch import API_FETCH_TASK_COUNT, ParallelAPIFetcher, start_background_call
 from cja_auto_sdr.core.perf import PerformanceTracker
 
 
@@ -162,3 +164,39 @@ class TestErrorContextPropagation:
         metrics, dimensions, _dataview = fetcher.fetch_all_data("dv_test")
         assert isinstance(metrics, pd.DataFrame) and metrics.empty
         assert isinstance(dimensions, pd.DataFrame) and dimensions.empty
+
+
+# ==================== start_background_call ====================
+
+
+def test_start_background_call_result_propagates_with_args_and_kwargs():
+    future = start_background_call(lambda a, b=0: a + b, 1, b=2)
+    assert future.result(timeout=5) == 3
+
+
+def test_start_background_call_exception_propagates():
+    def boom():
+        raise ValueError("boom")
+
+    future = start_background_call(boom)
+    with pytest.raises(ValueError, match="boom"):
+        future.result(timeout=5)
+
+
+def test_start_background_call_runs_on_named_daemon_thread():
+    seen = {}
+    release = threading.Event()
+
+    def probe():
+        seen["thread"] = threading.current_thread()
+        release.wait(timeout=5)
+
+    future = start_background_call(probe)
+    try:
+        while "thread" not in seen:
+            threading.Event().wait(0.01)
+        assert seen["thread"].daemon is True
+        assert seen["thread"].name == "cja-background-call"
+    finally:
+        release.set()
+        future.result(timeout=5)

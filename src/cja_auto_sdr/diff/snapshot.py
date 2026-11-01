@@ -4,10 +4,11 @@ import json
 import logging
 import os
 import struct
+from concurrent.futures import wait
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from cja_auto_sdr.api.fetch import classify_component_payload, fetch_component_payload
+from cja_auto_sdr.api.fetch import classify_component_payload, fetch_component_payload, start_background_call
 from cja_auto_sdr.core.discovery_payloads import (
     TOLERATED_LEGACY_LOOKUP_REASONS,
     PayloadKind,
@@ -164,9 +165,16 @@ class SnapshotManager:
         dv_description = dv_info.get("description", "")
 
         self.logger.info("Fetching metrics...")
+        # Prefetch dimensions on a daemon thread while metrics load. On an ordinary metrics failure we join
+        # it so no thread outlives this call. On Ctrl+C (KeyboardInterrupt) we re-raise at once: the daemon
+        # thread cannot hold up the interrupt or interpreter exit.
+        dimensions_future = start_background_call(
+            fetch_component_payload, cja, "dimensions", data_view_id, inclType=True, full=True
+        )
         try:
             raw_metrics = fetch_component_payload(cja, "metrics", data_view_id, inclType=True, full=True)
         except Exception as exc:
+            wait([dimensions_future])
             raise _annotate_snapshot_failure(exc, stage="metrics_fetch") from exc
 
         metrics_outcome = classify_component_payload(raw_metrics)
@@ -178,6 +186,7 @@ class SnapshotManager:
             and hasattr(raw_metrics, "to_dict")
         )
         if metrics_outcome.status == "failed" and not legacy_metrics_like_frame:
+            wait([dimensions_future])
             raise _annotate_snapshot_failure(
                 ValueError(
                     f"Metrics fetch returned error payload ({metrics_outcome.reason}): {metrics_outcome.error_message}"
@@ -192,7 +201,7 @@ class SnapshotManager:
 
         self.logger.info("Fetching dimensions...")
         try:
-            raw_dimensions = fetch_component_payload(cja, "dimensions", data_view_id, inclType=True, full=True)
+            raw_dimensions = dimensions_future.result()
         except Exception as exc:
             raise _annotate_snapshot_failure(exc, stage="dimensions_fetch") from exc
         dimensions_outcome = classify_component_payload(raw_dimensions)

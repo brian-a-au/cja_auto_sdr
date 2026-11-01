@@ -13,6 +13,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 from zoneinfo import ZoneInfo
 
+import pandas as pd
 import pytest
 
 import cja_auto_sdr.core.json_io as json_io
@@ -835,6 +836,140 @@ class TestSnapshotManagerInit:
         """Custom logger is stored."""
         manager = SnapshotManager(logger)
         assert manager.logger is logger
+
+
+# ==================== create_snapshot prefetch (PERF-8) ====================
+
+
+class TestCreateSnapshotPrefetch:
+    """Dimensions are fetched while metrics load, with unchanged errors and log order."""
+
+    @staticmethod
+    def _cja():
+        cja = MagicMock()
+        cja.getDataView.return_value = {"name": "My View", "owner": {"name": "admin"}, "description": "d"}
+        return cja
+
+    def test_create_snapshot_overlaps_component_fetches(self, manager):
+        import threading
+
+        dims_started = threading.Event()
+        seen = {}
+
+        def fake_fetch(cja, kind, data_view_id, **kwargs):
+            if kind == "dimensions":
+                dims_started.set()
+                return pd.DataFrame([{"id": "d1"}])
+            # The dimensions call must begin while the metrics call is still in flight.
+            seen["overlapped"] = dims_started.wait(timeout=5)
+            return pd.DataFrame([{"id": "m1"}])
+
+        with patch("cja_auto_sdr.diff.snapshot.fetch_component_payload", side_effect=fake_fetch):
+            snap = manager.create_snapshot(self._cja(), "dv_test", quiet=True)
+
+        assert seen["overlapped"] is True
+        assert [m["id"] for m in snap.metrics] == ["m1"]
+        assert [d["id"] for d in snap.dimensions] == ["d1"]
+
+    def test_create_snapshot_metrics_error_still_raises_metrics_stage(self, manager):
+        import threading
+        import time
+
+        dims_started = threading.Event()
+        dims_finished = threading.Event()
+
+        def fake_fetch(cja, kind, data_view_id, **kwargs):
+            if kind == "dimensions":
+                dims_started.set()
+                time.sleep(0.05)
+                dims_finished.set()
+                return pd.DataFrame([])
+            dims_started.wait(timeout=5)
+            raise RuntimeError("metrics boom")
+
+        with (
+            patch("cja_auto_sdr.diff.snapshot.fetch_component_payload", side_effect=fake_fetch),
+            pytest.raises(RuntimeError, match="metrics boom") as caught,
+        ):
+            manager.create_snapshot(self._cja(), "dv_test", quiet=True)
+
+        assert getattr(caught.value, "_cja_snapshot_failure_stage") == "metrics_fetch"
+        # The worker was joined before the error propagated: no thread left running.
+        assert dims_finished.is_set()
+
+    def test_create_snapshot_keyboard_interrupt_does_not_wait_for_dimensions(self, manager):
+        import threading
+
+        dims_started = threading.Event()
+        release = threading.Event()
+        outcome = {}
+
+        def fake_fetch(cja, kind, data_view_id, **kwargs):
+            if kind == "dimensions":
+                dims_started.set()
+                release.wait(timeout=30)
+                return pd.DataFrame([])
+            dims_started.wait(timeout=5)
+            raise KeyboardInterrupt
+
+        def run():
+            try:
+                with patch("cja_auto_sdr.diff.snapshot.fetch_component_payload", side_effect=fake_fetch):
+                    manager.create_snapshot(self._cja(), "dv_test", quiet=True)
+            except BaseException as exc:
+                outcome["exc"] = exc
+
+        runner = threading.Thread(target=run, daemon=True)
+        runner.start()
+        try:
+            runner.join(timeout=5)
+            assert not runner.is_alive(), "KeyboardInterrupt waited for the dimensions prefetch"
+            assert isinstance(outcome.get("exc"), KeyboardInterrupt)
+        finally:
+            release.set()
+            runner.join(timeout=5)
+
+    def test_create_snapshot_metrics_error_payload_joins_dimensions(self, manager):
+        import threading
+
+        dims_started = threading.Event()
+        dims_finished = threading.Event()
+
+        def fake_fetch(cja, kind, data_view_id, **kwargs):
+            if kind == "dimensions":
+                dims_started.set()
+                threading.Event().wait(0.3)
+                dims_finished.set()
+                return pd.DataFrame([])
+            dims_started.wait(timeout=5)
+            return {"statusCode": 503, "message": "metrics down"}
+
+        with (
+            patch("cja_auto_sdr.diff.snapshot.fetch_component_payload", side_effect=fake_fetch),
+            pytest.raises(ValueError, match="Metrics fetch returned error payload") as caught,
+        ):
+            manager.create_snapshot(self._cja(), "dv_test", quiet=True)
+
+        assert getattr(caught.value, "_cja_snapshot_failure_stage") == "metrics_fetch"
+        assert dims_finished.is_set()
+
+    def test_create_snapshot_dimensions_error_keeps_dimensions_stage_and_log_order(self, manager, caplog):
+        def fake_fetch(cja, kind, data_view_id, **kwargs):
+            if kind == "dimensions":
+                raise RuntimeError("dims boom")
+            return pd.DataFrame([{"id": "m1"}])
+
+        with (
+            caplog.at_level("INFO", logger=manager.logger.name),
+            patch("cja_auto_sdr.diff.snapshot.fetch_component_payload", side_effect=fake_fetch),
+            pytest.raises(RuntimeError, match="dims boom") as caught,
+        ):
+            manager.create_snapshot(self._cja(), "dv_test", quiet=True)
+
+        assert getattr(caught.value, "_cja_snapshot_failure_stage") == "dimensions_fetch"
+        messages = [r.getMessage() for r in caplog.records]
+        assert messages.index("Fetching metrics...") < messages.index("  Fetched 1 metrics")
+        assert messages.index("  Fetched 1 metrics") < messages.index("Fetching dimensions...")
 
 
 def _raise_on_constant(token):

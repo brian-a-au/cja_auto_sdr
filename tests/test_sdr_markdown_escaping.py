@@ -141,3 +141,61 @@ def test_backslash_before_pipe_keeps_cell_count():
     assert _gfm_cell_count(lines[2]) == 3
     assert "Path C:\\\\\\|x" in lines[2]
     assert escape_markdown("Path C:\\|x") == "Path C:\\\\\\|x"
+
+
+def _reference_df_to_markdown_table(df, sheet_name, empty_message=None):
+    """Copy of the pandas-vectorized implementation, kept as the byte-identical reference."""
+    if df.empty:
+        if empty_message:
+            return f"\n*{escape_markdown(empty_message)}*\n"
+        return f"\n*No {sheet_name.lower()} found.*\n"
+    headers = [escape_markdown(col) for col in df.columns]
+    header_row = "| " + " | ".join(headers) + " |"
+    separator_row = "| " + " | ".join(["---"] * len(headers)) + " |"
+    df_obj = df.astype(object)
+    df_esc = df_obj.where(df_obj.notna(), "").astype(str)
+    for col in df_esc.columns:
+        df_esc[col] = (
+            df_esc[col]
+            .str.replace("\\", "\\\\", regex=False)
+            .str.replace("|", "\\|", regex=False)
+            .str.replace("`", "\\`", regex=False)
+            .str.replace("\n", " ", regex=False)
+            .str.replace("\r", " ", regex=False)
+            .str.strip()
+        )
+    data_rows = ["| " + " | ".join(row) + " |" for row in df_esc.itertuples(index=False)]
+    return "\n".join([header_row, separator_row, *data_rows])
+
+
+def test_markdown_table_matches_reference():
+    frames = [
+        pd.DataFrame(
+            {
+                "name": ["a|b", "back\\slash", "multi\nline\r\nx", "  padded  ", "tick`s", None, np.nan],
+                "n": [1, 2, 3, 4, 5, 6, 7],
+                "f": [1.5, np.nan, 3.0, 4.25, 5.0, 6.0, 7.0],
+                "b": [True, False, True, False, True, False, True],
+                "u": ["café", "日本語", "\U0001f600", "x", "y", "z", "w"],
+            }
+        ),
+        pd.DataFrame(
+            {
+                "i": pd.array([1, None, 3], dtype="Int64"),
+                "f": pd.array([1.5, None, 3.5], dtype="Float64"),
+                "b": pd.array([True, None, False], dtype="boolean"),
+                "c": pd.Categorical(["a|b", None, "c"]),
+                "s": pd.array(["x", pd.NA, "y\nz"], dtype="string"),
+                "o": [None, pd.NA, np.nan],
+            }
+        ),
+        pd.DataFrame({"a": [1]}),
+        pd.DataFrame({"p|ipe": ["v"], "back\\": ["w"]}),
+        pd.DataFrame(),
+        pd.DataFrame({"a": []}),
+    ]
+    for df in frames:
+        assert df_to_markdown_table(df, "Sheet", "empty|msg") == _reference_df_to_markdown_table(
+            df, "Sheet", "empty|msg"
+        )
+        assert df_to_markdown_table(df, "Sheet") == _reference_df_to_markdown_table(df, "Sheet")

@@ -132,6 +132,8 @@ class DataViewComparator:
     ):
         self.logger = logger or logging.getLogger(__name__)
         self.ignore_fields = set(ignore_fields or [])
+        # The masker only acts on *_references ignores; skip its AST walk otherwise.
+        self._masks_references = any(f.endswith("_references") for f in self.ignore_fields)
         if compare_fields:
             self.compare_fields = compare_fields
         elif use_extended_fields:
@@ -440,7 +442,8 @@ class DataViewComparator:
                         definition = json.loads(value)
                     except (ValueError, TypeError) as exc:
                         raise ValueError(f"Invalid {label} {inventory_type} definition_json: {exc}") from exc
-                    self._mask_definition_references(definition, inventory_type)
+                    if self._masks_references:
+                        self._mask_definition_references(definition, inventory_type)
                     # Canonical JSON preserves JSON types (in particular true versus 1).
                     definitions.append(json.dumps(definition, sort_keys=True, separators=(",", ":")))
                 if definitions[0] != definitions[1]:
