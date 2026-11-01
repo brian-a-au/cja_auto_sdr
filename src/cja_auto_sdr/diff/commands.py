@@ -690,7 +690,9 @@ def handle_diff_snapshot_command(
                 flags.append("--include-calculated")
             if include_segments:
                 flags.append("--include-segments")
-            print(f"  cja_auto_sdr {data_view_id} {' '.join(flags)} --auto-snapshot", file=sys.stderr)
+            print(
+                f"  cja_auto_sdr {data_view_id} --snapshot ./snapshots/baseline.json {' '.join(flags)}", file=sys.stderr
+            )
             return False, False, None
 
         success, source, _ = generator.configure_cjapy(profile=profile, config_file=config_file, logger=logger)
