@@ -199,6 +199,44 @@ def test_file_outputs_keep_full_change_values(tmp_path):
     assert _NEW_DESC in md
 
 
+_INV_OLD = "Visits from the EMEA region only"
+_INV_NEW = "Visits from the EMEA region and APAC"
+
+
+@pytest.mark.parametrize("fmt", ["csv", "excel", "html", "markdown"])
+def test_inventory_file_outputs_keep_full_change_values(tmp_path, fmt):
+    from cja_auto_sdr.diff.models import ChangeType, InventoryItemDiff
+    from cja_auto_sdr.output.diff.markdown import write_diff_markdown_output
+
+    item = InventoryItemDiff(
+        id="s_mod",
+        name="Mod seg",
+        change_type=ChangeType.MODIFIED,
+        inventory_type="segment",
+        changed_fields={"description": (_INV_OLD, _INV_NEW)},
+    )
+    r = DiffResult(
+        summary=DiffSummary(segments_modified=1),
+        metadata_diff=MetadataDiff(source_name="A", target_name="B", source_id="dv_a", target_id="dv_b"),
+        metric_diffs=[],
+        dimension_diffs=[],
+        segments_diffs=[item],
+    )
+    out = str(tmp_path / fmt)
+    if fmt == "csv":
+        d = write_diff_csv_output(r, "d", out, logger)
+        text = "".join(Path(d, p).read_text(encoding="utf-8") for p in os.listdir(d) if p.endswith(".csv"))
+    elif fmt == "excel":
+        wb = load_workbook(write_diff_excel_output(r, "d", out, logger))
+        text = "\n".join(str(c) for ws in wb for row in ws.iter_rows(values_only=True) for c in row if c is not None)
+    elif fmt == "html":
+        text = Path(write_diff_html_output(r, "d", out, logger)).read_text(encoding="utf-8")
+    else:
+        text = Path(write_diff_markdown_output(r, "d", out, logger)).read_text(encoding="utf-8")
+    assert _INV_OLD in text
+    assert _INV_NEW in text
+
+
 def test_console_truncation_marks_ellipsis():
     from cja_auto_sdr.output.diff.common import _format_diff_value
 
