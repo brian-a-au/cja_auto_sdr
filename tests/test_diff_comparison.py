@@ -1342,6 +1342,90 @@ class TestShowOnlyFilter:
         assert ChangeType.UNCHANGED not in change_types
         assert ChangeType.REMOVED not in change_types
 
+    @staticmethod
+    def _inventory_snapshots(field: str, id_field: str):
+        source_items = [
+            {id_field: "i_keep", "name": "Keep", "description": "same"},
+            {id_field: "i_mod", "name": "Mod", "description": "old"},
+            {id_field: "i_gone", "name": "Gone", "description": "x"},
+        ]
+        target_items = [
+            {id_field: "i_keep", "name": "Keep", "description": "same"},
+            {id_field: "i_mod", "name": "Mod", "description": "new"},
+            {id_field: "i_new", "name": "New", "description": "y"},
+        ]
+        source = DataViewSnapshot(data_view_id="dv_1", data_view_name="Test", **{field: source_items})
+        target = DataViewSnapshot(data_view_id="dv_1", data_view_name="Test", **{field: target_items})
+        return source, target
+
+    def test_show_only_filters_segment_diffs(self, logger):
+        """--show-only applies to segment diffs, and hidden types do not count as changes."""
+        source, target = self._inventory_snapshots("segments_inventory", "segment_id")
+
+        result = DataViewComparator(logger, include_segments=True, show_only=["unchanged"]).compare(source, target)
+
+        assert [d.change_type for d in result.segments_diffs] == [ChangeType.UNCHANGED]
+        assert result.summary.has_changes is False
+        assert result.summary.total_changes == 0
+
+    def test_show_only_filters_calc_metric_diffs(self, logger):
+        """--show-only applies to calculated metric diffs the same way."""
+        source, target = self._inventory_snapshots("calculated_metrics_inventory", "metric_id")
+
+        result = DataViewComparator(logger, include_calc_metrics=True, show_only=["unchanged"]).compare(source, target)
+
+        assert [d.change_type for d in result.calc_metrics_diffs] == [ChangeType.UNCHANGED]
+        assert result.summary.has_changes is False
+        assert result.summary.total_changes == 0
+
+    def test_show_only_keeps_requested_inventory_changes(self, logger):
+        """Requested change types still count toward has_changes."""
+        source, target = self._inventory_snapshots("segments_inventory", "segment_id")
+
+        result = DataViewComparator(logger, include_segments=True, show_only=["added"]).compare(source, target)
+
+        assert [d.id for d in result.segments_diffs] == ["i_new"]
+        assert result.summary.has_changes is True
+
+    def test_show_only_empty_inventory_result_cli(self, tmp_path, monkeypatch):
+        """End to end: hidden inventory changes exit 0 and the empty CSV keeps its header."""
+        from unittest.mock import patch
+
+        from cja_auto_sdr.generator import main
+
+        source, target = self._inventory_snapshots("segments_inventory", "segment_id")
+        # Leave only the modified segment, then hide modifications.
+        source.segments_inventory = [item for item in source.segments_inventory if item["segment_id"] != "i_gone"]
+        target.segments_inventory = [item for item in target.segments_inventory if item["segment_id"] != "i_new"]
+        source_file = tmp_path / "a.json"
+        target_file = tmp_path / "b.json"
+        source_file.write_text(json.dumps(source.to_dict()))
+        target_file.write_text(json.dumps(target.to_dict()))
+        out_dir = tmp_path / "out"
+        monkeypatch.chdir(tmp_path)
+        argv = [
+            "cja_auto_sdr",
+            "--compare-snapshots",
+            str(source_file),
+            str(target_file),
+            "--show-only",
+            "added",
+            "--include-segments",
+            "--format",
+            "csv",
+            "--output-dir",
+            str(out_dir),
+            "--quiet",
+        ]
+
+        with patch.object(sys, "argv", argv), pytest.raises(SystemExit) as exc_info:
+            main()
+
+        assert exc_info.value.code == 0
+        csv_files = list(out_dir.rglob("segments_diff.csv"))
+        assert len(csv_files) == 1
+        assert csv_files[0].read_text(encoding="utf-8") == "status,id,name,details\n"
+
 
 class TestMetricsOnlyAndDimensionsOnly:
     """Tests for --metrics-only and --dimensions-only flags"""
