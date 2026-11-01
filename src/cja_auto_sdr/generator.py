@@ -3235,18 +3235,24 @@ def process_inventory_summary(
     if include_derived:
 
         def _build_derived_inventory_summary() -> Any:
+            from concurrent.futures import ThreadPoolExecutor
+
             from cja_auto_sdr.inventory.derived_fields import DerivedFieldInventoryBuilder
 
-            raw_metrics = _fetch_validated_component_payload(cja, "metrics", data_view_id, inclType=True, full=True)
-            metrics_outcome = _classify_component_payload(raw_metrics)
-            if metrics_outcome.status == "failed":
-                raise RuntimeError(
-                    f"metrics fetch returned error payload ({metrics_outcome.reason}): {metrics_outcome.error_message}"
+            # Dimensions are prefetched on one worker while metrics load; the with-block joins it on any exit.
+            with ThreadPoolExecutor(max_workers=1) as prefetch_pool:
+                dimensions_future = prefetch_pool.submit(
+                    _fetch_validated_component_payload, cja, "dimensions", data_view_id, inclType=True, full=True
                 )
+                raw_metrics = _fetch_validated_component_payload(cja, "metrics", data_view_id, inclType=True, full=True)
+                metrics_outcome = _classify_component_payload(raw_metrics)
+                if metrics_outcome.status == "failed":
+                    raise RuntimeError(
+                        f"metrics fetch returned error payload "
+                        f"({metrics_outcome.reason}): {metrics_outcome.error_message}"
+                    )
 
-            raw_dimensions = _fetch_validated_component_payload(
-                cja, "dimensions", data_view_id, inclType=True, full=True
-            )
+                raw_dimensions = dimensions_future.result()
             dimensions_outcome = _classify_component_payload(raw_dimensions)
             if dimensions_outcome.status == "failed":
                 raise RuntimeError(
