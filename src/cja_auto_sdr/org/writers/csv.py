@@ -61,6 +61,18 @@ _trending_snapshot_csv_rows = make_override_proxy(
 )
 
 
+# Explicit so an empty component index still writes a header row and sorts cleanly.
+_COMPONENT_CSV_COLUMNS = [
+    "Component ID",
+    "Component Type",
+    "Name",
+    "Data View Count",
+    "Coverage (%)",
+    "Distribution Bucket",
+    "Data Views",
+]
+
+
 def write_org_report_csv(
     result: OrgReportResult,
     output_path: Path | None,
@@ -189,7 +201,7 @@ def write_org_report_csv(
                 "Data Views": ";".join(sorted(info.data_views)),
             },
         )
-    comp_df = pd.DataFrame(comp_data)
+    comp_df = pd.DataFrame(comp_data, columns=_COMPONENT_CSV_COLUMNS)
     comp_df = comp_df.sort_values(["Distribution Bucket", "Data View Count"], ascending=[True, False])
     comp_path = csv_dir / "org_report_components.csv"
     comp_df.to_csv(comp_path, index=False, encoding="utf-8")
