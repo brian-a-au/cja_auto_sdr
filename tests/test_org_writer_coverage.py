@@ -338,6 +338,50 @@ class TestCompareOrgReports:
         assert comparison.previous_timestamp == "2024-12-01T10:00:00Z"
         assert comparison.current_timestamp == "2025-01-15T10:00:00Z"
 
+    @staticmethod
+    def _baseline(tmp_path, **fields):
+        report = _mark_full_fidelity_baseline(
+            {
+                "generated_at": "2024-12-01T10:00:00Z",
+                "data_views": [{"data_view_id": "dv_001", "data_view_name": "DV 1"}],
+                "summary": {"total_unique_components": 20},
+                "distribution": {"core": {"metrics_count": 5, "dimensions_count": 3}},
+                **fields,
+            }
+        )
+        path = tmp_path / "prev_report.json"
+        path.write_text(json.dumps(report), encoding="utf-8")
+        return path
+
+    def test_compare_org_reports_rejects_other_org(self, tmp_path):
+        prev_path = self._baseline(tmp_path, org_id="ORG_A@AdobeOrg")
+        current = _make_org_result()
+        current.org_id = "ORG_B@AdobeOrg"
+
+        with pytest.raises(ValueError, match="ORG_A@AdobeOrg") as exc_info:
+            compare_org_reports(current, str(prev_path))
+        assert "ORG_B@AdobeOrg" in str(exc_info.value)
+
+    @pytest.mark.parametrize("org_fields", [{}, {"org_id": "unknown"}, {"org_id": ""}])
+    def test_compare_org_reports_allows_legacy_baseline_without_org_id(self, tmp_path, org_fields):
+        prev_path = self._baseline(tmp_path, **org_fields)
+        current = _make_org_result()
+
+        assert isinstance(compare_org_reports(current, str(prev_path)), OrgReportComparison)
+
+    def test_compare_org_reports_allows_unknown_current_org(self, tmp_path):
+        prev_path = self._baseline(tmp_path, org_id="ORG_A@AdobeOrg")
+        current = _make_org_result()
+        current.org_id = "unknown"
+
+        assert isinstance(compare_org_reports(current, str(prev_path)), OrgReportComparison)
+
+    def test_compare_org_reports_same_org_compares(self, tmp_path):
+        current = _make_org_result()
+        prev_path = self._baseline(tmp_path, org_id=current.org_id)
+
+        assert isinstance(compare_org_reports(current, str(prev_path)), OrgReportComparison)
+
     def test_compare_with_nested_similarity_pairs(self, tmp_path):
         """Cover lines 10483-10484: old nested data_view_1/data_view_2 format."""
         prev_report = _mark_full_fidelity_baseline(

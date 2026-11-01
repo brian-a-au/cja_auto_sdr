@@ -5892,6 +5892,14 @@ def compare_org_reports(current: OrgReportResult, previous_path: str) -> OrgRepo
     with open(previous_path, encoding="utf-8") as f:
         prev_data = json.load(f)
 
+    # A legacy baseline without an org ID still compares; a known other org does not.
+    prev_org = prev_data.get("org_id") if isinstance(prev_data, dict) else None
+    known_orgs = all(isinstance(org, str) and org and org != "unknown" for org in (prev_org, current.org_id))
+    if known_orgs and prev_org != current.org_id:
+        raise ValueError(
+            f"Previous report {previous_path} is from org {prev_org}, but the current report is from org {current.org_id}"
+        )
+
     from cja_auto_sdr.org.snapshot_utils import (
         org_report_snapshot_comparison_input,
     )

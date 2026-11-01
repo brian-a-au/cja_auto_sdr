@@ -3203,6 +3203,38 @@ class TestOrgReportOutputHandling:
 
         assert "--org-stats only writes" not in capsys.readouterr().err
 
+    def test_org_report_cross_org_baseline_exits_1(self, sample_result, capsys, tmp_path):
+        """A baseline from another org still writes the report, then fails the run."""
+        from cja_auto_sdr.generator import build_org_report_json_data
+
+        baseline = build_org_report_json_data(sample_result)
+        baseline["org_id"] = "ORG_OTHER@AdobeOrg"
+        baseline_path = tmp_path / "baseline.json"
+        baseline_path.write_text(json.dumps(baseline), encoding="utf-8")
+        out_dir = tmp_path / "out"
+
+        with (
+            patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "ok", {"org_id": "org_123"})),
+            patch("cja_auto_sdr.generator.cjapy.CJA", return_value=Mock()),
+            patch("cja_auto_sdr.generator.OrgComponentAnalyzer") as mock_analyzer,
+            patch("cja_auto_sdr.generator.append_github_step_summary"),
+        ):
+            mock_analyzer.return_value.run_analysis.return_value = sample_result
+            success, _ = run_org_report(
+                config_file="config.json",
+                output_format="json",
+                output_path=None,
+                output_dir=str(out_dir),
+                org_config=OrgReportConfig(compare_org_report=str(baseline_path), skip_lock=True),
+                profile=None,
+                quiet=True,
+            )
+
+        assert success is False
+        captured = capsys.readouterr()
+        assert "ORG_OTHER@AdobeOrg" in captured.out + captured.err
+        assert list(out_dir.glob("*.json"))
+
     def test_csv_output_to_stdout_errors(self, sample_result, capsys):
         """CSV org-report should error on stdout since it writes multiple files."""
         with (
