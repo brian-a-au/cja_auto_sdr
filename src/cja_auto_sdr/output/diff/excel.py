@@ -168,7 +168,7 @@ def write_diff_excel_output(
                         "Status": diff.change_type.value.upper(),
                         "ID": diff.id,
                         "Name": diff.name,
-                        "Details": _get_change_detail(diff),
+                        "Details": _get_change_detail(diff, truncate=False),
                     }
                     for diff in diffs
                 ]
@@ -213,7 +213,7 @@ def write_diff_excel_output(
                         "Status": diff.change_type.value.upper(),
                         "ID": diff.id,
                         "Name": diff.name,
-                        "Details": _get_inventory_change_detail(diff),
+                        "Details": _get_inventory_change_detail(diff, truncate=False),
                     }
                     for diff in diffs
                 ]

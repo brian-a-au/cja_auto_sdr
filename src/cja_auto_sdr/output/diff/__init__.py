@@ -88,10 +88,11 @@ def write_diff_output(
     import json as _json
 
     from cja_auto_sdr.core.constants import should_generate_format
+    from cja_auto_sdr.core.json_io import replace_non_finite
 
     # Stdout JSON fast-path: emit JSON to stdout and skip file creation
     if output_to_stdout and output_format == "json":
-        data = build_diff_json_data(diff_result, changes_only=changes_only)
+        data = replace_non_finite(build_diff_json_data(diff_result, changes_only=changes_only))
         print(_json.dumps(data, indent=2, ensure_ascii=False))  # noqa: T201
         return None
 

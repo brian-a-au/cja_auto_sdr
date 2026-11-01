@@ -329,13 +329,13 @@ Drill into individual data view resources. These commands let you inspect a sing
 | `--warn-threshold PERCENT` | Exit with code 3 if change % exceeds threshold | - |
 | `--group-by-field` | Group changes by field name instead of component | False |
 | `--group-by-field-limit N` | Max items per section in --group-by-field output (0=unlimited) | 10 |
-| `--diff-output FILE` | Write the diff to `FILE`. Console and PR-comment output is saved as text. JSON, Markdown, HTML, and Excel reports are written to `FILE` instead of an auto-named file in `--output-dir`. Not supported for CSV, which writes several files. `--diff-output -` is rejected with exit 1 before any work and creates no file; use `--format json --output -` for stdout | - |
+| `--diff-output FILE` | Write the diff to `FILE`. Console and PR-comment output is saved as text. JSON, Markdown, HTML, and Excel reports are written to `FILE` instead of an auto-named file in `--output-dir`. Not supported for CSV, which writes several files. `--diff-output` is also ignored for `--format all`, and a warning names the folder. Console text saved to a file has no color codes. `--diff-output -` is rejected with exit 1 before any work and creates no file; use `--format json --output -` for stdout | - |
 | `--format-pr-comment` | Output in GitHub/GitLab PR comment format | False |
 | `--auto-snapshot` | Automatically save snapshots during diff for audit trail | False |
 | `--auto-prune` | With `--auto-snapshot`, apply default retention (`--keep-last 20` + `--keep-since 30d`) only when both retention flags are omitted | False |
 | `--snapshot-dir DIR` | Directory for auto-saved snapshots | ./snapshots |
 | `--keep-last N` | Retention: keep only last N snapshots per data view (0=all) | 0 |
-| `--keep-since PERIOD` | Date-based retention: delete snapshots older than PERIOD. Formats: `7d`, `2w`, `1m`, `30` (days) | - |
+| `--keep-since PERIOD` | Date-based retention: delete snapshots older than PERIOD. Formats: `7d`, `2w`, `1m`, `30` (days). An invalid value exits 1 before any API call, as with `--prune-snapshots` | - |
 
 > **Retention precedence:** Explicit values are preserved, including `--keep-last 0` / `--keep-last=0` and `--keep-since 90d` / `--keep-since=90d`.
 

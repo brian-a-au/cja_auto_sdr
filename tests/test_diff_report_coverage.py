@@ -153,3 +153,140 @@ def test_coverage_rows_helper():
     assert rows["ignored_fields"] == ""
     assert rows["show_only"] == ""
     assert rows["metadata_policy"] == "reported"
+
+
+_OLD_DESC = "Counts visits from the EMEA region only"
+_NEW_DESC = "Counts visits from the EMEA region and APAC"
+
+
+def _long_change_result() -> DiffResult:
+    from cja_auto_sdr.diff.models import ChangeType, ComponentDiff
+
+    diff = ComponentDiff(
+        id="metrics/a",
+        name="A",
+        change_type=ChangeType.MODIFIED,
+        changed_fields={"description": (_OLD_DESC, _NEW_DESC)},
+    )
+    return DiffResult(
+        summary=DiffSummary(),
+        metadata_diff=MetadataDiff(source_name="A", target_name="B", source_id="dv_a", target_id="dv_b"),
+        metric_diffs=[diff],
+        dimension_diffs=[],
+    )
+
+
+def test_file_outputs_keep_full_change_values(tmp_path):
+    from cja_auto_sdr.output.diff.markdown import write_diff_markdown_output
+
+    r = _long_change_result()
+    csv_dir = write_diff_csv_output(r, "d", str(tmp_path / "csv"), logger)
+    csv_text = "".join(Path(csv_dir, p).read_text(encoding="utf-8") for p in os.listdir(csv_dir) if p.endswith(".csv"))
+    assert _OLD_DESC in csv_text
+    assert _NEW_DESC in csv_text
+
+    xlsx = write_diff_excel_output(r, "d", str(tmp_path / "xlsx"), logger)
+    wb = load_workbook(xlsx)
+    cells = [str(c) for ws in wb for row in ws.iter_rows(values_only=True) for c in row if c is not None]
+    assert any(_OLD_DESC in c and _NEW_DESC in c for c in cells)
+
+    html = Path(write_diff_html_output(r, "d", str(tmp_path / "html"), logger)).read_text(encoding="utf-8")
+    assert _OLD_DESC in html
+    assert _NEW_DESC in html
+
+    md = Path(write_diff_markdown_output(r, "d", str(tmp_path / "md"), logger)).read_text(encoding="utf-8")
+    assert _OLD_DESC in md
+    assert _NEW_DESC in md
+
+
+_INV_OLD = "Visits from the EMEA region only"
+_INV_NEW = "Visits from the EMEA region and APAC"
+
+
+@pytest.mark.parametrize("fmt", ["csv", "excel", "html", "markdown"])
+def test_inventory_file_outputs_keep_full_change_values(tmp_path, fmt):
+    from cja_auto_sdr.diff.models import ChangeType, InventoryItemDiff
+    from cja_auto_sdr.output.diff.markdown import write_diff_markdown_output
+
+    item = InventoryItemDiff(
+        id="s_mod",
+        name="Mod seg",
+        change_type=ChangeType.MODIFIED,
+        inventory_type="segment",
+        changed_fields={"description": (_INV_OLD, _INV_NEW)},
+    )
+    r = DiffResult(
+        summary=DiffSummary(segments_modified=1),
+        metadata_diff=MetadataDiff(source_name="A", target_name="B", source_id="dv_a", target_id="dv_b"),
+        metric_diffs=[],
+        dimension_diffs=[],
+        segments_diffs=[item],
+    )
+    out = str(tmp_path / fmt)
+    if fmt == "csv":
+        d = write_diff_csv_output(r, "d", out, logger)
+        text = "".join(Path(d, p).read_text(encoding="utf-8") for p in os.listdir(d) if p.endswith(".csv"))
+    elif fmt == "excel":
+        wb = load_workbook(write_diff_excel_output(r, "d", out, logger))
+        text = "\n".join(str(c) for ws in wb for row in ws.iter_rows(values_only=True) for c in row if c is not None)
+    elif fmt == "html":
+        text = Path(write_diff_html_output(r, "d", out, logger)).read_text(encoding="utf-8")
+    else:
+        text = Path(write_diff_markdown_output(r, "d", out, logger)).read_text(encoding="utf-8")
+    assert _INV_OLD in text
+    assert _INV_NEW in text
+
+
+def test_console_truncation_marks_ellipsis():
+    from cja_auto_sdr.output.diff.common import _format_diff_value
+
+    assert _format_diff_value("x" * 40) == "x" * 30 + "..."
+    assert _format_diff_value("x" * 30) == "x" * 30
+
+
+def _inventory_result() -> DiffResult:
+    from cja_auto_sdr.diff.models import ChangeType, InventoryItemDiff
+
+    def item(i, n, ct, kind, fields=None):
+        return InventoryItemDiff(id=i, name=n, change_type=ct, inventory_type=kind, changed_fields=fields)
+
+    segs = [
+        item("s_new", "New seg", ChangeType.ADDED, "segment"),
+        item("s_old", "Old seg", ChangeType.REMOVED, "segment"),
+        item("s_mod", "Mod seg", ChangeType.MODIFIED, "segment", {"description": ("a", "b")}),
+    ]
+    cms = [item("cm_new", "New cm", ChangeType.ADDED, "calculated_metric")]
+    return DiffResult(
+        summary=DiffSummary(
+            segments_added=1,
+            segments_removed=1,
+            segments_modified=1,
+            calc_metrics_added=1,
+        ),
+        metadata_diff=MetadataDiff(source_name="A", target_name="B", source_id="dv_a", target_id="dv_b"),
+        metric_diffs=[],
+        dimension_diffs=[],
+        calc_metrics_diffs=cms,
+        segments_diffs=segs,
+    )
+
+
+def test_grouped_lists_inventory_changes():
+    from cja_auto_sdr.output.diff.grouped import write_diff_grouped_by_field_output
+
+    out = write_diff_grouped_by_field_output(_inventory_result(), use_color=False)
+    seg_section = out.split("Segments")[1]
+    for text in ("s_new", "New seg", "s_old", "Old seg", "s_mod", "Mod seg"):
+        assert text in seg_section
+    assert "Calculated Metrics" in out
+    assert "cm_new" in out.split("Calculated Metrics")[1]
+    assert "Total changes: 4" in out
+
+
+def test_grouped_inventory_follows_limit():
+    from cja_auto_sdr.output.diff.grouped import write_diff_grouped_by_field_output
+
+    out = write_diff_grouped_by_field_output(_inventory_result(), use_color=False, limit=1)
+    assert "... and 2 more" in out.split("Segments")[1]
+    unlimited = write_diff_grouped_by_field_output(_inventory_result(), use_color=False, limit=0)
+    assert "more" not in unlimited.split("Segments")[1]

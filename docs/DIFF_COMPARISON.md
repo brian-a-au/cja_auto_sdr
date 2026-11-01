@@ -619,7 +619,7 @@ cja_auto_sdr dv_12345 --diff-snapshot ./baseline.json --auto-snapshot
 **Retention Policy:**
 - `--keep-last 0` (default): Keep all snapshots forever
 - `--keep-last N`: Keep only the N most recent snapshots per data view
-- `--keep-since PERIOD`: Delete snapshots older than `7d`, `2w`, `1m`, or numeric days (for example `30`)
+- `--keep-since PERIOD`: Delete snapshots older than `7d`, `2w`, `1m`, or numeric days (for example `30`). An invalid value exits 1 before any API call
 - `--auto-prune`: Applies defaults `--keep-last 20` + `--keep-since 30d` only when both retention flags are omitted
 - Explicit retention in either form always takes precedence (`--keep-last N` / `--keep-last=N`, `--keep-since PERIOD` / `--keep-since=PERIOD`)
 - Old snapshots are deleted automatically after new ones are saved
@@ -683,13 +683,13 @@ To minimize API calls during name resolution, data view listings are cached for 
 | `--warn-threshold PERCENT` | Exit with code 3 if change percentage exceeds threshold. |
 | `--group-by-field` | Group changes by field name instead of by component. |
 | `--group-by-field-limit N` | Max items per section in --group-by-field output (default: 10, 0=unlimited). |
-| `--diff-output FILE` | Write the diff to `FILE`. Console and PR-comment output is saved as text. JSON, Markdown, HTML, and Excel reports are written to `FILE` instead of an auto-named file in `--output-dir`. CSV writes several files, so it ignores `--diff-output` and prints a warning. Diff modes use `--output` only for `--output -` (JSON to stdout); `--output FILE` is ignored with a warning, so use `--diff-output FILE` instead. `--diff-output -` is rejected with exit 1 before any work and creates no file; use `--format json --output -` to write the diff to stdout. `--output -` with a file-writing non-JSON format (such as Markdown or HTML) prints a warning and writes the file as usual. |
+| `--diff-output FILE` | Write the diff to `FILE`. Console and PR-comment output is saved as text. JSON, Markdown, HTML, and Excel reports are written to `FILE` instead of an auto-named file in `--output-dir`. CSV writes several files, so it ignores `--diff-output` and prints a warning. `--diff-output` is also ignored for `--format all`, and a warning names the folder. Console text saved to a file has no color codes. Diff modes use `--output` only for `--output -` (JSON to stdout); `--output FILE` is ignored with a warning, so use `--diff-output FILE` instead. `--diff-output -` is rejected with exit 1 before any work and creates no file; use `--format json --output -` to write the diff to stdout. `--output -` with a file-writing non-JSON format (such as Markdown or HTML) prints a warning and writes the file as usual. |
 | `--format-pr-comment` | Output in GitHub/GitLab PR comment format with collapsible details. |
 | `--auto-snapshot` | Automatically save snapshots during diff for audit trail. |
 | `--auto-prune` | With `--auto-snapshot`, apply default retention (`--keep-last 20` and `--keep-since 30d`) only when both retention flags are omitted. |
 | `--snapshot-dir DIR` | Directory for auto-saved snapshots (default: ./snapshots). |
 | `--keep-last N` | Retention: keep only last N snapshots per data view (0 = keep all). |
-| `--keep-since PERIOD` | Date-based retention: delete snapshots older than PERIOD (`7d`, `2w`, `1m`, `30`). |
+| `--keep-since PERIOD` | Date-based retention: delete snapshots older than PERIOD (`7d`, `2w`, `1m`, `30`). An invalid value exits 1 before any API call, as with `--prune-snapshots`. |
 | `--list-snapshots` | List snapshots from `--snapshot-dir` (optionally filtered by DATA_VIEW_ID positional args). |
 | `--prune-snapshots` | Apply retention policies (`--keep-last`/`--keep-since`) in `--snapshot-dir` without running diff. |
 

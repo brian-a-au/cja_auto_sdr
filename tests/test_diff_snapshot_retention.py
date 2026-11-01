@@ -313,3 +313,133 @@ def test_snapshot_eligibility_refreshes_after_same_size_mtime_replacement(tmp_pa
 def test_from_dict_preserves_missing_version_default():
     snapshot = DataViewSnapshot.from_dict({"data_view_id": "legacy"})
     assert snapshot.snapshot_version == "1.0" and snapshot.metrics == [] and snapshot.dimensions == []
+
+
+def _auto_snapshot_args(tmp_path, **overrides):
+    import argparse
+
+    values = {
+        "auto_snapshot": True,
+        "auto_prune": False,
+        "keep_last": 0,
+        "keep_since": "30x",
+        "snapshot_dir": str(tmp_path / "snaps"),
+        "diff_snapshot": str(tmp_path / "baseline.json"),
+        "compare_snapshots": None,
+        "compare_with_prev": False,
+        "list_snapshots": False,
+        "prune_snapshots": False,
+        "snapshot": None,
+        "format": "json",
+        "output": None,
+        "output_dir": str(tmp_path),
+        "diff_output": None,
+        "config_file": "config.json",
+        "profile": None,
+        "quiet": True,
+        "metrics_only": False,
+        "dimensions_only": False,
+        "inventory_only": False,
+        "diff": False,
+    }
+    values.update(overrides)
+    return argparse.Namespace(**values)
+
+
+@pytest.mark.parametrize("bad_value", ["30x", "30days", "1.5w"])
+@pytest.mark.parametrize("mode", ["diff_snapshot", "diff"])
+def test_auto_snapshot_invalid_keep_since_exits_1(tmp_path, capsys, monkeypatch, bad_value, mode):
+    from cja_auto_sdr import generator
+    from cja_auto_sdr.diff import cli as diff_cli
+
+    args = _auto_snapshot_args(tmp_path, keep_since=bad_value)
+    called = []
+    monkeypatch.setattr(generator, "handle_diff_snapshot_command", lambda **kw: called.append(kw))
+    monkeypatch.setattr(generator, "handle_diff_command", lambda **kw: called.append(kw))
+    monkeypatch.setattr(generator, "SnapshotManager", lambda *a, **k: called.append("mgr"))
+
+    with pytest.raises(SystemExit) as exc:
+        if mode == "diff":
+            diff_cli.dispatch_cross_data_view_diff_cli_mode(
+                args,
+                data_view_inputs=["dv_1", "dv_2"],
+                ignore_fields=None,
+                labels=None,
+                show_only=None,
+                keep_last_specified=False,
+                keep_since_specified=True,
+            )
+        else:
+            diff_cli.dispatch_snapshot_cli_modes(
+                args,
+                data_view_inputs=["dv_1"],
+                output_to_stdout=False,
+                ignore_fields=None,
+                labels=None,
+                show_only=None,
+                keep_last_specified=False,
+                keep_since_specified=True,
+            )
+
+    assert exc.value.code == 1
+    assert f"Invalid --keep-since value: {bad_value}" in capsys.readouterr().err
+    assert called == []
+
+
+def test_auto_snapshot_invalid_keep_since_rejected_for_compare_with_prev(tmp_path, capsys, monkeypatch):
+    from cja_auto_sdr import generator
+    from cja_auto_sdr.diff import cli as diff_cli
+
+    args = _auto_snapshot_args(tmp_path, compare_with_prev=True, diff_snapshot=None)
+    called = []
+    monkeypatch.setattr(generator, "handle_diff_snapshot_command", lambda **kw: called.append(kw))
+
+    with pytest.raises(SystemExit) as exc:
+        diff_cli.dispatch_snapshot_cli_modes(
+            args,
+            data_view_inputs=["dv_1"],
+            output_to_stdout=False,
+            ignore_fields=None,
+            labels=None,
+            show_only=None,
+            keep_last_specified=False,
+            keep_since_specified=True,
+        )
+
+    assert exc.value.code == 1
+    assert "Invalid --keep-since value: 30x" in capsys.readouterr().err
+    assert called == []
+
+
+def test_auto_snapshot_valid_keep_since_still_prunes(tmp_path):
+    from cja_auto_sdr import generator
+    from cja_auto_sdr.diff import cli as diff_cli
+
+    # Valid values, and the auto-prune default, must not trip the check.
+    diff_cli._validate_keep_since(
+        _auto_snapshot_args(tmp_path, keep_since="30d"), keep_last_specified=False, keep_since_specified=True
+    )
+    diff_cli._validate_keep_since(
+        _auto_snapshot_args(tmp_path, keep_since=None, auto_prune=True),
+        keep_last_specified=False,
+        keep_since_specified=False,
+    )
+    # Without --auto-snapshot an invalid value is left alone (today's behavior).
+    diff_cli._validate_keep_since(
+        _auto_snapshot_args(tmp_path, auto_snapshot=False, keep_since="30x"),
+        keep_last_specified=False,
+        keep_since_specified=True,
+    )
+
+    # And retention still deletes old snapshots for a valid value.
+    sdir = tmp_path / "snaps"
+    sdir.mkdir()
+    mgr = SnapshotManager()
+    old = sdir / "old.json"
+    mgr.save_snapshot(
+        DataViewSnapshot(data_view_id="dv_1", data_view_name="V", created_at="2020-01-01T00:00:00+00:00"), str(old)
+    )
+    days = generator.parse_retention_period("30d")
+    assert days == 30
+    mgr.apply_date_retention_policy(str(sdir), "dv_1", keep_since_days=days)
+    assert not old.exists()

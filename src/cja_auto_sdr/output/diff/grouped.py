@@ -115,6 +115,29 @@ def write_diff_grouped_by_field_output(diff_result: DiffResult, use_color: bool 
         if limit > 0 and len(removed) > limit:
             lines.append(f"  ... and {len(removed) - limit} more")
 
+    # Inventory sections (counted in the totals above, so they must be listed too)
+    inventory_sections = (
+        ("Calculated Metrics", diff_result.calc_metrics_diffs),
+        ("Segments", diff_result.segments_diffs),
+    )
+    markers = ((ChangeType.ADDED, "[+]"), (ChangeType.REMOVED, "[-]"), (ChangeType.MODIFIED, "[~]"))
+    for title, inv_diffs in inventory_sections:
+        if inv_diffs is None:
+            continue
+        entries = [
+            f"  {marker} {d.id}  {d.name}" if d.name else f"  {marker} {d.id}"
+            for change_type, marker in markers
+            for d in inv_diffs
+            if d.change_type == change_type
+        ]
+        if not entries:
+            continue
+        lines.append("")
+        lines.append(ANSIColors.bold(f"{title} ({len(entries)})", c))
+        lines.extend(entries if limit == 0 else entries[:limit])
+        if limit > 0 and len(entries) > limit:
+            lines.append(f"  ... and {len(entries) - limit} more")
+
     lines.append("")
     lines.append("=" * 80)
     lines.append(ANSIColors.cyan(f"Summary: {summary.natural_language_summary}", c))

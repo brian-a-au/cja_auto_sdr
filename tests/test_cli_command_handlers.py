@@ -1143,6 +1143,7 @@ class TestHandleDiffSnapshotCommand:
     def test_missing_inventory_blocks_diff(self, mock_sm_cls, capsys):
         """Requesting calc metrics from snapshot that lacks them returns failure."""
         snap = _make_mock_snapshot()
+        snap.data_view_id = "dv_test"
         snap.has_calculated_metrics_inventory = False
         snap.has_segments_inventory = False
 

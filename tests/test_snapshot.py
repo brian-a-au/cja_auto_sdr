@@ -835,3 +835,154 @@ class TestSnapshotManagerInit:
         """Custom logger is stored."""
         manager = SnapshotManager(logger)
         assert manager.logger is logger
+
+
+def _raise_on_constant(token):
+    raise ValueError(f"non-RFC-8259 token {token}")
+
+
+class TestStrictJsonSnapshots:
+    """DIFF-1: snapshots, and diff JSON, must never contain NaN/Infinity tokens."""
+
+    def test_replace_non_finite_nested(self):
+        from cja_auto_sdr.core.json_io import replace_non_finite
+
+        value = {"a": [1.0, float("nan")], "b": {"c": float("inf")}}
+        assert replace_non_finite(value) == {"a": [1.0, None], "b": {"c": None}}
+        assert replace_non_finite((float("-inf"), 2)) == (None, 2)
+
+    def test_replace_non_finite_numpy_and_passthrough(self):
+        import numpy as np
+
+        from cja_auto_sdr.core.json_io import replace_non_finite
+
+        np_int = np.int64(3)
+        np_bool = np.bool_(True)
+        result = replace_non_finite([np.float64("nan"), np.float32("inf"), np.float64(1.5), np_int, np_bool, "s", None])
+        assert result[0] is None
+        assert result[1] is None
+        assert result[2] == 1.5
+        assert result[3] is np_int
+        assert result[4] is np_bool
+        assert result[5:] == ["s", None]
+
+    def test_save_snapshot_writes_strict_json(self, manager, tmp_path):
+        snap = DataViewSnapshot(
+            data_view_id="dv_abc",
+            data_view_name="Test",
+            owner="o",
+            description="d",
+            metrics=[{"id": "m1", "name": "M", "description": float("nan")}],
+            dimensions=[{"id": "d1", "name": "D", "weight": float("inf")}],
+        )
+        path = manager.save_snapshot(snap, str(tmp_path / "s.json"))
+        text = Path(path).read_text(encoding="utf-8")
+        data = json.loads(text, parse_constant=_raise_on_constant)
+        assert data["metrics"][0]["description"] is None
+        assert data["dimensions"][0]["weight"] is None
+
+    def test_diff_json_stdout_and_file_are_strict(self, tmp_path, capsys):
+        from cja_auto_sdr.output.diff import write_diff_output
+
+        logger = logging.getLogger("test_strict_diff")
+        src = DataViewSnapshot(
+            data_view_id="dv_abc",
+            data_view_name="T",
+            owner="o",
+            description="d",
+            metrics=[{"id": "m1", "name": "M", "description": float("nan")}],
+            dimensions=[],
+        )
+        tgt = DataViewSnapshot(
+            data_view_id="dv_abc",
+            data_view_name="T",
+            owner="o",
+            description="d",
+            metrics=[{"id": "m1", "name": "M", "description": "now set", "extra": float("nan")}],
+            dimensions=[],
+        )
+        from cja_auto_sdr.diff.comparator import DataViewComparator
+
+        result = DataViewComparator(logger).compare(src, tgt)
+
+        write_diff_output(result, "json", "d", str(tmp_path), logger, output_to_stdout=True)
+        out = capsys.readouterr().out
+        assert "NaN" not in out
+        json.loads(out, parse_constant=_raise_on_constant)
+
+        write_diff_output(result, "json", "d", str(tmp_path), logger)
+        text = (tmp_path / "d.json").read_text(encoding="utf-8")
+        assert "NaN" not in text
+        json.loads(text, parse_constant=_raise_on_constant)
+
+    def test_old_snapshot_with_nan_diffs_to_strict_json(self, manager, tmp_path, capsys):
+        from cja_auto_sdr.diff.comparator import DataViewComparator
+        from cja_auto_sdr.output.diff import write_diff_output
+
+        old = tmp_path / "old.json"
+        old.write_text(
+            '{"snapshot_version": "1.0", "data_view_id": "dv_abc", "data_view_name": "T", '
+            '"created_at": "2026-01-01T00:00:00+00:00", "owner": NaN, '
+            '"metrics": [{"id": "m1", "name": "M", "description": NaN}], "dimensions": []}',
+            encoding="utf-8",
+        )
+        assert "NaN" in old.read_text(encoding="utf-8")
+        loaded = manager.load_snapshot(str(old))
+        target = DataViewSnapshot(
+            data_view_id="dv_abc",
+            data_view_name="T",
+            owner="o",
+            description="d",
+            metrics=[{"id": "m1", "name": "M", "description": "set now"}],
+            dimensions=[],
+        )
+        logger = logging.getLogger("test_old_nan")
+        result = DataViewComparator(logger).compare(loaded, target)
+        write_diff_output(result, "json", "d", str(tmp_path), logger, output_to_stdout=True)
+        out = capsys.readouterr().out
+        assert "NaN" not in out
+        json.loads(out, parse_constant=_raise_on_constant)
+        write_diff_output(result, "json", "d", str(tmp_path), logger)
+        json.loads((tmp_path / "d.json").read_text(encoding="utf-8"), parse_constant=_raise_on_constant)
+
+
+class TestUndatedSnapshot:
+    @pytest.mark.parametrize("variant", ["missing", "null", "empty"])
+    def test_load_snapshot_without_created_at_uses_file_mtime(self, manager, tmp_path, variant):
+        payload = {
+            "snapshot_version": "1.0",
+            "data_view_id": "dv_1",
+            "data_view_name": "DV",
+            "metrics": [],
+            "dimensions": [],
+        }
+        if variant == "null":
+            payload["created_at"] = None
+        elif variant == "empty":
+            payload["created_at"] = ""
+        path = tmp_path / "undated.json"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        mtime = datetime(2020, 1, 1, 12, 0, tzinfo=UTC).timestamp()
+        os.utime(path, (mtime, mtime))
+
+        loaded = manager.load_snapshot(str(path))
+
+        assert loaded.created_at.startswith("2020-01-01")
+        assert loaded.created_at.endswith("+00:00")
+
+    def test_load_snapshot_keeps_existing_created_at(self, manager, tmp_path):
+        path = tmp_path / "dated.json"
+        path.write_text(
+            json.dumps(
+                {
+                    "snapshot_version": "1.0",
+                    "data_view_id": "dv_1",
+                    "data_view_name": "DV",
+                    "created_at": "2024-05-05T00:00:00+00:00",
+                    "metrics": [],
+                    "dimensions": [],
+                },
+            ),
+            encoding="utf-8",
+        )
+        assert manager.load_snapshot(str(path)).created_at == "2024-05-05T00:00:00+00:00"

@@ -1102,6 +1102,7 @@ class TestHandleDiffSnapshotCommand:
         mock_sm = MagicMock()
         mock_snapshot_cls.return_value = mock_sm
         source_snap = MagicMock()
+        source_snap.data_view_id = "dv_test"
         source_snap.has_calculated_metrics_inventory = True
         source_snap.has_segments_inventory = True
         source_snap.metrics = [{"id": "m1"}]
@@ -1158,6 +1159,7 @@ class TestHandleDiffSnapshotCommand:
         mock_sm = MagicMock()
         mock_snapshot_cls.return_value = mock_sm
         source_snap = MagicMock()
+        source_snap.data_view_id = "dv_test"
         source_snap.has_calculated_metrics_inventory = True
         source_snap.has_segments_inventory = True
         source_snap.metrics = [{"id": "m1"}]

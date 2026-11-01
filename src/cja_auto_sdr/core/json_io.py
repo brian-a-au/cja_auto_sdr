@@ -4,6 +4,8 @@ import contextlib
 import errno
 import functools
 import json
+import math
+import numbers
 import os
 import uuid
 from collections.abc import Callable
@@ -17,6 +19,31 @@ _DIRECTORY_FSYNC_BEST_EFFORT_ERRNOS = {
     errno.EPERM,
     getattr(errno, "ENOTSUP", errno.EINVAL),
 }
+
+
+def replace_non_finite(value: Any) -> Any:
+    """Return a copy of *value* with every float NaN/inf/-inf replaced by ``None``.
+
+    Recurses into dicts, lists, and tuples. numpy floating scalars are handled too;
+    every other value (including numpy ints and bools) is returned as the same object.
+    """
+    if isinstance(value, dict):
+        return {k: replace_non_finite(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [replace_non_finite(v) for v in value]
+    if isinstance(value, tuple):
+        return tuple(replace_non_finite(v) for v in value)
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if _is_numpy_floating(value):
+        return value if math.isfinite(float(value)) else None
+    return value
+
+
+def _is_numpy_floating(value: Any) -> bool:
+    """True for numpy floating scalars (np.float32/64) without importing numpy."""
+    cls = type(value)
+    return cls.__module__ == "numpy" and isinstance(value, numbers.Real) and cls.__name__.startswith("float")
 
 
 def _reject_symlink_destination(target_path: Path) -> None:

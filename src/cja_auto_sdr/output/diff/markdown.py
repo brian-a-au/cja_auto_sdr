@@ -154,7 +154,7 @@ def write_diff_markdown_output(
                 md_parts.append("| --- | --- | --- | --- |")
                 for diff in metric_changes:
                     symbol = _get_change_emoji(diff.change_type)
-                    detail = _get_change_detail(diff)
+                    detail = _get_change_detail(diff, truncate=False)
                     md_parts.append(f"| {symbol} | `{_esc(diff.id)}` | {_esc(diff.name)} | {_esc(detail)} |")
 
                 # Add side-by-side detail for modified items
@@ -179,7 +179,7 @@ def write_diff_markdown_output(
                 md_parts.append("| --- | --- | --- | --- |")
                 for diff in dim_changes:
                     symbol = _get_change_emoji(diff.change_type)
-                    detail = _get_change_detail(diff)
+                    detail = _get_change_detail(diff, truncate=False)
                     md_parts.append(f"| {symbol} | `{_esc(diff.id)}` | {_esc(diff.name)} | {_esc(detail)} |")
 
                 # Add side-by-side detail for modified items
@@ -209,7 +209,7 @@ def write_diff_markdown_output(
                     md_parts.append("| --- | --- | --- | --- |")
                     for diff in calc_changes:
                         symbol = _get_change_emoji(diff.change_type)
-                        detail = _get_inventory_change_detail(diff)
+                        detail = _get_inventory_change_detail(diff, truncate=False)
                         md_parts.append(f"| {symbol} | `{_esc(diff.id)}` | {_esc(diff.name)} | {_esc(detail)} |")
                 else:
                     md_parts.append("*No changes*")
@@ -224,7 +224,7 @@ def write_diff_markdown_output(
                     md_parts.append("| --- | --- | --- | --- |")
                     for diff in seg_changes:
                         symbol = _get_change_emoji(diff.change_type)
-                        detail = _get_inventory_change_detail(diff)
+                        detail = _get_inventory_change_detail(diff, truncate=False)
                         md_parts.append(f"| {symbol} | `{_esc(diff.id)}` | {_esc(diff.name)} | {_esc(detail)} |")
                 else:
                     md_parts.append("*No changes*")

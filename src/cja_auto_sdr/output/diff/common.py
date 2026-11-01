@@ -83,7 +83,7 @@ def _format_diff_value(val: Any, truncate: bool = True, max_len: int = 30) -> st
         pass
     result = str(val)
     if truncate and len(result) > max_len:
-        result = result[:max_len]
+        result = result[:max_len] + "..."
     return result
 
 

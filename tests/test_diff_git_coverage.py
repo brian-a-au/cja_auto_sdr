@@ -726,3 +726,66 @@ class TestGitCommitSnapshotSuccessfulPush:
         assert success is True
         assert message == "deadbeef"
         assert "push failed" not in message
+
+
+class TestGitPushFailureReporting:
+    """DIFF-4: a failed push prints a warning, not the success line."""
+
+    @staticmethod
+    def _run(commit_result, capsys):
+        from types import SimpleNamespace
+
+        from cja_auto_sdr.cli.execution import _handle_single_mode_git_commit
+
+        args = SimpleNamespace(
+            git_commit=True,
+            git_dir="./sdr-snapshots",
+            git_push=True,
+            git_message=None,
+            config_file="config.json",
+            profile=None,
+            include_calculated_metrics=False,
+            include_segments_inventory=False,
+        )
+        result = SimpleNamespace(
+            data_view_id="dv_1",
+            data_view_name="DV",
+            metrics_count=1,
+            dimensions_count=1,
+            metrics_data=[],
+            dimensions_data=[],
+        )
+        with (
+            patch("cja_auto_sdr.generator.git_repository_state", return_value="repo"),
+            patch("cja_auto_sdr.generator._refetch_git_snapshot_for_commit", return_value=MagicMock()),
+            patch("cja_auto_sdr.generator.save_git_friendly_snapshot"),
+            patch("cja_auto_sdr.generator.git_commit_snapshot", return_value=(True, commit_result)),
+        ):
+            handled = _handle_single_mode_git_commit(args, result)
+        return handled, capsys.readouterr().out
+
+    def test_git_push_failure_prints_warning(self, capsys):
+        handled, out = self._run("abc12345 (push failed: no remote)", capsys)
+        assert handled is True
+        assert "Push failed: no remote" in out
+        assert "Pushed to remote" not in out
+        assert "Committed: abc12345" in out
+
+    def test_git_push_failure_committed_line_has_only_sha(self, capsys):
+        _, out = self._run("abc12345 (push failed: no remote)", capsys)
+        committed = next(line for line in out.splitlines() if "Committed:" in line)
+        assert "push failed" not in committed.lower()
+        assert committed.rstrip().endswith("abc12345")
+
+    def test_git_push_failure_reason_keeps_trailing_paren(self, capsys):
+        _, out = self._run("abc12345 (push failed: rejected (see 'git help push'))", capsys)
+        assert "Push failed: rejected (see 'git help push')" in out
+
+    def test_git_push_failure_empty_reason_says_unknown(self, capsys):
+        _, out = self._run("abc12345 (push failed: )", capsys)
+        assert "Push failed: unknown error" in out
+
+    def test_git_push_success_still_reports_pushed(self, capsys):
+        handled, out = self._run("abc12345", capsys)
+        assert handled is True
+        assert "Pushed to remote" in out
