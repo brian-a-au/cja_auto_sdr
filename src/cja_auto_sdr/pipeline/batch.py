@@ -247,6 +247,13 @@ class BatchProcessor:
                     disable=self.quiet,
                 ) as pbar:
                     handled: set = set()
+                    stop_warned: list[bool] = []
+
+                    def _warn_stop(message: str) -> None:
+                        """Log the stop warning for the first failure only."""
+                        if not stop_warned:
+                            stop_warned.append(True)
+                            self.logger.warning(message, self.batch_id)
 
                     def _record(future) -> bool:
                         """Record one finished future; return True when the batch should stop."""
@@ -266,9 +273,8 @@ class BatchProcessor:
                             self.logger.error("[%s] ✗ %s: FAILED - %s", self.batch_id, dv_id, result.error_message)
 
                             if not self.continue_on_error:
-                                self.logger.warning(
-                                    "[%s] Stopping batch processing due to error (use --continue-on-error to continue)",
-                                    self.batch_id,
+                                _warn_stop(
+                                    "[%s] Stopping batch processing due to error (use --continue-on-error to continue)"
                                 )
                                 return True
                             return False
@@ -292,7 +298,7 @@ class BatchProcessor:
                             )
 
                             if not self.continue_on_error:
-                                self.logger.warning("[%s] Stopping batch processing due to error", self.batch_id)
+                                _warn_stop("[%s] Stopping batch processing due to error")
                                 return True
                             return False
 

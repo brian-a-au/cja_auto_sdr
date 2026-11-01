@@ -1028,3 +1028,70 @@ class TestBatchStopOnErrorCollectsRunningViews:
         assert [r.data_view_id for r in results["successful"]] == ["dv_slow"]
         assert [r.data_view_id for r in results["failed"]] == ["dv_fail"]
         assert "dv_queued" not in started
+
+    @patch("cja_auto_sdr.generator.setup_logging")
+    def test_stop_warning_is_logged_once(self, mock_setup_logging, mock_config_file, temp_output_dir):
+        import threading
+        from concurrent.futures import Future
+
+        logger = Mock()
+        mock_setup_logging.return_value = logger
+        both_running = threading.Barrier(2)
+        first_failed = threading.Event()
+
+        class ThreadedExecutor:
+            def __init__(self, max_workers=None):
+                self.threads = []
+
+            def submit(self, fn, *args):
+                future = Future()
+
+                def run():
+                    if future.set_running_or_notify_cancel():
+                        try:
+                            future.set_result(fn(*args))
+                        except BaseException as exc:
+                            future.set_exception(exc)
+
+                thread = threading.Thread(target=run)
+                self.threads.append(thread)
+                thread.start()
+                return future
+
+            def shutdown(self, wait=True, cancel_futures=False):
+                for thread in self.threads:
+                    thread.join()
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                self.shutdown()
+                return False
+
+        def fake_worker(wa):
+            both_running.wait(5)
+            if wa.data_view_id == "dv_b":
+                first_failed.wait(5)
+            else:
+                first_failed.set()
+            return ProcessingResult(
+                data_view_id=wa.data_view_id, data_view_name="F", success=False, duration=0.0, error_message="boom"
+            )
+
+        with (
+            patch("cja_auto_sdr.generator.ProcessPoolExecutor", ThreadedExecutor),
+            patch("cja_auto_sdr.generator.process_single_dataview_worker", fake_worker),
+        ):
+            processor = BatchProcessor(
+                config_file=mock_config_file,
+                output_dir=temp_output_dir,
+                workers=2,
+                continue_on_error=False,
+                quiet=True,
+            )
+            results = processor.process_batch(["dv_a", "dv_b"])
+
+        assert sorted(r.data_view_id for r in results["failed"]) == ["dv_a", "dv_b"]
+        stop_warnings = [c for c in logger.warning.call_args_list if "Stopping batch processing" in c.args[0]]
+        assert len(stop_warnings) == 1
