@@ -92,8 +92,17 @@ def _print_cross_data_view_inventory_error(
     source_snapshot: Any,
     target_name: str | None,
     target_id: str,
+    *,
+    output_format: str = "console",
 ) -> None:
     """Explain why inventory comparison needs both sides to be the same data view."""
+    if output_format == "json":
+        generator._emit_discovery_error(
+            "Inventory comparison requires snapshots from the same data view",
+            is_machine_readable=True,
+            error_type="comparison_error",
+        )
+        return
     print(
         generator.ConsoleColors.error("ERROR: Inventory comparison requires snapshots from the same data view."),
         file=sys.stderr,
@@ -628,7 +637,9 @@ def handle_diff_snapshot_command(
         source_snapshot = snapshot_manager.load_snapshot(snapshot_file)
 
         if (include_calc_metrics or include_segments) and source_snapshot.data_view_id != data_view_id:
-            _print_cross_data_view_inventory_error(generator, source_snapshot, None, data_view_id)
+            _print_cross_data_view_inventory_error(
+                generator, source_snapshot, None, data_view_id, output_format=output_format
+            )
             return False, False, None
 
         missing_inventory = []
@@ -913,6 +924,7 @@ def handle_compare_snapshots_command(
                 source_snapshot,
                 target_snapshot.data_view_name,
                 target_snapshot.data_view_id,
+                output_format=output_format,
             )
             return False, False, None
 

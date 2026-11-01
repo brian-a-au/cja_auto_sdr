@@ -973,3 +973,106 @@ def test_diff_snapshot_inventory_requires_same_data_view(tmp_path, capsys):
     assert "Inventory comparison requires snapshots from the same data view." in capsys.readouterr().err
     configure.assert_not_called()
     create.assert_not_called()
+
+
+def _write_snapshot(path, data_view_id, **fields):
+    from cja_auto_sdr.diff.models import DataViewSnapshot
+
+    snapshot = DataViewSnapshot(
+        created_at="2025-06-01T00:00:00+00:00",
+        data_view_id=data_view_id,
+        data_view_name=f"DV {data_view_id}",
+        metrics=[],
+        dimensions=[],
+        **fields,
+    )
+    path.write_text(json.dumps(snapshot.to_dict()))
+    return path
+
+
+def test_missing_inventory_hint_uses_snapshot_command(tmp_path, capsys):
+    from cja_auto_sdr.diff.commands import handle_diff_snapshot_command
+
+    snap_file = _write_snapshot(tmp_path / "baseline.json", "dv_aaa")
+
+    with patch("cja_auto_sdr.generator.configure_cjapy") as configure, patch("cja_auto_sdr.generator.cjapy"):
+        result = handle_diff_snapshot_command(
+            data_view_id="dv_aaa",
+            snapshot_file=str(snap_file),
+            include_segments=True,
+            quiet=True,
+            quiet_diff=True,
+        )
+
+    err = capsys.readouterr().err
+    assert result == (False, False, None)
+    assert "cja_auto_sdr dv_aaa --snapshot ./snapshots/baseline.json --include-segments" in err
+    assert "--auto-snapshot" not in err
+    configure.assert_not_called()
+
+
+def test_cross_dv_inventory_error_is_json_for_diff_snapshot(tmp_path, capsys):
+    from cja_auto_sdr.diff.commands import handle_diff_snapshot_command
+
+    snap_file = _write_snapshot(tmp_path / "baseline.json", "dv_A")
+
+    with patch("cja_auto_sdr.generator.configure_cjapy") as configure, patch("cja_auto_sdr.generator.cjapy"):
+        result = handle_diff_snapshot_command(
+            data_view_id="dv_B",
+            snapshot_file=str(snap_file),
+            include_segments=True,
+            output_format="json",
+            quiet=True,
+            quiet_diff=True,
+        )
+
+    captured = capsys.readouterr()
+    assert result == (False, False, None)
+    payload = json.loads(captured.err)
+    assert payload["error_type"] == "comparison_error"
+    assert "same data view" in payload["error"]
+    assert captured.out == ""
+    configure.assert_not_called()
+
+
+def test_cross_dv_inventory_error_is_json_for_compare_snapshots(tmp_path, capsys):
+    from cja_auto_sdr.diff.commands import handle_compare_snapshots_command
+
+    source = _write_snapshot(tmp_path / "a.json", "dv_A")
+    target = _write_snapshot(tmp_path / "b.json", "dv_B")
+
+    result = handle_compare_snapshots_command(
+        source_file=str(source),
+        target_file=str(target),
+        include_segments=True,
+        output_format="json",
+        quiet=True,
+        quiet_diff=True,
+    )
+
+    captured = capsys.readouterr()
+    assert result == (False, False, None)
+    payload = json.loads(captured.err)
+    assert payload["error_type"] == "comparison_error"
+    assert "same data view" in payload["error"]
+
+
+def test_cross_dv_inventory_error_console_text_unchanged(tmp_path, capsys):
+    from cja_auto_sdr.diff.commands import handle_compare_snapshots_command
+
+    source = _write_snapshot(tmp_path / "a.json", "dv_A")
+    target = _write_snapshot(tmp_path / "b.json", "dv_B")
+
+    handle_compare_snapshots_command(
+        source_file=str(source),
+        target_file=str(target),
+        include_segments=True,
+        quiet=True,
+        quiet_diff=True,
+    )
+
+    err = capsys.readouterr().err
+    assert "Inventory comparison requires snapshots from the same data view." in err
+    assert "  Source: DV dv_A (dv_A)" in err
+    assert "  Target: DV dv_B (dv_B)" in err
+    assert "Remove --include-segments, --include-calculated, --include-derived" in err
