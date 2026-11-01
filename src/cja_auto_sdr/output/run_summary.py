@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any
 from cja_auto_sdr.api.quality_policy import count_quality_issues_by_severity
 from cja_auto_sdr.core.constants import QUALITY_SEVERITY_ORDER
 from cja_auto_sdr.core.json_io import write_json_atomic_compatible
+from cja_auto_sdr.output.markdown_escape import escape_markdown_table_cell
 
 if TYPE_CHECKING:
     from cja_auto_sdr.diff.models import DiffResult
@@ -99,7 +100,7 @@ def build_quality_step_summary(results: list[ProcessingResult]) -> str:
                 highest = severity
                 break
         lines.append(
-            f"| {result.data_view_name or '-'} | `{result.data_view_id}` | {result.dq_issues_count} | {highest} |",
+            f"| {escape_markdown_table_cell(result.data_view_name or '-')} | `{result.data_view_id}` | {result.dq_issues_count} | {highest} |",
         )
 
     return "\n".join(lines)

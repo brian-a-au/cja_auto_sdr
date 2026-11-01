@@ -2726,6 +2726,7 @@ from cja_auto_sdr.diff.models import (
     MetadataDiff,
 )
 from cja_auto_sdr.diff.snapshot import SnapshotManager, parse_retention_period
+from cja_auto_sdr.output.markdown_escape import escape_markdown_table_cell
 
 # write_run_summary_output, append_github_step_summary,
 # build_diff_step_summary, build_org_step_summary -> output/run_summary.py
@@ -2774,7 +2775,7 @@ def build_quality_step_summary(results: list[ProcessingResult]) -> str:
                 highest = severity
                 break
         lines.append(
-            f"| {result.data_view_name or '-'} | `{result.data_view_id}` | {result.dq_issues_count} | {highest} |",
+            f"| {escape_markdown_table_cell(result.data_view_name or '-')} | `{result.data_view_id}` | {result.dq_issues_count} | {highest} |",
         )
 
     return "\n".join(lines)
