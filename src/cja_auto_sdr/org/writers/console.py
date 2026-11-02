@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from cja_auto_sdr.core.colors import ConsoleColors
 from cja_auto_sdr.core.constants import BANNER_WIDTH, effective_governance_overlap_threshold
 from cja_auto_sdr.org.models import (
     OrgReportComparison,
@@ -452,6 +453,11 @@ def write_org_report_comparison_console(comparison: OrgReportComparison, quiet: 
     print(f"Previous: {comparison.previous_timestamp}")
     print(f"Current:  {comparison.current_timestamp}")
     print()
+
+    for warning in comparison.warnings:
+        print(ConsoleColors.warning(f"Warning: {warning}"))
+    if comparison.warnings:
+        print()
 
     summary = comparison.summary
     print("-" * 70)

@@ -5939,10 +5939,35 @@ def compare_org_reports(current: OrgReportResult, previous_path: str) -> OrgRepo
     except ValueError as exc:
         raise ValueError(f"Current org-report is not eligible for comparison: {exc}") from exc
 
-    return build_org_report_comparison(
+    comparison = build_org_report_comparison(
         previous=previous_snapshot,
         current=current_snapshot,
     )
+    comparison.warnings.extend(_org_baseline_threshold_warnings(current, prev_data))
+    return comparison
+
+
+def _org_baseline_threshold_warnings(current: OrgReportResult, prev_data: Any) -> list[str]:
+    """Describe thresholds that differ between the baseline JSON and the current run."""
+    prev_params = prev_data.get("parameters") if isinstance(prev_data, dict) else None
+    if not isinstance(prev_params, dict):
+        return []
+    warnings: list[str] = []
+    for key in ("core_threshold", "core_min_count", "overlap_threshold"):
+        if key not in prev_params:
+            continue
+        before = prev_params[key]
+        after = getattr(current.parameters, key, None)
+        if isinstance(before, (int, float)) and isinstance(after, (int, float)) and not isinstance(before, bool):
+            differs = abs(before - after) > 1e-9
+        else:
+            differs = before != after
+        if differs:
+            warnings.append(
+                f"Baseline used {key}={before} but this run uses {key}={after}; "
+                "core and similarity deltas may not be comparable."
+            )
+    return warnings
 
 
 def _org_report_history_exclusion_note(

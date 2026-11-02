@@ -353,6 +353,33 @@ class TestCompareOrgReports:
         path.write_text(json.dumps(report), encoding="utf-8")
         return path
 
+    def test_compare_warns_on_threshold_mismatch(self, tmp_path, capsys):
+        prev_path = self._baseline(tmp_path, parameters={"core_threshold": 0.5, "overlap_threshold": 0.8})
+        current = _make_org_result()
+        current.parameters.core_threshold = 1.0
+        current.parameters.overlap_threshold = 0.8
+
+        comparison = compare_org_reports(current, str(prev_path))
+
+        assert len(comparison.warnings) == 1
+        assert "core_threshold" in comparison.warnings[0]
+        write_org_report_comparison_console(comparison)
+        assert "Warning: Baseline used core_threshold=0.5" in capsys.readouterr().out
+
+    def test_compare_no_warning_without_baseline_parameters(self, tmp_path):
+        prev_path = self._baseline(tmp_path)
+        current = _make_org_result()
+        current.parameters.core_threshold = 1.0
+
+        assert compare_org_reports(current, str(prev_path)).warnings == []
+
+    def test_compare_no_warning_when_parameters_match(self, tmp_path):
+        prev_path = self._baseline(tmp_path, parameters={"core_threshold": 0.5, "core_min_count": None})
+        current = _make_org_result()
+        current.parameters.core_threshold = 0.5
+
+        assert compare_org_reports(current, str(prev_path)).warnings == []
+
     def test_compare_org_reports_rejects_other_org(self, tmp_path):
         prev_path = self._baseline(tmp_path, org_id="ORG_A@AdobeOrg")
         current = _make_org_result()
