@@ -658,11 +658,11 @@ class DataViewComparator:
     def _build_metadata_diff(self, source: DataViewSnapshot, target: DataViewSnapshot) -> MetadataDiff:
         changed_fields = {}
 
-        if source.data_view_name != target.data_view_name:
+        if self._normalize_value(source.data_view_name) != self._normalize_value(target.data_view_name):
             changed_fields["name"] = (source.data_view_name, target.data_view_name)
-        if source.owner != target.owner:
+        if self._normalize_value(source.owner) != self._normalize_value(target.owner):
             changed_fields["owner"] = (source.owner, target.owner)
-        if source.description != target.description:
+        if self._normalize_value(source.description) != self._normalize_value(target.description):
             changed_fields["description"] = (source.description, target.description)
 
         return MetadataDiff(

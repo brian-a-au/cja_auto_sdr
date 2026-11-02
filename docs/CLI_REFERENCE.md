@@ -331,13 +331,13 @@ Drill into individual data view resources. These commands let you inspect a sing
 | `--warn-threshold PERCENT` | Exit with code 3 if change % exceeds threshold | - |
 | `--group-by-field` | Group changes by field name instead of component | False |
 | `--group-by-field-limit N` | Max items per section in --group-by-field output (0=unlimited) | 10 |
-| `--diff-output FILE` | Write the diff to `FILE`. Console and PR-comment output is saved as text. JSON, Markdown, HTML, and Excel reports are written to `FILE` instead of an auto-named file in `--output-dir`. Not supported for CSV, which writes several files. `--diff-output` is also ignored for `--format all`, and a warning names the folder. Console text saved to a file has no color codes. `--diff-output -` is rejected with exit 1 before any work and creates no file; use `--format json --output -` for stdout | - |
+| `--diff-output FILE` | Write the diff to `FILE`. Console and PR-comment output is saved as text. JSON, Markdown, HTML, and Excel reports are written to `FILE` instead of an auto-named file in `--output-dir`. Not supported for CSV, which writes several files. `--diff-output` is also ignored for `--format all`, and a warning names the folder. Console text saved to a file has no color codes. `--diff-output -` is rejected with exit 1 before any work and creates no file; use `--format json --output -` for stdout. For JSON, Markdown, HTML, and Excel reports, a hard-linked or non-regular destination (such as a folder) exits 1 with `ERROR: Cannot write --diff-output: ...`; a symlink is followed and the existing file mode is kept. `--diff-output` is ignored with a warning when `--output -` streams the report to stdout. | - |
 | `--format-pr-comment` | Output in GitHub/GitLab PR comment format | False |
 | `--auto-snapshot` | Automatically save snapshots during diff for audit trail | False |
 | `--auto-prune` | With `--auto-snapshot`, apply default retention (`--keep-last 20` + `--keep-since 30d`) only when both retention flags are omitted | False |
 | `--snapshot-dir DIR` | Directory for auto-saved snapshots | ./snapshots |
 | `--keep-last N` | Retention: keep only last N snapshots per data view (0=all) | 0 |
-| `--keep-since PERIOD` | Date-based retention: delete snapshots older than PERIOD. Formats: `7d`, `2w`, `1m`, `30` (days). An invalid value exits 1 before any API call, as with `--prune-snapshots` | - |
+| `--keep-since PERIOD` | Date-based retention: delete snapshots older than PERIOD. Formats: `7d`, `2w`, `1m`, `30` (days). The period must be positive; zero, negative, or invalid values exit 1 before any API call, as with `--prune-snapshots` | - |
 
 > **Retention precedence:** Explicit values are preserved, including `--keep-last 0` / `--keep-last=0` and `--keep-since 90d` / `--keep-since=90d`.
 
@@ -352,7 +352,7 @@ Analyze component usage patterns across all data views in your organization.
 | `--org-report` | Enable org-wide analysis mode. Analyzes all accessible data views and generates a governance report | False |
 | `--filter PATTERN` | Include only data views matching regex pattern (case-insensitive) | - |
 | `--exclude PATTERN` | Exclude data views matching regex pattern (case-insensitive) | - |
-| `--limit N` | Analyze only the first N data views (useful for testing) | - |
+| `--limit N` | Analyze only the first N data views (N must be at least 1; useful for testing) | - |
 | `--include-names` | Fetch and display component names (slower but more readable) | False |
 | `--skip-similarity` | Skip O(n²) pairwise similarity calculation (faster for large orgs) | False |
 | `--similarity-max-dvs N` | Guardrail to skip similarity when data views exceed N. Similarity has O(n²) complexity—250 DVs means ~31K comparisons. Use `--force-similarity` to override | 250 |
@@ -367,7 +367,7 @@ Analyze component usage patterns across all data views in your organization.
 | Option | Description | Default |
 |--------|-------------|---------|
 | `--core-threshold FLOAT` | Fraction of data views for "core" classification (0.0-1.0) | 0.5 |
-| `--core-min-count N` | Absolute count for "core" classification (overrides threshold) | - |
+| `--core-min-count N` | Absolute count for "core" classification (overrides threshold; must be at least 1) | - |
 | `--overlap-threshold FLOAT` | Minimum Jaccard similarity to flag as "high overlap" (0.0-1.0; capped at 0.9 for governance checks) | 0.8 |
 
 #### Component Type & Metadata Options

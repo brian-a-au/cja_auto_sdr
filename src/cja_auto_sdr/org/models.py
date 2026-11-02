@@ -433,6 +433,7 @@ class OrgReportComparison:
         new_high_similarity_pairs: New pairs with >=90% similarity
         resolved_pairs: Previously high-similarity pairs now resolved
         summary: Dict with overview statistics
+        warnings: Non-fatal notes about comparability (e.g. differing thresholds)
     """
 
     current_timestamp: str
@@ -448,6 +449,7 @@ class OrgReportComparison:
     new_high_similarity_pairs: list[dict[str, Any]] = field(default_factory=list)
     resolved_pairs: list[dict[str, Any]] = field(default_factory=list)
     summary: dict[str, Any] = field(default_factory=dict)
+    warnings: list[str] = field(default_factory=list)
 
 
 @dataclass

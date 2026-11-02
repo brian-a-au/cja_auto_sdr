@@ -346,3 +346,58 @@ def test_diff_excel_writes_pandas_missing_markers_as_blank(temp_output_dir):
     ws = load_workbook(filepath)["Metrics Diff"]
     assert ws.cell(row=2, column=3).value in (None, "")
     assert ws.cell(row=3, column=3).value in (None, "")
+
+
+def _long_detail_result(old: str, new: str, inventory: bool = False):
+    diff_result = _build_diff_result()
+    if inventory:
+        item = InventoryItemDiff(
+            id="cm1",
+            inventory_type="calculated_metric",
+            name="CM",
+            change_type=ChangeType.MODIFIED,
+            changed_fields={"description": (old, new)},
+        )
+        diff_result.calc_metrics_diffs = [item]
+    else:
+        diff_result.metric_diffs = [
+            ComponentDiff(
+                id="m1",
+                name="M",
+                change_type=ChangeType.MODIFIED,
+                changed_fields={"description": (old, new)},
+            )
+        ]
+    return diff_result
+
+
+def test_excel_long_detail_keeps_target(temp_output_dir):
+    """DIFF-23: a Details value over the cell limit keeps both sides, each ending in '...'."""
+    diff_result = _long_detail_result("A" * 40000, "A" * 39999 + "B")
+
+    filepath = write_diff_excel_output(diff_result, "test_diff", temp_output_dir, logger)
+
+    cell = load_workbook(filepath)["Metrics Diff"].cell(row=2, column=4).value
+    assert len(cell) <= 32767
+    assert " -> " in cell
+    assert cell.endswith("...'")
+    assert cell.split(" -> ")[1].rstrip("'").endswith("...")
+
+
+def test_excel_long_inventory_detail_keeps_target(temp_output_dir):
+    diff_result = _long_detail_result("A" * 40000, "B" * 40000, inventory=True)
+
+    filepath = write_diff_excel_output(diff_result, "test_diff", temp_output_dir, logger)
+
+    cell = load_workbook(filepath)["Calc Metrics Diff"].cell(row=2, column=4).value
+    assert len(cell) <= 32767
+    assert " -> " in cell
+    assert cell.split(" -> ")[1].rstrip("'").endswith("...")
+
+
+def test_excel_short_detail_unchanged(temp_output_dir):
+    diff_result = _long_detail_result("old", "new")
+
+    filepath = write_diff_excel_output(diff_result, "test_diff", temp_output_dir, logger)
+
+    assert load_workbook(filepath)["Metrics Diff"].cell(row=2, column=4).value == "description: 'old' -> 'new'"

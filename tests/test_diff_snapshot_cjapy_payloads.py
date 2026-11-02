@@ -76,6 +76,28 @@ def test_create_snapshot_succeeds_on_valid_payloads(snapshot_manager, mock_cja):
     assert len(snapshot.dimensions) == 1
 
 
+@pytest.mark.parametrize(
+    ("raw_name", "stored_name"),
+    [(None, None), ("", ""), ("   ", "   "), ("Prod", "Prod")],
+)
+def test_create_snapshot_stores_name_as_previous_release(snapshot_manager, mock_cja, tmp_path, raw_name, stored_name):
+    """Snapshots keep the raw name (as v3.13.9 did) so old and new snapshots compare equal."""
+    from cja_auto_sdr.diff.git import save_git_friendly_snapshot
+
+    mock_cja.getDataView.return_value = {"id": "dv_abc123", "name": raw_name, "owner": {"name": "Alice"}}
+
+    snapshot = snapshot_manager.create_snapshot(mock_cja, "dv_abc123")
+
+    assert snapshot.data_view_name == stored_name
+    assert save_git_friendly_snapshot(snapshot, tmp_path)
+
+
+def test_create_snapshot_missing_name_is_unknown(snapshot_manager, mock_cja):
+    mock_cja.getDataView.return_value = {"id": "dv_abc123", "owner": {"name": "Alice"}}
+
+    assert snapshot_manager.create_snapshot(mock_cja, "dv_abc123").data_view_name == "Unknown"
+
+
 def test_create_snapshot_does_not_leak_attributeerror_on_dict_metrics(snapshot_manager, mock_cja):
     mock_cja.getMetrics.return_value = {"statusCode": 503, "message": "backend timeout"}
 

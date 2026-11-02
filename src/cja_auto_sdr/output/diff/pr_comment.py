@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from cja_auto_sdr.diff.models import ChangeType, DiffResult
 from cja_auto_sdr.output.diff.common import (
+    _display_name,
     _format_diff_value,
     detect_breaking_changes,
 )
@@ -54,13 +55,26 @@ def write_diff_pr_comment_output(
         f"+{summary.dimensions_added} | -{summary.dimensions_removed} | ~{summary.dimensions_modified} | "
         f"{summary.dimensions_unchanged} | {summary.dimensions_change_percent:.1f}% |",
     )
-    if diff_result.calc_metrics_diffs is not None:
+    # Skip inventory rows that are entirely empty (no items on either side, no changes).
+    if diff_result.calc_metrics_diffs is not None and (
+        summary.calc_metrics_added
+        or summary.calc_metrics_removed
+        or summary.calc_metrics_modified
+        or summary.source_calc_metrics_count
+        or summary.target_calc_metrics_count
+    ):
         lines.append(
             f"| Calc Metrics | {summary.source_calc_metrics_count} | {summary.target_calc_metrics_count} | "
             f"+{summary.calc_metrics_added} | -{summary.calc_metrics_removed} | ~{summary.calc_metrics_modified} | "
             f"{summary.calc_metrics_unchanged} | {summary.calc_metrics_change_percent:.1f}% |",
         )
-    if diff_result.segments_diffs is not None:
+    if diff_result.segments_diffs is not None and (
+        summary.segments_added
+        or summary.segments_removed
+        or summary.segments_modified
+        or summary.source_segments_count
+        or summary.target_segments_count
+    ):
         lines.append(
             f"| Segments | {summary.source_segments_count} | {summary.target_segments_count} | "
             f"+{summary.segments_added} | -{summary.segments_removed} | ~{summary.segments_modified} | "
@@ -105,7 +119,7 @@ def write_diff_pr_comment_output(
                 diff.change_type,
                 "",
             )
-            lines.append(f"| {symbol} | `{_esc(diff.id)}` | {_esc(diff.name)} |")
+            lines.append(f"| {symbol} | `{_esc(diff.id)}` | {_esc(_display_name(diff.name))} |")
         if len(metric_changes) > 25:
             lines.append(f"| ... | | +{len(metric_changes) - 25} more |")
         lines.append("")
@@ -123,7 +137,7 @@ def write_diff_pr_comment_output(
                 diff.change_type,
                 "",
             )
-            lines.append(f"| {symbol} | `{_esc(diff.id)}` | {_esc(diff.name)} |")
+            lines.append(f"| {symbol} | `{_esc(diff.id)}` | {_esc(_display_name(diff.name))} |")
         if len(dim_changes) > 25:
             lines.append(f"| ... | | +{len(dim_changes) - 25} more |")
         lines.append("")
@@ -147,7 +161,7 @@ def write_diff_pr_comment_output(
                 diff.change_type,
                 "",
             )
-            lines.append(f"| {symbol} | `{_esc(diff.id)}` | {_esc(diff.name)} |")
+            lines.append(f"| {symbol} | `{_esc(diff.id)}` | {_esc(_display_name(diff.name))} |")
         if len(inventory_changes) > 25:
             lines.append(f"| ... | | +{len(inventory_changes) - 25} more |")
         lines.append("")

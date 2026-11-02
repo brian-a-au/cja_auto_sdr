@@ -21,7 +21,7 @@ from cja_auto_sdr.diff.models import (
     InventoryItemDiff,
     MetadataDiff,
 )
-from cja_auto_sdr.diff.snapshot import SnapshotManager, parse_retention_period
+from cja_auto_sdr.diff.snapshot import SnapshotManager, parse_positive_retention_period, parse_retention_period
 
 __all__ = [
     "ChangeType",
@@ -39,6 +39,7 @@ __all__ = [
     "git_init_snapshot_repo",
     "git_repository_state",
     "is_git_repository",
+    "parse_positive_retention_period",
     "parse_retention_period",
     "save_git_friendly_snapshot",
     "write_diff_console_output",

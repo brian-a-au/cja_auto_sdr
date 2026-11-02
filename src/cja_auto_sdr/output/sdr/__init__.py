@@ -1252,7 +1252,7 @@ def write_markdown_output(
         md_parts.append("## \U0001f4cb Metadata\n")
         if metadata_dict:
             for key, value in metadata_dict.items():
-                md_parts.append(f"**{key}:** {escape_markdown(str(value))}")
+                md_parts.append(f"**{key}:** {escape_markdown(value)}")
             md_parts.append("")
 
         # Table of contents

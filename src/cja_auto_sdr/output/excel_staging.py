@@ -15,26 +15,34 @@ import pandas as pd
 from cja_auto_sdr.core.exceptions import OutputError
 
 
-@contextmanager
-def staged_excel_writer(destination: str | Path) -> Iterator[pd.ExcelWriter]:
-    """Stage beside the resolved target, retaining symlinks and ordinary file modes.
+def prepare_staged_destination(destination: str | Path, *, label: str = "Excel") -> tuple[Path, int | None]:
+    """Resolve *destination* and validate it for replace-based publishing.
 
-    Hardlinked and non-regular destinations cannot preserve their inode semantics
-    with replacement, so reject them before rendering. New workbooks are created
-    normally inside a short sibling directory, allowing the OS to apply umask.
+    Returns the resolved real path and the previous permission bits (None when
+    the destination does not exist yet). Hardlinked and non-regular
+    destinations cannot preserve their inode semantics with replacement, so
+    they raise ``OutputError`` before anything is rendered.
     """
     target = Path(destination).resolve()
     try:
         previous = target.stat()
     except FileNotFoundError:
-        previous = None
-    if previous is not None:
-        if not stat.S_ISREG(previous.st_mode):
-            raise OutputError(f"Excel destination is not a regular file: {destination}. Choose a regular file path.")
-        if previous.st_nlink > 1:
-            raise OutputError(
-                f"Excel destination has multiple hard links: {destination}. Choose an unlinked file path."
-            )
+        return target, None
+    if not stat.S_ISREG(previous.st_mode):
+        raise OutputError(f"{label} destination is not a regular file: {destination}. Choose a regular file path.")
+    if previous.st_nlink > 1:
+        raise OutputError(f"{label} destination has multiple hard links: {destination}. Choose an unlinked file path.")
+    return target, stat.S_IMODE(previous.st_mode)
+
+
+@contextmanager
+def staged_excel_writer(destination: str | Path) -> Iterator[pd.ExcelWriter]:
+    """Stage beside the resolved target, retaining symlinks and ordinary file modes.
+
+    New workbooks are created normally inside a short sibling directory,
+    allowing the OS to apply umask.
+    """
+    target, previous_mode = prepare_staged_destination(destination)
 
     # Match the other SDR writers, which create a missing output directory.
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -43,11 +51,12 @@ def staged_excel_writer(destination: str | Path) -> Iterator[pd.ExcelWriter]:
     try:
         workbook_file = staged.open("wb")
         try:
-            # Cell text from the API is data, never a formula (e.g. a name like "=Revenue").
+            # Cell text from the API is data, never a formula (e.g. a name like "=Revenue") and never a
+            # hyperlink (xlsxwriter would rewrite "mailto:a@b" and drop URLs over 2079 characters).
             writer = pd.ExcelWriter(
                 workbook_file,
                 engine="xlsxwriter",
-                engine_kwargs={"options": {"strings_to_formulas": False}},
+                engine_kwargs={"options": {"strings_to_formulas": False, "strings_to_urls": False}},
             )
             try:
                 yield writer
@@ -63,8 +72,8 @@ def staged_excel_writer(destination: str | Path) -> Iterator[pd.ExcelWriter]:
             raise
         else:
             workbook_file.close()
-        if previous is not None:
-            staged.chmod(stat.S_IMODE(previous.st_mode))
+        if previous_mode is not None:
+            staged.chmod(previous_mode)
         os.replace(staged, target)
     finally:
         shutil.rmtree(staging_dir, ignore_errors=True)

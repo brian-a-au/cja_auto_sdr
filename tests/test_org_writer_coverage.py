@@ -353,6 +353,33 @@ class TestCompareOrgReports:
         path.write_text(json.dumps(report), encoding="utf-8")
         return path
 
+    def test_compare_warns_on_threshold_mismatch(self, tmp_path, capsys):
+        prev_path = self._baseline(tmp_path, parameters={"core_threshold": 0.5, "overlap_threshold": 0.8})
+        current = _make_org_result()
+        current.parameters.core_threshold = 1.0
+        current.parameters.overlap_threshold = 0.8
+
+        comparison = compare_org_reports(current, str(prev_path))
+
+        assert len(comparison.warnings) == 1
+        assert "core_threshold" in comparison.warnings[0]
+        write_org_report_comparison_console(comparison)
+        assert "Warning: Baseline used core_threshold=0.5" in capsys.readouterr().out
+
+    def test_compare_no_warning_without_baseline_parameters(self, tmp_path):
+        prev_path = self._baseline(tmp_path)
+        current = _make_org_result()
+        current.parameters.core_threshold = 1.0
+
+        assert compare_org_reports(current, str(prev_path)).warnings == []
+
+    def test_compare_no_warning_when_parameters_match(self, tmp_path):
+        prev_path = self._baseline(tmp_path, parameters={"core_threshold": 0.5, "core_min_count": None})
+        current = _make_org_result()
+        current.parameters.core_threshold = 0.5
+
+        assert compare_org_reports(current, str(prev_path)).warnings == []
+
     def test_compare_org_reports_rejects_other_org(self, tmp_path):
         prev_path = self._baseline(tmp_path, org_id="ORG_A@AdobeOrg")
         current = _make_org_result()
@@ -1555,6 +1582,20 @@ class TestWriteOrgReportMarkdown:
         assert "## Summary" in content
         assert "## Component Distribution" in content
         assert "## Data Views" in content
+
+    def test_org_markdown_escapes_newlines(self, tmp_path):
+        result = _make_org_result()
+        result.data_view_summaries[0].data_view_name = "Prod\nEU|x"
+        logger = logging.getLogger("test_md_escape")
+
+        returned = write_org_report_markdown(result, tmp_path / "report.md", str(tmp_path), logger)
+        content = Path(returned).read_text(encoding="utf-8")
+
+        dv_id = result.data_view_summaries[0].data_view_id
+        rows = [line for line in content.splitlines() if f"`{dv_id}`" in line and line.startswith("| ")]
+        assert len(rows) == 1
+        assert "Prod<br>EU\\|x" in rows[0]
+        assert "Prod\nEU" not in content
 
     def test_markdown_auto_generated_path(self, tmp_path):
         result = _make_org_result()
@@ -2788,6 +2829,22 @@ class TestOrgThresholdLabels:
         assert "Core (57%+ DVs)" in html_text
         assert "56%+" not in console + markdown + html_text
         assert "Common (in 25-56% DVs)" in console
+
+    def test_overlap_label_floors_in_console_and_markdown(self, tmp_path, capsys):
+        console, markdown, _html = self._render_all(tmp_path, capsys, overlap_threshold=0.855)
+
+        assert "Pairs with >= 85% Jaccard similarity" in console
+        assert "Data view pairs with >= 85% Jaccard similarity" in markdown
+        assert "86%" not in console
+
+    @pytest.mark.parametrize(
+        ("threshold", "label"),
+        [(0.567, "Common (25-56% DVs)"), (0.5, "Common (25-49% DVs)"), (0.26, "Common (25%+ DVs, < core)")],
+    )
+    def test_common_band_upper_bound(self, threshold, label):
+        from cja_auto_sdr.org.writers.common import common_band_label
+
+        assert common_band_label(threshold, None) == label
 
     def test_overlap_label_consistent_across_formats(self, tmp_path, capsys):
         console, markdown, html_text = self._render_all(tmp_path, capsys, overlap_threshold=0.58)

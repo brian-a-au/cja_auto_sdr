@@ -114,6 +114,19 @@ def _bounded_float(min_val: float, max_val: float):
     return _type
 
 
+def _min_int(min_val: int):
+    """Argparse type factory for an integer of at least min_val."""
+
+    def _type(value: str) -> int:
+        n = int(value)
+        if n < min_val:
+            raise argparse.ArgumentTypeError(f"must be at least {min_val}, got {n}")
+        return n
+
+    _type.__name__ = f"int>={min_val}"
+    return _type
+
+
 def _safe_env_number(env_var: str, default: int | float, cast: Callable[[str], int | float]) -> int | float:
     """Read a numeric env var and fall back to default when invalid."""
     raw = os.environ.get(env_var)
@@ -1179,7 +1192,7 @@ Requirements:
 
     org_group.add_argument(
         "--core-min-count",
-        type=int,
+        type=_min_int(1),
         metavar="N",
         help='Minimum absolute count for "core" components (overrides --core-threshold). '
         "E.g., --core-min-count 5 means components in >= 5 DVs are core",
