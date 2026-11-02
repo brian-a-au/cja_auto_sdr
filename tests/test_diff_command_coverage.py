@@ -1208,3 +1208,15 @@ class TestDiffMessages:
         assert code == 2  # has changes: exit code unchanged by the warning
         assert not out.exists()
         json.loads(captured.out)  # stdout still carries only the payload
+
+
+def test_cross_dv_error_json_has_ids(tmp_path, monkeypatch, capsys):
+    """The cross-data-view JSON error names both data views (additive fields)."""
+    a = _hunt_snap(tmp_path / "a.json", dv="dv_a", segments_inventory=[])
+    b = _hunt_snap(tmp_path / "b.json", dv="dv_b", segments_inventory=[])
+    code = _hunt_main(monkeypatch, ["--compare-snapshots", a, b, "--include-segments", "--format", "json", "--quiet"])
+    payload = json.loads(capsys.readouterr().err.strip().splitlines()[-1])
+    assert code == 1
+    assert payload["error_type"] == "comparison_error"
+    assert payload["source_data_view_id"] == "dv_a"
+    assert payload["target_data_view_id"] == "dv_b"

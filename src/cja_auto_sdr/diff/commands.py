@@ -109,6 +109,10 @@ def _print_cross_data_view_inventory_error(
             "Inventory comparison requires snapshots from the same data view",
             is_machine_readable=True,
             error_type="comparison_error",
+            additional_fields={
+                "source_data_view_id": source_snapshot.data_view_id,
+                "target_data_view_id": target_id,
+            },
         )
         return
     print(
