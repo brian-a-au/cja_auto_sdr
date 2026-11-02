@@ -7011,6 +7011,18 @@ def _describe_dataview_ignored_options(args: argparse.Namespace) -> list[str]:
     return ignored
 
 
+def _warn_sdr_mode_ignored_filter_limit(args: argparse.Namespace) -> None:
+    """Warn when --filter/--limit are given to SDR generation, where they select nothing."""
+    if getattr(args, "org_filter", None) is None and getattr(args, "org_limit", None) is None:
+        return
+    print(
+        ConsoleColors.warning(
+            "Warning: --filter/--limit have no effect in SDR mode; they apply to --org-report and discovery commands."
+        ),
+        file=sys.stderr,
+    )
+
+
 def _warn_describe_dataview_ignored_options(args: argparse.Namespace) -> None:
     """Warn when describe_dataview is invoked with ignored discovery options."""
     ignored_options = _describe_dataview_ignored_options(args)
@@ -8070,6 +8082,8 @@ def _main_impl(run_state: dict[str, Any] | None = None):
         print("Usage: cja_auto_sdr DATA_VIEW_ID_OR_NAME [DATA_VIEW_ID_OR_NAME ...]", file=sys.stderr)
         print("       Use --help for more information", file=sys.stderr)
         sys.exit(1)
+
+    _warn_sdr_mode_ignored_filter_limit(args)
 
     # Resolve data view names to IDs
     # Create a temporary logger for name resolution

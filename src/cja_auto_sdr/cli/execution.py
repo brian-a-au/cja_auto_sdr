@@ -214,8 +214,6 @@ def _confirm_large_batch(args: argparse.Namespace, *, data_views: list[str]) -> 
     print(f"  • Duration: ~{len(data_views) * 2}-{len(data_views) * 5} seconds")
     print()
     print("Tips:")
-    print("  • Use --filter to narrow scope: --filter 'prod*'")
-    print("  • Use --limit N to process only first N data views")
     print("  • Use --yes to skip this prompt in CI/CD")
     print()
 

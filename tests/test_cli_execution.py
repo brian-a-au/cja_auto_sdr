@@ -1029,3 +1029,68 @@ class TestIgnoredOutputAndCleanConfigJson:
         assert code == 0
         assert "--output is ignored with --dry-run" in captured.err
         assert "Auto-detected format" not in captured.out
+
+
+class TestFilterLimitOutsideOrgAndDiscovery:
+    """--filter/--limit do nothing in SDR mode, so say so on stderr (CLI-24)."""
+
+    WARNING = "--filter/--limit have no effect in SDR mode"
+
+    @staticmethod
+    def _run_main(argv, monkeypatch, tmp_path):
+        from cja_auto_sdr.generator import main
+
+        monkeypatch.chdir(tmp_path)
+        try:
+            with patch.object(sys, "argv", ["cja_auto_sdr", *argv]):
+                main()
+        except SystemExit as exc:
+            return exc.code
+        return 0
+
+    @pytest.mark.parametrize(
+        "argv",
+        [["dv_1", "--batch", "--limit", "1", "--dry-run"], ["dv_1", "--filter", "x", "--dry-run"]],
+    )
+    def test_sdr_mode_warns_on_stderr_only(self, argv, tmp_path, monkeypatch, capsys):
+        with (
+            patch("cja_auto_sdr.generator.run_dry_run", return_value=True),
+            patch("cja_auto_sdr.generator.resolve_data_view_names", return_value=(["dv_1"], {})),
+        ):
+            code = self._run_main(argv, monkeypatch, tmp_path)
+
+        captured = capsys.readouterr()
+        assert code == 0
+        assert self.WARNING in captured.err
+        assert self.WARNING not in captured.out
+
+    def test_org_report_limit_does_not_warn(self, tmp_path, monkeypatch, capsys):
+        with patch("cja_auto_sdr.generator.run_org_report", return_value=(True, False)):
+            self._run_main(
+                ["--org-report", "--limit", "1", "--config-file", str(tmp_path / "none.json")], monkeypatch, tmp_path
+            )
+
+        assert self.WARNING not in capsys.readouterr().err
+
+    def test_list_dataviews_filter_does_not_warn(self, tmp_path, monkeypatch, capsys):
+        with patch("cja_auto_sdr.generator.list_dataviews", return_value=True):
+            self._run_main(["--list-dataviews", "--filter", "x"], monkeypatch, tmp_path)
+
+        assert self.WARNING not in capsys.readouterr().err
+
+    def test_large_batch_prompt_has_no_filter_or_limit_tip(self, capsys):
+        from cja_auto_sdr.cli.execution import _confirm_large_batch
+
+        generator = _make_generator()
+        with (
+            patch("cja_auto_sdr.cli.execution._generator_module", return_value=generator),
+            patch("sys.stdin.isatty", return_value=True),
+            patch("builtins.input", return_value="y"),
+        ):
+            _confirm_large_batch(_make_args(assume_yes=False), data_views=[f"dv_{i}" for i in range(25)])
+
+        out = capsys.readouterr().out
+        assert "Large batch detected" in out
+        assert "--limit" not in out
+        assert "--filter" not in out
+        assert "--yes" in out
