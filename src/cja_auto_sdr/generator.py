@@ -4142,21 +4142,19 @@ def process_single_dataview(
             logger.error(_format_error_msg("applying JSON formatting", error=e))
 
         # Create Excel file name
-        dv_name = _display_data_view_name(lookup_data.get("name") if isinstance(lookup_data, dict) else None)
-        try:
-            # Sanitize filename (results and summaries show the real name; only the file name is sanitized)
-            safe_name = "".join(c for c in dv_name if c.isalnum() or c in (" ", "-", "_")).rstrip()
+        # Results and summaries show the display name; the file name is built from the raw value
+        # exactly as before (a non-string name gets the id-only form).
+        raw_dv_name = lookup_data.get("name", "Unknown") if isinstance(lookup_data, dict) else "Unknown"
+        dv_name = _display_data_view_name(raw_dv_name)
+        if isinstance(raw_dv_name, str):
+            safe_name = "".join(c for c in raw_dv_name if c.isalnum() or c in (" ", "-", "_")).rstrip()
             # Keep the whole file name under common 255-byte limits (the real name stays in the document).
             safe_name = safe_name[:100].rstrip()
             excel_file_name = f"CJA_DataView_{safe_name}_{data_view_id}_SDR.xlsx"
-
-            # Add output directory path
-            output_path = Path(output_dir) / excel_file_name
-            logger.info(f"Excel file will be saved as: {output_path}")
-        except (KeyError, TypeError, ValueError) as e:
-            logger.error(_format_error_msg("creating filename", error=e))
+        else:
             excel_file_name = f"CJA_DataView_{data_view_id}_SDR.xlsx"
-            output_path = Path(output_dir) / excel_file_name
+        output_path = Path(output_dir) / excel_file_name
+        logger.info(f"Excel file will be saved as: {output_path}")
 
         # Prepare data for output generation
         logger.info("=" * BANNER_WIDTH)

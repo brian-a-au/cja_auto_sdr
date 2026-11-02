@@ -2690,7 +2690,7 @@ class TestProcessSingleDataviewDisplayName:
 
         assert result.success is True
         assert result.data_view_name == "Unknown"
-        assert Path(result.output_file).name == "CJA_DataView_Unknown_dv_1_SDR.xlsx"
+        assert Path(result.output_file).name == "CJA_DataView_dv_1_SDR.xlsx"
 
 
 def _run_real_writers(tmp_path, lookup, **kwargs):
@@ -2752,8 +2752,26 @@ class TestNullDataViewNameDocuments:
 
         assert result.success is True
         js = json.loads(next(out.glob("*.json")).read_text())
-        assert "None" not in json.dumps(js["metadata"].get("Data View Name"))
-        assert js["metadata"]["Data View Name"] == "Unknown"
+        assert js["derived_fields"]["summary"]["data_view_name"] == "Unknown"
+
+    @pytest.mark.parametrize(
+        ("raw_name", "expected_file"),
+        [
+            (None, "CJA_DataView_dv_1_SDR.xlsx"),
+            ("", "CJA_DataView__dv_1_SDR.xlsx"),
+            ("   ", "CJA_DataView__dv_1_SDR.xlsx"),
+            (float("nan"), "CJA_DataView_dv_1_SDR.xlsx"),
+            (123, "CJA_DataView_dv_1_SDR.xlsx"),
+            ("Prod Web", "CJA_DataView_Prod Web_dv_1_SDR.xlsx"),
+        ],
+    )
+    def test_file_names_match_previous_release(self, tmp_path, raw_name, expected_file):
+        result, _ = _run_real_writers(
+            tmp_path, {"id": "dv_1", "name": raw_name, "owner": {"name": "O"}}, output_format="excel"
+        )
+
+        assert result.success is True
+        assert Path(result.output_file).name == expected_file
 
     def test_display_name_helper(self):
         from cja_auto_sdr.generator import _display_data_view_name
