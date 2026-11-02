@@ -1583,6 +1583,20 @@ class TestWriteOrgReportMarkdown:
         assert "## Component Distribution" in content
         assert "## Data Views" in content
 
+    def test_org_markdown_escapes_newlines(self, tmp_path):
+        result = _make_org_result()
+        result.data_view_summaries[0].data_view_name = "Prod\nEU|x"
+        logger = logging.getLogger("test_md_escape")
+
+        returned = write_org_report_markdown(result, tmp_path / "report.md", str(tmp_path), logger)
+        content = Path(returned).read_text(encoding="utf-8")
+
+        dv_id = result.data_view_summaries[0].data_view_id
+        rows = [line for line in content.splitlines() if f"`{dv_id}`" in line and line.startswith("| ")]
+        assert len(rows) == 1
+        assert "Prod<br>EU\\|x" in rows[0]
+        assert "Prod\nEU" not in content
+
     def test_markdown_auto_generated_path(self, tmp_path):
         result = _make_org_result()
         logger = logging.getLogger("test_md_auto")

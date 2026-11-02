@@ -8,6 +8,7 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from cja_auto_sdr.core.constants import effective_governance_overlap_threshold
 from cja_auto_sdr.core.json_io import write_text_atomic_compatible
@@ -43,6 +44,13 @@ _render_trending_markdown = make_override_proxy(
     "_render_trending_markdown",
     _render_trending_markdown_impl,
 )
+
+
+def escape_markdown_table_cell(value: Any) -> str:
+    """Escape a Markdown cell (imported lazily to avoid re-entering the output package at load)."""
+    from cja_auto_sdr.output.markdown_escape import escape_markdown_table_cell as _escape
+
+    return _escape(value)
 
 
 def write_org_report_markdown(
@@ -142,7 +150,7 @@ def write_org_report_markdown(
     lines.append("|------|----|---------:|----------:|--------|")
 
     for dv in sorted(result.data_view_summaries, key=lambda x: x.data_view_name):
-        name = dv.data_view_name.replace("|", "\\|")
+        name = escape_markdown_table_cell(dv.data_view_name)
         if dv.error is not None:
             lines.append(f"| {name} | `{dv.data_view_id}` | ERROR | - | {dv.status} |")
         else:
@@ -172,7 +180,7 @@ def write_org_report_markdown(
                 info = result.component_index.get(comp_id)
                 if info:
                     if has_names:
-                        name = (info.name or "-").replace("|", "\\|")
+                        name = escape_markdown_table_cell(info.name or "-")
                         lines.append(f"| `{comp_id}` | {name} | {info.presence_count} |")
                     else:
                         lines.append(f"| `{comp_id}` | {info.presence_count} |")
@@ -196,7 +204,7 @@ def write_org_report_markdown(
                 info = result.component_index.get(comp_id)
                 if info:
                     if has_names:
-                        name = (info.name or "-").replace("|", "\\|")
+                        name = escape_markdown_table_cell(info.name or "-")
                         lines.append(f"| `{comp_id}` | {name} | {info.presence_count} |")
                     else:
                         lines.append(f"| `{comp_id}` | {info.presence_count} |")
@@ -223,8 +231,8 @@ def write_org_report_markdown(
         lines.append("|-------------|-------------|------------|-------:|")
 
         for pair in result.similarity_pairs[:15]:
-            name1 = pair.dv1_name.replace("|", "\\|")
-            name2 = pair.dv2_name.replace("|", "\\|")
+            name1 = escape_markdown_table_cell(pair.dv1_name)
+            name2 = escape_markdown_table_cell(pair.dv2_name)
             lines.append(f"| {name1} | {name2} | {pair.jaccard_similarity * 100:.1f}% | {pair.shared_count} |")
 
         if len(result.similarity_pairs) > 15:
@@ -251,12 +259,12 @@ def write_org_report_markdown(
             rec_type = str(rec.get("type", "Unknown")).replace("_", " ").title()
             lines.append(f"### {i}. {severity_badge} {rec_type}")
             lines.append("")
-            reason = str(rec.get("reason", "No details provided.")).replace("|", "\\|").replace("`", "\\`")
+            reason = escape_markdown_table_cell(rec.get("reason", "No details provided."))
             lines.append(reason)
             lines.append("")
 
             for label, value in _format_recommendation_context_entries(rec):
-                value_text = str(value).replace("|", "\\|").replace("`", "\\`")
+                value_text = escape_markdown_table_cell(value)
                 lines.append(f"- **{label}:** {value_text}")
             lines.append("")
 
