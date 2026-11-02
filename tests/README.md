@@ -188,7 +188,7 @@ tests/
 └── README.md                        # This file
 ```
 
-**Total: 9,712 comprehensive tests**
+**Total: 9,718 comprehensive tests**
 
 ### Test Count Breakdown
 
@@ -197,16 +197,16 @@ tests/
 
 | Category | Tests | Files | Notes |
 |----------|-------|-------|-------|
-| `unit` | 9,550 | 169 | Default primary category for files without explicit integration/e2e/smoke scope |
+| `unit` | 9,556 | 169 | Default primary category for files without explicit integration/e2e/smoke scope |
 | `integration` | 123 | 3 | Cross-module integration suites |
 | `e2e` | 23 | 2 | End-to-end suites with a mocked external boundary |
 | `smoke` | 16 | 2 | Lightweight command-mode coverage |
 | `slow` | 0 | 0 | Overlay marker; these tests are also counted in a primary category |
-| **Primary Total** | **9,712** | **176** | **unit + integration + e2e + smoke** |
+| **Primary Total** | **9,718** | **176** | **unit + integration + e2e + smoke** |
 
 | CI Slice | Tests | Files | Selector |
 |----------|-------|-------|----------|
-| `test-unit` | 9,550 | 169 | `-m "unit and not slow"` |
+| `test-unit` | 9,556 | 169 | `-m "unit and not slow"` |
 | `test-integration` | 146 | 5 | `-m "integration or e2e or slow"` |
 | `smoke-test` | 16 | 2 | `-m smoke` |
 
@@ -224,7 +224,7 @@ tests/
 | `test_cli.py` | 418 | Command-line interface and argument parsing |
 | `test_profiles.py` | 96 | Multi-organization profile support |
 | `test_derived_inventory.py` | 64 | Derived fields inventory feature |
-| `test_diff_snapshot_cjapy_payloads.py` | 10 | Diff snapshot cjapy payload classification |
+| `test_diff_snapshot_cjapy_payloads.py` | 15 | Diff snapshot cjapy payload classification |
 | `test_inventory_pragma_coverage.py` | 18 | Inventory pragma coverage hardening |
 | `test_inventory_summary_cjapy_payloads.py` | 8 | Inventory summary cjapy payload classification |
 | `test_inventory_utils.py` | 57 | Inventory utilities and helpers |
@@ -246,7 +246,7 @@ tests/
 | `test_retry.py` | 25 | Retry with exponential backoff |
 | `test_batch_processor.py` | 34 | Batch processing of multiple data views |
 | `test_validation_cache.py` | 32 | Validation result caching |
-| `test_process_single_dataview.py` | 68 | End-to-end single data view processing |
+| `test_process_single_dataview.py` | 69 | End-to-end single data view processing |
 | `test_process_liveness_smoke.py` | 6 | Cross-platform lock PID liveness probes (Windows-safe) |
 | `test_optimized_validation.py` | 14 | Optimized data quality validation |
 | `test_name_resolution.py` | 30 | Data view name to ID resolution |
@@ -392,7 +392,7 @@ tests/
 | `test_diff_snapshot_retention.py` | 89 | Diff snapshot-retention parse-cache characterization test |
 | `test_diff_comparator_normalize.py` | 22 | Diff field-normalization type-fast-path characterization test |
 | `test_logging_diagnostics.py` | 2 | emit_diagnostic isEnabledFor guard characterization tests |
-| **Total** | **9,712** | **Collected via pytest --collect-only** |
+| **Total** | **9,718** | **Collected via pytest --collect-only** |
 
 ## Running Tests
 
@@ -850,7 +850,7 @@ the `tests/README.md` inventory tree or count table.
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (9,712 tests total)
+- [x] Comprehensive test coverage (9,718 tests total)
 - [x] Org-wide analysis tests (test_org_report.py) - 239 tests (including large org scaling, output path aliases, memory warnings, smart cache invalidation)
 - [x] Org-wide analysis integration tests (test_org_report_integration.py) - 46 tests (end-to-end flows, caching, filtering, governance thresholds)
 - [x] Profile management tests (test_profiles.py) - 96 tests
