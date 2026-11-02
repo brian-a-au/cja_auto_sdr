@@ -6367,19 +6367,23 @@ def run_org_report(
 
         # Handle org-stats mode (Feature 2) - minimal output
         if org_config.org_stats_only:
-            if output_format not in ("console", "json"):
+            requested_formats = _resolve_requested_output_formats(output_format)
+            stats_json_requested = "json" in requested_formats
+            ignored_formats = sorted(requested_formats - {"console", "json"})
+            if ignored_formats:
                 # Shown even under --quiet: the requested artifact will not exist.
+                if stats_json_requested:
+                    ignored_text = f"--format {output_format} ignored: {', '.join(ignored_formats)}."
+                else:
+                    ignored_text = f"--format {output_format} was ignored."
                 print(
-                    ConsoleColors.warning(
-                        f"Warning: --org-stats only writes console or JSON output; "
-                        f"--format {output_format} was ignored."
-                    ),
+                    ConsoleColors.warning(f"Warning: --org-stats only writes console or JSON output; {ignored_text}"),
                     file=sys.stderr,
                 )
             with contextlib.redirect_stdout(status_stream):
                 write_org_report_stats_only(result, quiet=console_writer_quiet, trending=trending)
-            # Still output JSON if requested for CI integration
-            if output_format == "json":
+            # Still output JSON if requested for CI integration (directly or via an alias)
+            if stats_json_requested:
                 if output_to_stdout:
                     json.dump(
                         build_org_report_json_data(result, trending=trending), sys.stdout, indent=2, ensure_ascii=False

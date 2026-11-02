@@ -3228,6 +3228,27 @@ class TestOrgReportOutputHandling:
         expected = f"Warning: --org-stats only writes console or JSON output; --format {output_format} was ignored."
         assert expected in capsys.readouterr().err
 
+    @pytest.mark.parametrize(
+        ("output_format", "ignored"),
+        [("ci", ["markdown"]), ("data", ["csv"]), ("all", ["csv", "excel", "html", "markdown"])],
+    )
+    def test_org_stats_writes_json_for_aliases_including_json(
+        self, sample_result, capsys, tmp_path, output_format, ignored
+    ):
+        success, _ = self._run_org_stats(sample_result, output_format, tmp_path)
+
+        assert success is True
+        assert list(tmp_path.glob("*.json"))
+        warning = next(line for line in capsys.readouterr().err.splitlines() if "--org-stats only writes" in line)
+        assert f"ignored: {', '.join(ignored)}." in warning
+        assert "json" not in warning.split("ignored:")[1]
+
+    def test_org_stats_excel_writes_nothing(self, sample_result, capsys, tmp_path):
+        self._run_org_stats(sample_result, "excel", tmp_path)
+
+        assert not list(tmp_path.glob("*.json"))
+        assert "--format excel was ignored." in capsys.readouterr().err
+
     @pytest.mark.parametrize("output_format", ["console", "json"])
     def test_org_stats_supported_format_has_no_warning(self, sample_result, capsys, tmp_path, output_format):
         self._run_org_stats(sample_result, output_format, tmp_path)
