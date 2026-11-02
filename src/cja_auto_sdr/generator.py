@@ -4175,47 +4175,51 @@ def process_single_dataview(
             if include_dimensions_section:
                 data_dict["Dimensions"] = dimensions
 
-        # Add derived field inventory if available or placeholder if flag was used
-        if not derived_inventory_df.empty:
-            data_dict["Derived Fields"] = derived_inventory_df
-        elif inventory_statuses["derived"] == INVENTORY_STATUS_FAILED:
-            data_dict["Derived Fields"] = _inventory_unavailable_frame("derived", data_view_id)
-        elif include_derived_inventory:
-            data_dict["Derived Fields"] = pd.DataFrame(
-                {
-                    "Status": ["No derived fields found for this data view"],
-                    "Data View ID": [data_view_id],
-                    "Note": ["This data view has no derived fields configured"],
-                },
-            )
-
-        # Add calculated metrics inventory if available or placeholder if flag was used
-        if not calculated_metrics_df.empty:
-            data_dict["Calculated Metrics"] = calculated_metrics_df
-        elif inventory_statuses["calculated"] == INVENTORY_STATUS_FAILED:
-            data_dict["Calculated Metrics"] = _inventory_unavailable_frame("calculated", data_view_id)
-        elif include_calculated_metrics:
-            data_dict["Calculated Metrics"] = pd.DataFrame(
-                {
-                    "Status": ["No calculated metrics found for this data view"],
-                    "Data View ID": [data_view_id],
-                    "Note": ["This data view has no associated calculated metrics"],
-                },
-            )
-
-        # Add segments inventory if available or placeholder if flag was used
-        if not segments_inventory_df.empty:
-            data_dict["Segments"] = segments_inventory_df
-        elif inventory_statuses["segments"] == INVENTORY_STATUS_FAILED:
-            data_dict["Segments"] = _inventory_unavailable_frame("segments", data_view_id)
-        elif include_segments_inventory:
-            data_dict["Segments"] = pd.DataFrame(
-                {
-                    "Status": ["No segments found for this data view"],
-                    "Data View ID": [data_view_id],
-                    "Note": ["This data view has no associated segments"],
-                },
-            )
+        # Add inventory sections in CLI order (same order as the Excel sheets); a type missing from the
+        # CLI order keeps its default position after the ordered ones.
+        default_inventory_order = ["derived", "calculated", "segments"]
+        data_dict_inventory_order = list(inventory_order or default_inventory_order)
+        data_dict_inventory_order += [t for t in default_inventory_order if t not in data_dict_inventory_order]
+        inventory_sections = {
+            "derived": (
+                "Derived Fields",
+                derived_inventory_df,
+                include_derived_inventory,
+                "No derived fields found for this data view",
+                "This data view has no derived fields configured",
+            ),
+            "calculated": (
+                "Calculated Metrics",
+                calculated_metrics_df,
+                include_calculated_metrics,
+                "No calculated metrics found for this data view",
+                "This data view has no associated calculated metrics",
+            ),
+            "segments": (
+                "Segments",
+                segments_inventory_df,
+                include_segments_inventory,
+                "No segments found for this data view",
+                "This data view has no associated segments",
+            ),
+        }
+        for inv_type in data_dict_inventory_order:
+            if inv_type not in inventory_sections:
+                continue
+            section_name, section_df, section_enabled, empty_status, empty_note = inventory_sections[inv_type]
+            # Add the inventory if available, or a placeholder if the flag was used
+            if not section_df.empty:
+                data_dict[section_name] = section_df
+            elif inventory_statuses[inv_type] == INVENTORY_STATUS_FAILED:
+                data_dict[section_name] = _inventory_unavailable_frame(inv_type, data_view_id)
+            elif section_enabled:
+                data_dict[section_name] = pd.DataFrame(
+                    {
+                        "Status": [empty_status],
+                        "Data View ID": [data_view_id],
+                        "Note": [empty_note],
+                    },
+                )
 
         # Prepare metadata dictionary for JSON/HTML
         metadata_dict = {}

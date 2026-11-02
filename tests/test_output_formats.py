@@ -759,3 +759,46 @@ class TestMarkdownOutput:
         # Check for count messages
         assert "*Total Metrics: 2 items*" in content
         assert "*Total Dimensions: 3 items*" in content
+
+
+class TestInventoryOrderAcrossFormats:
+    """Inventory sections follow the CLI order in every SDR format (SDR-5)."""
+
+    INV = ("Segments", "Derived Fields")
+
+    def _sections(self, tmp_path, inventory_order):
+        import re
+
+        import openpyxl
+
+        from tests.test_process_single_dataview import _run_real_writers
+
+        result, out = _run_real_writers(
+            tmp_path,
+            {"id": "dv_1", "name": "N", "owner": {"name": "O"}},
+            output_format="all",
+            include_derived_inventory=True,
+            include_segments_inventory=True,
+            inventory_order=inventory_order,
+        )
+        assert result.success is True
+        inv = self.INV
+        excel = [s for s in openpyxl.load_workbook(next(out.glob("*.xlsx"))).sheetnames if s in inv]
+        md = [h for h in re.findall(r"^## (.*)$", next(out.glob("*.md")).read_text(), re.M) if h in inv]
+        html = [h for h in re.findall(r"<h2>\S+ (.*?)</h2>", next(out.glob("*.html")).read_text()) if h in inv]
+        js = [k for k in json.loads(next(out.glob("*.json")).read_text()) if k in ("segments", "derived_fields")]
+        return excel, md, html, js
+
+    def test_inventory_order_matches_cli_in_all_formats(self, tmp_path):
+        excel, md, html, js = self._sections(tmp_path, ["segments", "derived"])
+
+        assert excel == ["Segments", "Derived Fields"]
+        assert md == excel
+        assert html == excel
+
+    def test_default_inventory_order_unchanged(self, tmp_path):
+        excel, md, html, _ = self._sections(tmp_path, None)
+
+        assert excel == ["Derived Fields", "Segments"]
+        assert md == excel
+        assert html == excel
