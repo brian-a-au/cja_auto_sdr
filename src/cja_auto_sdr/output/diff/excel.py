@@ -28,6 +28,9 @@ from cja_auto_sdr.output.diff.common import (
     _get_inventory_change_detail,
 )
 
+# Excel cell text limit; longer Details are shortened evenly so both sides survive.
+_EXCEL_CELL_LIMIT = 32767
+
 
 def _excel_text(value: Any) -> Any:
     """Return "" for a non-finite float or a pandas missing marker, which xlsxwriter cannot write."""
@@ -190,7 +193,7 @@ def write_diff_excel_output(
                         "Status": diff.change_type.value.upper(),
                         "ID": _excel_text(diff.id),
                         "Name": _excel_text(diff.name),
-                        "Details": _get_change_detail(diff, truncate=False),
+                        "Details": _get_change_detail(diff, truncate=False, max_len=_EXCEL_CELL_LIMIT),
                     }
                     for diff in diffs
                 ]
@@ -235,7 +238,7 @@ def write_diff_excel_output(
                         "Status": diff.change_type.value.upper(),
                         "ID": _excel_text(diff.id),
                         "Name": _excel_text(diff.name),
-                        "Details": _get_inventory_change_detail(diff, truncate=False),
+                        "Details": _get_inventory_change_detail(diff, truncate=False, max_len=_EXCEL_CELL_LIMIT),
                     }
                     for diff in diffs
                 ]

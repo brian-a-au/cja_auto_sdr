@@ -218,7 +218,7 @@ def _validate_keep_since(
         keep_last_specified=keep_last_specified,
         keep_since_specified=keep_since_specified,
     )
-    if effective_keep_since and generator.parse_retention_period(effective_keep_since) is None:
+    if effective_keep_since and generator.parse_positive_retention_period(effective_keep_since) is None:
         generator._exit_error(f"Invalid --keep-since value: {effective_keep_since}")
 
 
@@ -484,7 +484,7 @@ def dispatch_snapshot_cli_modes(
 
         keep_since_days = None
         if effective_keep_since:
-            keep_since_days = generator.parse_retention_period(effective_keep_since)
+            keep_since_days = generator.parse_positive_retention_period(effective_keep_since)
             if keep_since_days is None:
                 generator._exit_error(f"Invalid --keep-since value: {effective_keep_since}")
 

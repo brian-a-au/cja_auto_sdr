@@ -108,12 +108,14 @@ def build_quality_step_summary(results: list[ProcessingResult]) -> str:
 
 def build_diff_step_summary(diff_result: DiffResult) -> str:
     """Build markdown summary table for diff output."""
+    from cja_auto_sdr.output.diff.common import _display_name
+
     summary = diff_result.summary
     lines = [
         "### Diff Summary",
         "",
-        f"- Source: `{diff_result.metadata_diff.source_id}` ({diff_result.metadata_diff.source_name})",
-        f"- Target: `{diff_result.metadata_diff.target_id}` ({diff_result.metadata_diff.target_name})",
+        f"- Source: `{diff_result.metadata_diff.source_id}` ({_display_name(diff_result.metadata_diff.source_name)})",
+        f"- Target: `{diff_result.metadata_diff.target_id}` ({_display_name(diff_result.metadata_diff.target_name)})",
         f"- Total changes: {summary.total_changes}",
         "",
         "| Type | Source | Target | Added | Removed | Modified | Unchanged |",

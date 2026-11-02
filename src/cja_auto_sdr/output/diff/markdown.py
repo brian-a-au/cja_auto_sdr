@@ -15,6 +15,7 @@ from cja_auto_sdr.core.colors import _format_error_msg
 from cja_auto_sdr.core.json_io import write_text_atomic_compatible
 from cja_auto_sdr.diff.models import ChangeType, ComponentDiff, DiffResult
 from cja_auto_sdr.output.diff.common import (
+    _display_name,
     _format_diff_value,
     _get_change_detail,
     _get_change_emoji,
@@ -40,7 +41,7 @@ def _format_markdown_side_by_side(diff: ComponentDiff, source_label: str, target
         return lines
 
     # Component header
-    lines.append(f"\n**`{diff.id}`** - {diff.name}\n")
+    lines.append(f"\n**`{diff.id}`** - {_display_name(diff.name)}\n")
 
     # Side-by-side table
     lines.append(f"| Field | {_esc(source_label)} | {_esc(target_label)} |")
@@ -100,8 +101,8 @@ def write_diff_markdown_output(
 
         # Metadata
         md_parts.append("## Comparison Details\n")
-        md_parts.append(f"**{diff_result.source_label}:** {meta.source_name} (`{meta.source_id}`)")
-        md_parts.append(f"**{diff_result.target_label}:** {meta.target_name} (`{meta.target_id}`)")
+        md_parts.append(f"**{diff_result.source_label}:** {_display_name(meta.source_name)} (`{meta.source_id}`)")
+        md_parts.append(f"**{diff_result.target_label}:** {_display_name(meta.target_name)} (`{meta.target_id}`)")
         md_parts.append(f"**Generated:** {diff_result.generated_at}")
         md_parts.append(f"**Tool Version:** {diff_result.tool_version}\n")
 
@@ -155,7 +156,9 @@ def write_diff_markdown_output(
                 for diff in metric_changes:
                     symbol = _get_change_emoji(diff.change_type)
                     detail = _get_change_detail(diff, truncate=False)
-                    md_parts.append(f"| {symbol} | `{_esc(diff.id)}` | {_esc(diff.name)} | {_esc(detail)} |")
+                    md_parts.append(
+                        f"| {symbol} | `{_esc(diff.id)}` | {_esc(_display_name(diff.name))} | {_esc(detail)} |"
+                    )
 
                 # Add side-by-side detail for modified items
                 if side_by_side:
@@ -180,7 +183,9 @@ def write_diff_markdown_output(
                 for diff in dim_changes:
                     symbol = _get_change_emoji(diff.change_type)
                     detail = _get_change_detail(diff, truncate=False)
-                    md_parts.append(f"| {symbol} | `{_esc(diff.id)}` | {_esc(diff.name)} | {_esc(detail)} |")
+                    md_parts.append(
+                        f"| {symbol} | `{_esc(diff.id)}` | {_esc(_display_name(diff.name))} | {_esc(detail)} |"
+                    )
 
                 # Add side-by-side detail for modified items
                 if side_by_side:
@@ -210,7 +215,9 @@ def write_diff_markdown_output(
                     for diff in calc_changes:
                         symbol = _get_change_emoji(diff.change_type)
                         detail = _get_inventory_change_detail(diff, truncate=False)
-                        md_parts.append(f"| {symbol} | `{_esc(diff.id)}` | {_esc(diff.name)} | {_esc(detail)} |")
+                        md_parts.append(
+                            f"| {symbol} | `{_esc(diff.id)}` | {_esc(_display_name(diff.name))} | {_esc(detail)} |"
+                        )
                 else:
                     md_parts.append("*No changes*")
                 md_parts.append("")
@@ -225,7 +232,9 @@ def write_diff_markdown_output(
                     for diff in seg_changes:
                         symbol = _get_change_emoji(diff.change_type)
                         detail = _get_inventory_change_detail(diff, truncate=False)
-                        md_parts.append(f"| {symbol} | `{_esc(diff.id)}` | {_esc(diff.name)} | {_esc(detail)} |")
+                        md_parts.append(
+                            f"| {symbol} | `{_esc(diff.id)}` | {_esc(_display_name(diff.name))} | {_esc(detail)} |"
+                        )
                 else:
                     md_parts.append("*No changes*")
                 md_parts.append("")

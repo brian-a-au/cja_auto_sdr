@@ -400,7 +400,7 @@ cja_auto_sdr --list-dataviews  # Uses client-a
 | `--auto-snapshot` | Automatically save snapshots during diff for future comparisons |
 | `--auto-prune` | With `--auto-snapshot`, apply default retention (`--keep-last 20` + `--keep-since 30d`) only when both retention flags are omitted |
 | `--keep-last N` | Retention: keep last N snapshots per data view (`0` keeps all) |
-| `--keep-since PERIOD` | Date retention: delete snapshots older than `7d`, `2w`, `1m`, or days (`30`) |
+| `--keep-since PERIOD` | Date retention: delete snapshots older than `7d`, `2w`, `1m`, or days (`30`); must be positive |
 | `--warn-threshold PERCENT` | Exit with code 3 if change % exceeds threshold (for CI/CD) |
 | `--no-color` | Disable ANSI color codes in console output (global) |
 | `--format-pr-comment` | Output in GitHub/GitLab PR comment format |

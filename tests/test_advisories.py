@@ -626,10 +626,35 @@ class TestDiffAdvisoryBuilder:
         all_actions = {action for finding in summary.findings for action in finding.recommended_actions}
         assert all_actions <= _DOCUMENTED_DIFF_RECOMMENDED_ACTIONS
 
+    # ---------------------------------------------------------------------------
+    # Advisory rollup builder tests
+    # ---------------------------------------------------------------------------
 
-# ---------------------------------------------------------------------------
-# Advisory rollup builder tests
-# ---------------------------------------------------------------------------
+    def test_show_only_suppresses_additions_only_advisory(self):
+        """DIFF-24: --show-only hides removals, so 'no removals detected' would be a false claim."""
+        from cja_auto_sdr.core.advisory_builders import build_diff_advisories
+        from cja_auto_sdr.diff.models import ChangeType, ComponentDiff, DiffCoverage, DiffSummary
+
+        added = ComponentDiff(id="m_new", name="New", change_type=ChangeType.ADDED)
+        coverage = DiffCoverage(
+            compare_fields=["name"],
+            ignored_fields=[],
+            component_types=["metrics"],
+            inventories=[],
+            metadata_policy="reported",
+            show_only=["added"],
+        )
+        diff = _make_minimal_diff_result(
+            summary=DiffSummary(metrics_added=1),
+            metric_diffs=[added],
+            coverage=coverage,
+        )
+        types = [f.type for f in build_diff_advisories(diff).findings]
+        assert "additions_only" not in types
+
+        coverage.show_only = None
+        types = [f.type for f in build_diff_advisories(diff).findings]
+        assert "additions_only" in types
 
 
 class TestAdvisoryRollup:

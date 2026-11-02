@@ -1124,6 +1124,7 @@ class TestHandleDiffSnapshotCommand:
             mod.CalculatedMetricsInventoryBuilder.side_effect = RuntimeError("Build failed")
 
             success, _has_changes, _code = handle_diff_snapshot_command(
+                output_format="json",
                 data_view_id="dv_test",
                 snapshot_file="snap.json",
                 include_calc_metrics=True,
@@ -1181,6 +1182,7 @@ class TestHandleDiffSnapshotCommand:
             mod.SegmentsInventoryBuilder.side_effect = RuntimeError("Seg build failed")
 
             success, _has_changes, _code = handle_diff_snapshot_command(
+                output_format="json",
                 data_view_id="dv_test",
                 snapshot_file="snap.json",
                 include_calc_metrics=False,

@@ -21,6 +21,7 @@ from cja_auto_sdr.diff.models import (
     InventoryItemDiff,
 )
 from cja_auto_sdr.output.diff.common import (
+    _display_name,
     _get_change_detail,
     _get_inventory_change_detail,
 )
@@ -185,8 +186,8 @@ def write_diff_html_output(
         # Metadata section
         html_parts.append(f"""
         <div class="metadata">
-            <p><strong>{_safe_html_escape(diff_result.source_label)}:</strong> {_safe_html_escape(meta.source_name)} (<code>{_safe_html_escape(meta.source_id)}</code>)</p>
-            <p><strong>{_safe_html_escape(diff_result.target_label)}:</strong> {_safe_html_escape(meta.target_name)} (<code>{_safe_html_escape(meta.target_id)}</code>)</p>
+            <p><strong>{_safe_html_escape(diff_result.source_label)}:</strong> {_safe_html_escape(_display_name(meta.source_name))} (<code>{_safe_html_escape(meta.source_id)}</code>)</p>
+            <p><strong>{_safe_html_escape(diff_result.target_label)}:</strong> {_safe_html_escape(_display_name(meta.target_name))} (<code>{_safe_html_escape(meta.target_id)}</code>)</p>
             <p><strong>Generated:</strong> {_safe_html_escape(diff_result.generated_at)}</p>
         </div>
 """)
@@ -317,7 +318,7 @@ def write_diff_html_output(
                 <tr class="{row_class}">
                     <td><span class="badge {badge_class}">{badge_text}</span></td>
                     <td><code>{_html_escape(str(diff.id))}</code></td>
-                    <td>{_html_escape(str(diff.name))}</td>
+                    <td>{_html_escape(_display_name(diff.name))}</td>
                     <td>{detail_escaped}</td>
                 </tr>"""
 
@@ -361,7 +362,7 @@ def write_diff_html_output(
                     <tr class="{row_class}">
                         <td><span class="badge {badge_class}">{badge_text}</span></td>
                         <td><code>{_html_escape(str(diff.id))}</code></td>
-                        <td>{_html_escape(str(diff.name))}</td>
+                        <td>{_html_escape(_display_name(diff.name))}</td>
                         <td>{detail_escaped}</td>
                     </tr>"""
 
