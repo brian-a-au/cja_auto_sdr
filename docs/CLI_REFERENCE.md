@@ -148,6 +148,8 @@ An exception inside a validation check or worker fails the run with `DQ_VALIDATI
 >
 > **Artifact compatibility:** When `output_files` is present, `output_file` remains the primary artifact for backward compatibility and is listed first in the emitted artifact order.
 >
+> **Unresolved names:** In SDR generation, data view names that match nothing do not vanish silently. Resolved data views still run, then the command prints an error naming the unresolved inputs (a JSON line with `error` and `error_type` on stderr when output is machine-readable) and exits 1. The run summary lists them under `inputs.unresolved_data_view_inputs` (always present, empty when every input resolved). With `--dry-run`, each unresolved name counts as an invalid data view. If name lookup fails because of a credential or configuration error, that error is reported instead of the name-matching tips.
+>
 > **Run summary contract (v1.1):** `summary_version` is currently `1.1`. Consumers should treat unknown keys as additive/forward-compatible and only rely on documented stable fields.
 >
 > **Run summary `details` enrichment (additive):**

@@ -185,6 +185,10 @@ def dispatch_inventory_summary_mode(
         if index < len(data_views) - 1:
             print()
 
+    unresolved = list((run_state or {}).get("unresolved_data_view_inputs") or [])
+    if unresolved:
+        generator._report_unresolved_data_view_inputs(args, unresolved)
+        failed = True
     if failed and run_state is not None:
         run_state["details"] = {"operation_success": False}
     sys.exit(1 if failed else 0)
@@ -304,7 +308,12 @@ def prepare_sdr_execution_context(
 
     if args.dry_run:
         logger = generator.setup_logging(batch_mode=True, log_level="WARNING", log_format=args.log_format)
-        success = generator.run_dry_run(data_views, args.config_file, logger, profile=getattr(args, "profile", None))
+        unresolved = list((run_state or {}).get("unresolved_data_view_inputs") or [])
+        dry_run_extra = {"unresolved_names": unresolved} if unresolved else {}
+        success = generator.run_dry_run(
+            data_views, args.config_file, logger, profile=getattr(args, "profile", None), **dry_run_extra
+        )
+        success = bool(success) and not unresolved
         if run_state is not None:
             run_state["details"] = {"operation_success": success}
         sys.exit(0 if success else 1)

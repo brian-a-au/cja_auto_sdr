@@ -499,3 +499,155 @@ class TestNameResolutionLogFormat:
             generator.main()
 
         assert "ERROR - Data view name 'X' not found" in capsys.readouterr().err
+
+
+class TestUnresolvedNamesThroughMain:
+    """main() fails loudly when some, but not all, data view names do not resolve."""
+
+    @staticmethod
+    def _ok_result():
+        from cja_auto_sdr.generator import ProcessingResult
+
+        return ProcessingResult(
+            data_view_id="dv_ok",
+            data_view_name="OK View",
+            success=True,
+            duration=0.1,
+            output_file="report.xlsx",
+            file_size_bytes=1,
+        )
+
+    @staticmethod
+    def _partial_resolution(identifiers, config_file, logger, **kwargs):
+        return ["dv_ok"], {}, NameResolutionDiagnostics()
+
+    def _run(self, argv, tmp_path, monkeypatch):
+        from cja_auto_sdr.generator import main
+
+        monkeypatch.chdir(tmp_path)
+        try:
+            with patch.object(sys, "argv", ["cja_auto_sdr", *argv]):
+                main()
+        except SystemExit as exc:
+            return exc.code
+        return 0
+
+    @patch("cja_auto_sdr.generator.process_single_dataview")
+    @patch("cja_auto_sdr.generator.resolve_data_view_names")
+    def test_partial_unresolved_names_exit_1(self, mock_resolve, mock_process, tmp_path, monkeypatch, capsys):
+        import json
+
+        mock_resolve.side_effect = self._partial_resolution
+        mock_process.return_value = self._ok_result()
+        summary_path = tmp_path / "summary.json"
+
+        code = self._run(
+            ["dv_ok", "Bogus", "--run-summary-json", str(summary_path)],
+            tmp_path,
+            monkeypatch,
+        )
+
+        assert code == 1
+        assert mock_process.call_count == 1
+        assert "Bogus" in capsys.readouterr().err
+        summary = json.loads(summary_path.read_text())
+        assert summary["inputs"]["unresolved_data_view_inputs"] == ["Bogus"]
+        assert summary["status"] != "success"
+        assert summary["exit_code"] == 1
+
+    @patch("cja_auto_sdr.generator.process_single_dataview")
+    @patch("cja_auto_sdr.generator.resolve_data_view_names")
+    def test_partial_unresolved_names_json_envelope_on_stderr(
+        self, mock_resolve, mock_process, tmp_path, monkeypatch, capsys
+    ):
+        import json
+
+        mock_resolve.side_effect = self._partial_resolution
+        mock_process.return_value = self._ok_result()
+
+        code = self._run(["dv_ok", "Bogus", "--format", "json", "--output", "-"], tmp_path, monkeypatch)
+
+        assert code == 1
+        err_lines = [line for line in capsys.readouterr().err.splitlines() if line.startswith("{")]
+        envelopes = [json.loads(line) for line in err_lines]
+        match = [e for e in envelopes if "error_type" in e and "Bogus" in e["error"]]
+        assert match
+
+    @patch("cja_auto_sdr.generator.process_single_dataview")
+    @patch("cja_auto_sdr.generator.resolve_data_view_names")
+    def test_all_resolved_summary_has_empty_unresolved_list(self, mock_resolve, mock_process, tmp_path, monkeypatch):
+        import json
+
+        mock_resolve.return_value = (["dv_ok"], {})
+        mock_process.return_value = self._ok_result()
+        summary_path = tmp_path / "summary.json"
+
+        self._run(["dv_ok", "--run-summary-json", str(summary_path)], tmp_path, monkeypatch)
+
+        assert json.loads(summary_path.read_text())["inputs"]["unresolved_data_view_inputs"] == []
+
+    @patch("cja_auto_sdr.generator.run_dry_run")
+    @patch("cja_auto_sdr.generator.resolve_data_view_names")
+    def test_dry_run_counts_unresolved_invalid(self, mock_resolve, mock_dry, tmp_path, monkeypatch):
+        mock_resolve.side_effect = self._partial_resolution
+        mock_dry.return_value = True
+
+        code = self._run(["dv_ok", "Bogus", "--dry-run"], tmp_path, monkeypatch)
+
+        assert code == 1
+        assert mock_dry.call_args.kwargs["unresolved_names"] == ["Bogus"]
+
+    def test_run_dry_run_reports_unresolved_as_invalid(self, capsys):
+        import logging
+
+        from cja_auto_sdr import generator
+
+        with (
+            patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "config.json", {})),
+            patch("cja_auto_sdr.generator.cjapy") as mock_cjapy,
+            patch("cja_auto_sdr.generator.make_api_call_with_retry", return_value=[{"id": "dv_ok"}]),
+            patch("cja_auto_sdr.generator.CredentialResolver") as mock_resolver,
+        ):
+            mock_resolver.return_value.resolve.return_value = ({}, "environment")
+            mock_cjapy.CJA.return_value = MagicMock()
+            ok = generator.run_dry_run([], "config.json", logging.getLogger("t"), unresolved_names=["Bogus"])
+
+        out = capsys.readouterr().out
+        assert ok is False
+        assert "1 invalid" in out
+        assert "Bogus" in out
+
+    def test_credential_failure_reports_credentials(self, tmp_path, monkeypatch, capsys):
+        for var in ("ORG_ID", "CLIENT_ID", "SECRET", "SCOPES", "SANDBOX"):
+            monkeypatch.delenv(var, raising=False)
+
+        code = self._run(["Some Name", "--config-file", str(tmp_path / "missing.json")], tmp_path, monkeypatch)
+
+        err = capsys.readouterr().err
+        assert code == 1
+        assert "missing.json" in err or "credential" in err.lower()
+        assert "Names must match EXACTLY" not in err
+
+    def test_dry_run_without_credentials_fails_at_step_1(self, tmp_path, monkeypatch, capsys):
+        for var in ("ORG_ID", "CLIENT_ID", "SECRET", "SCOPES", "SANDBOX"):
+            monkeypatch.delenv(var, raising=False)
+
+        code = self._run(
+            ["Some Name", "--dry-run", "--config-file", str(tmp_path / "missing.json")], tmp_path, monkeypatch
+        )
+
+        out = capsys.readouterr().out
+        assert code == 1
+        assert "DRY-RUN MODE" in out
+        assert "[1/3]" in out
+        assert "DRY-RUN FAILED" in out
+
+    @patch("cja_auto_sdr.generator.process_single_dataview")
+    @patch("cja_auto_sdr.generator.configure_cjapy")
+    def test_all_ids_fast_path_keeps_single_configure(self, mock_configure, mock_process, tmp_path, monkeypatch):
+        mock_configure.return_value = (True, "config.json", {})
+        mock_process.return_value = self._ok_result()
+        with patch("cja_auto_sdr.generator.cjapy") as mock_cjapy:
+            self._run(["dv_ok"], tmp_path, monkeypatch)
+            assert mock_cjapy.CJA.call_count == 0
+        assert mock_configure.call_count == 1

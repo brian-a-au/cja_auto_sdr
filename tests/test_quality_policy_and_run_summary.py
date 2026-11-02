@@ -103,6 +103,7 @@ class TestRunSummaryOutput:
         assert isinstance(inputs, dict)
         assert isinstance(inputs.get("data_view_inputs"), list)
         assert isinstance(inputs.get("resolved_data_views"), list)
+        assert isinstance(inputs.get("unresolved_data_view_inputs"), list)
 
         result_counts = payload["result_counts"]
         assert isinstance(result_counts, dict)

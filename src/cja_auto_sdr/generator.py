@@ -2685,6 +2685,7 @@ def _build_run_summary_payload(
         "inputs": {
             "data_view_inputs": run_state.get("data_view_inputs", []),
             "resolved_data_views": run_state.get("resolved_data_views", []),
+            "unresolved_data_view_inputs": list(run_state.get("unresolved_data_view_inputs", [])),
         },
         "results": serialized_results,
         "result_counts": {
@@ -4636,7 +4637,13 @@ BatchProcessor = importlib.import_module("cja_auto_sdr.pipeline.batch").BatchPro
 # ==================== DRY-RUN MODE ====================
 
 
-def run_dry_run(data_views: list[str], config_file: str, logger: logging.Logger, profile: str | None = None) -> bool:
+def run_dry_run(
+    data_views: list[str],
+    config_file: str,
+    logger: logging.Logger,
+    profile: str | None = None,
+    unresolved_names: list[str] | None = None,
+) -> bool:
     """
     Validate configuration and connectivity without generating reports.
 
@@ -4650,6 +4657,7 @@ def run_dry_run(data_views: list[str], config_file: str, logger: logging.Logger,
         config_file: Path to configuration file
         logger: Logger instance
         profile: Optional profile name to use for credentials
+        unresolved_names: Data view names that matched nothing; counted as invalid
 
     Returns:
         True if all validations pass, False otherwise
@@ -4880,6 +4888,11 @@ def run_dry_run(data_views: list[str], config_file: str, logger: logging.Logger,
         print(f"  ✓ {dv_id}: {dv_name}")
         print(f"      Components: {metrics_count} metrics, {dimensions_count} dimensions")
         valid_count += 1
+
+    for unresolved_name in unresolved_names or []:
+        print(f"  ✗ {unresolved_name}: data view name not found")
+        invalid_count += 1
+        all_passed = False
 
     # Calculate time estimates
     # Based on benchmarks: ~0.5s per component for validation, ~0.1s without
@@ -6934,6 +6947,26 @@ def _prepare_sdr_execution_context(
 # ==================== MAIN FUNCTION ====================
 
 
+def _is_unresolved_report_machine_readable(args: argparse.Namespace) -> bool:
+    """Return True when stderr errors for this SDR run must be JSON envelopes."""
+    return bool(
+        getattr(args, "agent_mode", False)
+        or _is_machine_readable_output(getattr(args, "format", None), getattr(args, "output", None))
+    )
+
+
+def _report_unresolved_data_view_inputs(args: argparse.Namespace, unresolved: list[str]) -> None:
+    """Report data view names that matched nothing after the resolved views ran."""
+    names = ", ".join(f"'{name}'" for name in unresolved)
+    _emit_discovery_error(
+        f"Could not resolve data view name(s): {names}. Run 'cja_auto_sdr --list-dataviews' to see available names and IDs.",
+        is_machine_readable=_is_unresolved_report_machine_readable(args),
+        error_type="not_found",
+        additional_fields={"unresolved_data_view_inputs": list(unresolved)},
+        human_to_stderr=True,
+    )
+
+
 def _describe_dataview_ignored_options(args: argparse.Namespace) -> list[str]:
     """Return discovery filtering options that have no effect on --describe-dataview."""
     ignored: list[str] = []
@@ -8016,18 +8049,40 @@ def _main_impl(run_state: dict[str, Any] | None = None):
         print()
         print(ConsoleColors.info(f"Resolving {len(names_provided)} data view name(s)..."))
 
-    data_views, name_to_ids_map = resolve_data_view_names(
+    resolution_result = resolve_data_view_names(
         data_view_inputs,
         args.config_file,
         temp_logger,
         profile=getattr(args, "profile", None),
         match_mode=getattr(args, "name_match", "exact"),
+        include_diagnostics=True,
     )
+    data_views, name_to_ids_map, resolution_diagnostics = _coerce_name_resolution_result(resolution_result)
+    unresolved_inputs = [name for name in names_provided if name not in name_to_ids_map]
+    if run_state is not None:
+        run_state["unresolved_data_view_inputs"] = list(unresolved_inputs)
 
     # Remove the temporary handler
     temp_logger.removeHandler(handler)
 
+    resolution_config_error = resolution_diagnostics.error_type == "configuration_error"
+    if resolution_config_error and getattr(args, "dry_run", False):
+        # Let the dry run report the credential/config failure itself (step 1).
+        data_views = list(data_view_inputs)
+        unresolved_inputs = []
+        if run_state is not None:
+            run_state["unresolved_data_view_inputs"] = []
+
     # Check if resolution failed
+    if not data_views and resolution_config_error:
+        _emit_discovery_error(
+            resolution_diagnostics.error_message or "Failed to configure credentials",
+            is_machine_readable=_is_unresolved_report_machine_readable(args),
+            error_type="configuration_error",
+            human_to_stderr=True,
+        )
+        sys.exit(1)
+
     if not data_views:
         print(file=sys.stderr)
         print(ConsoleColors.error("ERROR: No valid data views found"), file=sys.stderr)
@@ -8121,6 +8176,9 @@ def _main_impl(run_state: dict[str, Any] | None = None):
     overall_failure = bool(execution_result["overall_failure"])
     processing_failures_detected = bool(execution_result["processing_failures_detected"])
     _merge_run_details(run_state, execution_settings=execution_result["execution_settings"])
+    if unresolved_inputs:
+        _report_unresolved_data_view_inputs(args, unresolved_inputs)
+        overall_failure = True
 
     all_quality_issues = aggregate_quality_issues(successful_results)
     if run_state is not None:
