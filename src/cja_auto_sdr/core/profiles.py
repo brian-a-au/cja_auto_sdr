@@ -106,14 +106,25 @@ def load_profile_config_json(profile_path: Path) -> dict[str, str] | None:
         return None
 
 
-_DOUBLE_QUOTE_ESCAPES = {"\\": "\\", '"': '"', "n": "\n", "t": "\t"}
+_DOUBLE_QUOTE_ESCAPES = {
+    "\\": "\\",
+    "'": "'",
+    '"': '"',
+    "a": "\a",
+    "b": "\b",
+    "f": "\f",
+    "n": "\n",
+    "r": "\r",
+    "t": "\t",
+    "v": "\v",
+}
 _SINGLE_QUOTE_ESCAPES = {"\\": "\\", "'": "'"}
 
 
 def _decode_quoted_dotenv_value(value: str) -> str:
     """Decode a quoted ``.env`` value: find the closing unescaped quote and decode escapes.
 
-    Double quotes decode ``\\``, ``\"``, ``\n``, ``\t``; single quotes decode ``\\`` and ``\'`` only
+    Double quotes decode ``\\``, ``\'``, ``\"`` and ``\a \b \f \n \r \t \v``; single quotes decode ``\\`` and ``\'`` only
     (python-dotenv semantics). Unknown escapes keep their backslash. An unterminated quote
     keeps the rest of the line verbatim.
     """
