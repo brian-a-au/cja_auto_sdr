@@ -123,27 +123,52 @@ def _get_change_emoji(change_type: ChangeType) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _get_change_detail(diff: ComponentDiff, truncate: bool = True) -> str:
+def _join_changed_fields(
+    changed_fields: dict[str, tuple[Any, Any]],
+    truncate: bool,
+    max_len: int | None,
+) -> str:
+    """Join ``field: 'old' -> 'new'`` entries, optionally bounded to *max_len* characters.
+
+    When the full text exceeds *max_len*, each old/new value is shortened evenly and
+    ends with ``...`` so the arrow and both sides stay visible.
+    """
+    pairs = [
+        (field, _format_diff_value(old_val, truncate), _format_diff_value(new_val, truncate))
+        for field, (old_val, new_val) in changed_fields.items()
+    ]
+
+    def render(values: list[tuple[str, str, str]]) -> str:
+        return "; ".join(f"{field}: '{old}' -> '{new}'" for field, old, new in values)
+
+    text = render(pairs)
+    if max_len is None or len(text) <= max_len:
+        return text
+
+    overhead = len(render([(field, "", "") for field, _, _ in pairs]))
+    per_value = max((max_len - overhead) // (2 * len(pairs)), 4)
+    shortened = [
+        (
+            field,
+            old if len(old) <= per_value else old[: per_value - 3] + "...",
+            new if len(new) <= per_value else new[: per_value - 3] + "...",
+        )
+        for field, old, new in pairs
+    ]
+    return render(shortened)
+
+
+def _get_change_detail(diff: ComponentDiff, truncate: bool = True, max_len: int | None = None) -> str:
     """Get detail string for a component diff"""
     if diff.change_type == ChangeType.MODIFIED and diff.changed_fields:
-        changes = []
-        for field, (old_val, new_val) in diff.changed_fields.items():
-            old_str = _format_diff_value(old_val, truncate)
-            new_str = _format_diff_value(new_val, truncate)
-            changes.append(f"{field}: '{old_str}' -> '{new_str}'")
-        return "; ".join(changes)
+        return _join_changed_fields(diff.changed_fields, truncate, max_len)
     return ""
 
 
-def _get_inventory_change_detail(diff: InventoryItemDiff, truncate: bool = True) -> str:
+def _get_inventory_change_detail(diff: InventoryItemDiff, truncate: bool = True, max_len: int | None = None) -> str:
     """Get detail string for an inventory item diff"""
     if diff.change_type == ChangeType.MODIFIED and diff.changed_fields:
-        changes = []
-        for field, (old_val, new_val) in diff.changed_fields.items():
-            old_str = _format_diff_value(old_val, truncate)
-            new_str = _format_diff_value(new_val, truncate)
-            changes.append(f"{field}: '{old_str}' -> '{new_str}'")
-        return "; ".join(changes)
+        return _join_changed_fields(diff.changed_fields, truncate, max_len)
     return ""
 
 
