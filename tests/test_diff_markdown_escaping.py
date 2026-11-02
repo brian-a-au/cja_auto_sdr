@@ -89,3 +89,47 @@ def test_cell_helper_is_shared_with_org_trending():
     assert _escape_markdown_table_cell(value) == escape_markdown_table_cell(value)
     assert escape_markdown_table_cell(value) == "a\\\\b\\|c\\`d<br>e<br>f"
     assert re.fullmatch(r"plain text", escape_markdown_table_cell("plain text"))
+
+
+def _nan_name_result():
+    from cja_auto_sdr.diff.models import (
+        ChangeType,
+        ComponentDiff,
+        DiffResult,
+        DiffSummary,
+        InventoryItemDiff,
+        MetadataDiff,
+    )
+
+    nan = float("nan")
+    comp = ComponentDiff(id="m1", name=nan, change_type=ChangeType.MODIFIED, changed_fields={"description": ("x", "y")})
+    added = ComponentDiff(id="m2", name=None, change_type=ChangeType.ADDED)
+    inv = InventoryItemDiff(id="s1", inventory_type="segment", name=nan, change_type=ChangeType.ADDED)
+    return DiffResult(
+        summary=DiffSummary(metrics_added=1, metrics_modified=1, segments_added=1),
+        metadata_diff=MetadataDiff(source_name=None, target_name=nan, source_id="a", target_id="b"),
+        metric_diffs=[comp, added],
+        dimension_diffs=[],
+        segments_diffs=[inv],
+    )
+
+
+def test_nan_name_blank_in_text_writers(tmp_path):
+    """DIFF-26: a NaN or None component name is blank, never the text 'nan' or 'None'."""
+    from cja_auto_sdr.output.diff.console import write_diff_console_output
+    from cja_auto_sdr.output.diff.grouped import write_diff_grouped_by_field_output
+    from cja_auto_sdr.output.diff.html import write_diff_html_output
+
+    result = _nan_name_result()
+    md = open(write_diff_markdown_output(result, "d", str(tmp_path), log), encoding="utf-8").read()
+    html_text = open(write_diff_html_output(result, "d", str(tmp_path), log), encoding="utf-8").read()
+    outputs = {
+        "markdown": md,
+        "pr_comment": write_diff_pr_comment_output(result),
+        "html": html_text,
+        "console": write_diff_console_output(result, use_color=False),
+        "grouped": write_diff_grouped_by_field_output(result, use_color=False),
+    }
+    for fmt, text in outputs.items():
+        assert not re.search(r"\bnan\b", text, re.IGNORECASE), fmt
+        assert not re.search(r"\bNone\b", text), fmt

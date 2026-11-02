@@ -306,7 +306,9 @@ def build_diff_advisories(
     total_removed = summary.total_removed
     total_modified = summary.total_modified
     total_added = summary.total_added
-    if total_added > 0 and total_removed == 0 and total_modified == 0:
+    # --show-only hides other change types, so "no removals" would be a claim we cannot make.
+    show_only_active = getattr(getattr(diff_result, "coverage", None), "show_only", None) is not None
+    if total_added > 0 and total_removed == 0 and total_modified == 0 and not show_only_active:
         added = [d for d in all_diffs + inv_diffs if d.change_type == ChangeType.ADDED]
         component_details = [{"component_id": d.id, "component_name": d.name} for d in added]
         findings.append(

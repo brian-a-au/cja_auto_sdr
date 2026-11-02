@@ -1981,3 +1981,36 @@ class TestStatsResolutionFailureContract:
         assert "ERROR: No valid data views found" in captured.err
         for line in captured.err.splitlines():
             assert not line.lstrip().startswith("{")
+
+
+class TestShowStatsNullName:
+    @pytest.mark.parametrize("fmt", ["json", "csv", "table"])
+    @patch("cja_auto_sdr.generator.cjapy")
+    @patch("cja_auto_sdr.generator.configure_cjapy")
+    def test_stats_null_name_all_formats(self, mock_config, mock_cjapy, fmt, capsys: pytest.CaptureFixture) -> None:
+        import json as _json
+
+        from cja_auto_sdr.generator import show_stats
+
+        mock_config.return_value = (True, "file", None)
+        mock_cja = MagicMock()
+        mock_cja.getDataView.return_value = {
+            "id": "dv_test",
+            "name": None,
+            "owner": {"name": "Alice"},
+            "description": None,
+        }
+        mock_cja.getMetrics.return_value = pd.DataFrame({"id": ["m1", "m2"]})
+        mock_cja.getDimensions.return_value = pd.DataFrame({"id": ["d1"]})
+        mock_cjapy.CJA.return_value = mock_cja
+
+        assert show_stats(["dv_test"], output_format=fmt, quiet=True) is True
+
+        out = capsys.readouterr().out
+        assert "connectivity_error" not in out
+        assert "Unknown" in out
+        assert "None" not in out
+        if fmt == "json":
+            payload = _json.loads(out)
+            rows = payload.get("data_views") or payload.get("rows") or payload
+            assert "Unknown" in _json.dumps(rows)

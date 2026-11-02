@@ -1076,3 +1076,297 @@ def test_cross_dv_inventory_error_console_text_unchanged(tmp_path, capsys):
     assert "  Source: DV dv_A (dv_A)" in err
     assert "  Target: DV dv_B (dv_B)" in err
     assert "Remove --include-segments, --include-calculated, --include-derived" in err
+
+
+# ==================== v3.13.10 diff hunt helpers ====================
+
+
+def _hunt_snap(path, dv="dv_1", created="2026-10-01T00:00:00+00:00", **kw):
+    data = {
+        "snapshot_version": "2.0",
+        "created_at": created,
+        "data_view_id": dv,
+        "data_view_name": "DV",
+        "owner": "o",
+        "description": "d",
+        "metrics": [{"id": "m1", "name": "M", "description": "a"}],
+        "dimensions": [],
+    }
+    data.update(kw)
+    path.write_text(json.dumps(data), encoding="utf-8")
+    return str(path)
+
+
+def _hunt_main(monkeypatch, argv):
+    import sys
+
+    from cja_auto_sdr.generator import main
+
+    monkeypatch.setattr(sys, "argv", ["cja_auto_sdr", *argv])
+    with pytest.raises(SystemExit) as exc:
+        main()
+    return exc.value.code
+
+
+def _hunt_pair(tmp_path):
+    a = _hunt_snap(tmp_path / "a.json")
+    b = _hunt_snap(tmp_path / "b.json", metrics=[{"id": "m1", "name": "M", "description": "b"}])
+    return a, b
+
+
+class TestDiffOutputDestinationSafety:
+    """DIFF-20: --diff-output follows the staged Excel writer's destination rules."""
+
+    def test_hard_linked_destination_rejected(self, tmp_path, monkeypatch, capsys):
+        a, b = _hunt_pair(tmp_path)
+        real = tmp_path / "real.xlsx"
+        real.write_text("old")
+        hard = tmp_path / "hard.xlsx"
+        os.link(real, hard)
+        code = _hunt_main(
+            monkeypatch, ["--compare-snapshots", a, b, "--format", "excel", "--diff-output", str(hard), "--quiet"]
+        )
+        assert code == 1
+        assert "ERROR: Cannot write --diff-output: Diff output destination has multiple hard links" in (
+            capsys.readouterr().err
+        )
+        assert os.stat(hard).st_nlink == 2
+        assert real.read_text() == "old"
+
+    def test_existing_file_mode_kept(self, tmp_path, monkeypatch):
+        import stat
+
+        a, b = _hunt_pair(tmp_path)
+        report = tmp_path / "r.md"
+        report.write_text("x")
+        report.chmod(0o600)
+        _hunt_main(
+            monkeypatch, ["--compare-snapshots", a, b, "--format", "markdown", "--diff-output", str(report), "--quiet"]
+        )
+        assert stat.S_IMODE(report.stat().st_mode) == 0o600
+        assert report.read_text() != "x"
+
+    def test_symlink_destination_stays_symlink(self, tmp_path, monkeypatch):
+        a, b = _hunt_pair(tmp_path)
+        target = tmp_path / "t.json"
+        target.write_text("{}")
+        link = tmp_path / "s.json"
+        link.symlink_to(target.name)
+        _hunt_main(
+            monkeypatch, ["--compare-snapshots", a, b, "--format", "json", "--diff-output", str(link), "--quiet"]
+        )
+        assert link.is_symlink()
+        assert target.read_text() != "{}"
+
+
+class TestDiffMessages:
+    """DIFF-27 and DIFF-28: console errors are human; ignored --diff-output is announced."""
+
+    def _missing_inventory_pair(self, tmp_path):
+        a = _hunt_snap(tmp_path / "a.json")
+        b = _hunt_snap(tmp_path / "b.json", segments_inventory=[])
+        return a, b
+
+    def test_missing_inventory_console_is_human(self, tmp_path, monkeypatch, capsys):
+        a, b = self._missing_inventory_pair(tmp_path)
+        code = _hunt_main(monkeypatch, ["--compare-snapshots", a, b, "--include-segments", "--quiet"])
+        err = capsys.readouterr().err
+        assert code == 1
+        assert not err.lstrip().startswith("{")
+        assert "ERROR" in err
+
+    def test_missing_inventory_hint_printed_in_console_and_json(self, tmp_path, monkeypatch, capsys):
+        a, b = self._missing_inventory_pair(tmp_path)
+        monkeypatch.setattr("cja_auto_sdr.generator.api_connection_hint", lambda *args, **kwargs: "check your network")
+
+        _hunt_main(monkeypatch, ["--compare-snapshots", a, b, "--include-segments", "--quiet"])
+        err = capsys.readouterr().err
+        assert not err.lstrip().startswith("{")
+        assert "check your network" in err
+
+        _hunt_main(monkeypatch, ["--compare-snapshots", a, b, "--include-segments", "--format", "json", "--quiet"])
+        payload = json.loads(capsys.readouterr().err.strip().splitlines()[-1])
+        assert payload["hint"] == "check your network"
+
+    def test_missing_inventory_json_unchanged(self, tmp_path, monkeypatch, capsys):
+        a, b = self._missing_inventory_pair(tmp_path)
+        code = _hunt_main(
+            monkeypatch, ["--compare-snapshots", a, b, "--include-segments", "--format", "json", "--quiet"]
+        )
+        err = capsys.readouterr().err.strip()
+        assert code == 1
+        payload = json.loads(err.splitlines()[-1])
+        assert payload["error_type"] == "comparison_error"
+
+    def test_diff_output_with_stdout_warns(self, tmp_path, monkeypatch, capsys):
+        a, b = _hunt_pair(tmp_path)
+        out = tmp_path / "x.json"
+        code = _hunt_main(
+            monkeypatch,
+            ["--compare-snapshots", a, b, "--format", "json", "--output", "-", "--diff-output", str(out)],
+        )
+        captured = capsys.readouterr()
+        assert "--diff-output" in captured.err
+        assert "--output -" in captured.err
+        assert code == 2  # has changes: exit code unchanged by the warning
+        assert not out.exists()
+        json.loads(captured.out)  # stdout still carries only the payload
+
+
+def test_cross_dv_error_json_has_ids(tmp_path, monkeypatch, capsys):
+    """The cross-data-view JSON error names both data views (additive fields)."""
+    a = _hunt_snap(tmp_path / "a.json", dv="dv_a", segments_inventory=[])
+    b = _hunt_snap(tmp_path / "b.json", dv="dv_b", segments_inventory=[])
+    code = _hunt_main(monkeypatch, ["--compare-snapshots", a, b, "--include-segments", "--format", "json", "--quiet"])
+    payload = json.loads(capsys.readouterr().err.strip().splitlines()[-1])
+    assert code == 1
+    assert payload["error_type"] == "comparison_error"
+    assert payload["source_data_view_id"] == "dv_a"
+    assert payload["target_data_view_id"] == "dv_b"
+
+
+class TestNullSnapshotNameDisplay:
+    """A null or NaN snapshot name is blank in banners, labels, and reports, never 'None' or 'nan'."""
+
+    def _null_pair(self, tmp_path):
+        a = _hunt_snap(tmp_path / "a.json", data_view_name=None)
+        b = _hunt_snap(
+            tmp_path / "b.json", data_view_name=None, metrics=[{"id": "m1", "name": "M", "description": "b"}]
+        )
+        return a, b
+
+    def test_console_banner_and_labels(self, tmp_path, monkeypatch, capsys):
+        import re
+
+        a, b = self._null_pair(tmp_path)
+        code = _hunt_main(monkeypatch, ["--compare-snapshots", a, b])
+        out = capsys.readouterr().out
+        assert code == 2
+        assert "Comparing:" in out
+        assert not re.search(r"\bNone\b", out)
+        assert not re.search(r"\bnan\b", out, re.IGNORECASE)
+
+    def test_markdown_header(self, tmp_path, monkeypatch, capsys):
+        import re
+
+        a, b = self._null_pair(tmp_path)
+        out_dir = tmp_path / "out"
+        out_dir.mkdir()
+        code = _hunt_main(
+            monkeypatch, ["--compare-snapshots", a, b, "--format", "markdown", "--output-dir", str(out_dir), "--quiet"]
+        )
+        assert code == 2
+        md = next(out_dir.glob("*.md")).read_text(encoding="utf-8")
+        assert not re.search(r"\bNone\b", md)
+        assert not re.search(r"\bnan\b", md, re.IGNORECASE)
+
+    def test_snapshot_created_banner(self, tmp_path, monkeypatch, capsys):
+        import re
+        from unittest.mock import MagicMock
+
+        import pandas as pd
+
+        from cja_auto_sdr.diff.commands import handle_snapshot_command
+
+        cja = MagicMock()
+        cja.getDataView.return_value = {"id": "dv_1", "name": None, "owner": {"name": "O"}}
+        cja.getMetrics.return_value = pd.DataFrame([{"id": "m1", "name": "M", "type": "int"}])
+        cja.getDimensions.return_value = pd.DataFrame([{"id": "d1", "name": "D", "type": "string"}])
+        monkeypatch.setattr("cja_auto_sdr.generator.configure_cjapy", lambda **k: (True, "test", None))
+        monkeypatch.setattr("cja_auto_sdr.generator.cjapy.CJA", lambda: cja)
+        ok = handle_snapshot_command(data_view_id="dv_1", snapshot_file=str(tmp_path / "s.json"))
+        out = capsys.readouterr().out
+        assert ok is True
+        assert "Data View:  (dv_1)" in out
+        assert not re.search(r"\bNone\b", out)
+
+
+def test_diff_step_summary_blanks_null_names():
+    import re
+
+    from cja_auto_sdr.diff.models import DiffResult, DiffSummary, MetadataDiff
+    from cja_auto_sdr.output.run_summary import build_diff_step_summary
+
+    result = DiffResult(
+        summary=DiffSummary(),
+        metadata_diff=MetadataDiff(source_name=None, target_name=float("nan"), source_id="a", target_id="b"),
+        metric_diffs=[],
+        dimension_diffs=[],
+    )
+    text = build_diff_step_summary(result)
+    assert not re.search(r"\bNone\b", text)
+    assert not re.search(r"\bnan\b", text, re.IGNORECASE)
+
+
+class TestDiffOutputDestinationMessage:
+    """A --diff-output destination problem is reported as such, not as a failed comparison."""
+
+    def _hard_link(self, tmp_path):
+        real = tmp_path / "real.json"
+        real.write_text("old")
+        hard = tmp_path / "hard.json"
+        os.link(real, hard)
+        return hard
+
+    def _live_cja(self, monkeypatch):
+        from unittest.mock import MagicMock
+
+        import pandas as pd
+
+        cja = MagicMock()
+        cja.getDataView.side_effect = lambda dv, **_k: {"id": dv, "name": "DV", "owner": {"name": "O"}}
+        cja.getMetrics.return_value = pd.DataFrame([{"id": "m1", "name": "M", "type": "int", "description": "x"}])
+        cja.getDimensions.return_value = pd.DataFrame([{"id": "d1", "name": "D", "type": "string"}])
+        monkeypatch.setattr("cja_auto_sdr.generator.configure_cjapy", lambda **k: (True, "test", None))
+        monkeypatch.setattr("cja_auto_sdr.generator.cjapy.CJA", lambda: cja)
+
+    @pytest.mark.parametrize("output_format", ["json", "excel"])
+    def test_compare_snapshots(self, tmp_path, monkeypatch, capsys, output_format):
+        a, b = _hunt_pair(tmp_path)
+        hard = self._hard_link(tmp_path)
+        code = _hunt_main(
+            monkeypatch,
+            ["--compare-snapshots", a, b, "--format", output_format, "--diff-output", str(hard), "--quiet"],
+        )
+        err = capsys.readouterr().err
+        assert code == 1
+        assert "ERROR: Cannot write --diff-output:" in err
+        assert "Failed to compare" not in err
+
+    def test_diff_snapshot(self, tmp_path, monkeypatch, capsys):
+        from cja_auto_sdr.diff.commands import handle_diff_snapshot_command
+
+        self._live_cja(monkeypatch)
+        snap = _hunt_snap(tmp_path / "s.json", dv="dv_1")
+        hard = self._hard_link(tmp_path)
+        success, _changes, _code = handle_diff_snapshot_command(
+            data_view_id="dv_1",
+            snapshot_file=snap,
+            output_format="json",
+            output_dir=str(tmp_path),
+            diff_output=str(hard),
+            quiet=True,
+        )
+        err = capsys.readouterr().err
+        assert success is False
+        assert "ERROR: Cannot write --diff-output:" in err
+        assert "multiple hard links" in err
+        assert "Failed to compare" not in err
+
+    def test_diff_live(self, tmp_path, monkeypatch, capsys):
+        from cja_auto_sdr.diff.commands import handle_diff_command
+
+        self._live_cja(monkeypatch)
+        hard = self._hard_link(tmp_path)
+        success, _changes, _code = handle_diff_command(
+            source_id="dv_1",
+            target_id="dv_2",
+            output_format="json",
+            output_dir=str(tmp_path),
+            diff_output=str(hard),
+            quiet=True,
+        )
+        err = capsys.readouterr().err
+        assert success is False
+        assert "ERROR: Cannot write --diff-output:" in err
+        assert "Failed to compare" not in err

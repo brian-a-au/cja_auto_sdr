@@ -354,7 +354,7 @@ def _collect_stats_row(cja: cjapy.CJA, data_view_id: str) -> dict[str, Any]:
     description_text = generator._normalize_optional_text(dv_info.get("description"), default="")
     return {
         "id": data_view_id,
-        "name": dv_info.get("name", "Unknown"),
+        "name": generator._display_data_view_name(dv_info.get("name")),
         "owner": dv_info.get("owner", {}).get("name", "N/A") if isinstance(dv_info.get("owner"), dict) else "N/A",
         "metrics": metrics_count,
         "dimensions": dimensions_count,
