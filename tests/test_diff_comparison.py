@@ -3855,3 +3855,22 @@ def test_diff_result_without_coverage_serializes():
     )
     assert bare.coverage is None
     assert build_diff_json_data(bare)["coverage"] is None
+
+
+def test_metadata_nan_equals_itself_and_null():
+    """DIFF-21: NaN, None, and empty metadata are all 'no value' and never a change."""
+    logger = logging.getLogger("meta-nan")
+    nan = float("nan")
+
+    def compare(src_desc, tgt_desc, tgt_owner="o"):
+        src = DataViewSnapshot(data_view_id="dv", data_view_name="T", owner="o", description=src_desc)
+        tgt = DataViewSnapshot(data_view_id="dv", data_view_name="T", owner=tgt_owner, description=tgt_desc)
+        return DataViewComparator(logger, include_metadata=True).compare(src, tgt)
+
+    for src_desc, tgt_desc in [(nan, nan), (nan, None), (None, nan), (nan, ""), ("", None)]:
+        result = compare(src_desc, tgt_desc)
+        assert result.summary.metadata_changes == 0
+        assert result.summary.has_changes is False
+
+    changed = compare(nan, nan, tgt_owner="someone else")
+    assert changed.summary.metadata_changes == 1
