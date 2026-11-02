@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 from contextlib import suppress
-from typing import Any, ClassVar
+from typing import Any, ClassVar, TypeVar
 
 import pandas as pd
 
@@ -22,6 +22,8 @@ from cja_auto_sdr.diff.models import (
 )
 from cja_auto_sdr.diff.snapshot import _annotate_snapshot_failure
 from cja_auto_sdr.inventory.utils import extract_short_name, normalize_func_name
+
+_DiffT = TypeVar("_DiffT", ComponentDiff, InventoryItemDiff)
 
 
 class DataViewComparator:
@@ -194,6 +196,7 @@ class DataViewComparator:
                 "calculated_metric",
                 id_field="metric_id",
             )
+            calc_metrics_diffs = self._apply_show_only_filter(calc_metrics_diffs)
             self.logger.info(f"  Calculated Metrics: {self._count_changes(calc_metrics_diffs)}")
 
         if self.include_segments:
@@ -203,6 +206,7 @@ class DataViewComparator:
                 "segment",
                 id_field="segment_id",
             )
+            segments_diffs = self._apply_show_only_filter(segments_diffs)
             self.logger.info(f"  Segments: {self._count_changes(segments_diffs)}")
 
         metadata_diff = self._build_metadata_diff(source, target)
@@ -536,7 +540,7 @@ class DataViewComparator:
 
         traverse(definition)
 
-    def _apply_show_only_filter(self, diffs: list[ComponentDiff]) -> list[ComponentDiff]:
+    def _apply_show_only_filter(self, diffs: list[_DiffT]) -> list[_DiffT]:
         if not self.show_only:
             return diffs
 

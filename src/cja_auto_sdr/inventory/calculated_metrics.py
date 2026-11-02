@@ -150,6 +150,19 @@ def _is_single_group(expr: str) -> bool:
     return False
 
 
+def _needs_operator_parens(expr: str) -> bool:
+    """True when ``expr`` has a ``+`` or ``-`` outside any ``()`` or ``[]`` group."""
+    depth = 0
+    for index, char in enumerate(expr):
+        if char in "([":
+            depth += 1
+        elif char in ")]":
+            depth -= 1
+        elif depth == 0 and char in "+-" and expr[index - 1 : index + 2] == f" {char} ":
+            return True
+    return False
+
+
 @dataclass
 class CalculatedMetricSummary:
     """Summary of a single calculated metric for inventory output.
@@ -1038,6 +1051,10 @@ class CalculatedMetricsInventoryBuilder:
             left = self._build_formula_expression(node.get("col1", {}), max_depth - 1)
             right = self._build_formula_expression(node.get("col2", {}), max_depth - 1)
             if left and right:
+                if _needs_operator_parens(left):
+                    left = f"({left})"
+                if _needs_operator_parens(right):
+                    right = f"({right})"
                 return f"{left} x {right}"
 
         if func == "add":
@@ -1065,6 +1082,9 @@ class CalculatedMetricsInventoryBuilder:
             left = self._build_formula_expression(node.get("col1", {}), max_depth - 1)
             right = self._build_formula_expression(node.get("col2", {}), max_depth - 1)
             if left and right:
+                # Subtraction is left-associative, so only the right side needs grouping.
+                if _needs_operator_parens(right):
+                    right = f"({right})"
                 return f"{left} - {right}"
 
         if func == "calc-metric":

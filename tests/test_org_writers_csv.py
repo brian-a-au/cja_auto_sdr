@@ -60,3 +60,23 @@ def test_csv_writer_reads_successful_count_once_per_table(tmp_path, rich_org_rep
         write_org_report_csv(result, None, str(tmp_path), logger)
 
     assert prop.call_count <= 2
+
+
+def test_org_csv_with_no_components_writes_headers(tmp_path, rich_org_report_result):
+    """Every view failed or was empty: the components CSV still gets its header row."""
+    import dataclasses
+
+    from cja_auto_sdr.org.models import ComponentDistribution
+
+    result = dataclasses.replace(
+        rich_org_report_result,
+        component_index={},
+        distribution=ComponentDistribution(),
+        similarity_pairs=None,
+    )
+    logger = logging.getLogger("test_org_writers_csv")
+
+    returned = write_org_report_csv(result, None, str(tmp_path), logger)
+
+    body = (Path(returned) / "org_report_components.csv").read_text(encoding="utf-8")
+    assert body == EXPECTED_COMPONENTS_CSV.splitlines(keepends=True)[0]

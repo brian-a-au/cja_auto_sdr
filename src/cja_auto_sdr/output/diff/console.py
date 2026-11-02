@@ -177,7 +177,10 @@ def write_diff_console_output(
 
     # Inventory rows (if present)
     if summary.has_inventory_changes or (
-        summary.source_calc_metrics_count > 0 or summary.target_calc_metrics_count > 0
+        summary.source_calc_metrics_count > 0
+        or summary.target_calc_metrics_count > 0
+        or summary.source_segments_count > 0
+        or summary.target_segments_count > 0
     ):
         lines.append("-" * total_width)
         lines.append(ANSIColors.bold("INVENTORY", c))

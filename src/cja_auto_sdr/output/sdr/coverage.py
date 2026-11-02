@@ -181,7 +181,7 @@ class SdrCoverage:
     def to_frame(self) -> pd.DataFrame:
         records = [(row.heading, row.state.value, row.count, row.detail) for row in self.rows]
         records.append((DATA_QUALITY_SECTION, self.quality.state.value, self.quality.issue_count, self.quality.line))
-        return pd.DataFrame(records, columns=list(COVERAGE_COLUMNS)).astype({"Count": "object"})
+        return pd.DataFrame(records, columns=list(COVERAGE_COLUMNS), dtype=object)
 
     def to_json(self) -> dict[str, Any]:
         return {"families": [row.to_json() for row in self.rows], "quality": self.quality.to_json()}

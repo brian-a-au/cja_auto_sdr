@@ -102,6 +102,14 @@ class _PairwiseJaccard(Mapping[tuple[int, int], float]):
             yield (i, j), shared / union if union > 0 else 0.0, shared, union
 
 
+def _with_listing_name(summary: DataViewSummary, listing_row: dict[str, Any]) -> DataViewSummary:
+    """Return ``summary`` with the current listing name; cached component data stays as is."""
+    name = listing_row.get("name")
+    if isinstance(name, str) and name and name != summary.data_view_name:
+        return replace(summary, data_view_name=name)
+    return summary
+
+
 class OrgComponentAnalyzer:
     """Analyze component distribution across all data views in an organization.
 
@@ -770,7 +778,7 @@ class OrgComponentAnalyzer:
                     dv_id = dv.get("id", "")
                     cached = self.cache.get(dv_id, self.config.cache_max_age_hours, required_flags=required_flags)
                     if cached:
-                        summaries.append(cached)
+                        summaries.append(_with_listing_name(cached, dv))
                         cache_hits += 1
                     else:
                         to_fetch.append(dv)
@@ -2038,7 +2046,7 @@ class OrgComponentAnalyzer:
                 continue
 
             if cached:
-                valid_summaries.append(cached)
+                valid_summaries.append(_with_listing_name(cached, dv))
                 valid_count += 1
             else:
                 to_fetch.append(dv)

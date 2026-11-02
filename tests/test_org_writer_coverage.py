@@ -338,6 +338,50 @@ class TestCompareOrgReports:
         assert comparison.previous_timestamp == "2024-12-01T10:00:00Z"
         assert comparison.current_timestamp == "2025-01-15T10:00:00Z"
 
+    @staticmethod
+    def _baseline(tmp_path, **fields):
+        report = _mark_full_fidelity_baseline(
+            {
+                "generated_at": "2024-12-01T10:00:00Z",
+                "data_views": [{"data_view_id": "dv_001", "data_view_name": "DV 1"}],
+                "summary": {"total_unique_components": 20},
+                "distribution": {"core": {"metrics_count": 5, "dimensions_count": 3}},
+                **fields,
+            }
+        )
+        path = tmp_path / "prev_report.json"
+        path.write_text(json.dumps(report), encoding="utf-8")
+        return path
+
+    def test_compare_org_reports_rejects_other_org(self, tmp_path):
+        prev_path = self._baseline(tmp_path, org_id="ORG_A@AdobeOrg")
+        current = _make_org_result()
+        current.org_id = "ORG_B@AdobeOrg"
+
+        with pytest.raises(ValueError, match="ORG_A@AdobeOrg") as exc_info:
+            compare_org_reports(current, str(prev_path))
+        assert "ORG_B@AdobeOrg" in str(exc_info.value)
+
+    @pytest.mark.parametrize("org_fields", [{}, {"org_id": "unknown"}, {"org_id": ""}])
+    def test_compare_org_reports_allows_legacy_baseline_without_org_id(self, tmp_path, org_fields):
+        prev_path = self._baseline(tmp_path, **org_fields)
+        current = _make_org_result()
+
+        assert isinstance(compare_org_reports(current, str(prev_path)), OrgReportComparison)
+
+    def test_compare_org_reports_allows_unknown_current_org(self, tmp_path):
+        prev_path = self._baseline(tmp_path, org_id="ORG_A@AdobeOrg")
+        current = _make_org_result()
+        current.org_id = "unknown"
+
+        assert isinstance(compare_org_reports(current, str(prev_path)), OrgReportComparison)
+
+    def test_compare_org_reports_same_org_compares(self, tmp_path):
+        current = _make_org_result()
+        prev_path = self._baseline(tmp_path, org_id=current.org_id)
+
+        assert isinstance(compare_org_reports(current, str(prev_path)), OrgReportComparison)
+
     def test_compare_with_nested_similarity_pairs(self, tmp_path):
         """Cover lines 10483-10484: old nested data_view_1/data_view_2 format."""
         prev_report = _mark_full_fidelity_baseline(
@@ -991,6 +1035,17 @@ class TestWriteOrgReportConsole:
         assert "DISTRIBUTION" in captured
         assert "HIGH OVERLAP PAIRS" in captured
         assert "RECOMMENDATIONS" in captured
+
+    def test_console_naming_audit_with_zero_components(self, capsys):
+        """An empty component index must not divide by zero in the naming audit."""
+        result = _make_org_result()
+        result.naming_audit = {"total_components": 0, "case_styles": {"snake_case": 0}, "recommendations": []}
+
+        write_org_report_console(result, OrgReportConfig())
+
+        captured = capsys.readouterr().out
+        assert "Case styles distribution:" in captured
+        assert "snake_case" in captured
 
     def test_console_quiet_mode(self, capsys):
         result = _make_org_result()
@@ -2707,3 +2762,63 @@ class TestBuildOrgReportJsonDataSkipSimilarity:
         data = build_org_report_json_data(result)
 
         assert data["summary"]["similarity_analysis_mode"] == "org_stats_only"
+
+
+class TestOrgThresholdLabels:
+    """Band and threshold labels follow the thresholds the report used."""
+
+    @staticmethod
+    def _render_all(tmp_path, capsys, **params):
+        import dataclasses
+
+        result = _make_org_result(include_similarity=True)
+        result.parameters = dataclasses.replace(result.parameters, **params)
+        logger = logging.getLogger("test_org_labels")
+        write_org_report_console(result, result.parameters)
+        console = capsys.readouterr().out
+        markdown = Path(write_org_report_markdown(result, None, str(tmp_path), logger)).read_text(encoding="utf-8")
+        html_text = Path(write_org_report_html(result, None, str(tmp_path), logger)).read_text(encoding="utf-8")
+        return console, markdown, html_text
+
+    def test_core_label_rounds_threshold(self, tmp_path, capsys):
+        console, markdown, html_text = self._render_all(tmp_path, capsys, core_threshold=0.57)
+
+        assert "Core (in 57%+ DVs)" in console
+        assert "Core (57%+ DVs)" in markdown
+        assert "Core (57%+ DVs)" in html_text
+        assert "56%+" not in console + markdown + html_text
+        assert "Common (in 25-56% DVs)" in console
+
+    def test_overlap_label_consistent_across_formats(self, tmp_path, capsys):
+        console, markdown, html_text = self._render_all(tmp_path, capsys, overlap_threshold=0.58)
+
+        assert ">= 58% Jaccard" in console
+        assert ">= 58% Jaccard" in markdown
+        assert "&gt;= 58% Jaccard" in html_text
+
+    def test_common_band_follows_core_threshold(self, tmp_path, capsys):
+        console, markdown, html_text = self._render_all(tmp_path, capsys, core_threshold=0.8)
+
+        assert "Common (in 25-79% DVs)" in console
+        assert "Common (25-79% DVs)" in markdown
+        assert "Common (25-79% DVs)" in html_text
+
+    def test_common_band_with_core_min_count(self, tmp_path, capsys):
+        console, markdown, html_text = self._render_all(tmp_path, capsys, core_min_count=5)
+
+        assert "Common (in 25%+ DVs, < core)" in console
+        assert "Common (25%+ DVs, < core)" in markdown
+        assert "Common (25%+ DVs, < core)" in html_text
+        # The console table keeps its 30-character label column aligned.
+        common_row = next(line for line in console.splitlines() if line.startswith("Common ("))
+        core_row = next(line for line in console.splitlines() if line.startswith("Core ("))
+        assert common_row.index(common_row.split()[-3]) == core_row.index(core_row.split()[-3])
+
+    def test_default_labels_unchanged(self, tmp_path, capsys):
+        console, markdown, html_text = self._render_all(tmp_path, capsys)
+
+        assert "Common (in 25-49% DVs)" in console
+        assert "Common (25-49% DVs)" in markdown
+        assert "Common (25-49% DVs)" in html_text
+        assert "Core (in 50%+ DVs)" in console
+        assert "Core (50%+ DVs)" in markdown

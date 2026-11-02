@@ -2105,6 +2105,8 @@ def _validate_semantic_flag_relationships(
         _exit_error("Use either --list-snapshots or --prune-snapshots, not both")
     if getattr(args, "profile_overwrite", False) and not getattr(args, "profile_import", None):
         _exit_error("--profile-overwrite requires --profile-import")
+    if getattr(args, "org_report", False) and isinstance(getattr(args, "org_limit", None), int) and args.org_limit < 0:
+        _exit_error("--limit cannot be negative")
     if getattr(args, "agent_mode", False) and getattr(args, "interactive", False):
         _exit_error("--agent-mode cannot be used with --interactive")
     # Watch mode rejections.
@@ -2738,6 +2740,7 @@ from cja_auto_sdr.diff.models import (
     MetadataDiff,
 )
 from cja_auto_sdr.diff.snapshot import SnapshotManager, parse_retention_period
+from cja_auto_sdr.output.markdown_escape import escape_markdown_table_cell
 
 # write_run_summary_output, append_github_step_summary,
 # build_diff_step_summary, build_org_step_summary -> output/run_summary.py
@@ -2786,7 +2789,7 @@ def build_quality_step_summary(results: list[ProcessingResult]) -> str:
                 highest = severity
                 break
         lines.append(
-            f"| {result.data_view_name or '-'} | `{result.data_view_id}` | {result.dq_issues_count} | {highest} |",
+            f"| {escape_markdown_table_cell(result.data_view_name or '-')} | `{result.data_view_id}` | {result.dq_issues_count} | {highest} |",
         )
 
     return "\n".join(lines)
@@ -4117,11 +4120,13 @@ def process_single_dataview(
             logger.error(_format_error_msg("applying JSON formatting", error=e))
 
         # Create Excel file name
+        raw_dv_name = lookup_data.get("name", "Unknown") if isinstance(lookup_data, dict) else "Unknown"
+        # Results and summaries show the real name; only the file name is sanitized.
+        dv_name = raw_dv_name if isinstance(raw_dv_name, str) else "Unknown"
         try:
-            dv_name = lookup_data.get("name", "Unknown") if isinstance(lookup_data, dict) else "Unknown"
             # Sanitize filename
-            dv_name = "".join(c for c in dv_name if c.isalnum() or c in (" ", "-", "_")).rstrip()
-            excel_file_name = f"CJA_DataView_{dv_name}_{data_view_id}_SDR.xlsx"
+            safe_name = "".join(c for c in raw_dv_name if c.isalnum() or c in (" ", "-", "_")).rstrip()
+            excel_file_name = f"CJA_DataView_{safe_name}_{data_view_id}_SDR.xlsx"
 
             # Add output directory path
             output_path = Path(output_dir) / excel_file_name
@@ -5904,6 +5909,14 @@ def compare_org_reports(current: OrgReportResult, previous_path: str) -> OrgRepo
     with open(previous_path, encoding="utf-8") as f:
         prev_data = json.load(f)
 
+    # A legacy baseline without an org ID still compares; a known other org does not.
+    prev_org = prev_data.get("org_id") if isinstance(prev_data, dict) else None
+    known_orgs = all(isinstance(org, str) and org and org != "unknown" for org in (prev_org, current.org_id))
+    if known_orgs and prev_org != current.org_id:
+        raise ValueError(
+            f"Previous report {previous_path} is from org {prev_org}, but the current report is from org {current.org_id}"
+        )
+
     from cja_auto_sdr.org.snapshot_utils import (
         org_report_snapshot_comparison_input,
     )
@@ -6354,6 +6367,15 @@ def run_org_report(
 
         # Handle org-stats mode (Feature 2) - minimal output
         if org_config.org_stats_only:
+            if output_format not in ("console", "json"):
+                # Shown even under --quiet: the requested artifact will not exist.
+                print(
+                    ConsoleColors.warning(
+                        f"Warning: --org-stats only writes console or JSON output; "
+                        f"--format {output_format} was ignored."
+                    ),
+                    file=sys.stderr,
+                )
             with contextlib.redirect_stdout(status_stream):
                 write_org_report_stats_only(result, quiet=console_writer_quiet, trending=trending)
             # Still output JSON if requested for CI integration

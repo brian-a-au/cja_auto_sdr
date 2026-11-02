@@ -11,6 +11,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from cja_auto_sdr.cli.option_resolution import resolve_long_option_token
+
 __all__ = [
     "dispatch_inventory_summary_mode",
     "execute_sdr_processing_modes",
@@ -64,26 +66,34 @@ def resolve_inventory_mode_configuration(args: argparse.Namespace, *, argv: list
 
     inventory_order: list[str] = []
     if has_inventory:
-        derived_pos = None
-        calculated_pos = None
-        segments_pos = None
-        for index, arg in enumerate(argv):
-            if arg == "--include-derived" and derived_pos is None:
-                derived_pos = index
-            elif arg == "--include-calculated" and calculated_pos is None:
-                calculated_pos = index
-            elif arg == "--include-segments" and segments_pos is None:
-                segments_pos = index
+        # Imported directly: tests replace _generator_module() with a stub.
+        from cja_auto_sdr.generator import _known_long_options
 
-        positions = []
-        if derived_pos is not None:
-            positions.append(("derived", derived_pos))
-        if calculated_pos is not None:
-            positions.append(("calculated", calculated_pos))
-        if segments_pos is not None:
-            positions.append(("segments", segments_pos))
-        positions.sort(key=lambda item: item[1])
-        inventory_order = [name for name, _ in positions]
+        known_long_options = _known_long_options()
+        option_types = {
+            "--include-derived": "derived",
+            "--include-calculated": "calculated",
+            "--include-segments": "segments",
+        }
+        enabled = {
+            "derived": getattr(args, "include_derived_inventory", False),
+            "calculated": getattr(args, "include_calculated_metrics", False),
+            "segments": getattr(args, "include_segments_inventory", False),
+        }
+        for arg in argv:
+            canonical = resolve_long_option_token(arg, known_long_options).canonical_option
+            inv_type = option_types.get(canonical or "")
+            if inv_type is not None and inv_type not in inventory_order:
+                inventory_order.append(inv_type)
+
+        # Flags enabled without their own token (for example by --include-all-inventory)
+        # still need a place once the user gave an explicit order.
+        if inventory_order:
+            inventory_order.extend(
+                inv_type
+                for inv_type in ("derived", "calculated", "segments")
+                if enabled[inv_type] and inv_type not in inventory_order
+            )
 
     if getattr(args, "inventory_summary", False):
         if not has_inventory:

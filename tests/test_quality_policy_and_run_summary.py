@@ -2587,3 +2587,30 @@ def test_metrics_only_sdr_json_has_no_dimensions_quality_rows(tmp_path):
 def test_dimensions_only_quality_ignores_metrics(tmp_path):
     result = _run_family_scoped_quality(tmp_path, dimensions_only=True, output_format="json", quality_report_only=True)
     assert not any(i["Type"] == "Metrics" for i in result.dq_issues)
+
+
+@pytest.mark.parametrize(
+    "builder_path",
+    ["cja_auto_sdr.generator.build_quality_step_summary", "cja_auto_sdr.output.run_summary.build_quality_step_summary"],
+)
+def test_quality_step_summary_escapes_pipe_in_data_view_name(builder_path):
+    """A '|' in a real data view name must not add a table column."""
+    import importlib
+
+    from cja_auto_sdr.generator import ProcessingResult
+
+    module_name, func_name = builder_path.rsplit(".", 1)
+    build = getattr(importlib.import_module(module_name), func_name)
+    result = ProcessingResult(
+        data_view_id="dv_1",
+        data_view_name="Prod | EU",
+        success=True,
+        duration=0.1,
+        dq_issues=[],
+        dq_severity_counts={},
+    )
+
+    summary = build([result])
+
+    row = next(line for line in summary.splitlines() if "`dv_1`" in line)
+    assert row == "| Prod \\| EU | `dv_1` | 0 | NONE |"
