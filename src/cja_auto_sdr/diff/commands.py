@@ -418,7 +418,7 @@ def handle_diff_command(
                     snapshot_manager.apply_retention_policy(snapshot_dir, target_id, effective_keep_last)
                 )
             if effective_keep_since:
-                days = generator.parse_retention_period(effective_keep_since)
+                days = generator.parse_positive_retention_period(effective_keep_since)
                 if days:
                     total_deleted += len(
                         snapshot_manager.apply_date_retention_policy(snapshot_dir, source_id, keep_since_days=days)
@@ -780,7 +780,7 @@ def handle_diff_snapshot_command(
                     snapshot_manager.apply_retention_policy(snapshot_dir, data_view_id, effective_keep_last)
                 )
             if effective_keep_since:
-                days = generator.parse_retention_period(effective_keep_since)
+                days = generator.parse_positive_retention_period(effective_keep_since)
                 if days:
                     total_deleted += len(
                         snapshot_manager.apply_date_retention_policy(snapshot_dir, data_view_id, keep_since_days=days)

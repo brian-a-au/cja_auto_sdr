@@ -619,7 +619,7 @@ cja_auto_sdr dv_12345 --diff-snapshot ./baseline.json --auto-snapshot
 **Retention Policy:**
 - `--keep-last 0` (default): Keep all snapshots forever
 - `--keep-last N`: Keep only the N most recent snapshots per data view
-- `--keep-since PERIOD`: Delete snapshots older than `7d`, `2w`, `1m`, or numeric days (for example `30`). An invalid value exits 1 before any API call
+- `--keep-since PERIOD`: Delete snapshots older than `7d`, `2w`, `1m`, or numeric days (for example `30`). The period must be positive; zero, negative, or invalid values exit 1 before any API call
 - `--auto-prune`: Applies defaults `--keep-last 20` + `--keep-since 30d` only when both retention flags are omitted
 - Explicit retention in either form always takes precedence (`--keep-last N` / `--keep-last=N`, `--keep-since PERIOD` / `--keep-since=PERIOD`)
 - Old snapshots are deleted automatically after new ones are saved

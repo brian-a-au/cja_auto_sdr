@@ -335,7 +335,7 @@ Drill into individual data view resources. These commands let you inspect a sing
 | `--auto-prune` | With `--auto-snapshot`, apply default retention (`--keep-last 20` + `--keep-since 30d`) only when both retention flags are omitted | False |
 | `--snapshot-dir DIR` | Directory for auto-saved snapshots | ./snapshots |
 | `--keep-last N` | Retention: keep only last N snapshots per data view (0=all) | 0 |
-| `--keep-since PERIOD` | Date-based retention: delete snapshots older than PERIOD. Formats: `7d`, `2w`, `1m`, `30` (days). An invalid value exits 1 before any API call, as with `--prune-snapshots` | - |
+| `--keep-since PERIOD` | Date-based retention: delete snapshots older than PERIOD. Formats: `7d`, `2w`, `1m`, `30` (days). The period must be positive; zero, negative, or invalid values exit 1 before any API call, as with `--prune-snapshots` | - |
 
 > **Retention precedence:** Explicit values are preserved, including `--keep-last 0` / `--keep-last=0` and `--keep-since 90d` / `--keep-since=90d`.
 

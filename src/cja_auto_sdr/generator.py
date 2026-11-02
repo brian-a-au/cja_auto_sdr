@@ -2739,7 +2739,7 @@ from cja_auto_sdr.diff.models import (
     InventoryItemDiff,
     MetadataDiff,
 )
-from cja_auto_sdr.diff.snapshot import SnapshotManager, parse_retention_period
+from cja_auto_sdr.diff.snapshot import SnapshotManager, parse_positive_retention_period, parse_retention_period
 from cja_auto_sdr.output.markdown_escape import escape_markdown_table_cell
 
 # write_run_summary_output, append_github_step_summary,
