@@ -6949,6 +6949,34 @@ def _prepare_sdr_execution_context(
 # ==================== MAIN FUNCTION ====================
 
 
+def _stderr_errors_as_json(args: argparse.Namespace) -> bool:
+    """Return True when stderr diagnostics must be JSON (JSON log format or agent mode)."""
+    return bool(getattr(args, "agent_mode", False) or getattr(args, "log_format", None) == "json")
+
+
+@contextlib.contextmanager
+def _name_resolution_logger(args: argparse.Namespace, level: int = logging.WARNING):
+    """Yield a ``name_resolution`` logger whose records follow the resolved ``--log-format``."""
+    resolution_logger = logging.getLogger("name_resolution")
+    previous_level = resolution_logger.level
+    previous_propagate = resolution_logger.propagate
+    handler = logging.StreamHandler()
+    handler.setFormatter(
+        JSONFormatter()
+        if getattr(args, "log_format", None) == "json"
+        else logging.Formatter("%(levelname)s - %(message)s"),
+    )
+    resolution_logger.setLevel(level)
+    resolution_logger.addHandler(handler)
+    resolution_logger.propagate = False
+    try:
+        yield resolution_logger
+    finally:
+        resolution_logger.removeHandler(handler)
+        resolution_logger.setLevel(previous_level)
+        resolution_logger.propagate = previous_propagate
+
+
 def _is_unresolved_report_machine_readable(args: argparse.Namespace) -> bool:
     """Return True when stderr errors for this SDR run must be JSON envelopes."""
     return bool(
@@ -7375,18 +7403,22 @@ def _dispatch_post_validation_report_modes(
                 )
                 sys.exit(1)
         else:
-            temp_logger = logging.getLogger("name_resolution")
-            temp_logger.setLevel(logging.WARNING)
-            resolved_ids, stats_name_map = resolve_data_view_names(
-                data_view_inputs,
-                args.config_file,
-                temp_logger,
-                profile=getattr(args, "profile", None),
-                match_mode=getattr(args, "name_match", "exact"),
-            )
+            with _name_resolution_logger(args) as temp_logger:
+                resolved_ids, stats_name_map = resolve_data_view_names(
+                    data_view_inputs,
+                    args.config_file,
+                    temp_logger,
+                    profile=getattr(args, "profile", None),
+                    match_mode=getattr(args, "name_match", "exact"),
+                )
 
             if not resolved_ids:
-                print(ConsoleColors.error("ERROR: No valid data views found"), file=sys.stderr)
+                _emit_discovery_error(
+                    "No valid data views found",
+                    is_machine_readable=_stderr_errors_as_json(args),
+                    error_type="not_found",
+                    human_to_stderr=True,
+                )
                 sys.exit(1)
         # A name that matched nothing must not vanish silently: report it as a failed row.
         stats_unresolved_names = [

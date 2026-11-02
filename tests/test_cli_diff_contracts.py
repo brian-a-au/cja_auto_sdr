@@ -1322,3 +1322,40 @@ def test_short_quiet_flag_suppresses_compare_snapshots_banner(tmp_path, monkeypa
         return _re.sub(r"\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}", "<ts>", text)
 
     assert _mask(outputs["-q"]) == _mask(outputs["--quiet"])
+
+
+class TestJsonNameResolutionLogs:
+    """Machine-readable runs keep every stderr line parseable, name resolution included (CLI-23)."""
+
+    @pytest.fixture(autouse=True)
+    def _isolate(self, tmp_path, monkeypatch):
+        import logging
+
+        for var in ("ORG_ID", "CLIENT_ID", "SECRET", "SCOPES", "SANDBOX"):
+            monkeypatch.delenv(var, raising=False)
+        monkeypatch.setenv("CJA_HOME", str(tmp_path / ".cja"))
+        monkeypatch.chdir(tmp_path)
+        logging.getLogger("name_resolution").handlers.clear()
+        yield
+        logging.getLogger("name_resolution").handlers.clear()
+
+    @staticmethod
+    def _assert_stderr_all_json(capsys) -> None:
+        lines = [line for line in capsys.readouterr().err.splitlines() if line.strip()]
+        assert lines
+        for line in lines:
+            json.loads(line)
+
+    def _run(self, argv) -> None:
+        from cja_auto_sdr.generator import main
+
+        with patch.object(sys, "argv", ["cja_auto_sdr", *argv]), pytest.raises(SystemExit):
+            main()
+
+    def test_diff_agent_mode_name_resolution_stderr_is_json(self, tmp_path, capsys):
+        self._run(["--diff", "dv_a", "Some Name", "--agent-mode", "--config-file", str(tmp_path / "missing.json")])
+        self._assert_stderr_all_json(capsys)
+
+    def test_stats_table_json_log_format_name_resolution_stderr_is_json(self, tmp_path, capsys):
+        self._run(["--stats", "Some Name", "--log-format", "json", "--config-file", str(tmp_path / "missing.json")])
+        self._assert_stderr_all_json(capsys)

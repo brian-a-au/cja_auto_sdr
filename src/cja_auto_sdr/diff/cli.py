@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import argparse
-import logging
 import sys
 from pathlib import Path
 from typing import Any
@@ -111,20 +110,21 @@ def _resolve_single_data_view_id_or_exit(
         print(usage, file=sys.stderr)
         sys.exit(1)
 
-    temp_logger = logging.getLogger("name_resolution")
-    temp_logger.setLevel(logging.WARNING)
-    resolved_ids, _ = generator.resolve_data_view_names(
-        data_view_inputs,
-        args.config_file,
-        temp_logger,
-        profile=getattr(args, "profile", None),
-        match_mode=getattr(args, "name_match", "exact"),
-    )
+    with generator._name_resolution_logger(args) as temp_logger:
+        resolved_ids, _ = generator.resolve_data_view_names(
+            data_view_inputs,
+            args.config_file,
+            temp_logger,
+            profile=getattr(args, "profile", None),
+            match_mode=getattr(args, "name_match", "exact"),
+        )
 
     if not resolved_ids:
-        print(
-            generator.ConsoleColors.error(f"ERROR: Could not resolve data view: '{data_view_inputs[0]}'"),
-            file=sys.stderr,
+        generator._emit_discovery_error(
+            f"Could not resolve data view: '{data_view_inputs[0]}'",
+            is_machine_readable=generator._stderr_errors_as_json(args),
+            error_type="not_found",
+            human_to_stderr=True,
         )
         sys.exit(1)
 
@@ -161,20 +161,21 @@ def _resolve_diff_input_or_exit(
     """Resolve one cross-data-view diff operand to a single data view ID or exit."""
     generator = _generator_module()
 
-    temp_logger = logging.getLogger("name_resolution")
-    temp_logger.setLevel(logging.WARNING)
-    resolved_ids, _ = generator.resolve_data_view_names(
-        [data_view_input],
-        args.config_file,
-        temp_logger,
-        profile=getattr(args, "profile", None),
-        match_mode=getattr(args, "name_match", "exact"),
-    )
+    with generator._name_resolution_logger(args) as temp_logger:
+        resolved_ids, _ = generator.resolve_data_view_names(
+            [data_view_input],
+            args.config_file,
+            temp_logger,
+            profile=getattr(args, "profile", None),
+            match_mode=getattr(args, "name_match", "exact"),
+        )
 
     if not resolved_ids:
-        print(
-            generator.ConsoleColors.error(f"ERROR: Could not resolve {role} data view: '{data_view_input}'"),
-            file=sys.stderr,
+        generator._emit_discovery_error(
+            f"Could not resolve {role} data view: '{data_view_input}'",
+            is_machine_readable=generator._stderr_errors_as_json(args),
+            error_type="not_found",
+            human_to_stderr=True,
         )
         sys.exit(1)
 
