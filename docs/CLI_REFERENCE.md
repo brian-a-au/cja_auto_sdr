@@ -713,7 +713,7 @@ Three new `INFO`-level diagnostic events are emitted via `emit_diagnostic()` (vi
 
 | Family | Flags |
 |---|---|
-| Output / format | `--format`, `--output` |
+| Output / format | `--format`, `--output`, `--run-summary-json -` (stdout; a file path is allowed) |
 | Other run modes | `--org-report`, `--diff`, `--batch` |
 | Quality engine | `--quality-policy`, `--fail-on-quality` |
 | Discovery | `--list-dataviews`, `--list-connections`, `--list-datasets`, `--describe-dataview`, `--list-metrics`, `--list-dimensions`, `--list-segments`, `--list-calculated-metrics` |

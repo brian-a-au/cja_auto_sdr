@@ -2131,6 +2131,8 @@ def _validate_semantic_flag_relationships(
             _exit_error("--watch is incompatible with --format")
         if getattr(args, "output", None) is not None:
             _exit_error("--watch is incompatible with --output")
+        if getattr(args, "run_summary_json", None) in ("-", "stdout"):
+            _exit_error("--watch is incompatible with --run-summary-json stdout")
         if getattr(args, "org_report", False):
             _exit_error("--watch is incompatible with --org-report")
         if getattr(args, "diff", False):
