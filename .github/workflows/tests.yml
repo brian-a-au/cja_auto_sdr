@@ -183,14 +183,15 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   smoke-test:
-    # Linux smoke tests run in test-integration. macOS runners queue longest,
-    # so PRs check the newest Python only; main pushes add the 3.11 floor.
+    # Linux smoke tests run in test-integration, and macOS runs in
+    # smoke-test-macos below. PRs check the newest Python only; main pushes
+    # add the 3.11 floor.
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest]
+        os: [windows-latest]
         python-version: ${{ fromJSON(github.event_name == 'pull_request' && '["3.14"]' || '["3.11", "3.14"]') }}
     steps:
       - uses: actions/checkout@v7
@@ -209,6 +210,70 @@ jobs:
           uv run --locked python -m cja_auto_sdr --help
       - name: Smoke test - parser and contract tests
         run: uv run --locked pytest tests/ -q --tb=short -m smoke
+
+  smoke-test-macos:
+    # GitHub sometimes has no macOS arm64 runner free. After about 15 minutes
+    # it gives up and the job result is "abandoned" ("The job was not acquired
+    # by Runner of type hosted even after multiple attempts"). In that case
+    # smoke-test-macos-intel runs the same checks on an Intel runner, which
+    # comes from a separate pool. This job runs each Python version in turn,
+    # so it needs one macOS runner, not one per version, and its result is
+    # never a mix of a real failure and an abandoned leg.
+    runs-on: macos-latest
+    timeout-minutes: 15
+    env:
+      SMOKE_PYTHONS: ${{ github.event_name == 'pull_request' && '3.14' || '3.11 3.14' }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+          prune-cache: false
+      - name: Smoke test on each Python version
+        run: |
+          for py in $SMOKE_PYTHONS; do
+            echo "::group::Python $py"
+            export UV_PYTHON="$py"
+            uv sync --locked --dev
+            uv run --locked python -m cja_auto_sdr --version
+            uv run --locked python -m cja_auto_sdr --exit-codes
+            uv run --locked python -m cja_auto_sdr --help
+            uv run --locked pytest tests/ -q --tb=short -m smoke
+            echo "::endgroup::"
+          done
+
+  smoke-test-macos-intel:
+    # Runs only when GitHub abandoned smoke-test-macos for lack of a runner.
+    # A real failure there ("failure") or a superseded run ("cancelled") does
+    # not start this job, so it cannot hide a macOS test failure.
+    needs: smoke-test-macos
+    if: ${{ always() && needs.smoke-test-macos.result == 'abandoned' }}
+    runs-on: macos-15-intel
+    timeout-minutes: 15
+    env:
+      SMOKE_PYTHONS: ${{ github.event_name == 'pull_request' && '3.14' || '3.11 3.14' }}
+    steps:
+      - name: Note the fallback
+        run: echo "::warning::No macOS arm64 runner was available, so the macOS smoke tests ran on Intel."
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+          prune-cache: false
+      - name: Smoke test on each Python version
+        run: |
+          for py in $SMOKE_PYTHONS; do
+            echo "::group::Python $py"
+            export UV_PYTHON="$py"
+            uv sync --locked --dev
+            uv run --locked python -m cja_auto_sdr --version
+            uv run --locked python -m cja_auto_sdr --exit-codes
+            uv run --locked python -m cja_auto_sdr --help
+            uv run --locked pytest tests/ -q --tb=short -m smoke
+            echo "::endgroup::"
+          done
 
   build:
     # One wheel, three install checks: a plain uv install, a no-extras install
@@ -293,16 +358,20 @@ jobs:
 
   ci-gate:
     if: always()
-    needs: [test-unit, test-integration, smoke-test, build]
+    needs: [test-unit, test-integration, smoke-test, smoke-test-macos, smoke-test-macos-intel, build]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Verify all required jobs passed
         # Design note: the check below treats any non-"success" result
-        # (including "skipped") as a failure. This is intentional — all four
-        # required jobs are unconditional. If a job is ever made conditional
+        # (including "skipped") as a failure. This is intentional — the four
+        # jobs in the list are unconditional. If a job is ever made conditional
         # (with an `if:` guard), its "skipped" result will fail this gate;
-        # update the check accordingly if that happens.
+        # update the check accordingly if that happens. macOS is checked
+        # separately below, because its Intel fallback job is conditional.
+        env:
+          MACOS_RESULT: ${{ needs.smoke-test-macos.result }}
+          MACOS_INTEL_RESULT: ${{ needs.smoke-test-macos-intel.result }}
         run: |
           declare -A results=(
             [test-unit]="${{ needs.test-unit.result }}"
@@ -320,6 +389,15 @@ jobs:
               echo "OK:   $job = $r"
             fi
           done
+          if [[ "$MACOS_RESULT" == "success" ]]; then
+            echo "OK:   smoke-test-macos = success"
+          elif [[ "$MACOS_RESULT" == "abandoned" && "$MACOS_INTEL_RESULT" == "success" ]]; then
+            echo "OK:   smoke-test-macos = abandoned (no arm64 runner), smoke-test-macos-intel = success"
+            echo "::warning::macOS smoke tests ran on the Intel fallback because no arm64 runner was available."
+          else
+            echo "FAIL: smoke-test-macos = $MACOS_RESULT, smoke-test-macos-intel = $MACOS_INTEL_RESULT"
+            failed=1
+          fi
           if [[ "$failed" -eq 1 ]]; then
             echo "One or more required jobs did not succeed."
             exit 1
