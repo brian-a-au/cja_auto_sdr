@@ -146,6 +146,7 @@ cja_auto_sdr dv_12345 --stats --format csv --output stats.csv
 - Auto-adjusted column widths
 - Alternating row colors
 - Severity-based color coding (CRITICAL, HIGH, MEDIUM, LOW)
+- Cell text is written exactly as it comes from the API: a value that starts with `=` stays text (never a formula), and URL-like text such as `https://...` or `mailto:...` stays plain text (never a clickable link)
 
 **Best for:**
 - Manual review and analysis

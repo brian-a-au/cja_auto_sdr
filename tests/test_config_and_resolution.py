@@ -1994,7 +1994,12 @@ class TestShowStatsNullName:
 
         mock_config.return_value = (True, "file", None)
         mock_cja = MagicMock()
-        mock_cja.getDataView.return_value = {"id": "dv_test", "name": None, "owner": {"name": "Alice"}, "description": None}
+        mock_cja.getDataView.return_value = {
+            "id": "dv_test",
+            "name": None,
+            "owner": {"name": "Alice"},
+            "description": None,
+        }
         mock_cja.getMetrics.return_value = pd.DataFrame({"id": ["m1", "m2"]})
         mock_cja.getDimensions.return_value = pd.DataFrame({"id": ["d1"]})
         mock_cjapy.CJA.return_value = mock_cja
