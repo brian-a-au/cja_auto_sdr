@@ -1236,6 +1236,37 @@ class TestOrgComponentAnalyzer:
         # m2 should not be core
         assert "m2" not in distribution.core_metrics
 
+    @pytest.mark.parametrize(
+        ("threshold", "total", "presence"),
+        [(0.55, 100, 55), (0.56, 25, 14), (0.28, 25, 7), (0.07, 100, 7)],
+    )
+    def test_exact_threshold_is_core(self, mock_cja, mock_logger, threshold, total, presence):
+        """A component present in exactly threshold * total data views is core despite float error."""
+        config = OrgReportConfig(core_threshold=threshold)
+        analyzer = OrgComponentAnalyzer(mock_cja, config, mock_logger)
+        dvs = {f"dv_{i}" for i in range(presence)}
+        index = {"m1": ComponentInfo("m1", "metric", data_views=dvs)}
+
+        distribution = analyzer._compute_distribution(index, total_dvs=total)
+
+        assert "m1" in distribution.core_metrics
+
+    @pytest.mark.parametrize(
+        ("fraction", "label"),
+        [(0.996, "99"), (0.567, "56"), (0.5, "50"), (0.57, "57"), (0.29, "29")],
+    )
+    def test_core_label_is_lower_bound(self, fraction, label):
+        from cja_auto_sdr.org.writers.common import threshold_percent
+
+        assert threshold_percent(fraction) == label
+
+    def test_common_band_label_core_26(self):
+        from cja_auto_sdr.org.writers.common import common_band_label
+
+        assert "25-25%" not in common_band_label(0.26, None)
+        assert common_band_label(0.26, None) == "Common (25%+ DVs, < core)"
+        assert common_band_label(0.5, None) == "Common (25-49% DVs)"
+
     def test_compute_similarity_matrix(self, mock_cja, mock_logger):
         """Test Jaccard similarity calculation"""
         config = OrgReportConfig(overlap_threshold=0.5)
