@@ -2779,3 +2779,24 @@ class TestNullDataViewNameDocuments:
                 data_view_id="dv_1", config_file=str(cfg), output_dir=str(tmp_path), quiet=True
             )
         assert result.data_view_name == "Unknown"
+
+
+class TestLongDataViewNameFilename:
+    def test_long_name_filename_is_capped(self, tmp_path):
+        long_name = "Long Name " * 23  # 230 characters
+        result, out = _run_real_writers(
+            tmp_path, {"id": "dv_1", "name": long_name, "owner": {"name": "O"}}, output_format="excel"
+        )
+
+        assert result.success is True
+        stem = Path(result.output_file).stem
+        name_part = stem[len("CJA_DataView_") : -len("_dv_1_SDR")]
+        assert 0 < len(name_part) <= 100
+        assert result.data_view_name == long_name
+
+    def test_short_name_filename_unchanged(self, tmp_path):
+        result, _ = _run_real_writers(
+            tmp_path, {"id": "dv_1", "name": "A" * 40, "owner": {"name": "O"}}, output_format="excel"
+        )
+
+        assert Path(result.output_file).name == f"CJA_DataView_{'A' * 40}_dv_1_SDR.xlsx"

@@ -4143,6 +4143,8 @@ def process_single_dataview(
         try:
             # Sanitize filename (results and summaries show the real name; only the file name is sanitized)
             safe_name = "".join(c for c in dv_name if c.isalnum() or c in (" ", "-", "_")).rstrip()
+            # Keep the whole file name under common 255-byte limits (the real name stays in the document).
+            safe_name = safe_name[:100].rstrip()
             excel_file_name = f"CJA_DataView_{safe_name}_{data_view_id}_SDR.xlsx"
 
             # Add output directory path
