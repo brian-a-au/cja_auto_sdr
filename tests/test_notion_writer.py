@@ -1552,3 +1552,16 @@ def test_notion_dotenv_searches_from_cwd_repair_database(monkeypatch):
         repair_notion_database(None, logging.getLogger("t"))
     assert fake.find_calls == [{"usecwd": True}]
     assert fake.load_calls == [("/work/proj/.env",)]
+
+
+def test_notion_dotenv_loading_tolerates_undecodable_env_file(tmp_path, monkeypatch):
+    """CRED-28: a Latin-1 .env must not crash Notion credential/repair loading."""
+    pytest.importorskip("dotenv")
+    from cja_auto_sdr.output.writers.notion import resolve_notion_credentials
+
+    (tmp_path / ".env").write_bytes(b"NOTION_NOTE=caf\xe9\n")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("NOTION_TOKEN", "tok")
+    monkeypatch.setenv("NOTION_PARENT_PAGE_ID", "parent")
+
+    assert resolve_notion_credentials() == ("tok", "parent")

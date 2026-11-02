@@ -7850,6 +7850,7 @@ def _main_impl(run_state: dict[str, Any] | None = None):
     # Handle --profile-import mode (no data view required)
     if getattr(args, "profile_import", None):
         profile_name, source_file = args.profile_import
+        profile_name = profile_name.strip()
         success = import_profile_non_interactive(
             profile_name,
             source_file,
@@ -7861,21 +7862,21 @@ def _main_impl(run_state: dict[str, Any] | None = None):
 
     # Handle --profile-add mode (no data view required)
     if getattr(args, "profile_add", None):
-        success = add_profile_interactive(args.profile_add)
+        success = add_profile_interactive(args.profile_add.strip())
         if run_state is not None:
             run_state["details"] = {"operation_success": success}
         sys.exit(0 if success else 1)
 
     # Handle --profile-test mode (no data view required)
     if getattr(args, "profile_test", None):
-        success = test_profile(args.profile_test)
+        success = test_profile(args.profile_test.strip())
         if run_state is not None:
             run_state["details"] = {"operation_success": success}
         sys.exit(0 if success else 1)
 
     # Handle --profile-show mode (no data view required)
     if getattr(args, "profile_show", None):
-        success = show_profile(args.profile_show)
+        success = show_profile(args.profile_show.strip())
         if run_state is not None:
             run_state["details"] = {"operation_success": success}
         sys.exit(0 if success else 1)

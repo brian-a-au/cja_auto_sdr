@@ -279,13 +279,16 @@ class TestDataViewNameResolution:
 
     @patch("cja_auto_sdr.generator.cjapy")
     def test_resolve_with_config_error(self, mock_cjapy):
-        """Test resolving when config file is not found"""
-        mock_cjapy.importConfigFile.side_effect = FileNotFoundError("Config not found")
-
-        ids, name_map = resolve_data_view_names(["Production Analytics"], "config.json", self.logger)
+        """A credential configuration failure is reported as a configuration_error."""
+        with patch("cja_auto_sdr.generator.configure_cjapy", return_value=(False, "msg", None)):
+            ids, name_map, diagnostics = resolve_data_view_names(
+                ["Production Analytics"], "config.json", self.logger, include_diagnostics=True
+            )
 
         assert ids == []
         assert name_map == {}
+        assert diagnostics.error_type == "configuration_error"
+        mock_cjapy.CJA.assert_not_called()
 
     @patch("cja_auto_sdr.generator.cjapy")
     def test_resolve_with_api_error(self, mock_cjapy):

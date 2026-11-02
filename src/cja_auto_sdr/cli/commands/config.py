@@ -29,6 +29,26 @@ def _generator_module():
     return _generator
 
 
+def _clean_config_file_values(config: dict[str, Any]) -> dict[str, Any]:
+    """Clean config.json values the way real runs do (strip, unquote, list secret, comma scopes).
+
+    Values whose JSON type cannot be cleaned (for example a number or object for a
+    required field) are kept raw so diagnostics still report the type error.
+    """
+    from cja_auto_sdr.core.credentials import filter_credentials
+
+    cleaned: dict[str, Any] = dict(filter_credentials(config))
+    for key in ("org_id", "client_id", "secret"):
+        raw = config.get(key)
+        if raw is None or isinstance(raw, str):
+            continue
+        if key == "secret" and isinstance(raw, (list, tuple)):
+            continue
+        if raw:
+            cleaned[key] = raw
+    return cleaned
+
+
 def _api_connection_hint(exc: Exception, *, context: str | None = None) -> str | None:
     """Return an actionable hint for common API connection failures.
 
@@ -172,7 +192,7 @@ def show_config_status(config_file: str = "config.json", profile: str | None = N
             config_payload, read_error = _read_config_status_file(config_file, logger)
             if read_error:
                 return _emit_config_status_error(read_error)
-            config_data = config_payload or {}
+            config_data = _clean_config_file_values(config_payload or {})
             config_source = f"Config file: {config_path.resolve()}"
             config_source_type = "file"
         else:
@@ -442,7 +462,7 @@ def validate_config_only(
                 if not isinstance(config, dict):
                     print(generator.ConsoleColors.error("  \u2717 Config file must contain a JSON object"))
                     all_passed = False
-                elif display_credentials(config, f"Config file ({config_file})"):
+                elif display_credentials(_clean_config_file_values(config), f"Config file ({config_file})"):
                     active_credentials = config
                     credential_source = "file"
                 else:

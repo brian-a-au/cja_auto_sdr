@@ -1038,3 +1038,50 @@ class TestProfileDotenvParsing:
 
     def test_validate_profile_name_rejects_trailing_newline(self):
         assert validate_profile_name("client-a\n")[0] is False
+
+
+# ---------------------------------------------------------------------------
+# CRED-25 / CRED-26: quoted escapes and BOM parity with python-dotenv
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("line", "expected"),
+    [
+        (r'SECRET="ab\"cd"', 'ab"cd'),
+        (r"SECRET='it\'s'", "it's"),
+        (r'SECRET="a\nb"', "a\nb"),
+        (r'SECRET="a\\b"', "a\\b"),
+        (r"SECRET='a\nb'", r"a\nb"),
+        (r'SECRET="a\qb"', r"a\qb"),
+        (r'SECRET="it\'s"', "it's"),
+        (r'SECRET="a\rb"', "a\rb"),
+        (r'SECRET="a\ab\bc\fd\ve"', "a\ab\bc\fd\ve"),
+        (r'SECRET="a\"b" # note', 'a"b'),
+        ("export SECRET=abc", "abc"),
+        ("SECRET=abc # c", "abc"),
+        ("SECRET=a=b=c", "a=b=c"),
+        ("SECRET=abc\r", "abc"),
+    ],
+)
+def test_parse_dotenv_line_matches_dotenv_semantics(line, expected):
+    from cja_auto_sdr.core.profiles import _parse_dotenv_line
+
+    assert _parse_dotenv_line(line) == ("SECRET", expected)
+
+
+def test_profile_dotenv_with_bom_keeps_first_key(tmp_path):
+    from cja_auto_sdr.core.profiles import load_profile_dotenv
+
+    (tmp_path / ".env").write_bytes(b"\xef\xbb\xbfORG_ID=ORG@AdobeOrg\nCLIENT_ID=cid\n")
+    assert load_profile_dotenv(tmp_path) == {"org_id": "ORG@AdobeOrg", "client_id": "cid"}
+
+
+def test_import_dotenv_with_bom_keeps_first_key(tmp_path):
+    from cja_auto_sdr.core.profiles import load_profile_import_source
+
+    src = tmp_path / "creds.env"
+    src.write_bytes(b"\xef\xbb\xbfORG_ID=ORG@AdobeOrg\nCLIENT_ID=cid\n")
+    creds = load_profile_import_source(src)
+    assert creds["org_id"] == "ORG@AdobeOrg"
+    assert creds["client_id"] == "cid"

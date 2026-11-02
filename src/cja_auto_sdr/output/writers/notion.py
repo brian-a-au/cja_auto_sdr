@@ -23,6 +23,7 @@ from typing import Any
 
 import pandas as pd
 
+from cja_auto_sdr.core.error_policies import RECOVERABLE_DOTENV_BOOTSTRAP_EXCEPTIONS
 from cja_auto_sdr.core.version import __version__
 from cja_auto_sdr.output.notion_registry import (
     add_orphaned_page_id,
@@ -276,6 +277,21 @@ def build_sdr_blocks(
 # ---------------------------------------------------------------------------
 
 
+def _load_dotenv_best_effort() -> None:
+    """Load a ``.env`` from the working directory, tolerating a missing or unreadable one."""
+    try:
+        from dotenv import find_dotenv, load_dotenv
+    except ImportError:
+        return
+    except RECOVERABLE_DOTENV_BOOTSTRAP_EXCEPTIONS as e:
+        logging.getLogger(__name__).debug("Failed to import python-dotenv for Notion .env loading: %s", e)
+        return
+    try:
+        load_dotenv(find_dotenv(usecwd=True))
+    except RECOVERABLE_DOTENV_BOOTSTRAP_EXCEPTIONS as e:
+        logging.getLogger(__name__).debug("Failed to load .env for Notion: %s", e)
+
+
 def resolve_notion_credentials(*, require_parent: bool = True) -> tuple[str, str | None]:
     """Return (NOTION_TOKEN, NOTION_PARENT_PAGE_ID) from env / .env file.
 
@@ -285,12 +301,7 @@ def resolve_notion_credentials(*, require_parent: bool = True) -> tuple[str, str
     into an already-configured database does not need a parent page, so callers
     that only do that pass ``require_parent=False``.
     """
-    try:
-        from dotenv import find_dotenv, load_dotenv
-
-        load_dotenv(find_dotenv(usecwd=True))
-    except ImportError:
-        pass
+    _load_dotenv_best_effort()
 
     token = os.environ.get("NOTION_TOKEN")
     parent_page_id = os.environ.get("NOTION_PARENT_PAGE_ID")
@@ -726,12 +737,7 @@ def repair_notion_database(
     # database id is resolved before the token check so the missing-database-id
     # error wins when neither is set. resolve_notion_credentials loads .env too
     # (idempotent), but it runs later, so do it here for the id lookup.
-    try:
-        from dotenv import find_dotenv, load_dotenv
-
-        load_dotenv(find_dotenv(usecwd=True))
-    except ImportError:
-        pass
+    _load_dotenv_best_effort()
 
     database_id = database_id or os.environ.get("NOTION_DATABASE_ID")
     if not database_id:
