@@ -4149,7 +4149,11 @@ def process_single_dataview(
         if isinstance(raw_dv_name, str):
             safe_name = "".join(c for c in raw_dv_name if c.isalnum() or c in (" ", "-", "_")).rstrip()
             # Keep the whole file name under common 255-byte limits (the real name stays in the document).
-            safe_name = safe_name[:100].rstrip()
+            # Cap by UTF-8 bytes, not characters, so multi-byte names fit too.
+            safe_name = safe_name[:100]
+            while len(safe_name.encode("utf-8")) > 100:
+                safe_name = safe_name[:-1]
+            safe_name = safe_name.rstrip()
             excel_file_name = f"CJA_DataView_{safe_name}_{data_view_id}_SDR.xlsx"
         else:
             excel_file_name = f"CJA_DataView_{data_view_id}_SDR.xlsx"

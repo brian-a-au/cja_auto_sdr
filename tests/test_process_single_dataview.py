@@ -2812,6 +2812,20 @@ class TestLongDataViewNameFilename:
         assert 0 < len(name_part) <= 100
         assert result.data_view_name == long_name
 
+    def test_cjk_name_filename_is_capped_by_bytes(self, tmp_path):
+        cjk_name = "数据视图" * 38  # 152 characters, 456 UTF-8 bytes
+        result, _ = _run_real_writers(
+            tmp_path, {"id": "dv_1", "name": cjk_name, "owner": {"name": "O"}}, output_format="excel"
+        )
+
+        assert result.success is True
+        stem = Path(result.output_file).stem
+        name_part = stem[len("CJA_DataView_") : -len("_dv_1_SDR")]
+        assert name_part
+        assert cjk_name.startswith(name_part)
+        assert len(name_part.encode("utf-8")) <= 100
+        assert Path(result.output_file).is_file()
+
     def test_short_name_filename_unchanged(self, tmp_path):
         result, _ = _run_real_writers(
             tmp_path, {"id": "dv_1", "name": "A" * 40, "owner": {"name": "O"}}, output_format="excel"
