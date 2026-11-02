@@ -18,9 +18,12 @@ def threshold_percent(fraction: float) -> str:
 
 def common_band_label(core_threshold: float, core_min_count: int | None, *, prefix: str = "") -> str:
     """Label the common band, which runs from 25% of data views up to the core cut."""
-    core_percent = math.floor(round(core_threshold * 100, 9))
+    exact_percent = round(core_threshold * 100, 9)
+    core_percent = math.floor(exact_percent)
     if core_min_count is None and core_percent > 26:
-        return f"Common ({prefix}25-{core_percent - 1}% DVs)"
+        # A fractional cut (56.7%) makes the floored percent (56%) still Common; a whole cut starts core there.
+        upper = core_percent if exact_percent != core_percent else core_percent - 1
+        return f"Common ({prefix}25-{upper}% DVs)"
     return f"Common ({prefix}25%+ DVs, < core)"
 
 

@@ -211,8 +211,10 @@ def write_org_report_console(
         effective_threshold = effective_governance_overlap_threshold(config.overlap_threshold)
         threshold_note = ""
         if config.overlap_threshold > 0.9:
-            threshold_note = f" (configured {config.overlap_threshold * 100:.0f}%, capped at 90% for governance checks)"
-        print(f"Pairs with >= {effective_threshold * 100:.0f}% Jaccard similarity{threshold_note}:")
+            threshold_note = (
+                f" (configured {threshold_percent(config.overlap_threshold)}%, capped at 90% for governance checks)"
+            )
+        print(f"Pairs with >= {threshold_percent(effective_threshold)}% Jaccard similarity{threshold_note}:")
         print()
 
         for pair in result.similarity_pairs[:10]:  # Limit to top 10
