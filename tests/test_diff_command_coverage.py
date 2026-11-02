@@ -1154,3 +1154,57 @@ class TestDiffOutputDestinationSafety:
         )
         assert link.is_symlink()
         assert target.read_text() != "{}"
+
+
+class TestDiffMessages:
+    """DIFF-27 and DIFF-28: console errors are human; ignored --diff-output is announced."""
+
+    def _missing_inventory_pair(self, tmp_path):
+        a = _hunt_snap(tmp_path / "a.json")
+        b = _hunt_snap(tmp_path / "b.json", segments_inventory=[])
+        return a, b
+
+    def test_missing_inventory_console_is_human(self, tmp_path, monkeypatch, capsys):
+        a, b = self._missing_inventory_pair(tmp_path)
+        code = _hunt_main(monkeypatch, ["--compare-snapshots", a, b, "--include-segments", "--quiet"])
+        err = capsys.readouterr().err
+        assert code == 1
+        assert not err.lstrip().startswith("{")
+        assert "ERROR" in err
+
+    def test_missing_inventory_hint_printed_in_console_and_json(self, tmp_path, monkeypatch, capsys):
+        a, b = self._missing_inventory_pair(tmp_path)
+        monkeypatch.setattr("cja_auto_sdr.generator.api_connection_hint", lambda *args, **kwargs: "check your network")
+
+        _hunt_main(monkeypatch, ["--compare-snapshots", a, b, "--include-segments", "--quiet"])
+        err = capsys.readouterr().err
+        assert not err.lstrip().startswith("{")
+        assert "check your network" in err
+
+        _hunt_main(monkeypatch, ["--compare-snapshots", a, b, "--include-segments", "--format", "json", "--quiet"])
+        payload = json.loads(capsys.readouterr().err.strip().splitlines()[-1])
+        assert payload["hint"] == "check your network"
+
+    def test_missing_inventory_json_unchanged(self, tmp_path, monkeypatch, capsys):
+        a, b = self._missing_inventory_pair(tmp_path)
+        code = _hunt_main(
+            monkeypatch, ["--compare-snapshots", a, b, "--include-segments", "--format", "json", "--quiet"]
+        )
+        err = capsys.readouterr().err.strip()
+        assert code == 1
+        payload = json.loads(err.splitlines()[-1])
+        assert payload["error_type"] == "comparison_error"
+
+    def test_diff_output_with_stdout_warns(self, tmp_path, monkeypatch, capsys):
+        a, b = _hunt_pair(tmp_path)
+        out = tmp_path / "x.json"
+        code = _hunt_main(
+            monkeypatch,
+            ["--compare-snapshots", a, b, "--format", "json", "--output", "-", "--diff-output", str(out)],
+        )
+        captured = capsys.readouterr()
+        assert "--diff-output" in captured.err
+        assert "--output -" in captured.err
+        assert code == 2  # has changes: exit code unchanged by the warning
+        assert not out.exists()
+        json.loads(captured.out)  # stdout still carries only the payload

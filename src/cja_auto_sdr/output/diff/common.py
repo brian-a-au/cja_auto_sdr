@@ -72,6 +72,18 @@ class ANSIColors:
 # ---------------------------------------------------------------------------
 
 
+def _display_name(value: object) -> str:
+    """Return a printable name: blank for None, NaN, pd.NA, and NaT."""
+    if value is None:
+        return ""
+    try:
+        if pd.isna(value):
+            return ""
+    except (TypeError, ValueError):
+        pass
+    return str(value)
+
+
 def _format_diff_value(val: Any, truncate: bool = True, max_len: int = 30) -> str:
     """Format a value for diff display, handling None and NaN."""
     if val is None:

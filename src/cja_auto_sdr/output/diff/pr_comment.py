@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from cja_auto_sdr.diff.models import ChangeType, DiffResult
 from cja_auto_sdr.output.diff.common import (
+    _display_name,
     _format_diff_value,
     detect_breaking_changes,
 )
@@ -105,7 +106,7 @@ def write_diff_pr_comment_output(
                 diff.change_type,
                 "",
             )
-            lines.append(f"| {symbol} | `{_esc(diff.id)}` | {_esc(diff.name)} |")
+            lines.append(f"| {symbol} | `{_esc(diff.id)}` | {_esc(_display_name(diff.name))} |")
         if len(metric_changes) > 25:
             lines.append(f"| ... | | +{len(metric_changes) - 25} more |")
         lines.append("")
@@ -123,7 +124,7 @@ def write_diff_pr_comment_output(
                 diff.change_type,
                 "",
             )
-            lines.append(f"| {symbol} | `{_esc(diff.id)}` | {_esc(diff.name)} |")
+            lines.append(f"| {symbol} | `{_esc(diff.id)}` | {_esc(_display_name(diff.name))} |")
         if len(dim_changes) > 25:
             lines.append(f"| ... | | +{len(dim_changes) - 25} more |")
         lines.append("")
@@ -147,7 +148,7 @@ def write_diff_pr_comment_output(
                 diff.change_type,
                 "",
             )
-            lines.append(f"| {symbol} | `{_esc(diff.id)}` | {_esc(diff.name)} |")
+            lines.append(f"| {symbol} | `{_esc(diff.id)}` | {_esc(_display_name(diff.name))} |")
         if len(inventory_changes) > 25:
             lines.append(f"| ... | | +{len(inventory_changes) - 25} more |")
         lines.append("")

@@ -82,6 +82,11 @@ def _write_diff_report(
         write_text_atomic_compatible(diff_output, ConsoleColors.ANSI_ESCAPE.sub("", output_content))
         if not quiet:
             print(f"Diff output written to: {diff_output}")
+    elif diff_output and output_to_stdout:
+        print(
+            f"Warning: --diff-output {diff_output} was ignored because the report was written to stdout (--output -).",
+            file=sys.stderr,
+        )
     elif diff_output and not output_to_stdout:
         print(
             f"Warning: --diff-output does not apply to --format {output_format} (it produces multiple files); "
@@ -148,17 +153,20 @@ def _emit_api_failure_hint(generator: Any, exc: Exception) -> None:
     generator._print_api_hint(exc, file=sys.stderr)
 
 
-def _emit_requested_inventory_failure(generator: Any, exc: Exception) -> bool:
+def _emit_requested_inventory_failure(generator: Any, exc: Exception, *, is_machine_readable: bool = True) -> bool:
     stage = getattr(exc, "_cja_snapshot_failure_stage", None)
     if stage not in {"calculated_metrics_inventory", "segments_inventory", "requested_inventory_validation"}:
         return False
     hint = generator.api_connection_hint(exc)
     generator._emit_discovery_error(
         str(exc),
-        is_machine_readable=True,
+        is_machine_readable=is_machine_readable,
         error_type="comparison_error",
         additional_fields={"hint": hint} if hint else None,
+        human_to_stderr=True,
     )
+    if hint and not is_machine_readable:
+        print(f"Hint: {hint}", file=sys.stderr)
     return True
 
 
@@ -849,19 +857,19 @@ def handle_diff_snapshot_command(
         _populate_diff_advisory_rollup(runtime_details, diff_result, changes_only=changes_only)
         return True, diff_result.summary.has_changes, exit_code_override
     except FileNotFoundError as e:
-        if _emit_requested_inventory_failure(generator, e):
+        if _emit_requested_inventory_failure(generator, e, is_machine_readable=output_format == "json"):
             return False, False, None
         print(generator.ConsoleColors.error(f"ERROR: Snapshot file not found: {snapshot_file}"), file=sys.stderr)
         return False, False, None
     except ValueError as e:
-        if _emit_requested_inventory_failure(generator, e):
+        if _emit_requested_inventory_failure(generator, e, is_machine_readable=output_format == "json"):
             return False, False, None
         print(generator.ConsoleColors.error(f"ERROR: Invalid snapshot file: {e!s}"), file=sys.stderr)
         return False, False, None
     except (KeyboardInterrupt, SystemExit):
         raise
     except generator.RECOVERABLE_COMMAND_HANDLER_EXCEPTIONS as e:
-        if _emit_requested_inventory_failure(generator, e):
+        if _emit_requested_inventory_failure(generator, e, is_machine_readable=output_format == "json"):
             return False, False, None
         print(generator.ConsoleColors.error(f"ERROR: Failed to compare against snapshot: {e!s}"), file=sys.stderr)
         _emit_api_failure_hint(generator, e)
@@ -1033,7 +1041,7 @@ def handle_compare_snapshots_command(
         print(generator.ConsoleColors.error(f"ERROR: {message}"), file=sys.stderr)
         return False, False, None
     except ValueError as e:
-        if _emit_requested_inventory_failure(generator, e):
+        if _emit_requested_inventory_failure(generator, e, is_machine_readable=output_format == "json"):
             return False, False, None
         print(generator.ConsoleColors.error(f"ERROR: Invalid snapshot file: {e!s}"), file=sys.stderr)
         return False, False, None
