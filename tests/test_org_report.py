@@ -5277,7 +5277,34 @@ def test_org_report_negative_limit_exits_1(tmp_path, monkeypatch, capsys):
         code = _run_main(["--org-report", "--limit", "-1"], tmp_path, monkeypatch)
 
     assert code == 1
-    assert "--limit cannot be negative" in capsys.readouterr().err
+    assert "--limit must be at least 1 with --org-report" in capsys.readouterr().err
+    run.assert_not_called()
+
+
+def test_org_report_zero_limit_exits_1(tmp_path, monkeypatch, capsys):
+    with patch("cja_auto_sdr.generator.run_org_report", return_value=(True, False)) as run:
+        code = _run_main(["--org-report", "--limit", "0"], tmp_path, monkeypatch)
+
+    assert code == 1
+    assert "--limit must be at least 1 with --org-report" in capsys.readouterr().err
+    run.assert_not_called()
+
+
+def test_org_report_limit_one_accepted(tmp_path, monkeypatch):
+    with patch("cja_auto_sdr.generator.run_org_report", return_value=(True, False)) as run:
+        code = _run_main(["--org-report", "--limit", "1"], tmp_path, monkeypatch)
+
+    assert code == 0
+    run.assert_called_once()
+
+
+@pytest.mark.parametrize("value", ["0", "-5"])
+def test_core_min_count_below_one_exits_2(value, tmp_path, monkeypatch, capsys):
+    with patch("cja_auto_sdr.generator.run_org_report", return_value=(True, False)) as run:
+        code = _run_main(["--org-report", f"--core-min-count={value}"], tmp_path, monkeypatch)
+
+    assert code == 2
+    assert "must be at least 1" in capsys.readouterr().err
     run.assert_not_called()
 
 

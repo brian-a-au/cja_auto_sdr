@@ -2105,8 +2105,8 @@ def _validate_semantic_flag_relationships(
         _exit_error("Use either --list-snapshots or --prune-snapshots, not both")
     if getattr(args, "profile_overwrite", False) and not getattr(args, "profile_import", None):
         _exit_error("--profile-overwrite requires --profile-import")
-    if getattr(args, "org_report", False) and isinstance(getattr(args, "org_limit", None), int) and args.org_limit < 0:
-        _exit_error("--limit cannot be negative")
+    if getattr(args, "org_report", False) and isinstance(getattr(args, "org_limit", None), int) and args.org_limit < 1:
+        _exit_error("--limit must be at least 1 with --org-report")
     if getattr(args, "agent_mode", False) and getattr(args, "interactive", False):
         _exit_error("--agent-mode cannot be used with --interactive")
     # Watch mode rejections.

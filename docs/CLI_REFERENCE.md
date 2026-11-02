@@ -350,7 +350,7 @@ Analyze component usage patterns across all data views in your organization.
 | `--org-report` | Enable org-wide analysis mode. Analyzes all accessible data views and generates a governance report | False |
 | `--filter PATTERN` | Include only data views matching regex pattern (case-insensitive) | - |
 | `--exclude PATTERN` | Exclude data views matching regex pattern (case-insensitive) | - |
-| `--limit N` | Analyze only the first N data views (useful for testing) | - |
+| `--limit N` | Analyze only the first N data views (N must be at least 1; useful for testing) | - |
 | `--include-names` | Fetch and display component names (slower but more readable) | False |
 | `--skip-similarity` | Skip O(n²) pairwise similarity calculation (faster for large orgs) | False |
 | `--similarity-max-dvs N` | Guardrail to skip similarity when data views exceed N. Similarity has O(n²) complexity—250 DVs means ~31K comparisons. Use `--force-similarity` to override | 250 |
@@ -365,7 +365,7 @@ Analyze component usage patterns across all data views in your organization.
 | Option | Description | Default |
 |--------|-------------|---------|
 | `--core-threshold FLOAT` | Fraction of data views for "core" classification (0.0-1.0) | 0.5 |
-| `--core-min-count N` | Absolute count for "core" classification (overrides threshold) | - |
+| `--core-min-count N` | Absolute count for "core" classification (overrides threshold; must be at least 1) | - |
 | `--overlap-threshold FLOAT` | Minimum Jaccard similarity to flag as "high overlap" (0.0-1.0; capped at 0.9 for governance checks) | 0.8 |
 
 #### Component Type & Metadata Options

@@ -176,7 +176,7 @@ Based on the analysis, the tool generates governance recommendations:
 | `--org-report` | Enable org-wide analysis mode |
 | `--filter PATTERN` | Include data views matching regex |
 | `--exclude PATTERN` | Exclude data views matching regex |
-| `--limit N` | Analyze only first N data views |
+| `--limit N` | Analyze only first N data views (N must be at least 1) |
 | `--include-names` | Fetch and display component names |
 | `--quiet` | Suppress progress output |
 
@@ -185,7 +185,7 @@ Based on the analysis, the tool generates governance recommendations:
 | Option | Default | Description |
 |--------|---------|-------------|
 | `--core-threshold` | 0.5 | Fraction of DVs for "core" classification |
-| `--core-min-count` | - | Absolute count for "core" (overrides threshold) |
+| `--core-min-count` | - | Absolute count for "core" (overrides threshold; must be at least 1) |
 | `--overlap-threshold` | 0.8 | Minimum similarity to flag as "high overlap" (capped at 0.9 for governance checks) |
 
 ### Component Type Breakdown
