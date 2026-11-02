@@ -9,6 +9,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.13.10] - 2026-11-02
+
+This patch fixes bugs in SDR output, diff and snapshot output, the org report, CLI contracts, and credential and profile handling. Several results change on purpose:
+- SDR runs with data view names that do not resolve now exit 1. The names that resolve still run, and the run summary lists the others under `inputs.unresolved_data_view_inputs`.
+- A credential failure during name resolution is reported as `configuration_error` in every mode, and stderr errors are JSON whenever `--agent-mode`, `--log-format json`, `--format json` or `csv`, or `--output -` is set.
+- A null or blank data view name shows as "Unknown" in SDR outputs. SDR file names are unchanged, except that the name part is capped at 100 UTF-8 bytes.
+- URLs in Excel workbooks are plain text and are no longer clickable.
+- `--keep-since` of zero or a negative value, `--core-min-count` below 1, and `--org-report --limit 0` are now rejected.
+- Org core labels never show a higher percent than the cut, and a component exactly at the core threshold now counts as core.
+- `--validate-config`, `--config-status`, and `--config-json` now clean config.json values the way real runs do, so their result can change.
+
+### Fixed
+
+- **Null data view name in SDR outputs:** a data view with a null name showed "None" in the Markdown, HTML, and Notion metadata, and null in the JSON metadata and the inventory `data_view_name`. A NaN name showed "nan" in Markdown, and the run logged a false `Error creating filename`. These outputs now show "Unknown", and the false error is gone. File names are the same as in v3.13.9.
+  - **Behavior change:** tools that read the JSON metadata or the inventory `data_view_name` get "Unknown" instead of null.
+- **`--stats` with a null name:** `--stats` CSV and table output crashed on a data view with a null name and reported `connectivity_error`. The row now shows "Unknown", and the JSON `name` field is "Unknown" instead of null.
+- **URLs in Excel:** Excel turned URL-like text into links, so a `mailto:` prefix was dropped and a URL longer than 2,079 characters gave an empty cell. SDR, diff, and org workbooks now keep the exact text as plain text.
+  - **Behavior change:** URLs in workbooks are no longer clickable.
+- **Inventory section order:** inventory sections followed the order given on the command line only in Excel. Markdown, HTML, JSON, and Notion now use the same order.
+- **Long data view names:** a data view name of about 230 characters failed with "File name too long". The name part of the SDR file name is now cut to 100 UTF-8 bytes.
+- **Git snapshot with a null name:** `--git-commit` raised `TypeError` on a data view with a null name. It now uses an empty name for the folder.
+- **`--diff-output` destinations:** a single-file `--diff-output` skipped the hard link and non-regular file checks, replaced a symlink with a plain file, and reset the file mode. For JSON, Markdown, HTML, and Excel reports, a hard-linked or non-regular destination now exits 1 with `ERROR: Cannot write --diff-output: <reason>`. A symlink is followed and the file mode is kept.
+- **False metadata changes:** the metadata diff compared raw values, so NaN against NaN, or NaN or None against an empty value, showed as a change and made the diff exit 2. These values now compare as equal. A change that is only whitespace in the name, owner, or description is also no longer reported.
+- **`--keep-since` of zero or less:** `--keep-since 0` and negative values were accepted and pruned nothing. They now exit 1 for the diff and snapshot flags. `--org-report-keep-since 0` is unchanged.
+  - **Behavior change:** these values are now rejected.
+- **Long Excel diff details:** when a Details cell reached the 32,767 character Excel limit, the cut removed the `->` and the new value. Each side is now shortened evenly, so both values stay in the cell.
+- **`--show-only` advisory:** under `--show-only`, the diff advisory said "no removals or modifications detected" although the filter hid them. The advisory is no longer shown with `--show-only`.
+- **NaN and null names in diffs:** a NaN name showed as "nan" in the Markdown, PR comment, HTML, console, and grouped outputs. A null snapshot name showed as "None" in compare banners, labels, and the GitHub step summary. These names are now blank, and a null-name compare label reads `(YYYY-MM-DD)`.
+- **Missing inventory error in console mode:** the `--compare-snapshots` missing-inventory error was raw JSON in console mode. It is now plain text with a hint. `--format json` output is unchanged.
+- **`--diff-output` with `--output -`:** `--diff-output` was ignored without notice when the report went to stdout. A warning is now printed.
+- **PR comment inventory rows:** the PR comment showed calculated metric and segment rows where every count was zero. These rows are now left out. A row with unchanged, nonzero counts is still shown.
+- **Cross data view JSON error:** the JSON error for snapshots from different data views now includes `source_data_view_id` and `target_data_view_id`.
+- **Org core cut:** a float rounding error put components that sit exactly at the core threshold outside core, e.g., a threshold of 0.55 with 100 data views gave a cut of 56. The cut is now 55.
+  - **Behavior change:** some core and common bucket counts change.
+- **Org threshold labels:** rounded labels could overstate the cut, e.g., `--core-threshold 0.996` showed "100%+", and a core threshold of 26% gave a common band of "25-25%". Labels now floor the percent in the console, Markdown, and HTML, and the common band upper bound matches the band. Default labels are unchanged.
+- **`--org-stats` format aliases:** `--org-stats` with `--format ci`, `data`, or `all` wrote no JSON file, although each includes JSON. It now writes the JSON stats file.
+- **Org option values:** `--core-min-count` accepted 0 and negative values, and `--org-report --limit 0` analyzed the whole org. `--core-min-count` below 1 now exits 2, and `--limit 0` with `--org-report` exits 1.
+  - **Behavior change:** these values are now rejected.
+- **Org baseline thresholds:** `--compare-org-report` against a baseline built with different thresholds reported false drift without notice. It now prints a warning for each threshold that differs. The exit code is unchanged.
+- **Org Markdown tables:** the org Markdown writer escaped only `|`, so a newline in a name broke the table. Cells and recommendation text now use the same escaping as other Markdown writers.
+- **Unresolved data view names:** in SDR, batch, and dry-run modes, names that did not resolve were dropped without an error, and the run exited 0. The names that resolve still run. The others are reported on stderr and in the run summary under `inputs.unresolved_data_view_inputs`, and the run exits 1.
+  - **Behavior change:** these runs now exit 1, and the run summary has a new field.
+- **Credential errors during name resolution:** with a credential failure, SDR and dry-run printed "No valid data views found" and name matching tips, and the dry-run banner never showed. Diff and snapshot modes reported `not_found`. Every mode now shows the credential error, reported as `configuration_error`, and dry-run fails at step 1 after its banner.
+  - **Behavior change:** diff and snapshot modes report `configuration_error` instead of `not_found` for these failures.
+- **JSON errors on stderr:** some modes printed plain text errors on stderr when machine-readable output was requested. stderr errors are now JSON when `--agent-mode`, `--log-format json`, `--format json` or `csv`, or `--output -` is set.
+- **`--watch` with `--run-summary-json -`:** this combination moved the watch output to stderr. It now exits 1.
+- **Ignored `--output`:** `--validate-config` and `--dry-run` ignored `--output FILE` without notice, and `--config-json --output x.json` printed "Auto-detected format" on stdout before the JSON. Both modes now warn, and `--config-json` stdout holds only the JSON.
+- **`--limit` and `--filter` in SDR mode:** these options were accepted and ignored in SDR and batch mode, and the large batch prompt recommended them. They now print a warning, and the prompt no longer suggests them.
+- **Config diagnostics:** `--validate-config` rejected a list `secret` that real runs accept, and `--config-status` and `--config-json` reported a whitespace-only `org_id` as valid. These commands now clean config.json values the way real runs do.
+  - **Behavior change:** the `valid` result and exit code of these commands can change.
+- **Profile names with spaces:** `--profile-show`, `--profile-test`, `--profile-add`, and `--profile-import` did not trim spaces around the profile name, and `--profile-list` did not mark a padded `CJA_PROFILE` as active. Names are now trimmed.
+- **Profile `.env` files:** the profile `.env` parser ignored backslash escapes inside quotes, and a UTF-8 BOM dropped the first key. Escapes are now decoded the way python-dotenv decodes them, and the BOM is handled. `--profile-import` sources handle the BOM too.
+- **Notion with a bad `.env`:** a `.env` file that is not UTF-8 made Notion loading fail with a traceback. The file is now skipped with a debug log.
+- **Missing `--config-file`:** when an explicit `--config-file` did not exist, the "no credentials" error did not name it. The error now adds `Config file not found: <path>`.
+
 ## [3.13.9] - 2026-11-01
 
 This patch fixes bugs in SDR output, diff and snapshot output, the org report, and CLI option handling. Several results change on purpose:
