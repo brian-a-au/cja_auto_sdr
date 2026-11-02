@@ -141,7 +141,7 @@ def save_git_friendly_snapshot(
     """Save snapshot in Git-friendly format (separate JSON files)."""
     logger = logger or logging.getLogger(__name__)
 
-    safe_name = "".join(c if c.isalnum() or c in "-_" else "_" for c in snapshot.data_view_name)
+    safe_name = "".join(c if c.isalnum() or c in "-_" else "_" for c in (snapshot.data_view_name or ""))
     safe_name = safe_name[:50] if safe_name else snapshot.data_view_id
     dv_dir = output_dir / f"{safe_name}_{snapshot.data_view_id}"
     dv_dir.mkdir(parents=True, exist_ok=True)

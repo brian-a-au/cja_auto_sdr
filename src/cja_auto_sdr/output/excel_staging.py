@@ -51,11 +51,12 @@ def staged_excel_writer(destination: str | Path) -> Iterator[pd.ExcelWriter]:
     try:
         workbook_file = staged.open("wb")
         try:
-            # Cell text from the API is data, never a formula (e.g. a name like "=Revenue").
+            # Cell text from the API is data, never a formula (e.g. a name like "=Revenue") and never a
+            # hyperlink (xlsxwriter would rewrite "mailto:a@b" and drop URLs over 2079 characters).
             writer = pd.ExcelWriter(
                 workbook_file,
                 engine="xlsxwriter",
-                engine_kwargs={"options": {"strings_to_formulas": False}},
+                engine_kwargs={"options": {"strings_to_formulas": False, "strings_to_urls": False}},
             )
             try:
                 yield writer

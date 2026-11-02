@@ -159,6 +159,8 @@ class SnapshotManager:
             )
 
         dv_info = lookup_assessment.payload or {}
+        # Store the name exactly as returned so snapshots from earlier releases compare equal;
+        # writers blank a null name for display.
         dv_name = dv_info.get("name", "Unknown")
         dv_owner = dv_info.get("owner", {})
         owner_name = dv_owner.get("name", "") if isinstance(dv_owner, dict) else str(dv_owner)
