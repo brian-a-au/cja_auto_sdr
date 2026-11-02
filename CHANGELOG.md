@@ -9,6 +9,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.13.9] - 2026-11-01
+
+This patch fixes bugs in SDR output, diff and snapshot output, the org report, and CLI option handling. Several results change on purpose:
+- SDR results, the run summary JSON and Markdown, the batch summary, and the `--git-commit` message now show the real data view name instead of the filename-safe form. File names are unchanged.
+- `--show-only` now also filters calculated metric and segment diffs, so a run can exit 0 where hidden inventory changes made it exit 2.
+- `--compare-org-report` with a baseline from another org now exits 1.
+- A negative `--limit` with `--org-report` now exits 1. A `--core-threshold` outside 0.0 to 1.0, or `nan` for either threshold option, now exits 2.
+- `--agent-mode` with `--interactive`, and `--watch` with `--dry-run`, `--config-status`, `--config-json`, `--validate-config`, or `--interactive`, now exit 1.
+- Calculated metric `formula_summary` text changes for metrics with a compound subtract or multiply operand. `formula_summary` is compared in diffs, so a diff against a v3.13.8 snapshot shows those metrics as modified once.
+
+### Fixed
+
+- **Data view names in results:** the filename-safe form of the data view name replaced the real name in results, so "Prod: Web/App (EU) & Co." showed as "Prod WebApp EU  Co" in the run summary JSON and Markdown, the batch summary, the SUCCESS line, and the `--git-commit` message. These now show the real name. The Excel file name and the git snapshot folder are unchanged. Names are escaped in the GitHub step summary table, so a `|` in a name no longer shifts its columns.
+  - **Behavior change:** tools that read `data_view_name` from the run summary JSON now get the real name.
+- **Null data view name:** a data view whose name was null crashed the batch summary after all the work was done. The name now shows as "Unknown", and the file name is unchanged.
+- **Coverage counts:** the SDR Coverage section showed counts as `2.0` and `NaN` in CSV, Markdown, HTML, and Notion. Counts are now whole numbers, and families that were not requested show a blank. Excel is unchanged.
+- **Missing values in HTML:** the HTML SDR showed `NaN` or `None` for missing values, such as a metric with no description. These cells are now blank, as in every other format.
+- **Inventory sheets:** an abbreviated inventory flag such as `--include-calc`, or `--include-all-inventory` together with a specific inventory flag, silently left inventory sheets out of the workbook and the inventory summary. Every requested inventory now appears. `--include-all-inventory` alone keeps the default order.
+- **Calculated metric summaries:** subtract and multiply never grouped compound operands, so `a x (b + c)` read as `a x b + c` and `a - (b + c)` read as `a - b + c`. Multiply now groups an ungrouped sum or difference on either side, and subtract groups its right side. Operands that are already grouped are unchanged.
+  - **Behavior change:** `formula_summary` changes for the affected metrics, so a diff against a v3.13.8 snapshot shows them as modified once.
+- **Diff Excel with missing names:** a component whose name was NaN, `pd.NA`, or `pd.NaT` made the diff workbook fail with "NAN/INF not supported". These names are now written as blank cells.
+- **Diff Excel summary with equal labels:** when both sides had the same label, such as two snapshots of one data view from the same day, the Summary sheet kept only one count column. It now keeps both.
+- **`--show-only` with inventory:** `--show-only` filtered metric and dimension diffs only. Calculated metric and segment diffs kept every change type, were listed in every format, and still set `has_changes` and the exit code. They are now filtered too, as the docs describe.
+  - **Behavior change:** `--show-only` with `--include-segments`, `--include-calculated`, or `--include-all-inventory` can now exit 0 where it exited 2.
+- **PR comment inventory:** `--format-pr-comment` counted calculated metric and segment changes in its summary line but never listed them. It now has summary rows and collapsible sections for them.
+- **Empty diff CSVs:** a diff CSV with no rows was empty, so tools such as `pd.read_csv` rejected it. These files now always have the `status,id,name,details` header.
+- **Missing inventory hint:** when a snapshot lacked the requested inventory, the hint suggested a command with `--auto-snapshot`, which saves no snapshot in SDR mode. It now suggests `--snapshot` with a path.
+- **Console diff summary:** a segments-only diff with no segment changes did not show the Segments row. It now does.
+- **Cross data view error under `--format json`:** `--diff-snapshot` and `--compare-snapshots` printed the "requires snapshots from the same data view" error as plain text even under `--format json`. It now uses the JSON error format on stderr, like the missing-inventory error. Console text is unchanged.
+- **Org report with no components:** when every selected data view failed or had no components, `--format csv` (and `all` and `data`) failed with `KeyError: 'Distribution Bucket'`, and the console naming audit divided by zero. Both now finish, and the components CSV has its header row.
+- **`--org-stats` formats:** `--org-stats` with `--format excel`, `csv`, `markdown`, or `html` wrote nothing and gave no message. It now warns that `--org-stats` only writes console or JSON output. The exit code is unchanged.
+- **Org cache and renamed data views:** with `--use-cache`, a renamed data view kept its old name in the report, even when `--filter` matched the new name. Cache hits now use the current name.
+- **Org baseline from another org:** `--compare-org-report` accepted a baseline from a different org and reported false drift. It now prints an error, still writes the report, and exits 1. A baseline with no org ID still compares.
+  - **Behavior change:** a cross-org baseline now exits 1.
+- **Org threshold labels:** threshold labels truncated values, so `--core-threshold 0.57` showed 56%, and Markdown and HTML could disagree with the console on the overlap label. The common band label always said 25-49%. Labels now round the same way in every format, and the common band follows the core threshold. Default labels are unchanged.
+- **Org `--limit` and `--core-threshold` values:** `--org-report --limit -1` silently dropped the last data view, and `--core-threshold 50` was accepted. A negative `--limit` with `--org-report` now exits 1, and `--core-threshold` must be between 0.0 and 1.0 (exit 2). `nan` is rejected for `--core-threshold` and `--overlap-threshold`.
+  - **Behavior change:** these values are now rejected.
+- **`-q` in diff and org report modes:** `-q`, and short-flag groups such as `-qy`, were ignored by every diff mode and by `--org-report`, which still printed banners. `-q` now works the same as `--quiet`.
+- **`--profile-import` with list values:** importing a config file whose `secret` or `scopes` was a list stored the Python list text, so the new profile failed to authenticate. These values are now read the way `config.json` reads them: the first secret, and comma-separated scopes. String values are unchanged.
+- **`--agent-mode` with `--interactive`:** the docs say these cannot be combined, but the combination ran the interactive wizard and exited 0. It now exits 1.
+  - **Behavior change:** this also applies when an informational flag such as `--exit-codes` is present.
+- **`--watch` with one-shot modes:** `--watch` started its polling loop even when `--dry-run`, `--config-status`, `--config-json`, `--validate-config`, or `--interactive` was also given. These combinations now exit 1 before any API call, and the CLI reference lists them.
+  - **Behavior change:** these combinations are now rejected.
+
 ## [3.13.8] - 2026-11-01
 
 This patch fixes bugs in credential handling, diff and snapshot output, SDR output, data quality, and batch runs. It also makes snapshot-based commands faster. The diagnostic commands (`--config-status`, `--validate-config`, `--dry-run`) now check credentials the same way real runs do. Snapshot files and diff JSON are now always valid JSON. Several results change on purpose:

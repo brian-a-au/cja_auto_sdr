@@ -1315,4 +1315,10 @@ def test_short_quiet_flag_suppresses_compare_snapshots_banner(tmp_path, monkeypa
         outputs[flag] = capsys.readouterr().out
 
     assert "COMPARING TWO SNAPSHOTS" not in outputs["-q"]
-    assert outputs["-q"] == outputs["--quiet"]
+    # The report carries a generation timestamp, which can tick between the two runs.
+    import re as _re
+
+    def _mask(text):
+        return _re.sub(r"\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}", "<ts>", text)
+
+    assert _mask(outputs["-q"]) == _mask(outputs["--quiet"])
