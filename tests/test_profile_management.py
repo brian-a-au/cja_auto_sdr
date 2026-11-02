@@ -960,3 +960,33 @@ class TestImportProfileImportSourceErrors:
         result = self._run_import(ValueError("no credentials"), capsys)
         assert result is False
         assert "Error loading profile import source" in capsys.readouterr().err
+
+
+# ===========================================================================
+# CRED-20 / CRED-21: profile names are trimmed, active marker ignores padding
+# ===========================================================================
+
+
+class TestProfileNameTrimming:
+    def test_profile_show_trims_name(self, tmp_path, capsys, monkeypatch):
+        from cja_auto_sdr.generator import main
+
+        monkeypatch.setenv("CJA_HOME", str(tmp_path))
+        monkeypatch.delenv("CJA_PROFILE", raising=False)
+        _write_config_json(tmp_path / "orgs" / "prod")
+        monkeypatch.setattr("sys.argv", ["cja_auto_sdr", "--profile-show", " prod "])
+        with pytest.raises(SystemExit) as exc:
+            main()
+        assert exc.value.code == 0
+        assert "prod" in capsys.readouterr().out
+
+    def test_profile_list_marks_padded_env_profile_active(self, tmp_path, capsys, monkeypatch):
+        from cja_auto_sdr.generator import list_profiles
+
+        monkeypatch.setenv("CJA_HOME", str(tmp_path))
+        monkeypatch.setenv("CJA_PROFILE", "prod ")
+        _write_config_json(tmp_path / "orgs" / "prod")
+        assert list_profiles(output_format="json") is True
+        data = json.loads(capsys.readouterr().out)
+        assert data["active"] == "prod"
+        assert [p["active"] for p in data["profiles"] if p["name"] == "prod"] == [True]

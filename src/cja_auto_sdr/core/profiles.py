@@ -272,7 +272,7 @@ def list_profiles(output_format: str = "table") -> bool:
         return True
 
     profiles = []
-    active_profile = os.environ.get("CJA_PROFILE")
+    active_profile = resolve_active_profile(None)
 
     for item in sorted(profiles_dir.iterdir()):
         if not os.path.isdir(item):
