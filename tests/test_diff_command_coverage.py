@@ -1220,3 +1220,76 @@ def test_cross_dv_error_json_has_ids(tmp_path, monkeypatch, capsys):
     assert payload["error_type"] == "comparison_error"
     assert payload["source_data_view_id"] == "dv_a"
     assert payload["target_data_view_id"] == "dv_b"
+
+
+class TestNullSnapshotNameDisplay:
+    """A null or NaN snapshot name is blank in banners, labels, and reports, never 'None' or 'nan'."""
+
+    def _null_pair(self, tmp_path):
+        a = _hunt_snap(tmp_path / "a.json", data_view_name=None)
+        b = _hunt_snap(
+            tmp_path / "b.json", data_view_name=None, metrics=[{"id": "m1", "name": "M", "description": "b"}]
+        )
+        return a, b
+
+    def test_console_banner_and_labels(self, tmp_path, monkeypatch, capsys):
+        import re
+
+        a, b = self._null_pair(tmp_path)
+        code = _hunt_main(monkeypatch, ["--compare-snapshots", a, b])
+        out = capsys.readouterr().out
+        assert code == 2
+        assert "Comparing:" in out
+        assert not re.search(r"\bNone\b", out)
+        assert not re.search(r"\bnan\b", out, re.IGNORECASE)
+
+    def test_markdown_header(self, tmp_path, monkeypatch, capsys):
+        import re
+
+        a, b = self._null_pair(tmp_path)
+        out_dir = tmp_path / "out"
+        out_dir.mkdir()
+        code = _hunt_main(
+            monkeypatch, ["--compare-snapshots", a, b, "--format", "markdown", "--output-dir", str(out_dir), "--quiet"]
+        )
+        assert code == 2
+        md = next(out_dir.glob("*.md")).read_text(encoding="utf-8")
+        assert not re.search(r"\bNone\b", md)
+        assert not re.search(r"\bnan\b", md, re.IGNORECASE)
+
+    def test_snapshot_created_banner(self, tmp_path, monkeypatch, capsys):
+        import re
+        from unittest.mock import MagicMock
+
+        import pandas as pd
+
+        from cja_auto_sdr.diff.commands import handle_snapshot_command
+
+        cja = MagicMock()
+        cja.getDataView.return_value = {"id": "dv_1", "name": None, "owner": {"name": "O"}}
+        cja.getMetrics.return_value = pd.DataFrame([{"id": "m1", "name": "M", "type": "int"}])
+        cja.getDimensions.return_value = pd.DataFrame([{"id": "d1", "name": "D", "type": "string"}])
+        monkeypatch.setattr("cja_auto_sdr.generator.configure_cjapy", lambda **k: (True, "test", None))
+        monkeypatch.setattr("cja_auto_sdr.generator.cjapy.CJA", lambda: cja)
+        ok = handle_snapshot_command(data_view_id="dv_1", snapshot_file=str(tmp_path / "s.json"))
+        out = capsys.readouterr().out
+        assert ok is True
+        assert "Data View:  (dv_1)" in out
+        assert not re.search(r"\bNone\b", out)
+
+
+def test_diff_step_summary_blanks_null_names():
+    import re
+
+    from cja_auto_sdr.diff.models import DiffResult, DiffSummary, MetadataDiff
+    from cja_auto_sdr.output.run_summary import build_diff_step_summary
+
+    result = DiffResult(
+        summary=DiffSummary(),
+        metadata_diff=MetadataDiff(source_name=None, target_name=float("nan"), source_id="a", target_id="b"),
+        metric_diffs=[],
+        dimension_diffs=[],
+    )
+    text = build_diff_step_summary(result)
+    assert not re.search(r"\bNone\b", text)
+    assert not re.search(r"\bnan\b", text, re.IGNORECASE)

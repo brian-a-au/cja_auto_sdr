@@ -18,6 +18,7 @@ from cja_auto_sdr.core.colors import ConsoleColors
 from cja_auto_sdr.core.exceptions import OutputError
 from cja_auto_sdr.core.json_io import write_text_atomic_compatible
 from cja_auto_sdr.diff.snapshot import _annotate_snapshot_failure
+from cja_auto_sdr.output.diff.common import _display_name
 from cja_auto_sdr.output.excel_staging import prepare_staged_destination
 
 if TYPE_CHECKING:
@@ -119,8 +120,10 @@ def _print_cross_data_view_inventory_error(
         generator.ConsoleColors.error("ERROR: Inventory comparison requires snapshots from the same data view."),
         file=sys.stderr,
     )
-    print(f"  Source: {source_snapshot.data_view_name} ({source_snapshot.data_view_id})", file=sys.stderr)
-    target_text = f"{target_name} ({target_id})" if target_name else target_id
+    print(
+        f"  Source: {_display_name(source_snapshot.data_view_name)} ({source_snapshot.data_view_id})", file=sys.stderr
+    )
+    target_text = f"{_display_name(target_name)} ({target_id})" if _display_name(target_name) else target_id
     print(f"  Target: {target_text}", file=sys.stderr)
     print(file=sys.stderr)
     print("Inventory IDs are data-view-scoped and cannot be matched across different data views.", file=sys.stderr)
@@ -234,7 +237,7 @@ def handle_snapshot_command(
             print("=" * generator.BANNER_WIDTH)
             print(generator.ConsoleColors.success("SNAPSHOT CREATED SUCCESSFULLY"))
             print("=" * generator.BANNER_WIDTH)
-            print(f"Data View: {snapshot.data_view_name} ({snapshot.data_view_id})")
+            print(f"Data View: {_display_name(snapshot.data_view_name)} ({snapshot.data_view_id})")
             print(f"Metrics: {len(snapshot.metrics)}")
             print(f"Dimensions: {len(snapshot.dimensions)}")
             if snapshot.calculated_metrics_inventory is not None:
@@ -952,8 +955,12 @@ def handle_compare_snapshots_command(
         if labels:
             source_label, target_label = labels
         else:
-            source_label = f"{source_snapshot.data_view_name} ({source_snapshot.created_at[:10]})"
-            target_label = f"{target_snapshot.data_view_name} ({target_snapshot.created_at[:10]})"
+            source_label = (
+                f"{_display_name(source_snapshot.data_view_name)} ({source_snapshot.created_at[:10]})".strip()
+            )
+            target_label = (
+                f"{_display_name(target_snapshot.data_view_name)} ({target_snapshot.created_at[:10]})".strip()
+            )
 
         if not quiet and not quiet_diff:
             print(f"Comparing: {source_label} vs {target_label}")
@@ -965,14 +972,14 @@ def handle_compare_snapshots_command(
             print("  Source:")
             print(f"    File: {Path(source_file).name} ({source_size_str})")
             print(f"    Created: {source_snapshot.created_at}")
-            print(f"    Data View: {source_snapshot.data_view_name} ({source_snapshot.data_view_id})")
+            print(f"    Data View: {_display_name(source_snapshot.data_view_name)} ({source_snapshot.data_view_id})")
             print(f"    Metrics: {len(source_snapshot.metrics):,} | Dimensions: {len(source_snapshot.dimensions):,}")
             target_size = os.path.getsize(target_file)
             target_size_str = f"{target_size:,} bytes" if target_size < 1024 else f"{target_size / 1024:.1f} KB"
             print("  Target:")
             print(f"    File: {Path(target_file).name} ({target_size_str})")
             print(f"    Created: {target_snapshot.created_at}")
-            print(f"    Data View: {target_snapshot.data_view_name} ({target_snapshot.data_view_id})")
+            print(f"    Data View: {_display_name(target_snapshot.data_view_name)} ({target_snapshot.data_view_id})")
             print(f"    Metrics: {len(target_snapshot.metrics):,} | Dimensions: {len(target_snapshot.dimensions):,}")
             print("-" * 40)
             print()
