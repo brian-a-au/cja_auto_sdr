@@ -106,6 +106,34 @@ def load_profile_config_json(profile_path: Path) -> dict[str, str] | None:
         return None
 
 
+_DOUBLE_QUOTE_ESCAPES = {"\\": "\\", '"': '"', "n": "\n", "t": "\t"}
+_SINGLE_QUOTE_ESCAPES = {"\\": "\\", "'": "'"}
+
+
+def _decode_quoted_dotenv_value(value: str) -> str:
+    """Decode a quoted ``.env`` value: find the closing unescaped quote and decode escapes.
+
+    Double quotes decode ``\\``, ``\"``, ``\n``, ``\t``; single quotes decode ``\\`` and ``\'`` only
+    (python-dotenv semantics). Unknown escapes keep their backslash. An unterminated quote
+    keeps the rest of the line verbatim.
+    """
+    quote = value[0]
+    escapes = _DOUBLE_QUOTE_ESCAPES if quote == '"' else _SINGLE_QUOTE_ESCAPES
+    out: list[str] = []
+    i = 1
+    while i < len(value):
+        ch = value[i]
+        if ch == "\\" and i + 1 < len(value) and value[i + 1] in escapes:
+            out.append(escapes[value[i + 1]])
+            i += 2
+            continue
+        if ch == quote:
+            return "".join(out)
+        out.append(ch)
+        i += 1
+    return value[1:]
+
+
 def _parse_dotenv_line(raw_line: str) -> tuple[str, str] | None:
     """Parse one ``.env`` line the way python-dotenv does.
 
@@ -123,9 +151,7 @@ def _parse_dotenv_line(raw_line: str) -> tuple[str, str] | None:
     key = key.strip()
     value = value.strip()
     if value[:1] in ('"', "'"):
-        quote = value[0]
-        end = value.find(quote, 1)
-        value = value[1:end] if end != -1 else value[1:]
+        value = _decode_quoted_dotenv_value(value)
     else:
         match = re.search(r"\s#", value)
         if match:
@@ -142,7 +168,7 @@ def load_profile_dotenv(profile_path: Path) -> dict[str, str] | None:
 
     credentials = {}
     try:
-        with open(env_file, encoding="utf-8") as f:
+        with open(env_file, encoding="utf-8-sig") as f:
             for raw_line in f:
                 if "=" not in raw_line:
                     continue
@@ -503,7 +529,7 @@ def load_profile_import_source(source_file: str | Path) -> dict[str, str]:
         merged_credentials: dict[str, str] = {}
 
         if os.path.exists(config_json_path):
-            with open(config_json_path, encoding="utf-8") as f:
+            with open(config_json_path, encoding="utf-8-sig") as f:
                 config_payload = json.load(f)
             if not isinstance(config_payload, dict):
                 raise ValueError(f"Invalid profile config in {config_json_path}: expected JSON object")
@@ -512,14 +538,14 @@ def load_profile_import_source(source_file: str | Path) -> dict[str, str]:
             merged_credentials.update(_normalize_import_credentials(config_payload))
 
         if os.path.exists(dotenv_path):
-            merged_credentials.update(_parse_env_credentials_content(dotenv_path.read_text(encoding="utf-8")))
+            merged_credentials.update(_parse_env_credentials_content(dotenv_path.read_text(encoding="utf-8-sig")))
 
         if not merged_credentials:
             raise ValueError(f"No credentials found in directory: {source_path}")
         return merged_credentials
 
     if source_path.suffix.lower() == ".json":
-        with open(source_path, encoding="utf-8") as f:
+        with open(source_path, encoding="utf-8-sig") as f:
             payload = json.load(f)
         if not isinstance(payload, dict):
             raise ValueError("Profile import JSON must be an object")
@@ -527,7 +553,7 @@ def load_profile_import_source(source_file: str | Path) -> dict[str, str]:
             payload = payload["credentials"]
         credentials = _normalize_import_credentials(payload)
     else:
-        credentials = _parse_env_credentials_content(source_path.read_text(encoding="utf-8"))
+        credentials = _parse_env_credentials_content(source_path.read_text(encoding="utf-8-sig"))
 
     if not credentials:
         raise ValueError("No supported credential fields were found in import source")
