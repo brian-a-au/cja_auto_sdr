@@ -1236,6 +1236,37 @@ class TestOrgComponentAnalyzer:
         # m2 should not be core
         assert "m2" not in distribution.core_metrics
 
+    @pytest.mark.parametrize(
+        ("threshold", "total", "presence"),
+        [(0.55, 100, 55), (0.56, 25, 14), (0.28, 25, 7), (0.07, 100, 7)],
+    )
+    def test_exact_threshold_is_core(self, mock_cja, mock_logger, threshold, total, presence):
+        """A component present in exactly threshold * total data views is core despite float error."""
+        config = OrgReportConfig(core_threshold=threshold)
+        analyzer = OrgComponentAnalyzer(mock_cja, config, mock_logger)
+        dvs = {f"dv_{i}" for i in range(presence)}
+        index = {"m1": ComponentInfo("m1", "metric", data_views=dvs)}
+
+        distribution = analyzer._compute_distribution(index, total_dvs=total)
+
+        assert "m1" in distribution.core_metrics
+
+    @pytest.mark.parametrize(
+        ("fraction", "label"),
+        [(0.996, "99"), (0.567, "56"), (0.5, "50"), (0.57, "57"), (0.29, "29")],
+    )
+    def test_core_label_is_lower_bound(self, fraction, label):
+        from cja_auto_sdr.org.writers.common import threshold_percent
+
+        assert threshold_percent(fraction) == label
+
+    def test_common_band_label_core_26(self):
+        from cja_auto_sdr.org.writers.common import common_band_label
+
+        assert "25-25%" not in common_band_label(0.26, None)
+        assert common_band_label(0.26, None) == "Common (25%+ DVs, < core)"
+        assert common_band_label(0.5, None) == "Common (25-49% DVs)"
+
     def test_compute_similarity_matrix(self, mock_cja, mock_logger):
         """Test Jaccard similarity calculation"""
         config = OrgReportConfig(overlap_threshold=0.5)
@@ -3196,6 +3227,27 @@ class TestOrgReportOutputHandling:
         assert (success, thresholds) == (True, False)
         expected = f"Warning: --org-stats only writes console or JSON output; --format {output_format} was ignored."
         assert expected in capsys.readouterr().err
+
+    @pytest.mark.parametrize(
+        ("output_format", "ignored"),
+        [("ci", ["markdown"]), ("data", ["csv"]), ("all", ["csv", "excel", "html", "markdown"])],
+    )
+    def test_org_stats_writes_json_for_aliases_including_json(
+        self, sample_result, capsys, tmp_path, output_format, ignored
+    ):
+        success, _ = self._run_org_stats(sample_result, output_format, tmp_path)
+
+        assert success is True
+        assert list(tmp_path.glob("*.json"))
+        warning = next(line for line in capsys.readouterr().err.splitlines() if "--org-stats only writes" in line)
+        assert f"ignored: {', '.join(ignored)}." in warning
+        assert "json" not in warning.split("ignored:")[1]
+
+    def test_org_stats_excel_writes_nothing(self, sample_result, capsys, tmp_path):
+        self._run_org_stats(sample_result, "excel", tmp_path)
+
+        assert not list(tmp_path.glob("*.json"))
+        assert "--format excel was ignored." in capsys.readouterr().err
 
     @pytest.mark.parametrize("output_format", ["console", "json"])
     def test_org_stats_supported_format_has_no_warning(self, sample_result, capsys, tmp_path, output_format):
@@ -5246,7 +5298,34 @@ def test_org_report_negative_limit_exits_1(tmp_path, monkeypatch, capsys):
         code = _run_main(["--org-report", "--limit", "-1"], tmp_path, monkeypatch)
 
     assert code == 1
-    assert "--limit cannot be negative" in capsys.readouterr().err
+    assert "--limit must be at least 1 with --org-report" in capsys.readouterr().err
+    run.assert_not_called()
+
+
+def test_org_report_zero_limit_exits_1(tmp_path, monkeypatch, capsys):
+    with patch("cja_auto_sdr.generator.run_org_report", return_value=(True, False)) as run:
+        code = _run_main(["--org-report", "--limit", "0"], tmp_path, monkeypatch)
+
+    assert code == 1
+    assert "--limit must be at least 1 with --org-report" in capsys.readouterr().err
+    run.assert_not_called()
+
+
+def test_org_report_limit_one_accepted(tmp_path, monkeypatch):
+    with patch("cja_auto_sdr.generator.run_org_report", return_value=(True, False)) as run:
+        code = _run_main(["--org-report", "--limit", "1"], tmp_path, monkeypatch)
+
+    assert code == 0
+    run.assert_called_once()
+
+
+@pytest.mark.parametrize("value", ["0", "-5"])
+def test_core_min_count_below_one_exits_2(value, tmp_path, monkeypatch, capsys):
+    with patch("cja_auto_sdr.generator.run_org_report", return_value=(True, False)) as run:
+        code = _run_main(["--org-report", f"--core-min-count={value}"], tmp_path, monkeypatch)
+
+    assert code == 2
+    assert "must be at least 1" in capsys.readouterr().err
     run.assert_not_called()
 
 

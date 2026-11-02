@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from cja_auto_sdr.core.colors import ConsoleColors
 from cja_auto_sdr.core.constants import BANNER_WIDTH, effective_governance_overlap_threshold
 from cja_auto_sdr.org.models import (
     OrgReportComparison,
@@ -210,8 +211,10 @@ def write_org_report_console(
         effective_threshold = effective_governance_overlap_threshold(config.overlap_threshold)
         threshold_note = ""
         if config.overlap_threshold > 0.9:
-            threshold_note = f" (configured {config.overlap_threshold * 100:.0f}%, capped at 90% for governance checks)"
-        print(f"Pairs with >= {effective_threshold * 100:.0f}% Jaccard similarity{threshold_note}:")
+            threshold_note = (
+                f" (configured {threshold_percent(config.overlap_threshold)}%, capped at 90% for governance checks)"
+            )
+        print(f"Pairs with >= {threshold_percent(effective_threshold)}% Jaccard similarity{threshold_note}:")
         print()
 
         for pair in result.similarity_pairs[:10]:  # Limit to top 10
@@ -452,6 +455,11 @@ def write_org_report_comparison_console(comparison: OrgReportComparison, quiet: 
     print(f"Previous: {comparison.previous_timestamp}")
     print(f"Current:  {comparison.current_timestamp}")
     print()
+
+    for warning in comparison.warnings:
+        print(ConsoleColors.warning(f"Warning: {warning}"))
+    if comparison.warnings:
+        print()
 
     summary = comparison.summary
     print("-" * 70)

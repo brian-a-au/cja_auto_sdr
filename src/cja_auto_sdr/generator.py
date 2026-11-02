@@ -2121,8 +2121,8 @@ def _validate_semantic_flag_relationships(
         _exit_error("Use either --list-snapshots or --prune-snapshots, not both")
     if getattr(args, "profile_overwrite", False) and not getattr(args, "profile_import", None):
         _exit_error("--profile-overwrite requires --profile-import")
-    if getattr(args, "org_report", False) and isinstance(getattr(args, "org_limit", None), int) and args.org_limit < 0:
-        _exit_error("--limit cannot be negative")
+    if getattr(args, "org_report", False) and isinstance(getattr(args, "org_limit", None), int) and args.org_limit < 1:
+        _exit_error("--limit must be at least 1 with --org-report")
     if getattr(args, "agent_mode", False) and getattr(args, "interactive", False):
         _exit_error("--agent-mode cannot be used with --interactive")
     # Watch mode rejections.
@@ -5967,10 +5967,35 @@ def compare_org_reports(current: OrgReportResult, previous_path: str) -> OrgRepo
     except ValueError as exc:
         raise ValueError(f"Current org-report is not eligible for comparison: {exc}") from exc
 
-    return build_org_report_comparison(
+    comparison = build_org_report_comparison(
         previous=previous_snapshot,
         current=current_snapshot,
     )
+    comparison.warnings.extend(_org_baseline_threshold_warnings(current, prev_data))
+    return comparison
+
+
+def _org_baseline_threshold_warnings(current: OrgReportResult, prev_data: Any) -> list[str]:
+    """Describe thresholds that differ between the baseline JSON and the current run."""
+    prev_params = prev_data.get("parameters") if isinstance(prev_data, dict) else None
+    if not isinstance(prev_params, dict):
+        return []
+    warnings: list[str] = []
+    for key in ("core_threshold", "core_min_count", "overlap_threshold"):
+        if key not in prev_params:
+            continue
+        before = prev_params[key]
+        after = getattr(current.parameters, key, None)
+        if isinstance(before, (int, float)) and isinstance(after, (int, float)) and not isinstance(before, bool):
+            differs = abs(before - after) > 1e-9
+        else:
+            differs = before != after
+        if differs:
+            warnings.append(
+                f"Baseline used {key}={before} but this run uses {key}={after}; "
+                "core and similarity deltas may not be comparable."
+            )
+    return warnings
 
 
 def _org_report_history_exclusion_note(
@@ -6395,19 +6420,23 @@ def run_org_report(
 
         # Handle org-stats mode (Feature 2) - minimal output
         if org_config.org_stats_only:
-            if output_format not in ("console", "json"):
+            requested_formats = _resolve_requested_output_formats(output_format)
+            stats_json_requested = "json" in requested_formats
+            ignored_formats = sorted(requested_formats - {"console", "json"})
+            if ignored_formats:
                 # Shown even under --quiet: the requested artifact will not exist.
+                if stats_json_requested:
+                    ignored_text = f"--format {output_format} ignored: {', '.join(ignored_formats)}."
+                else:
+                    ignored_text = f"--format {output_format} was ignored."
                 print(
-                    ConsoleColors.warning(
-                        f"Warning: --org-stats only writes console or JSON output; "
-                        f"--format {output_format} was ignored."
-                    ),
+                    ConsoleColors.warning(f"Warning: --org-stats only writes console or JSON output; {ignored_text}"),
                     file=sys.stderr,
                 )
             with contextlib.redirect_stdout(status_stream):
                 write_org_report_stats_only(result, quiet=console_writer_quiet, trending=trending)
-            # Still output JSON if requested for CI integration
-            if output_format == "json":
+            # Still output JSON if requested for CI integration (directly or via an alias)
+            if stats_json_requested:
                 if output_to_stdout:
                     json.dump(
                         build_org_report_json_data(result, trending=trending), sys.stdout, indent=2, ensure_ascii=False

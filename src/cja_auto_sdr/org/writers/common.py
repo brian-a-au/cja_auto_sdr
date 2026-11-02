@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from collections.abc import Callable
 from typing import Any
 
@@ -11,15 +12,18 @@ from cja_auto_sdr.core.constants import FORMAT_ALIASES
 
 
 def threshold_percent(fraction: float) -> str:
-    """Render a 0-1 threshold as a whole percent without the % sign (0.57 -> "57")."""
-    return f"{fraction * 100:.0f}"
+    """Render a 0-1 threshold as a whole percent without the % sign (0.57 -> "57"); fractions floor so the label is a lower bound."""
+    return f"{math.floor(round(fraction * 100, 9))}"
 
 
 def common_band_label(core_threshold: float, core_min_count: int | None, *, prefix: str = "") -> str:
     """Label the common band, which runs from 25% of data views up to the core cut."""
-    core_percent = round(core_threshold * 100)
-    if core_min_count is None and core_percent > 25:
-        return f"Common ({prefix}25-{core_percent - 1}% DVs)"
+    exact_percent = round(core_threshold * 100, 9)
+    core_percent = math.floor(exact_percent)
+    if core_min_count is None and core_percent > 26:
+        # A fractional cut (56.7%) makes the floored percent (56%) still Common; a whole cut starts core there.
+        upper = core_percent if exact_percent != core_percent else core_percent - 1
+        return f"Common ({prefix}25-{upper}% DVs)"
     return f"Common ({prefix}25%+ DVs, < core)"
 
 
