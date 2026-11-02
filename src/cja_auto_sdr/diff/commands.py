@@ -18,6 +18,8 @@ from cja_auto_sdr.core.colors import ConsoleColors
 from cja_auto_sdr.core.exceptions import OutputError
 from cja_auto_sdr.core.json_io import write_text_atomic_compatible
 from cja_auto_sdr.diff.snapshot import _annotate_snapshot_failure
+from cja_auto_sdr.output.diff.common import _display_name
+from cja_auto_sdr.output.excel_staging import prepare_staged_destination
 
 if TYPE_CHECKING:
     from cja_auto_sdr.diff.models import DiffResult
@@ -40,6 +42,14 @@ def _generator_module():
 _SINGLE_FILE_DIFF_FORMATS = frozenset({"json", "markdown", "html", "excel"})
 
 
+class _DiffOutputDestinationError(OutputError):
+    """The ``--diff-output`` destination cannot be written (hard-linked or not a regular file)."""
+
+
+def _print_diff_output_destination_error(generator: Any, error: OutputError) -> None:
+    print(generator.ConsoleColors.error(f"ERROR: Cannot write --diff-output: {error!s}"), file=sys.stderr)
+
+
 def _write_diff_report(
     render: Callable[[str | Path], str | None],
     *,
@@ -58,7 +68,10 @@ def _write_diff_report(
     output under ``output_dir`` and say so on stderr.
     """
     if diff_output and not output_to_stdout and output_format in _SINGLE_FILE_DIFF_FORMATS:
-        destination = Path(diff_output)
+        try:
+            destination, previous_mode = prepare_staged_destination(diff_output, label="Diff output")
+        except OutputError as e:
+            raise _DiffOutputDestinationError(str(e)) from e
         destination.parent.mkdir(parents=True, exist_ok=True)
         staging_dir = Path(tempfile.mkdtemp(prefix=".diff-", dir=destination.parent))
         try:
@@ -66,6 +79,8 @@ def _write_diff_report(
             rendered = [path for path in staging_dir.iterdir() if path.is_file()]
             if len(rendered) != 1:
                 raise OutputError(f"Expected one {output_format} diff report, found {len(rendered)}")
+            if previous_mode is not None:
+                rendered[0].chmod(previous_mode)
             os.replace(rendered[0], destination)
         finally:
             shutil.rmtree(staging_dir, ignore_errors=True)
@@ -79,6 +94,11 @@ def _write_diff_report(
         write_text_atomic_compatible(diff_output, ConsoleColors.ANSI_ESCAPE.sub("", output_content))
         if not quiet:
             print(f"Diff output written to: {diff_output}")
+    elif diff_output and output_to_stdout:
+        print(
+            f"Warning: --diff-output {diff_output} was ignored because the report was written to stdout (--output -).",
+            file=sys.stderr,
+        )
     elif diff_output and not output_to_stdout:
         print(
             f"Warning: --diff-output does not apply to --format {output_format} (it produces multiple files); "
@@ -101,14 +121,20 @@ def _print_cross_data_view_inventory_error(
             "Inventory comparison requires snapshots from the same data view",
             is_machine_readable=True,
             error_type="comparison_error",
+            additional_fields={
+                "source_data_view_id": source_snapshot.data_view_id,
+                "target_data_view_id": target_id,
+            },
         )
         return
     print(
         generator.ConsoleColors.error("ERROR: Inventory comparison requires snapshots from the same data view."),
         file=sys.stderr,
     )
-    print(f"  Source: {source_snapshot.data_view_name} ({source_snapshot.data_view_id})", file=sys.stderr)
-    target_text = f"{target_name} ({target_id})" if target_name else target_id
+    print(
+        f"  Source: {_display_name(source_snapshot.data_view_name)} ({source_snapshot.data_view_id})", file=sys.stderr
+    )
+    target_text = f"{_display_name(target_name)} ({target_id})" if _display_name(target_name) else target_id
     print(f"  Target: {target_text}", file=sys.stderr)
     print(file=sys.stderr)
     print("Inventory IDs are data-view-scoped and cannot be matched across different data views.", file=sys.stderr)
@@ -145,17 +171,20 @@ def _emit_api_failure_hint(generator: Any, exc: Exception) -> None:
     generator._print_api_hint(exc, file=sys.stderr)
 
 
-def _emit_requested_inventory_failure(generator: Any, exc: Exception) -> bool:
+def _emit_requested_inventory_failure(generator: Any, exc: Exception, *, is_machine_readable: bool = True) -> bool:
     stage = getattr(exc, "_cja_snapshot_failure_stage", None)
     if stage not in {"calculated_metrics_inventory", "segments_inventory", "requested_inventory_validation"}:
         return False
     hint = generator.api_connection_hint(exc)
     generator._emit_discovery_error(
         str(exc),
-        is_machine_readable=True,
+        is_machine_readable=is_machine_readable,
         error_type="comparison_error",
         additional_fields={"hint": hint} if hint else None,
+        human_to_stderr=True,
     )
+    if hint and not is_machine_readable:
+        print(f"Hint: {hint}", file=sys.stderr)
     return True
 
 
@@ -219,7 +248,7 @@ def handle_snapshot_command(
             print("=" * generator.BANNER_WIDTH)
             print(generator.ConsoleColors.success("SNAPSHOT CREATED SUCCESSFULLY"))
             print("=" * generator.BANNER_WIDTH)
-            print(f"Data View: {snapshot.data_view_name} ({snapshot.data_view_id})")
+            print(f"Data View: {_display_name(snapshot.data_view_name)} ({snapshot.data_view_id})")
             print(f"Metrics: {len(snapshot.metrics)}")
             print(f"Dimensions: {len(snapshot.dimensions)}")
             if snapshot.calculated_metrics_inventory is not None:
@@ -415,7 +444,7 @@ def handle_diff_command(
                     snapshot_manager.apply_retention_policy(snapshot_dir, target_id, effective_keep_last)
                 )
             if effective_keep_since:
-                days = generator.parse_retention_period(effective_keep_since)
+                days = generator.parse_positive_retention_period(effective_keep_since)
                 if days:
                     total_deleted += len(
                         snapshot_manager.apply_date_retention_policy(snapshot_dir, source_id, keep_since_days=days)
@@ -460,27 +489,31 @@ def handle_diff_command(
         if not quiet_diff:
             effective_format = "pr-comment" if format_pr_comment else output_format
             base_filename = f"diff_{source_id}_{target_id}_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}"
-            _write_diff_report(
-                lambda directory: generator.write_diff_output(
-                    diff_result,
-                    effective_format,
-                    base_filename,
-                    directory,
-                    logger,
-                    changes_only,
-                    summary_only,
-                    side_by_side,
-                    use_color=generator.ConsoleColors.is_enabled() and not no_color,
-                    group_by_field=group_by_field,
-                    group_by_field_limit=group_by_field_limit,
+            try:
+                _write_diff_report(
+                    lambda directory: generator.write_diff_output(
+                        diff_result,
+                        effective_format,
+                        base_filename,
+                        directory,
+                        logger,
+                        changes_only,
+                        summary_only,
+                        side_by_side,
+                        use_color=generator.ConsoleColors.is_enabled() and not no_color,
+                        group_by_field=group_by_field,
+                        group_by_field_limit=group_by_field_limit,
+                        output_to_stdout=output_to_stdout,
+                    ),
+                    output_format=effective_format,
+                    output_dir=output_dir,
+                    diff_output=diff_output,
+                    quiet=quiet,
                     output_to_stdout=output_to_stdout,
-                ),
-                output_format=effective_format,
-                output_dir=output_dir,
-                diff_output=diff_output,
-                quiet=quiet,
-                output_to_stdout=output_to_stdout,
-            )
+                )
+            except _DiffOutputDestinationError as e:
+                _print_diff_output_destination_error(generator, e)
+                return False, False, None
             if not quiet and output_format != "console" and not output_to_stdout:
                 print()
                 print(generator.ConsoleColors.success("Diff report generated successfully"))
@@ -777,7 +810,7 @@ def handle_diff_snapshot_command(
                     snapshot_manager.apply_retention_policy(snapshot_dir, data_view_id, effective_keep_last)
                 )
             if effective_keep_since:
-                days = generator.parse_retention_period(effective_keep_since)
+                days = generator.parse_positive_retention_period(effective_keep_since)
                 if days:
                     total_deleted += len(
                         snapshot_manager.apply_date_retention_policy(snapshot_dir, data_view_id, keep_since_days=days)
@@ -817,27 +850,31 @@ def handle_diff_snapshot_command(
         if not quiet_diff:
             effective_format = "pr-comment" if format_pr_comment else output_format
             base_filename = f"diff_{data_view_id}_snapshot_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}"
-            _write_diff_report(
-                lambda directory: generator.write_diff_output(
-                    diff_result,
-                    effective_format,
-                    base_filename,
-                    directory,
-                    logger,
-                    changes_only,
-                    summary_only,
-                    side_by_side,
-                    use_color=generator.ConsoleColors.is_enabled() and not no_color,
-                    group_by_field=group_by_field,
-                    group_by_field_limit=group_by_field_limit,
+            try:
+                _write_diff_report(
+                    lambda directory: generator.write_diff_output(
+                        diff_result,
+                        effective_format,
+                        base_filename,
+                        directory,
+                        logger,
+                        changes_only,
+                        summary_only,
+                        side_by_side,
+                        use_color=generator.ConsoleColors.is_enabled() and not no_color,
+                        group_by_field=group_by_field,
+                        group_by_field_limit=group_by_field_limit,
+                        output_to_stdout=output_to_stdout,
+                    ),
+                    output_format=effective_format,
+                    output_dir=output_dir,
+                    diff_output=diff_output,
+                    quiet=quiet,
                     output_to_stdout=output_to_stdout,
-                ),
-                output_format=effective_format,
-                output_dir=output_dir,
-                diff_output=diff_output,
-                quiet=quiet,
-                output_to_stdout=output_to_stdout,
-            )
+                )
+            except _DiffOutputDestinationError as e:
+                _print_diff_output_destination_error(generator, e)
+                return False, False, None
             if not quiet and output_format != "console" and not output_to_stdout:
                 print()
                 print(generator.ConsoleColors.success("Diff report generated successfully"))
@@ -846,19 +883,19 @@ def handle_diff_snapshot_command(
         _populate_diff_advisory_rollup(runtime_details, diff_result, changes_only=changes_only)
         return True, diff_result.summary.has_changes, exit_code_override
     except FileNotFoundError as e:
-        if _emit_requested_inventory_failure(generator, e):
+        if _emit_requested_inventory_failure(generator, e, is_machine_readable=output_format == "json"):
             return False, False, None
         print(generator.ConsoleColors.error(f"ERROR: Snapshot file not found: {snapshot_file}"), file=sys.stderr)
         return False, False, None
     except ValueError as e:
-        if _emit_requested_inventory_failure(generator, e):
+        if _emit_requested_inventory_failure(generator, e, is_machine_readable=output_format == "json"):
             return False, False, None
         print(generator.ConsoleColors.error(f"ERROR: Invalid snapshot file: {e!s}"), file=sys.stderr)
         return False, False, None
     except (KeyboardInterrupt, SystemExit):
         raise
     except generator.RECOVERABLE_COMMAND_HANDLER_EXCEPTIONS as e:
-        if _emit_requested_inventory_failure(generator, e):
+        if _emit_requested_inventory_failure(generator, e, is_machine_readable=output_format == "json"):
             return False, False, None
         print(generator.ConsoleColors.error(f"ERROR: Failed to compare against snapshot: {e!s}"), file=sys.stderr)
         _emit_api_failure_hint(generator, e)
@@ -937,8 +974,12 @@ def handle_compare_snapshots_command(
         if labels:
             source_label, target_label = labels
         else:
-            source_label = f"{source_snapshot.data_view_name} ({source_snapshot.created_at[:10]})"
-            target_label = f"{target_snapshot.data_view_name} ({target_snapshot.created_at[:10]})"
+            source_label = (
+                f"{_display_name(source_snapshot.data_view_name)} ({source_snapshot.created_at[:10]})".strip()
+            )
+            target_label = (
+                f"{_display_name(target_snapshot.data_view_name)} ({target_snapshot.created_at[:10]})".strip()
+            )
 
         if not quiet and not quiet_diff:
             print(f"Comparing: {source_label} vs {target_label}")
@@ -950,14 +991,14 @@ def handle_compare_snapshots_command(
             print("  Source:")
             print(f"    File: {Path(source_file).name} ({source_size_str})")
             print(f"    Created: {source_snapshot.created_at}")
-            print(f"    Data View: {source_snapshot.data_view_name} ({source_snapshot.data_view_id})")
+            print(f"    Data View: {_display_name(source_snapshot.data_view_name)} ({source_snapshot.data_view_id})")
             print(f"    Metrics: {len(source_snapshot.metrics):,} | Dimensions: {len(source_snapshot.dimensions):,}")
             target_size = os.path.getsize(target_file)
             target_size_str = f"{target_size:,} bytes" if target_size < 1024 else f"{target_size / 1024:.1f} KB"
             print("  Target:")
             print(f"    File: {Path(target_file).name} ({target_size_str})")
             print(f"    Created: {target_snapshot.created_at}")
-            print(f"    Data View: {target_snapshot.data_view_name} ({target_snapshot.data_view_id})")
+            print(f"    Data View: {_display_name(target_snapshot.data_view_name)} ({target_snapshot.data_view_id})")
             print(f"    Metrics: {len(target_snapshot.metrics):,} | Dimensions: {len(target_snapshot.dimensions):,}")
             print("-" * 40)
             print()
@@ -996,27 +1037,31 @@ def handle_compare_snapshots_command(
             source_base = Path(source_file).stem
             target_base = Path(target_file).stem
             base_filename = f"diff_{source_base}_vs_{target_base}_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}"
-            _write_diff_report(
-                lambda directory: generator.write_diff_output(
-                    diff_result,
-                    effective_format,
-                    base_filename,
-                    directory,
-                    logger,
-                    changes_only,
-                    summary_only,
-                    side_by_side,
-                    use_color=generator.ConsoleColors.is_enabled() and not no_color,
-                    group_by_field=group_by_field,
-                    group_by_field_limit=group_by_field_limit,
+            try:
+                _write_diff_report(
+                    lambda directory: generator.write_diff_output(
+                        diff_result,
+                        effective_format,
+                        base_filename,
+                        directory,
+                        logger,
+                        changes_only,
+                        summary_only,
+                        side_by_side,
+                        use_color=generator.ConsoleColors.is_enabled() and not no_color,
+                        group_by_field=group_by_field,
+                        group_by_field_limit=group_by_field_limit,
+                        output_to_stdout=output_to_stdout,
+                    ),
+                    output_format=effective_format,
+                    output_dir=output_dir,
+                    diff_output=diff_output,
+                    quiet=quiet,
                     output_to_stdout=output_to_stdout,
-                ),
-                output_format=effective_format,
-                output_dir=output_dir,
-                diff_output=diff_output,
-                quiet=quiet,
-                output_to_stdout=output_to_stdout,
-            )
+                )
+            except _DiffOutputDestinationError as e:
+                _print_diff_output_destination_error(generator, e)
+                return False, False, None
             if not quiet and output_format != "console" and not output_to_stdout:
                 print()
                 print(generator.ConsoleColors.success("Diff report generated successfully"))
@@ -1030,7 +1075,7 @@ def handle_compare_snapshots_command(
         print(generator.ConsoleColors.error(f"ERROR: {message}"), file=sys.stderr)
         return False, False, None
     except ValueError as e:
-        if _emit_requested_inventory_failure(generator, e):
+        if _emit_requested_inventory_failure(generator, e, is_machine_readable=output_format == "json"):
             return False, False, None
         print(generator.ConsoleColors.error(f"ERROR: Invalid snapshot file: {e!s}"), file=sys.stderr)
         return False, False, None

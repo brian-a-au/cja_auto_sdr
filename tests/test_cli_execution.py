@@ -2,6 +2,7 @@
 
 import argparse
 import contextlib
+import logging
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -978,3 +979,141 @@ class TestInventoryOrderThroughMain:
             main()
 
         assert mock_process.call_args.kwargs["inventory_order"] == expected
+
+
+class TestIgnoredOutputAndCleanConfigJson:
+    """--output on modes that never write it warns on stderr and never pollutes stdout (CLI-22)."""
+
+    @pytest.fixture(autouse=True)
+    def _restore_root_logging(self):
+        """main() may call setup_logging(), which installs root handlers bound to captured streams."""
+        root = logging.getLogger()
+        before = list(root.handlers)
+        yield
+        for handler in list(root.handlers):
+            if handler not in before:
+                root.removeHandler(handler)
+                handler.close()
+
+    @staticmethod
+    def _run_main(argv, monkeypatch, tmp_path):
+        from cja_auto_sdr.generator import main
+
+        monkeypatch.chdir(tmp_path)
+        try:
+            with patch.object(sys, "argv", ["cja_auto_sdr", *argv]):
+                main()
+        except SystemExit as exc:
+            return exc.code
+        return 0
+
+    def test_config_json_with_output_keeps_stdout_json_and_hint_correct(self, tmp_path, monkeypatch, capsys):
+        import json
+
+        with patch("cja_auto_sdr.generator.show_config_status") as mock_status:
+            mock_status.side_effect = lambda *a, **k: print(json.dumps({"ok": True})) or True
+            code = self._run_main(["--config-json", "--output", "s.json"], monkeypatch, tmp_path)
+
+        captured = capsys.readouterr()
+        assert code == 0
+        assert json.loads(captured.out) == {"ok": True}
+        assert "ignored" in captured.err
+        assert "use --config-json" not in captured.err
+        assert "redirect stdout" in captured.err
+
+    def test_validate_config_with_output_warns(self, tmp_path, monkeypatch, capsys):
+        with patch("cja_auto_sdr.generator.validate_config_only", return_value=True):
+            code = self._run_main(["--validate-config", "--output", "v.json"], monkeypatch, tmp_path)
+
+        captured = capsys.readouterr()
+        assert code == 0
+        assert "--output is ignored with --validate-config" in captured.err
+        assert "--output is ignored" not in captured.out
+
+    def test_dry_run_with_output_warns(self, tmp_path, monkeypatch, capsys):
+        with (
+            patch("cja_auto_sdr.generator.run_dry_run", return_value=True),
+            patch("cja_auto_sdr.generator.resolve_data_view_names", return_value=(["dv_1"], {})),
+        ):
+            code = self._run_main(["dv_1", "--dry-run", "--output", "x.json"], monkeypatch, tmp_path)
+
+        captured = capsys.readouterr()
+        assert code == 0
+        assert "--output is ignored with --dry-run" in captured.err
+        assert "Auto-detected format" not in captured.out
+
+
+class TestFilterLimitOutsideOrgAndDiscovery:
+    """--filter/--limit do nothing in SDR mode, so say so on stderr (CLI-24)."""
+
+    @pytest.fixture(autouse=True)
+    def _restore_root_logging(self):
+        """main() may call setup_logging(), which installs root handlers bound to captured streams."""
+        root = logging.getLogger()
+        before = list(root.handlers)
+        yield
+        for handler in list(root.handlers):
+            if handler not in before:
+                root.removeHandler(handler)
+                handler.close()
+
+    WARNING = "--filter/--limit have no effect in SDR mode"
+
+    @staticmethod
+    def _run_main(argv, monkeypatch, tmp_path):
+        from cja_auto_sdr.generator import main
+
+        monkeypatch.chdir(tmp_path)
+        try:
+            with patch.object(sys, "argv", ["cja_auto_sdr", *argv]):
+                main()
+        except SystemExit as exc:
+            return exc.code
+        return 0
+
+    @pytest.mark.parametrize(
+        "argv",
+        [["dv_1", "--batch", "--limit", "1", "--dry-run"], ["dv_1", "--filter", "x", "--dry-run"]],
+    )
+    def test_sdr_mode_warns_on_stderr_only(self, argv, tmp_path, monkeypatch, capsys):
+        with (
+            patch("cja_auto_sdr.generator.run_dry_run", return_value=True),
+            patch("cja_auto_sdr.generator.resolve_data_view_names", return_value=(["dv_1"], {})),
+        ):
+            code = self._run_main(argv, monkeypatch, tmp_path)
+
+        captured = capsys.readouterr()
+        assert code == 0
+        assert self.WARNING in captured.err
+        assert self.WARNING not in captured.out
+
+    def test_org_report_limit_does_not_warn(self, tmp_path, monkeypatch, capsys):
+        with patch("cja_auto_sdr.generator.run_org_report", return_value=(True, False)):
+            self._run_main(
+                ["--org-report", "--limit", "1", "--config-file", str(tmp_path / "none.json")], monkeypatch, tmp_path
+            )
+
+        assert self.WARNING not in capsys.readouterr().err
+
+    def test_list_dataviews_filter_does_not_warn(self, tmp_path, monkeypatch, capsys):
+        with patch("cja_auto_sdr.generator.list_dataviews", return_value=True):
+            self._run_main(["--list-dataviews", "--filter", "x"], monkeypatch, tmp_path)
+
+        assert self.WARNING not in capsys.readouterr().err
+
+    def test_large_batch_prompt_has_no_filter_or_limit_tip(self, capsys):
+        from cja_auto_sdr.cli.execution import _confirm_large_batch
+
+        generator = _make_generator()
+        with (
+            patch("cja_auto_sdr.cli.execution._generator_module", return_value=generator),
+            patch("sys.stdin.isatty", return_value=True),
+            patch("builtins.input", return_value="y"),
+        ):
+            _confirm_large_batch(_make_args(assume_yes=False), data_views=[f"dv_{i}" for i in range(25)])
+
+        out = capsys.readouterr().out
+        assert "Large batch detected" in out
+        assert "--limit" not in out
+        assert "--filter" not in out
+        assert "--yes" in out

@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import inspect
 import json
+import logging
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -1322,3 +1323,85 @@ def test_short_quiet_flag_suppresses_compare_snapshots_banner(tmp_path, monkeypa
         return _re.sub(r"\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}", "<ts>", text)
 
     assert _mask(outputs["-q"]) == _mask(outputs["--quiet"])
+
+
+class TestJsonNameResolutionLogs:
+    """Machine-readable runs keep every stderr line parseable, name resolution included (CLI-23)."""
+
+    @pytest.fixture(autouse=True)
+    def _restore_root_logging(self):
+        """main() may call setup_logging(), which installs root handlers bound to captured streams."""
+        root = logging.getLogger()
+        before = list(root.handlers)
+        yield
+        for handler in list(root.handlers):
+            if handler not in before:
+                root.removeHandler(handler)
+                handler.close()
+
+    @pytest.fixture(autouse=True)
+    def _isolate(self, tmp_path, monkeypatch):
+        import logging
+
+        for var in ("ORG_ID", "CLIENT_ID", "SECRET", "SCOPES", "SANDBOX"):
+            monkeypatch.delenv(var, raising=False)
+        monkeypatch.setenv("CJA_HOME", str(tmp_path / ".cja"))
+        monkeypatch.chdir(tmp_path)
+        logging.getLogger("name_resolution").handlers.clear()
+        yield
+        logging.getLogger("name_resolution").handlers.clear()
+
+    @staticmethod
+    def _assert_stderr_all_json(capsys) -> None:
+        lines = [line for line in capsys.readouterr().err.splitlines() if line.strip()]
+        assert lines
+        for line in lines:
+            json.loads(line)
+
+    def _run(self, argv) -> None:
+        from cja_auto_sdr.generator import main
+
+        with patch.object(sys, "argv", ["cja_auto_sdr", *argv]), pytest.raises(SystemExit):
+            main()
+
+    def test_diff_agent_mode_name_resolution_stderr_is_json(self, tmp_path, capsys):
+        self._run(["--diff", "dv_a", "Some Name", "--agent-mode", "--config-file", str(tmp_path / "missing.json")])
+        self._assert_stderr_all_json(capsys)
+
+    def test_stats_table_json_log_format_name_resolution_stderr_is_json(self, tmp_path, capsys):
+        self._run(["--stats", "Some Name", "--log-format", "json", "--config-file", str(tmp_path / "missing.json")])
+        self._assert_stderr_all_json(capsys)
+
+    @staticmethod
+    def _last_envelope(capsys) -> dict:
+        lines = [line for line in capsys.readouterr().err.splitlines() if line.strip()]
+        assert lines
+        envelopes = [json.loads(line) for line in lines]
+        return envelopes[-1]
+
+    @pytest.mark.parametrize(
+        "argv",
+        [
+            ["--diff", "dv_a", "dv_b", "--agent-mode"],
+            ["--snapshot", "s.json", "dv_a", "--agent-mode"],
+            ["dv_a", "--diff-snapshot", "s.json", "--agent-mode"],
+        ],
+    )
+    def test_missing_credentials_is_configuration_error(self, tmp_path, capsys, argv):
+        self._run([*argv, "--config-file", str(tmp_path / "missing.json")])
+        envelope = self._last_envelope(capsys)
+        assert envelope["error_type"] == "configuration_error"
+        assert "Could not resolve" not in envelope["error"]
+
+    def test_missing_credentials_human_mode_shows_credential_error(self, tmp_path, capsys):
+        self._run(["--diff", "dv_a", "dv_b", "--config-file", str(tmp_path / "missing.json")])
+        err = capsys.readouterr().err
+        assert "ERROR:" in err
+        assert "Could not resolve" not in err
+
+    @patch("cja_auto_sdr.generator.resolve_data_view_names")
+    def test_diff_json_stdout_unresolved_name_is_json(self, mock_resolve, tmp_path, capsys):
+        mock_resolve.return_value = ([], {})
+        self._run(["--diff", "Bogus A", "dv_b", "--format", "json", "--output", "-"])
+        envelope = self._last_envelope(capsys)
+        assert envelope["error_type"] == "not_found"

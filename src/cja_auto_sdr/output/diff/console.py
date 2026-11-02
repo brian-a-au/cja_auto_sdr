@@ -12,6 +12,7 @@ import textwrap
 from cja_auto_sdr.diff.models import ChangeType, DiffResult
 from cja_auto_sdr.output.diff.common import (
     ANSIColors,
+    _display_name,
     _format_diff_value,
     _get_change_detail,
     _get_colored_symbol,
@@ -112,8 +113,8 @@ def write_diff_console_output(
     lines.append("=" * 80)
     lines.append(ANSIColors.bold("DATA VIEW COMPARISON REPORT", c))
     lines.append("=" * 80)
-    lines.append(f"{diff_result.source_label}: {meta.source_name} ({meta.source_id})")
-    lines.append(f"{diff_result.target_label}: {meta.target_name} ({meta.target_id})")
+    lines.append(f"{diff_result.source_label}: {_display_name(meta.source_name)} ({meta.source_id})")
+    lines.append(f"{diff_result.target_label}: {_display_name(meta.target_name)} ({meta.target_id})")
     lines.append(f"Generated: {diff_result.generated_at}")
     lines.append("=" * 80)
 
@@ -122,8 +123,8 @@ def write_diff_console_output(
     lines.append(ANSIColors.bold("SUMMARY", c))
 
     # Build full header labels with data view name and ID
-    src_header = f"{diff_result.source_label}: {meta.source_name} ({meta.source_id})"
-    tgt_header = f"{diff_result.target_label}: {meta.target_name} ({meta.target_id})"
+    src_header = f"{diff_result.source_label}: {_display_name(meta.source_name)} ({meta.source_id})"
+    tgt_header = f"{diff_result.target_label}: {_display_name(meta.target_name)} ({meta.target_id})"
 
     # Calculate dynamic column widths based on full header lengths
     src_width = max(8, len(src_header))
@@ -259,7 +260,7 @@ def write_diff_console_output(
         if metric_changes:
             for diff in metric_changes:
                 colored_symbol = _get_colored_symbol(diff.change_type, c)
-                lines.append(f'  [{colored_symbol}] {diff.id:{global_max_id_len}s} "{diff.name}"')
+                lines.append(f'  [{colored_symbol}] {diff.id:{global_max_id_len}s} "{_display_name(diff.name)}"')
                 if side_by_side and diff.change_type == ChangeType.MODIFIED:
                     # Side-by-side view for modified items
                     sbs_lines = _format_side_by_side(diff, diff_result.source_label, diff_result.target_label)
@@ -279,7 +280,7 @@ def write_diff_console_output(
         if dim_changes:
             for diff in dim_changes:
                 colored_symbol = _get_colored_symbol(diff.change_type, c)
-                lines.append(f'  [{colored_symbol}] {diff.id:{global_max_id_len}s} "{diff.name}"')
+                lines.append(f'  [{colored_symbol}] {diff.id:{global_max_id_len}s} "{_display_name(diff.name)}"')
                 if side_by_side and diff.change_type == ChangeType.MODIFIED:
                     # Side-by-side view for modified items
                     sbs_lines = _format_side_by_side(diff, diff_result.source_label, diff_result.target_label)
@@ -306,7 +307,7 @@ def write_diff_console_output(
             if calc_changes:
                 for diff in calc_changes:
                     colored_symbol = _get_colored_symbol(diff.change_type, c)
-                    lines.append(f'  [{colored_symbol}] {diff.id} "{diff.name}"')
+                    lines.append(f'  [{colored_symbol}] {diff.id} "{_display_name(diff.name)}"')
                     if diff.change_type == ChangeType.MODIFIED and diff.changed_fields:
                         detail = _get_inventory_change_detail(diff)
                         if detail:
@@ -322,7 +323,7 @@ def write_diff_console_output(
             if seg_changes:
                 for diff in seg_changes:
                     colored_symbol = _get_colored_symbol(diff.change_type, c)
-                    lines.append(f'  [{colored_symbol}] {diff.id} "{diff.name}"')
+                    lines.append(f'  [{colored_symbol}] {diff.id} "{_display_name(diff.name)}"')
                     if diff.change_type == ChangeType.MODIFIED and diff.changed_fields:
                         detail = _get_inventory_change_detail(diff)
                         if detail:

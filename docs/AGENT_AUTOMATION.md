@@ -426,6 +426,8 @@ For any new agent integration, the recommended reading order is:
 uv run cja_auto_sdr dv_abc123 --agent-mode --run-summary-json run_summary.json
 ```
 
+The run summary's `inputs` block always carries `data_view_inputs`, `resolved_data_views`, and `unresolved_data_view_inputs` (names that matched nothing; the run exits 1 when this list is not empty).
+
 The run summary includes an `advisories` rollup key when advisories are present (org-report and diff commands).
 
 ---

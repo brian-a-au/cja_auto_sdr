@@ -443,3 +443,42 @@ def test_auto_snapshot_valid_keep_since_still_prunes(tmp_path):
     assert days == 30
     mgr.apply_date_retention_policy(str(sdir), "dv_1", keep_since_days=days)
     assert not old.exists()
+
+
+@pytest.mark.parametrize("value", ["-5d", "0", "0d", "0w", "0m", "-1w"])
+def test_parse_positive_retention_period_rejects_non_positive(value):
+    """DIFF-22: a zero or negative period is invalid, not a silent no-op."""
+    from cja_auto_sdr.diff.snapshot import parse_positive_retention_period
+
+    assert parse_positive_retention_period(value) is None
+
+
+def test_parse_positive_retention_period_accepts_positive():
+    from cja_auto_sdr.diff.snapshot import parse_positive_retention_period
+
+    assert parse_positive_retention_period("7d") == 7
+    assert parse_positive_retention_period("2w") == 14
+    assert parse_positive_retention_period("30") == 30
+
+
+@pytest.mark.parametrize("value", ["0d", "0", "-5d"])
+def test_prune_snapshots_cli_rejects_non_positive_keep_since(tmp_path, monkeypatch, capsys, value):
+    from cja_auto_sdr.generator import main
+
+    snaps = tmp_path / "snaps"
+    snaps.mkdir()
+    monkeypatch.setattr(
+        sys, "argv", ["cja_auto_sdr", "--prune-snapshots", "--snapshot-dir", str(snaps), f"--keep-since={value}"]
+    )
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 1
+    assert "Invalid --keep-since value" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(("value", "days"), [("0", 0), ("0d", 0), ("7d", 7)])
+def test_org_retention_parser_still_accepts_zero(value, days):
+    """--org-report-keep-since keeps the shared parser, where 0 means 'older than now'."""
+    from cja_auto_sdr.diff.snapshot import parse_retention_period
+
+    assert parse_retention_period(value) == days

@@ -1261,7 +1261,7 @@ class OrgComponentAnalyzer:
         if self.config.core_min_count is not None:
             core_threshold_count = max(1, self.config.core_min_count)
         else:
-            core_threshold_count = max(1, math.ceil(total_dvs * self.config.core_threshold))
+            core_threshold_count = max(1, math.ceil(round(total_dvs * self.config.core_threshold, 9)))
 
         # Common threshold: 25% of DVs, but at least 2 to avoid overlap with isolated
         common_threshold_count = max(2, math.ceil(total_dvs * 0.25))

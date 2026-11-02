@@ -159,6 +159,8 @@ class SnapshotManager:
             )
 
         dv_info = lookup_assessment.payload or {}
+        # Store the name exactly as returned so snapshots from earlier releases compare equal;
+        # writers blank a null name for display.
         dv_name = dv_info.get("name", "Unknown")
         dv_owner = dv_info.get("owner", {})
         owner_name = dv_owner.get("name", "") if isinstance(dv_owner, dict) else str(dv_owner)
@@ -447,6 +449,18 @@ def parse_retention_period(period_str: str) -> int | None:
         pass
 
     return None
+
+
+def parse_positive_retention_period(period_str: str) -> int | None:
+    """Parse a diff retention period (--keep-since) into a positive number of days.
+
+    Returns None for invalid input and for zero or negative periods. The org-report
+    retention flag keeps using parse_retention_period, where 0 is allowed.
+    """
+    days = parse_retention_period(period_str)
+    if days is None or days <= 0:
+        return None
+    return days
 
 
 _DURATION_UNIT_SECONDS = {"h": 3600, "d": 86_400, "w": 604_800}

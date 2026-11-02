@@ -996,6 +996,47 @@ class TestPrCommentOutputWithInventory:
         assert "<summary>🧮 Calculated Metrics Changes (3)</summary>" in output
         assert "`cm4`" in output
 
+    def test_pr_comment_skips_zero_inventory_rows(self):
+        """Inventory rows with no items on either side and no changes are omitted."""
+        summary = _make_summary_with_inventory(
+            source_calc_metrics_count=0,
+            target_calc_metrics_count=0,
+            calc_metrics_added=0,
+            calc_metrics_removed=0,
+            calc_metrics_modified=0,
+            calc_metrics_unchanged=0,
+            source_segments_count=0,
+            target_segments_count=0,
+            segments_added=0,
+            segments_removed=0,
+            segments_modified=0,
+            segments_unchanged=0,
+        )
+        result = _make_diff_result_with_inventory(summary=summary)
+        output = write_diff_pr_comment_output(result)
+
+        assert "| Calc Metrics |" not in output
+        assert "| Segments |" not in output
+        assert "| Metrics |" in output
+        assert "| Dimensions |" in output
+
+        changed = write_diff_pr_comment_output(_make_diff_result_with_inventory())
+        assert "| Calc Metrics |" in changed
+        assert "| Segments |" in changed
+
+    def test_pr_comment_keeps_unchanged_nonempty_inventory_rows(self):
+        summary = _make_summary_with_inventory(
+            source_calc_metrics_count=5,
+            target_calc_metrics_count=7,
+            calc_metrics_added=0,
+            calc_metrics_removed=0,
+            calc_metrics_modified=0,
+            calc_metrics_unchanged=5,
+        )
+        output = write_diff_pr_comment_output(_make_diff_result_with_inventory(summary=summary))
+
+        assert "| Calc Metrics | 5 | 7 | +0 | -0 | ~0 | 5 |" in output
+
     def test_pr_comment_without_inventory_unchanged(self):
         result = _make_diff_result_with_inventory(calc_metrics_diffs=None, segments_diffs=None)
         output = write_diff_pr_comment_output(result)

@@ -9,6 +9,7 @@ from __future__ import annotations
 from cja_auto_sdr.diff.models import ChangeType, DiffResult
 from cja_auto_sdr.output.diff.common import (
     ANSIColors,
+    _display_name,
     _format_diff_value,
     detect_breaking_changes,
 )
@@ -35,8 +36,8 @@ def write_diff_grouped_by_field_output(diff_result: DiffResult, use_color: bool 
     lines.append("=" * 80)
     lines.append(ANSIColors.bold("DATA VIEW COMPARISON - GROUPED BY FIELD", c))
     lines.append("=" * 80)
-    lines.append(f"{diff_result.source_label}: {meta.source_name}")
-    lines.append(f"{diff_result.target_label}: {meta.target_name}")
+    lines.append(f"{diff_result.source_label}: {_display_name(meta.source_name)}")
+    lines.append(f"{diff_result.target_label}: {_display_name(meta.target_name)}")
     lines.append(f"Generated: {diff_result.generated_at}")
     lines.append("=" * 80)
 
@@ -49,7 +50,7 @@ def write_diff_grouped_by_field_output(diff_result: DiffResult, use_color: bool 
             for field, (old_val, new_val) in diff.changed_fields.items():
                 if field not in field_changes:
                     field_changes[field] = []
-                field_changes[field].append((diff.id, diff.name, old_val, new_val))
+                field_changes[field].append((diff.id, _display_name(diff.name), old_val, new_val))
 
     # Use shared detect_breaking_changes for breaking change detection
     breaking = detect_breaking_changes(diff_result)
@@ -125,7 +126,7 @@ def write_diff_grouped_by_field_output(diff_result: DiffResult, use_color: bool 
         if inv_diffs is None:
             continue
         entries = [
-            f"  {marker} {d.id}  {d.name}" if d.name else f"  {marker} {d.id}"
+            f"  {marker} {d.id}  {_display_name(d.name)}" if _display_name(d.name) else f"  {marker} {d.id}"
             for change_type, marker in markers
             for d in inv_diffs
             if d.change_type == change_type
