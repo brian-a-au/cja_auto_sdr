@@ -559,6 +559,23 @@ class TestCredentialResolver:
 
         assert "No valid credentials found" in str(exc_info.value)
 
+    def test_resolve_missing_explicit_config_file_is_named(self, tmp_path, clean_env):
+        """CRED-30: an explicit config path that does not exist is named in the error."""
+        resolver = self._make_resolver()
+        missing = tmp_path / "nope.json"
+
+        with pytest.raises(CredentialSourceError) as exc_info:
+            resolver.resolve(config_file=missing)
+
+        assert f"Config file not found: {missing}" in str(exc_info.value)
+
+    def test_resolve_missing_default_config_file_not_named(self, clean_env, monkeypatch, tmp_path):
+        monkeypatch.chdir(tmp_path)
+        with pytest.raises(CredentialSourceError) as exc_info:
+            self._make_resolver().resolve(config_file="config.json")
+
+        assert "Config file not found" not in str(exc_info.value)
+
     def test_resolve_falls_back_to_config_file(self, tmp_path, clean_env):
         """When env has no creds, falls back to config file."""
         resolver = self._make_resolver()

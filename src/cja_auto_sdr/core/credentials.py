@@ -289,10 +289,14 @@ class CredentialResolver:
             return creds, source
 
         # No valid credentials found
+        reason = "Checked profile, environment variables, and config file"
+        if str(config_file) != "config.json" and not os.path.exists(config_file):
+            # Only an explicit, non-default path is worth naming; the default is just "absent".
+            reason += f". Config file not found: {config_file}"
         raise CredentialSourceError(
             "No valid credentials found",
             source="all",
-            reason="Checked profile, environment variables, and config file",
+            reason=reason,
             details="Set credentials via --profile, environment variables, or config.json",
         )
 
