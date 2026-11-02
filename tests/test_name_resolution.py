@@ -504,6 +504,17 @@ class TestNameResolutionLogFormat:
 class TestUnresolvedNamesThroughMain:
     """main() fails loudly when some, but not all, data view names do not resolve."""
 
+    @pytest.fixture(autouse=True)
+    def _restore_root_logging(self):
+        """main() may call setup_logging(), which installs root handlers bound to captured streams."""
+        root = logging.getLogger()
+        before = list(root.handlers)
+        yield
+        for handler in list(root.handlers):
+            if handler not in before:
+                root.removeHandler(handler)
+                handler.close()
+
     @staticmethod
     def _ok_result():
         from cja_auto_sdr.generator import ProcessingResult
@@ -651,3 +662,22 @@ class TestUnresolvedNamesThroughMain:
             self._run(["dv_ok"], tmp_path, monkeypatch)
             assert mock_cjapy.CJA.call_count == 0
         assert mock_configure.call_count == 1
+
+    @pytest.mark.parametrize("argv", [["--agent-mode"], ["--format", "json", "--output", "-"]])
+    @patch("cja_auto_sdr.generator.resolve_data_view_names")
+    def test_all_unresolved_machine_readable_stderr_is_json(self, mock_resolve, argv, tmp_path, monkeypatch, capsys):
+        import json
+
+        mock_resolve.return_value = ([], {}, NameResolutionDiagnostics())
+
+        code = self._run(["Bogus", "Other", *argv], tmp_path, monkeypatch)
+
+        captured = capsys.readouterr()
+        assert code == 1
+        assert captured.out == ""
+        lines = [line for line in captured.err.splitlines() if line.strip()]
+        assert lines
+        envelopes = [json.loads(line) for line in lines]
+        assert envelopes[-1]["error_type"] == "not_found"
+        assert envelopes[-1]["unresolved_data_view_inputs"] == ["Bogus", "Other"]
+        assert "Tips for using" not in captured.err

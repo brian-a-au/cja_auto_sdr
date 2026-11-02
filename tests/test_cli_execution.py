@@ -2,6 +2,7 @@
 
 import argparse
 import contextlib
+import logging
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -983,6 +984,17 @@ class TestInventoryOrderThroughMain:
 class TestIgnoredOutputAndCleanConfigJson:
     """--output on modes that never write it warns on stderr and never pollutes stdout (CLI-22)."""
 
+    @pytest.fixture(autouse=True)
+    def _restore_root_logging(self):
+        """main() may call setup_logging(), which installs root handlers bound to captured streams."""
+        root = logging.getLogger()
+        before = list(root.handlers)
+        yield
+        for handler in list(root.handlers):
+            if handler not in before:
+                root.removeHandler(handler)
+                handler.close()
+
     @staticmethod
     def _run_main(argv, monkeypatch, tmp_path):
         from cja_auto_sdr.generator import main
@@ -1033,6 +1045,17 @@ class TestIgnoredOutputAndCleanConfigJson:
 
 class TestFilterLimitOutsideOrgAndDiscovery:
     """--filter/--limit do nothing in SDR mode, so say so on stderr (CLI-24)."""
+
+    @pytest.fixture(autouse=True)
+    def _restore_root_logging(self):
+        """main() may call setup_logging(), which installs root handlers bound to captured streams."""
+        root = logging.getLogger()
+        before = list(root.handlers)
+        yield
+        for handler in list(root.handlers):
+            if handler not in before:
+                root.removeHandler(handler)
+                handler.close()
 
     WARNING = "--filter/--limit have no effect in SDR mode"
 

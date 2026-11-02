@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import inspect
 import json
+import logging
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -1326,6 +1327,17 @@ def test_short_quiet_flag_suppresses_compare_snapshots_banner(tmp_path, monkeypa
 
 class TestJsonNameResolutionLogs:
     """Machine-readable runs keep every stderr line parseable, name resolution included (CLI-23)."""
+
+    @pytest.fixture(autouse=True)
+    def _restore_root_logging(self):
+        """main() may call setup_logging(), which installs root handlers bound to captured streams."""
+        root = logging.getLogger()
+        before = list(root.handlers)
+        yield
+        for handler in list(root.handlers):
+            if handler not in before:
+                root.removeHandler(handler)
+                handler.close()
 
     @pytest.fixture(autouse=True)
     def _isolate(self, tmp_path, monkeypatch):

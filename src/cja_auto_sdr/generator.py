@@ -8140,6 +8140,10 @@ def _main_impl(run_state: dict[str, Any] | None = None):
         )
         sys.exit(1)
 
+    if not data_views and _is_unresolved_report_machine_readable(args):
+        _report_unresolved_data_view_inputs(args, unresolved_inputs or list(data_view_inputs))
+        sys.exit(1)
+
     if not data_views:
         print(file=sys.stderr)
         print(ConsoleColors.error("ERROR: No valid data views found"), file=sys.stderr)
