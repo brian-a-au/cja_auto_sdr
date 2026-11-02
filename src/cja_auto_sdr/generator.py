@@ -1397,7 +1397,10 @@ def _display_data_view_name(raw: object) -> str:
             return "Unknown"
     except (TypeError, ValueError):
         pass
-    text = str(raw)
+    try:
+        text = str(raw)
+    except Exception:  # an unprintable name is displayed as Unknown
+        return "Unknown"
     return text if text.strip() else "Unknown"
 
 

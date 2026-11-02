@@ -784,20 +784,19 @@ class TestInventoryOrderAcrossFormats:
         assert result.success is True
         inv = self.INV
         excel = [s for s in openpyxl.load_workbook(next(out.glob("*.xlsx"))).sheetnames if s in inv]
-        md = [h for h in re.findall(r"^## (.*)$", next(out.glob("*.md")).read_text(), re.M) if h in inv]
+        md = [h for h in re.findall(r"^## (.*)$", next(out.glob("*.md")).read_text(), re.MULTILINE) if h in inv]
         html = [h for h in re.findall(r"<h2>\S+ (.*?)</h2>", next(out.glob("*.html")).read_text()) if h in inv]
-        js = [k for k in json.loads(next(out.glob("*.json")).read_text()) if k in ("segments", "derived_fields")]
-        return excel, md, html, js
+        return excel, md, html
 
     def test_inventory_order_matches_cli_in_all_formats(self, tmp_path):
-        excel, md, html, js = self._sections(tmp_path, ["segments", "derived"])
+        excel, md, html = self._sections(tmp_path, ["segments", "derived"])
 
         assert excel == ["Segments", "Derived Fields"]
         assert md == excel
         assert html == excel
 
     def test_default_inventory_order_unchanged(self, tmp_path):
-        excel, md, html, _ = self._sections(tmp_path, None)
+        excel, md, html = self._sections(tmp_path, None)
 
         assert excel == ["Derived Fields", "Segments"]
         assert md == excel

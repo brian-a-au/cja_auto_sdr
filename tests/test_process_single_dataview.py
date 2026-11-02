@@ -2784,7 +2784,7 @@ class TestNullDataViewNameDocuments:
 class TestLongDataViewNameFilename:
     def test_long_name_filename_is_capped(self, tmp_path):
         long_name = "Long Name " * 23  # 230 characters
-        result, out = _run_real_writers(
+        result, _ = _run_real_writers(
             tmp_path, {"id": "dv_1", "name": long_name, "owner": {"name": "O"}}, output_format="excel"
         )
 
