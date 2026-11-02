@@ -157,7 +157,7 @@ Try running: cja_auto_sdr --list-dataviews
   to see all accessible data view IDs and names
 ```
 
-If only some names fail to resolve, the data views that did resolve are still processed. The command then prints an error naming the unresolved inputs and exits with code `1`. In machine-readable runs (`--agent-mode`, `--format json --output -`) that error is one JSON line on stderr with `error`, `error_type: "not_found"`, and `unresolved_data_view_inputs`, and the name-matching tips are skipped. The run summary (`--run-summary-json`) lists the same names under `inputs.unresolved_data_view_inputs`, which is an empty list when everything resolved. With `--dry-run`, each unresolved name counts as an invalid data view.
+If only some names fail to resolve, the data views that did resolve are still processed. The command then prints an error naming the unresolved inputs and exits with code `1`. In machine-readable runs (`--agent-mode`, `--log-format json`, `--format json` or `csv`, or `--output -`) that error is one JSON line on stderr with `error`, `error_type: "not_found"`, and `unresolved_data_view_inputs`, and the name-matching tips are skipped. The run summary (`--run-summary-json`) lists the same names under `inputs.unresolved_data_view_inputs`, which is an empty list when everything resolved. With `--dry-run`, each unresolved name counts as an invalid data view.
 
 **Common Causes & Solutions:**
 
@@ -220,7 +220,7 @@ If the tool can't connect to CJA to resolve names, you'll see connection errors:
 ERROR - Failed to resolve data view names: Authentication failed
 ```
 
-When name lookup fails because of a credential or configuration problem, the tool prints that credential error and exits `1`. It no longer prints the name-matching tips, because the names were never checked. With `--dry-run`, the dry-run banner is shown and the run fails at step 1 with the credential reason.
+When name lookup fails because of a credential or configuration problem, the tool prints that credential error and exits `1` (in machine-readable runs, a JSON line with `error_type: "configuration_error"`). This applies to SDR generation, `--stats`, and the diff and snapshot modes. It no longer prints the name-matching tips, because the names were never checked. With `--dry-run`, the dry-run banner is shown and the run fails at step 1 with the credential reason.
 
 **Solutions:**
 1. Verify your credentials (profile, environment variables, or `config.json`)

@@ -1371,3 +1371,37 @@ class TestJsonNameResolutionLogs:
     def test_stats_table_json_log_format_name_resolution_stderr_is_json(self, tmp_path, capsys):
         self._run(["--stats", "Some Name", "--log-format", "json", "--config-file", str(tmp_path / "missing.json")])
         self._assert_stderr_all_json(capsys)
+
+    @staticmethod
+    def _last_envelope(capsys) -> dict:
+        lines = [line for line in capsys.readouterr().err.splitlines() if line.strip()]
+        assert lines
+        envelopes = [json.loads(line) for line in lines]
+        return envelopes[-1]
+
+    @pytest.mark.parametrize(
+        "argv",
+        [
+            ["--diff", "dv_a", "dv_b", "--agent-mode"],
+            ["--snapshot", "s.json", "dv_a", "--agent-mode"],
+            ["dv_a", "--diff-snapshot", "s.json", "--agent-mode"],
+        ],
+    )
+    def test_missing_credentials_is_configuration_error(self, tmp_path, capsys, argv):
+        self._run([*argv, "--config-file", str(tmp_path / "missing.json")])
+        envelope = self._last_envelope(capsys)
+        assert envelope["error_type"] == "configuration_error"
+        assert "Could not resolve" not in envelope["error"]
+
+    def test_missing_credentials_human_mode_shows_credential_error(self, tmp_path, capsys):
+        self._run(["--diff", "dv_a", "dv_b", "--config-file", str(tmp_path / "missing.json")])
+        err = capsys.readouterr().err
+        assert "ERROR:" in err
+        assert "Could not resolve" not in err
+
+    @patch("cja_auto_sdr.generator.resolve_data_view_names")
+    def test_diff_json_stdout_unresolved_name_is_json(self, mock_resolve, tmp_path, capsys):
+        mock_resolve.return_value = ([], {})
+        self._run(["--diff", "Bogus A", "dv_b", "--format", "json", "--output", "-"])
+        envelope = self._last_envelope(capsys)
+        assert envelope["error_type"] == "not_found"

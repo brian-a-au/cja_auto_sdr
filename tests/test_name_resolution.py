@@ -681,3 +681,20 @@ class TestUnresolvedNamesThroughMain:
         assert envelopes[-1]["error_type"] == "not_found"
         assert envelopes[-1]["unresolved_data_view_inputs"] == ["Bogus", "Other"]
         assert "Tips for using" not in captured.err
+
+    @patch("cja_auto_sdr.generator.resolve_data_view_names")
+    def test_all_unresolved_json_log_format_stderr_is_json(self, mock_resolve, tmp_path, monkeypatch, capsys):
+        import json
+
+        mock_resolve.return_value = ([], {}, NameResolutionDiagnostics())
+
+        code = self._run(["Bogus Name", "--log-format", "json"], tmp_path, monkeypatch)
+
+        captured = capsys.readouterr()
+        assert code == 1
+        assert "ERROR: No valid data views found" not in captured.err
+        lines = [line for line in captured.err.splitlines() if line.strip()]
+        assert lines
+        envelopes = [json.loads(line) for line in lines]
+        assert envelopes[-1]["error_type"] == "not_found"
+        assert envelopes[-1]["unresolved_data_view_inputs"] == ["Bogus Name"]

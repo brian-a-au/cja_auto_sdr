@@ -92,6 +92,42 @@ def _exit_with_diff_result(
     sys.exit(1)
 
 
+def _resolve_data_view_inputs_or_exit_on_config_error(
+    data_view_inputs: list[str],
+    *,
+    args: argparse.Namespace,
+) -> list[str]:
+    """Resolve data view inputs; a credential or config failure exits 1 as ``configuration_error``.
+
+    A failure to build the API client is not a missing data view, so it is reported with the
+    credential error text (JSON when stderr errors are JSON), as SDR mode does.
+    """
+    from cja_auto_sdr.cli.commands.stats import _coerce_name_resolution_result
+
+    generator = _generator_module()
+
+    with generator._name_resolution_logger(args) as temp_logger:
+        resolution_result = generator.resolve_data_view_names(
+            data_view_inputs,
+            args.config_file,
+            temp_logger,
+            profile=getattr(args, "profile", None),
+            match_mode=getattr(args, "name_match", "exact"),
+            include_diagnostics=True,
+        )
+    resolved_ids, _, diagnostics = _coerce_name_resolution_result(resolution_result)
+
+    if not resolved_ids and diagnostics.error_type == "configuration_error":
+        generator._emit_discovery_error(
+            diagnostics.error_message or "Failed to configure credentials",
+            is_machine_readable=generator._stderr_errors_as_json(args),
+            error_type="configuration_error",
+            human_to_stderr=True,
+        )
+        sys.exit(1)
+    return resolved_ids
+
+
 def _resolve_single_data_view_id_or_exit(
     data_view_inputs: list[str],
     *,
@@ -110,14 +146,7 @@ def _resolve_single_data_view_id_or_exit(
         print(usage, file=sys.stderr)
         sys.exit(1)
 
-    with generator._name_resolution_logger(args) as temp_logger:
-        resolved_ids, _ = generator.resolve_data_view_names(
-            data_view_inputs,
-            args.config_file,
-            temp_logger,
-            profile=getattr(args, "profile", None),
-            match_mode=getattr(args, "name_match", "exact"),
-        )
+    resolved_ids = _resolve_data_view_inputs_or_exit_on_config_error(data_view_inputs, args=args)
 
     if not resolved_ids:
         generator._emit_discovery_error(
@@ -161,14 +190,7 @@ def _resolve_diff_input_or_exit(
     """Resolve one cross-data-view diff operand to a single data view ID or exit."""
     generator = _generator_module()
 
-    with generator._name_resolution_logger(args) as temp_logger:
-        resolved_ids, _ = generator.resolve_data_view_names(
-            [data_view_input],
-            args.config_file,
-            temp_logger,
-            profile=getattr(args, "profile", None),
-            match_mode=getattr(args, "name_match", "exact"),
-        )
+    resolved_ids = _resolve_data_view_inputs_or_exit_on_config_error([data_view_input], args=args)
 
     if not resolved_ids:
         generator._emit_discovery_error(

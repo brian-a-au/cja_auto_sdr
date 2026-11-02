@@ -6950,8 +6950,16 @@ def _prepare_sdr_execution_context(
 
 
 def _stderr_errors_as_json(args: argparse.Namespace) -> bool:
-    """Return True when stderr diagnostics must be JSON (JSON log format or agent mode)."""
-    return bool(getattr(args, "agent_mode", False) or getattr(args, "log_format", None) == "json")
+    """Return True when stderr errors must be JSON envelopes.
+
+    That is agent mode, ``--log-format json``, or machine-readable output (``--format json``/``csv``
+    or ``--output -``/``stdout``, the discovery convention in ``_is_machine_readable_output``).
+    """
+    return bool(
+        getattr(args, "agent_mode", False)
+        or getattr(args, "log_format", None) == "json"
+        or _is_machine_readable_output(getattr(args, "format", None), getattr(args, "output", None))
+    )
 
 
 @contextlib.contextmanager
@@ -6977,20 +6985,12 @@ def _name_resolution_logger(args: argparse.Namespace, level: int = logging.WARNI
         resolution_logger.propagate = previous_propagate
 
 
-def _is_unresolved_report_machine_readable(args: argparse.Namespace) -> bool:
-    """Return True when stderr errors for this SDR run must be JSON envelopes."""
-    return bool(
-        getattr(args, "agent_mode", False)
-        or _is_machine_readable_output(getattr(args, "format", None), getattr(args, "output", None))
-    )
-
-
 def _report_unresolved_data_view_inputs(args: argparse.Namespace, unresolved: list[str]) -> None:
     """Report data view names that matched nothing after the resolved views ran."""
     names = ", ".join(f"'{name}'" for name in unresolved)
     _emit_discovery_error(
         f"Could not resolve data view name(s): {names}. Run 'cja_auto_sdr --list-dataviews' to see available names and IDs.",
-        is_machine_readable=_is_unresolved_report_machine_readable(args),
+        is_machine_readable=_stderr_errors_as_json(args),
         error_type="not_found",
         additional_fields={"unresolved_data_view_inputs": list(unresolved)},
         human_to_stderr=True,
@@ -8134,13 +8134,13 @@ def _main_impl(run_state: dict[str, Any] | None = None):
     if not data_views and resolution_config_error:
         _emit_discovery_error(
             resolution_diagnostics.error_message or "Failed to configure credentials",
-            is_machine_readable=_is_unresolved_report_machine_readable(args),
+            is_machine_readable=_stderr_errors_as_json(args),
             error_type="configuration_error",
             human_to_stderr=True,
         )
         sys.exit(1)
 
-    if not data_views and _is_unresolved_report_machine_readable(args):
+    if not data_views and _stderr_errors_as_json(args):
         _report_unresolved_data_view_inputs(args, unresolved_inputs or list(data_view_inputs))
         sys.exit(1)
 
