@@ -188,7 +188,7 @@ tests/
 └── README.md                        # This file
 ```
 
-**Total: 9,692 comprehensive tests**
+**Total: 9,718 comprehensive tests**
 
 ### Test Count Breakdown
 
@@ -197,16 +197,16 @@ tests/
 
 | Category | Tests | Files | Notes |
 |----------|-------|-------|-------|
-| `unit` | 9,530 | 169 | Default primary category for files without explicit integration/e2e/smoke scope |
+| `unit` | 9,556 | 169 | Default primary category for files without explicit integration/e2e/smoke scope |
 | `integration` | 123 | 3 | Cross-module integration suites |
 | `e2e` | 23 | 2 | End-to-end suites with a mocked external boundary |
 | `smoke` | 16 | 2 | Lightweight command-mode coverage |
 | `slow` | 0 | 0 | Overlay marker; these tests are also counted in a primary category |
-| **Primary Total** | **9,692** | **176** | **unit + integration + e2e + smoke** |
+| **Primary Total** | **9,718** | **176** | **unit + integration + e2e + smoke** |
 
 | CI Slice | Tests | Files | Selector |
 |----------|-------|-------|----------|
-| `test-unit` | 9,530 | 169 | `-m "unit and not slow"` |
+| `test-unit` | 9,556 | 169 | `-m "unit and not slow"` |
 | `test-integration` | 146 | 5 | `-m "integration or e2e or slow"` |
 | `smoke-test` | 16 | 2 | `-m smoke` |
 
@@ -224,7 +224,7 @@ tests/
 | `test_cli.py` | 418 | Command-line interface and argument parsing |
 | `test_profiles.py` | 96 | Multi-organization profile support |
 | `test_derived_inventory.py` | 64 | Derived fields inventory feature |
-| `test_diff_snapshot_cjapy_payloads.py` | 10 | Diff snapshot cjapy payload classification |
+| `test_diff_snapshot_cjapy_payloads.py` | 15 | Diff snapshot cjapy payload classification |
 | `test_inventory_pragma_coverage.py` | 18 | Inventory pragma coverage hardening |
 | `test_inventory_summary_cjapy_payloads.py` | 8 | Inventory summary cjapy payload classification |
 | `test_inventory_utils.py` | 57 | Inventory utilities and helpers |
@@ -232,7 +232,7 @@ tests/
 | `test_edge_cases.py` | 35 | Edge cases, configuration dataclasses, custom exceptions |
 | `test_calculated_metrics_inventory.py` | 398 | Calculated metrics inventory feature |
 | `test_git_integration.py` | 62 | Git integration, snapshot management, inventory snapshots |
-| `test_output_formats.py` | 38 | CSV, JSON, HTML, Markdown output generation |
+| `test_output_formats.py` | 40 | CSV, JSON, HTML, Markdown output generation |
 | `test_cja_initialization.py` | 58 | CJA connection and configuration validation |
 | `test_cjapy_retry_interaction.py` | 58 | cjapy retry/status-payload normalization contract |
 | `test_classify_component_payload.py` | 10 | Shared component payload classification helper |
@@ -246,7 +246,7 @@ tests/
 | `test_retry.py` | 25 | Retry with exponential backoff |
 | `test_batch_processor.py` | 34 | Batch processing of multiple data views |
 | `test_validation_cache.py` | 32 | Validation result caching |
-| `test_process_single_dataview.py` | 56 | End-to-end single data view processing |
+| `test_process_single_dataview.py` | 69 | End-to-end single data view processing |
 | `test_process_liveness_smoke.py` | 6 | Cross-platform lock PID liveness probes (Windows-safe) |
 | `test_optimized_validation.py` | 14 | Optimized data quality validation |
 | `test_name_resolution.py` | 30 | Data view name to ID resolution |
@@ -265,7 +265,7 @@ tests/
 | `test_discovery_dataset_metadata.py` | 27 | Connection-scoped dataset discovery metadata contracts |
 | `test_diagnostic_events.py` | 23 | Structured diagnostic event vocabulary, logger adapters, and redaction |
 | `test_output_content_validation.py` | 47 | Output format content validation (CSV, JSON, HTML, Excel, Markdown roundtrip) |
-| `test_excel_publication.py` | 52 | Excel render/close/publication failures, destination integrity, and filesystem compatibility |
+| `test_excel_publication.py` | 53 | Excel render/close/publication failures, destination integrity, and filesystem compatibility |
 | `test_component_fetch_validation.py` | 31 | Metrics/dimensions error payloads classified as failed, not empty |
 | `test_sdr_coverage.py` | 50 | SDR Coverage sheet/section, collected_components, quality gate rows |
 | `test_inventory_operation_status.py` | 16 | Optional inventory completed/failed status, unavailable placeholders, run summary parity |
@@ -299,7 +299,7 @@ tests/
 | `test_cli_command_handlers.py` | 166 | CLI dispatch for --stats, --org-report, --list-snapshots, discovery inspection, diff config unpacking |
 | `test_profile_management.py` | 54 | Interactive profile creation, import, test, show |
 | `test_snapshot_commands.py` | 94 | Snapshot creation, comparison, name resolution |
-| `test_config_and_resolution.py` | 130 | Config status, validation, stats, name resolution |
+| `test_config_and_resolution.py` | 133 | Config status, validation, stats, name resolution |
 | `test_derived_fields_edge_cases.py` | 37 | Derived fields edge cases and coverage |
 | `test_diff_command_coverage.py` | 54 | Diff command edge cases and coverage |
 | `test_generator_interactive_and_console.py` | 41 | Generator interactive and console tests |
@@ -332,7 +332,7 @@ tests/
 | `test_list_command_edge_cases.py` | 68 | List command edge cases and coverage |
 | `test_cli_commands_config_coverage.py` | 48 | Config command edge cases and coverage |
 | `test_cli_execution.py` | 43 | CLI execution edge cases and coverage |
-| `test_diff_git_coverage.py` | 32 | Diff/git subprocess error path coverage |
+| `test_diff_git_coverage.py` | 33 | Diff/git subprocess error path coverage |
 | `test_generator_trending_coverage.py` | 19 | Generator trending integration coverage |
 | `test_check_pypi_readme_links.py` | 10 | PyPI README link validation |
 | `test_dependabot_review.py` | 69 | Dependabot review and merge trust boundaries |
@@ -384,7 +384,7 @@ tests/
 | `test_org_analyzer_similarity.py` | 42 | Org similarity characterization, streaming parity, thresholds, and dispatch tests |
 | `test_org_writers_csv.py` | 3 | Org components-CSV bucket-lookup characterization test |
 | `test_csv_staging.py` | 16 | Staged CSV bundle publication and completion manifest tests |
-| `test_sdr_markdown_escaping.py` | 6 | SDR markdown vectorized cell-escaping characterization test |
+| `test_sdr_markdown_escaping.py` | 7 | SDR markdown vectorized cell-escaping characterization test |
 | `test_diff_excel.py` | 10 | Diff Excel row-coloring characterization tests |
 | `test_diff_report_coverage.py` | 28 | Metadata policy and coverage in HTML/CSV/Excel diffs |
 | `test_diff_markdown_escaping.py` | 3 | Diff Markdown and PR comment table-cell escaping |
@@ -392,7 +392,7 @@ tests/
 | `test_diff_snapshot_retention.py` | 89 | Diff snapshot-retention parse-cache characterization test |
 | `test_diff_comparator_normalize.py` | 22 | Diff field-normalization type-fast-path characterization test |
 | `test_logging_diagnostics.py` | 2 | emit_diagnostic isEnabledFor guard characterization tests |
-| **Total** | **9,692** | **Collected via pytest --collect-only** |
+| **Total** | **9,718** | **Collected via pytest --collect-only** |
 
 ## Running Tests
 
@@ -850,7 +850,7 @@ the `tests/README.md` inventory tree or count table.
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (9,692 tests total)
+- [x] Comprehensive test coverage (9,718 tests total)
 - [x] Org-wide analysis tests (test_org_report.py) - 239 tests (including large org scaling, output path aliases, memory warnings, smart cache invalidation)
 - [x] Org-wide analysis integration tests (test_org_report_integration.py) - 46 tests (end-to-end flows, caching, filtering, governance thresholds)
 - [x] Profile management tests (test_profiles.py) - 96 tests

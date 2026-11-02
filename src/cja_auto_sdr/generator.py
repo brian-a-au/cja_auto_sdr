@@ -1292,7 +1292,7 @@ def _build_sdr_metadata_dataframe(
     metadata_values = [
         formatted_timestamp,
         data_view_id,
-        lookup_data.get("name", "Unknown") if isinstance(lookup_data, Mapping) else "Unknown",
+        _display_data_view_name(lookup_data.get("name") if isinstance(lookup_data, Mapping) else None),
         metrics_count_value,
         metrics_breakdown_value,
         dimensions_count_value,
@@ -1386,6 +1386,22 @@ def _build_sdr_metadata_dataframe(
             metadata_values.append(status)
 
     return pd.DataFrame({"Property": metadata_properties, "Value": metadata_values})
+
+
+def _display_data_view_name(raw: object) -> str:
+    """Return a printable data view name: "Unknown" for None, NaN, or blank values."""
+    if raw is None:
+        return "Unknown"
+    try:
+        if pd.isna(raw):
+            return "Unknown"
+    except (TypeError, ValueError):
+        pass
+    try:
+        text = str(raw)
+    except Exception:  # an unprintable name is displayed as Unknown
+        return "Unknown"
+    return text if text.strip() else "Unknown"
 
 
 def _metadata_dataframe_to_dict(metadata_df: pd.DataFrame) -> dict[str, Any]:
@@ -3241,7 +3257,7 @@ def process_inventory_summary(
         return {"error": error_message}
 
     lookup_data = lookup_assessment.payload or (raw_lookup if isinstance(raw_lookup, dict) else {})
-    dv_name = lookup_data.get("name", data_view_id)
+    dv_name = _display_data_view_name(lookup_data.get("name", data_view_id))
 
     if not quiet:
         print(ConsoleColors.info(f"Fetching inventory data for: {dv_name}"))
@@ -3664,7 +3680,7 @@ def process_single_dataview(
             )
 
         if component_failures:
-            dv_name = lookup_data.get("name", "Unknown") if isinstance(lookup_data, dict) else "Unknown"
+            dv_name = _display_data_view_name(lookup_data.get("name") if isinstance(lookup_data, dict) else None)
             if allow_partial_for_sdr:
                 logger.warning(
                     "Component fetch failed for required sections, but continuing due to --allow-partial (exploratory mode).",
@@ -3705,7 +3721,7 @@ def process_single_dataview(
             fetch_statuses=fetch_statuses,
         )
         if empty_required_component_endpoints:
-            dv_name = lookup_data.get("name", "Unknown") if isinstance(lookup_data, dict) else "Unknown"
+            dv_name = _display_data_view_name(lookup_data.get("name") if isinstance(lookup_data, dict) else None)
             empty_required_components = ", ".join(empty_required_component_endpoints)
             missing_all_standard_components = (
                 set(empty_required_component_endpoints) == STANDARD_COMPONENT_ENDPOINTS
@@ -3806,7 +3822,7 @@ def process_single_dataview(
         validation_error_message = validation_result.error_message
 
         if validation_failed and execution_policy.validation_required_for_output:
-            dv_name = lookup_data.get("name", "Unknown") if isinstance(lookup_data, dict) else "Unknown"
+            dv_name = _display_data_view_name(lookup_data.get("name") if isinstance(lookup_data, dict) else None)
             if allow_partial_for_sdr:
                 logger.warning(
                     "Data quality validation failed at runtime, but continuing due to --allow-partial (exploratory mode).",
@@ -3840,7 +3856,7 @@ def process_single_dataview(
                 )
 
         if quality_report_only:
-            dv_name = lookup_data.get("name", "Unknown") if isinstance(lookup_data, dict) else "Unknown"
+            dv_name = _display_data_view_name(lookup_data.get("name") if isinstance(lookup_data, dict) else None)
             return _finalize_result(
                 data_view_name=dv_name,
                 success=True,
@@ -3880,7 +3896,9 @@ def process_single_dataview(
                 from cja_auto_sdr.inventory.derived_fields import DerivedFieldInventoryBuilder
 
                 builder = DerivedFieldInventoryBuilder(logger=logger)
-                dv_name = lookup_data.get("name", data_view_id) if isinstance(lookup_data, dict) else data_view_id
+                dv_name = _display_data_view_name(
+                    lookup_data.get("name", data_view_id) if isinstance(lookup_data, dict) else data_view_id
+                )
                 derived_inventory = builder.build(metrics, dimensions, data_view_id, dv_name)
 
                 derived_df = derived_inventory.get_dataframe()
@@ -3909,7 +3927,9 @@ def process_single_dataview(
                 from cja_auto_sdr.inventory.calculated_metrics import CalculatedMetricsInventoryBuilder
 
                 builder = CalculatedMetricsInventoryBuilder(logger=logger)
-                dv_name = lookup_data.get("name", data_view_id) if isinstance(lookup_data, dict) else data_view_id
+                dv_name = _display_data_view_name(
+                    lookup_data.get("name", data_view_id) if isinstance(lookup_data, dict) else data_view_id
+                )
                 with cja_inventory_lock:
                     calculated_inventory = builder.build(cja, data_view_id, dv_name)
 
@@ -3941,7 +3961,9 @@ def process_single_dataview(
                 from cja_auto_sdr.inventory.segments import SegmentsInventoryBuilder
 
                 builder = SegmentsInventoryBuilder(logger=logger)
-                dv_name = lookup_data.get("name", data_view_id) if isinstance(lookup_data, dict) else data_view_id
+                dv_name = _display_data_view_name(
+                    lookup_data.get("name", data_view_id) if isinstance(lookup_data, dict) else data_view_id
+                )
                 with cja_inventory_lock:
                     segments_inventory = builder.build(cja, data_view_id, dv_name)
 
@@ -4120,21 +4142,23 @@ def process_single_dataview(
             logger.error(_format_error_msg("applying JSON formatting", error=e))
 
         # Create Excel file name
+        # Results and summaries show the display name; the file name is built from the raw value
+        # exactly as before (a non-string name gets the id-only form).
         raw_dv_name = lookup_data.get("name", "Unknown") if isinstance(lookup_data, dict) else "Unknown"
-        # Results and summaries show the real name; only the file name is sanitized.
-        dv_name = raw_dv_name if isinstance(raw_dv_name, str) else "Unknown"
-        try:
-            # Sanitize filename
+        dv_name = _display_data_view_name(raw_dv_name)
+        if isinstance(raw_dv_name, str):
             safe_name = "".join(c for c in raw_dv_name if c.isalnum() or c in (" ", "-", "_")).rstrip()
+            # Keep the whole file name under common 255-byte limits (the real name stays in the document).
+            # Cap by UTF-8 bytes, not characters, so multi-byte names fit too.
+            safe_name = safe_name[:100]
+            while len(safe_name.encode("utf-8")) > 100:
+                safe_name = safe_name[:-1]
+            safe_name = safe_name.rstrip()
             excel_file_name = f"CJA_DataView_{safe_name}_{data_view_id}_SDR.xlsx"
-
-            # Add output directory path
-            output_path = Path(output_dir) / excel_file_name
-            logger.info(f"Excel file will be saved as: {output_path}")
-        except (KeyError, TypeError, ValueError) as e:
-            logger.error(_format_error_msg("creating filename", error=e))
+        else:
             excel_file_name = f"CJA_DataView_{data_view_id}_SDR.xlsx"
-            output_path = Path(output_dir) / excel_file_name
+        output_path = Path(output_dir) / excel_file_name
+        logger.info(f"Excel file will be saved as: {output_path}")
 
         # Prepare data for output generation
         logger.info("=" * BANNER_WIDTH)
@@ -4158,47 +4182,51 @@ def process_single_dataview(
             if include_dimensions_section:
                 data_dict["Dimensions"] = dimensions
 
-        # Add derived field inventory if available or placeholder if flag was used
-        if not derived_inventory_df.empty:
-            data_dict["Derived Fields"] = derived_inventory_df
-        elif inventory_statuses["derived"] == INVENTORY_STATUS_FAILED:
-            data_dict["Derived Fields"] = _inventory_unavailable_frame("derived", data_view_id)
-        elif include_derived_inventory:
-            data_dict["Derived Fields"] = pd.DataFrame(
-                {
-                    "Status": ["No derived fields found for this data view"],
-                    "Data View ID": [data_view_id],
-                    "Note": ["This data view has no derived fields configured"],
-                },
-            )
-
-        # Add calculated metrics inventory if available or placeholder if flag was used
-        if not calculated_metrics_df.empty:
-            data_dict["Calculated Metrics"] = calculated_metrics_df
-        elif inventory_statuses["calculated"] == INVENTORY_STATUS_FAILED:
-            data_dict["Calculated Metrics"] = _inventory_unavailable_frame("calculated", data_view_id)
-        elif include_calculated_metrics:
-            data_dict["Calculated Metrics"] = pd.DataFrame(
-                {
-                    "Status": ["No calculated metrics found for this data view"],
-                    "Data View ID": [data_view_id],
-                    "Note": ["This data view has no associated calculated metrics"],
-                },
-            )
-
-        # Add segments inventory if available or placeholder if flag was used
-        if not segments_inventory_df.empty:
-            data_dict["Segments"] = segments_inventory_df
-        elif inventory_statuses["segments"] == INVENTORY_STATUS_FAILED:
-            data_dict["Segments"] = _inventory_unavailable_frame("segments", data_view_id)
-        elif include_segments_inventory:
-            data_dict["Segments"] = pd.DataFrame(
-                {
-                    "Status": ["No segments found for this data view"],
-                    "Data View ID": [data_view_id],
-                    "Note": ["This data view has no associated segments"],
-                },
-            )
+        # Add inventory sections in CLI order (same order as the Excel sheets); a type missing from the
+        # CLI order keeps its default position after the ordered ones.
+        default_inventory_order = ["derived", "calculated", "segments"]
+        data_dict_inventory_order = list(inventory_order or default_inventory_order)
+        data_dict_inventory_order += [t for t in default_inventory_order if t not in data_dict_inventory_order]
+        inventory_sections = {
+            "derived": (
+                "Derived Fields",
+                derived_inventory_df,
+                include_derived_inventory,
+                "No derived fields found for this data view",
+                "This data view has no derived fields configured",
+            ),
+            "calculated": (
+                "Calculated Metrics",
+                calculated_metrics_df,
+                include_calculated_metrics,
+                "No calculated metrics found for this data view",
+                "This data view has no associated calculated metrics",
+            ),
+            "segments": (
+                "Segments",
+                segments_inventory_df,
+                include_segments_inventory,
+                "No segments found for this data view",
+                "This data view has no associated segments",
+            ),
+        }
+        for inv_type in data_dict_inventory_order:
+            if inv_type not in inventory_sections:
+                continue
+            section_name, section_df, section_enabled, empty_status, empty_note = inventory_sections[inv_type]
+            # Add the inventory if available, or a placeholder if the flag was used
+            if not section_df.empty:
+                data_dict[section_name] = section_df
+            elif inventory_statuses[inv_type] == INVENTORY_STATUS_FAILED:
+                data_dict[section_name] = _inventory_unavailable_frame(inv_type, data_view_id)
+            elif section_enabled:
+                data_dict[section_name] = pd.DataFrame(
+                    {
+                        "Status": [empty_status],
+                        "Data View ID": [data_view_id],
+                        "Note": [empty_note],
+                    },
+                )
 
         # Prepare metadata dictionary for JSON/HTML
         metadata_dict = {}

@@ -789,3 +789,14 @@ class TestGitPushFailureReporting:
         handled, out = self._run("abc12345", capsys)
         assert handled is True
         assert "Pushed to remote" in out
+
+
+def test_git_snapshot_none_name_uses_id(tmp_path):
+    from cja_auto_sdr.diff.git import save_git_friendly_snapshot
+    from cja_auto_sdr.diff.snapshot import DataViewSnapshot
+
+    snap = DataViewSnapshot(data_view_id="dv_1", data_view_name=None, metrics=[], dimensions=[])
+    files = save_git_friendly_snapshot(snap, tmp_path)
+
+    assert (tmp_path / "dv_1_dv_1").is_dir()
+    assert files

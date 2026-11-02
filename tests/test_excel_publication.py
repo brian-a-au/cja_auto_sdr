@@ -435,3 +435,21 @@ def test_org_excel_writes_equals_name_as_text(tmp_path):
     sheets, shared = _sheet_formulas_and_strings(path)
     assert all("<f>" not in sheet for sheet in sheets)
     assert "=Rev" in shared
+
+
+def test_staged_writer_keeps_url_text(tmp_path):
+    import openpyxl
+
+    from cja_auto_sdr.output.excel_staging import staged_excel_writer
+
+    long_url = "https://example.com/" + "a" * 2080
+    mailto = "mailto:team@example.com"
+    destination = tmp_path / "urls.xlsx"
+    with staged_excel_writer(destination) as writer:
+        pd.DataFrame({"v": [mailto, long_url]}).to_excel(writer, sheet_name="S", index=False)
+
+    ws = openpyxl.load_workbook(destination)["S"]
+    assert ws["A2"].value == mailto
+    assert ws["A3"].value == long_url
+    assert len(long_url) > 2079
+    assert not ws._hyperlinks
