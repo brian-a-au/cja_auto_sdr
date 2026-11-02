@@ -13,6 +13,13 @@ def _generator_module():
     return _generator
 
 
-def run_dry_run(data_views: list[str], config_file: str, logger: logging.Logger, profile: str | None = None) -> bool:
+def run_dry_run(
+    data_views: list[str],
+    config_file: str,
+    logger: logging.Logger,
+    profile: str | None = None,
+    unresolved_names: list[str] | None = None,
+) -> bool:
     """Delegate dry-run validation to the generator implementation."""
-    return _generator_module().run_dry_run(data_views, config_file, logger, profile=profile)
+    extra = {"unresolved_names": unresolved_names} if unresolved_names else {}
+    return _generator_module().run_dry_run(data_views, config_file, logger, profile=profile, **extra)

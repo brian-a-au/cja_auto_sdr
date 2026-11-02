@@ -175,7 +175,24 @@ def _run_isolated(args, tmp_path):
         cwd=tmp_path,
         env=env,
         timeout=60,
+        stdin=subprocess.DEVNULL,
     )
+
+
+@pytest.mark.parametrize(
+    "summary_args",
+    [["--run-summary-json", "-"], ["--run-summary-json", "stdout"], ["--run-summary-json=-"]],
+)
+def test_watch_rejects_run_summary_on_stdout(summary_args, tmp_path):
+    result = _run_isolated(["--watch", "dv_abc", "--interval", "1h", *summary_args], tmp_path)
+    assert result.returncode == 1, result.stderr
+    assert "--watch is incompatible with --run-summary-json stdout" in result.stderr
+    assert "cja-watch-event" not in result.stdout
+
+
+def test_watch_accepts_run_summary_file_path_in_prevalidation(tmp_path):
+    result = _run_isolated(["--watch", "dv_abc", "--interval", "1h", "--run-summary-json", "s.json"], tmp_path)
+    assert "--run-summary-json" not in result.stderr or "incompatible" not in result.stderr
 
 
 @pytest.mark.parametrize(

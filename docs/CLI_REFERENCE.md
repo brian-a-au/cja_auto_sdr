@@ -115,7 +115,7 @@ cja-auto-sdr [OPTIONS] DATA_VIEW_ID_OR_NAME [...]
 | Option | Description | Default |
 |--------|-------------|---------|
 | `--output-dir PATH` | Output directory for generated files | Current directory (or `OUTPUT_DIR` if set) |
-| `--output PATH` | Output file path. Use `-` or `stdout` to write a command-family-supported format to stdout; SDR generation and `--inventory-summary` support JSON, discovery and stats support JSON/CSV, diff supports JSON, and org-report supports JSON/console. Implies `--quiet` for stdout. Modes that never write to `--output FILE` (diff modes, `--batch`, `--inventory-summary` with a non-JSON format, `--sample-config`, `--config-status`, `--profile-list`, and `--stats` table output) print a warning instead of ignoring it silently. Diff `--output -` with a file-writing non-JSON format (such as Markdown or HTML) also warns; `--stats --format json/csv` exits 1 before any API call when the path is a directory; `--stats` prints a row for every data view but exits 1 if any data view or data view name could not be read (an unresolved name appears as an `ERROR` row) | - |
+| `--output PATH` | Output file path. Use `-` or `stdout` to write a command-family-supported format to stdout; SDR generation and `--inventory-summary` support JSON, discovery and stats support JSON/CSV, diff supports JSON, and org-report supports JSON/console. Implies `--quiet` for stdout. Modes that never write to `--output FILE` (diff modes, `--batch`, `--inventory-summary` with a non-JSON format, `--sample-config`, `--config-status`, `--validate-config`, `--dry-run`, `--profile-list`, and `--stats` table output) print a warning instead of ignoring it silently. Diff `--output -` with a file-writing non-JSON format (such as Markdown or HTML) also warns; `--stats --format json/csv` exits 1 before any API call when the path is a directory; `--stats` prints a row for every data view but exits 1 if any data view or data view name could not be read (an unresolved name appears as an `ERROR` row) | - |
 | `--format FORMAT` | Output format (see table below) | excel (SDR), console (diff) |
 | `--json-typed` | Emit versioned typed JSON (`schema_version: cja-auto-sdr.sdr-typed/1`) that keeps nested objects, lists, booleans, and numbers native. SDR generation only; requires `--format json` (or `--agent-mode`, which defaults to JSON on stdout). Any other format exits 1 with `ERROR: --json-typed requires --format json` before any API call. Ignored in other modes, and has no effect with `--quality-report`. See [OUTPUT_FORMATS.md](OUTPUT_FORMATS.md#typed-json---json-typed) | False |
 | `--stats` | Show quick statistics (metrics/dimensions count) without generating full SDR report | False |
@@ -147,6 +147,8 @@ An exception inside a validation check or worker fails the run with `DQ_VALIDATI
 > **Run summary observability:** Run summaries include: stable `failure_code` and `failure_reason` fields on failed SDR results; top-level `failure_rollups.by_code` and `failure_rollups.by_reason` counts; additive `output_files` alongside the compatibility `output_file`; per-result `partial_output` and `partial_reasons` for `--allow-partial` runs; and per-result `inventory_statuses` (`completed` or `failed` for each requested optional inventory).
 >
 > **Artifact compatibility:** When `output_files` is present, `output_file` remains the primary artifact for backward compatibility and is listed first in the emitted artifact order.
+>
+> **Unresolved names:** In SDR generation, data view names that match nothing do not vanish silently. Resolved data views still run, then the command prints an error naming the unresolved inputs (a JSON line with `error` and `error_type` on stderr when output is machine-readable) and exits 1. The run summary lists them under `inputs.unresolved_data_view_inputs` (always present, empty when every input resolved). With `--dry-run`, each unresolved name counts as an invalid data view. If name lookup fails because of a credential or configuration error, that error is reported instead of the name-matching tips.
 >
 > **Run summary contract (v1.1):** `summary_version` is currently `1.1`. Consumers should treat unknown keys as additive/forward-compatible and only rely on documented stable fields.
 >
@@ -711,7 +713,7 @@ Three new `INFO`-level diagnostic events are emitted via `emit_diagnostic()` (vi
 
 | Family | Flags |
 |---|---|
-| Output / format | `--format`, `--output` |
+| Output / format | `--format`, `--output`, `--run-summary-json -` (stdout; a file path is allowed) |
 | Other run modes | `--org-report`, `--diff`, `--batch` |
 | Quality engine | `--quality-policy`, `--fail-on-quality` |
 | Discovery | `--list-dataviews`, `--list-connections`, `--list-datasets`, `--describe-dataview`, `--list-metrics`, `--list-dimensions`, `--list-segments`, `--list-calculated-metrics` |

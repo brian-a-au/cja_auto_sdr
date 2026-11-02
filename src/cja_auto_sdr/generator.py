@@ -2147,6 +2147,8 @@ def _validate_semantic_flag_relationships(
             _exit_error("--watch is incompatible with --format")
         if getattr(args, "output", None) is not None:
             _exit_error("--watch is incompatible with --output")
+        if getattr(args, "run_summary_json", None) in ("-", "stdout"):
+            _exit_error("--watch is incompatible with --run-summary-json stdout")
         if getattr(args, "org_report", False):
             _exit_error("--watch is incompatible with --org-report")
         if getattr(args, "diff", False):
@@ -2701,6 +2703,7 @@ def _build_run_summary_payload(
         "inputs": {
             "data_view_inputs": run_state.get("data_view_inputs", []),
             "resolved_data_views": run_state.get("resolved_data_views", []),
+            "unresolved_data_view_inputs": list(run_state.get("unresolved_data_view_inputs", [])),
         },
         "results": serialized_results,
         "result_counts": {
@@ -4664,7 +4667,13 @@ BatchProcessor = importlib.import_module("cja_auto_sdr.pipeline.batch").BatchPro
 # ==================== DRY-RUN MODE ====================
 
 
-def run_dry_run(data_views: list[str], config_file: str, logger: logging.Logger, profile: str | None = None) -> bool:
+def run_dry_run(
+    data_views: list[str],
+    config_file: str,
+    logger: logging.Logger,
+    profile: str | None = None,
+    unresolved_names: list[str] | None = None,
+) -> bool:
     """
     Validate configuration and connectivity without generating reports.
 
@@ -4678,6 +4687,7 @@ def run_dry_run(data_views: list[str], config_file: str, logger: logging.Logger,
         config_file: Path to configuration file
         logger: Logger instance
         profile: Optional profile name to use for credentials
+        unresolved_names: Data view names that matched nothing; counted as invalid
 
     Returns:
         True if all validations pass, False otherwise
@@ -4908,6 +4918,11 @@ def run_dry_run(data_views: list[str], config_file: str, logger: logging.Logger,
         print(f"  ✓ {dv_id}: {dv_name}")
         print(f"      Components: {metrics_count} metrics, {dimensions_count} dimensions")
         valid_count += 1
+
+    for unresolved_name in unresolved_names or []:
+        print(f"  ✗ {unresolved_name}: data view name not found")
+        invalid_count += 1
+        all_passed = False
 
     # Calculate time estimates
     # Based on benchmarks: ~0.5s per component for validation, ~0.1s without
@@ -6991,6 +7006,54 @@ def _prepare_sdr_execution_context(
 # ==================== MAIN FUNCTION ====================
 
 
+def _stderr_errors_as_json(args: argparse.Namespace) -> bool:
+    """Return True when stderr errors must be JSON envelopes.
+
+    That is agent mode, ``--log-format json``, or machine-readable output (``--format json``/``csv``
+    or ``--output -``/``stdout``, the discovery convention in ``_is_machine_readable_output``).
+    """
+    return bool(
+        getattr(args, "agent_mode", False)
+        or getattr(args, "log_format", None) == "json"
+        or _is_machine_readable_output(getattr(args, "format", None), getattr(args, "output", None))
+    )
+
+
+@contextlib.contextmanager
+def _name_resolution_logger(args: argparse.Namespace, level: int = logging.WARNING):
+    """Yield a ``name_resolution`` logger whose records follow the resolved ``--log-format``."""
+    resolution_logger = logging.getLogger("name_resolution")
+    previous_level = resolution_logger.level
+    previous_propagate = resolution_logger.propagate
+    handler = logging.StreamHandler()
+    handler.setFormatter(
+        JSONFormatter()
+        if getattr(args, "log_format", None) == "json"
+        else logging.Formatter("%(levelname)s - %(message)s"),
+    )
+    resolution_logger.setLevel(level)
+    resolution_logger.addHandler(handler)
+    resolution_logger.propagate = False
+    try:
+        yield resolution_logger
+    finally:
+        resolution_logger.removeHandler(handler)
+        resolution_logger.setLevel(previous_level)
+        resolution_logger.propagate = previous_propagate
+
+
+def _report_unresolved_data_view_inputs(args: argparse.Namespace, unresolved: list[str]) -> None:
+    """Report data view names that matched nothing after the resolved views ran."""
+    names = ", ".join(f"'{name}'" for name in unresolved)
+    _emit_discovery_error(
+        f"Could not resolve data view name(s): {names}. Run 'cja_auto_sdr --list-dataviews' to see available names and IDs.",
+        is_machine_readable=_stderr_errors_as_json(args),
+        error_type="not_found",
+        additional_fields={"unresolved_data_view_inputs": list(unresolved)},
+        human_to_stderr=True,
+    )
+
+
 def _describe_dataview_ignored_options(args: argparse.Namespace) -> list[str]:
     """Return discovery filtering options that have no effect on --describe-dataview."""
     ignored: list[str] = []
@@ -7003,6 +7066,18 @@ def _describe_dataview_ignored_options(args: argparse.Namespace) -> list[str]:
     if getattr(args, "org_limit", None) is not None:
         ignored.append("--limit")
     return ignored
+
+
+def _warn_sdr_mode_ignored_filter_limit(args: argparse.Namespace) -> None:
+    """Warn when --filter/--limit are given to SDR generation, where they select nothing."""
+    if getattr(args, "org_filter", None) is None and getattr(args, "org_limit", None) is None:
+        return
+    print(
+        ConsoleColors.warning(
+            "Warning: --filter/--limit have no effect in SDR mode; they apply to --org-report and discovery commands."
+        ),
+        file=sys.stderr,
+    )
 
 
 def _warn_describe_dataview_ignored_options(args: argparse.Namespace) -> None:
@@ -7308,8 +7383,12 @@ def _dispatch_post_validation_report_modes(
         output_json = getattr(args, "config_json", False)
         _warn_output_ignored(
             getattr(args, "output", None),
-            scope="with --config-status",
-            hint="use --config-json and redirect stdout to save the status",
+            scope="with --config-json" if output_json else "with --config-status",
+            hint=(
+                "redirect stdout to save the status"
+                if output_json
+                else "use --config-json and redirect stdout to save the status"
+            ),
         )
         success = show_config_status(
             args.config_file,
@@ -7321,6 +7400,11 @@ def _dispatch_post_validation_report_modes(
         sys.exit(0 if success else 1)
 
     if args.validate_config:
+        _warn_output_ignored(
+            getattr(args, "output", None),
+            scope="with --validate-config",
+            hint="the validation report goes to stdout; redirect it to save it",
+        )
         success = validate_config_only(
             args.config_file,
             profile=resolve_active_profile(getattr(args, "profile", None)),
@@ -7388,18 +7472,22 @@ def _dispatch_post_validation_report_modes(
                 )
                 sys.exit(1)
         else:
-            temp_logger = logging.getLogger("name_resolution")
-            temp_logger.setLevel(logging.WARNING)
-            resolved_ids, stats_name_map = resolve_data_view_names(
-                data_view_inputs,
-                args.config_file,
-                temp_logger,
-                profile=getattr(args, "profile", None),
-                match_mode=getattr(args, "name_match", "exact"),
-            )
+            with _name_resolution_logger(args) as temp_logger:
+                resolved_ids, stats_name_map = resolve_data_view_names(
+                    data_view_inputs,
+                    args.config_file,
+                    temp_logger,
+                    profile=getattr(args, "profile", None),
+                    match_mode=getattr(args, "name_match", "exact"),
+                )
 
             if not resolved_ids:
-                print(ConsoleColors.error("ERROR: No valid data views found"), file=sys.stderr)
+                _emit_discovery_error(
+                    "No valid data views found",
+                    is_machine_readable=_stderr_errors_as_json(args),
+                    error_type="not_found",
+                    human_to_stderr=True,
+                )
                 sys.exit(1)
         # A name that matched nothing must not vanish silently: report it as a failed row.
         stats_unresolved_names = [
@@ -7630,7 +7718,7 @@ def _main_impl(run_state: dict[str, Any] | None = None):
         inferred_format = infer_format_from_path(output_path)
         if inferred_format:
             args.format = inferred_format
-            if not args.quiet:
+            if not args.quiet and inferred_mode == RunMode.SDR:
                 print(f"Auto-detected format '{inferred_format}' from output file extension")
     _sync_run_summary_cli_metadata(run_state, args)
     # The interactive wizard chooses the format later; prepare_sdr_execution_context
@@ -8052,6 +8140,8 @@ def _main_impl(run_state: dict[str, Any] | None = None):
         print("       Use --help for more information", file=sys.stderr)
         sys.exit(1)
 
+    _warn_sdr_mode_ignored_filter_limit(args)
+
     # Resolve data view names to IDs
     # Create a temporary logger for name resolution
     temp_logger = logging.getLogger("name_resolution")
@@ -8073,18 +8163,44 @@ def _main_impl(run_state: dict[str, Any] | None = None):
         print()
         print(ConsoleColors.info(f"Resolving {len(names_provided)} data view name(s)..."))
 
-    data_views, name_to_ids_map = resolve_data_view_names(
+    resolution_result = resolve_data_view_names(
         data_view_inputs,
         args.config_file,
         temp_logger,
         profile=getattr(args, "profile", None),
         match_mode=getattr(args, "name_match", "exact"),
+        include_diagnostics=True,
     )
+    data_views, name_to_ids_map, resolution_diagnostics = _coerce_name_resolution_result(resolution_result)
+    unresolved_inputs = [name for name in names_provided if name not in name_to_ids_map]
+    if run_state is not None:
+        run_state["unresolved_data_view_inputs"] = list(unresolved_inputs)
 
     # Remove the temporary handler
     temp_logger.removeHandler(handler)
 
+    resolution_config_error = resolution_diagnostics.error_type == "configuration_error"
+    if resolution_config_error and getattr(args, "dry_run", False):
+        # Let the dry run report the credential/config failure itself (step 1).
+        data_views = list(data_view_inputs)
+        unresolved_inputs = []
+        if run_state is not None:
+            run_state["unresolved_data_view_inputs"] = []
+
     # Check if resolution failed
+    if not data_views and resolution_config_error:
+        _emit_discovery_error(
+            resolution_diagnostics.error_message or "Failed to configure credentials",
+            is_machine_readable=_stderr_errors_as_json(args),
+            error_type="configuration_error",
+            human_to_stderr=True,
+        )
+        sys.exit(1)
+
+    if not data_views and _stderr_errors_as_json(args):
+        _report_unresolved_data_view_inputs(args, unresolved_inputs or list(data_view_inputs))
+        sys.exit(1)
+
     if not data_views:
         print(file=sys.stderr)
         print(ConsoleColors.error("ERROR: No valid data views found"), file=sys.stderr)
@@ -8178,6 +8294,9 @@ def _main_impl(run_state: dict[str, Any] | None = None):
     overall_failure = bool(execution_result["overall_failure"])
     processing_failures_detected = bool(execution_result["processing_failures_detected"])
     _merge_run_details(run_state, execution_settings=execution_result["execution_settings"])
+    if unresolved_inputs:
+        _report_unresolved_data_view_inputs(args, unresolved_inputs)
+        overall_failure = True
 
     all_quality_issues = aggregate_quality_issues(successful_results)
     if run_state is not None:
