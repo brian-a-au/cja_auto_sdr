@@ -307,6 +307,11 @@ def prepare_sdr_execution_context(
         effective_log_level = args.log_level
 
     if args.dry_run:
+        _warn_output_ignored(
+            getattr(args, "output", None),
+            scope="with --dry-run",
+            hint="a dry run writes no report files",
+        )
         logger = generator.setup_logging(batch_mode=True, log_level="WARNING", log_format=args.log_format)
         unresolved = list((run_state or {}).get("unresolved_data_view_inputs") or [])
         dry_run_extra = {"unresolved_names": unresolved} if unresolved else {}

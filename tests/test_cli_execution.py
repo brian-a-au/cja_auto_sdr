@@ -978,3 +978,54 @@ class TestInventoryOrderThroughMain:
             main()
 
         assert mock_process.call_args.kwargs["inventory_order"] == expected
+
+
+class TestIgnoredOutputAndCleanConfigJson:
+    """--output on modes that never write it warns on stderr and never pollutes stdout (CLI-22)."""
+
+    @staticmethod
+    def _run_main(argv, monkeypatch, tmp_path):
+        from cja_auto_sdr.generator import main
+
+        monkeypatch.chdir(tmp_path)
+        try:
+            with patch.object(sys, "argv", ["cja_auto_sdr", *argv]):
+                main()
+        except SystemExit as exc:
+            return exc.code
+        return 0
+
+    def test_config_json_with_output_keeps_stdout_json_and_hint_correct(self, tmp_path, monkeypatch, capsys):
+        import json
+
+        with patch("cja_auto_sdr.generator.show_config_status") as mock_status:
+            mock_status.side_effect = lambda *a, **k: print(json.dumps({"ok": True})) or True
+            code = self._run_main(["--config-json", "--output", "s.json"], monkeypatch, tmp_path)
+
+        captured = capsys.readouterr()
+        assert code == 0
+        assert json.loads(captured.out) == {"ok": True}
+        assert "ignored" in captured.err
+        assert "use --config-json" not in captured.err
+        assert "redirect stdout" in captured.err
+
+    def test_validate_config_with_output_warns(self, tmp_path, monkeypatch, capsys):
+        with patch("cja_auto_sdr.generator.validate_config_only", return_value=True):
+            code = self._run_main(["--validate-config", "--output", "v.json"], monkeypatch, tmp_path)
+
+        captured = capsys.readouterr()
+        assert code == 0
+        assert "--output is ignored with --validate-config" in captured.err
+        assert "--output is ignored" not in captured.out
+
+    def test_dry_run_with_output_warns(self, tmp_path, monkeypatch, capsys):
+        with (
+            patch("cja_auto_sdr.generator.run_dry_run", return_value=True),
+            patch("cja_auto_sdr.generator.resolve_data_view_names", return_value=(["dv_1"], {})),
+        ):
+            code = self._run_main(["dv_1", "--dry-run", "--output", "x.json"], monkeypatch, tmp_path)
+
+        captured = capsys.readouterr()
+        assert code == 0
+        assert "--output is ignored with --dry-run" in captured.err
+        assert "Auto-detected format" not in captured.out

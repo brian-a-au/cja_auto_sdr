@@ -7286,8 +7286,12 @@ def _dispatch_post_validation_report_modes(
         output_json = getattr(args, "config_json", False)
         _warn_output_ignored(
             getattr(args, "output", None),
-            scope="with --config-status",
-            hint="use --config-json and redirect stdout to save the status",
+            scope="with --config-json" if output_json else "with --config-status",
+            hint=(
+                "redirect stdout to save the status"
+                if output_json
+                else "use --config-json and redirect stdout to save the status"
+            ),
         )
         success = show_config_status(
             args.config_file,
@@ -7299,6 +7303,11 @@ def _dispatch_post_validation_report_modes(
         sys.exit(0 if success else 1)
 
     if args.validate_config:
+        _warn_output_ignored(
+            getattr(args, "output", None),
+            scope="with --validate-config",
+            hint="the validation report goes to stdout; redirect it to save it",
+        )
         success = validate_config_only(
             args.config_file,
             profile=resolve_active_profile(getattr(args, "profile", None)),
@@ -7608,7 +7617,7 @@ def _main_impl(run_state: dict[str, Any] | None = None):
         inferred_format = infer_format_from_path(output_path)
         if inferred_format:
             args.format = inferred_format
-            if not args.quiet:
+            if not args.quiet and inferred_mode == RunMode.SDR:
                 print(f"Auto-detected format '{inferred_format}' from output file extension")
     _sync_run_summary_cli_metadata(run_state, args)
     # The interactive wizard chooses the format later; prepare_sdr_execution_context
