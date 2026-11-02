@@ -1292,7 +1292,7 @@ def _build_sdr_metadata_dataframe(
     metadata_values = [
         formatted_timestamp,
         data_view_id,
-        lookup_data.get("name", "Unknown") if isinstance(lookup_data, Mapping) else "Unknown",
+        _display_data_view_name(lookup_data.get("name") if isinstance(lookup_data, Mapping) else None),
         metrics_count_value,
         metrics_breakdown_value,
         dimensions_count_value,
@@ -1386,6 +1386,19 @@ def _build_sdr_metadata_dataframe(
             metadata_values.append(status)
 
     return pd.DataFrame({"Property": metadata_properties, "Value": metadata_values})
+
+
+def _display_data_view_name(raw: object) -> str:
+    """Return a printable data view name: "Unknown" for None, NaN, or blank values."""
+    if raw is None:
+        return "Unknown"
+    try:
+        if pd.isna(raw):
+            return "Unknown"
+    except (TypeError, ValueError):
+        pass
+    text = str(raw)
+    return text if text.strip() else "Unknown"
 
 
 def _metadata_dataframe_to_dict(metadata_df: pd.DataFrame) -> dict[str, Any]:
@@ -3241,7 +3254,7 @@ def process_inventory_summary(
         return {"error": error_message}
 
     lookup_data = lookup_assessment.payload or (raw_lookup if isinstance(raw_lookup, dict) else {})
-    dv_name = lookup_data.get("name", data_view_id)
+    dv_name = _display_data_view_name(lookup_data.get("name", data_view_id))
 
     if not quiet:
         print(ConsoleColors.info(f"Fetching inventory data for: {dv_name}"))
@@ -3664,7 +3677,7 @@ def process_single_dataview(
             )
 
         if component_failures:
-            dv_name = lookup_data.get("name", "Unknown") if isinstance(lookup_data, dict) else "Unknown"
+            dv_name = _display_data_view_name(lookup_data.get("name") if isinstance(lookup_data, dict) else None)
             if allow_partial_for_sdr:
                 logger.warning(
                     "Component fetch failed for required sections, but continuing due to --allow-partial (exploratory mode).",
@@ -3705,7 +3718,7 @@ def process_single_dataview(
             fetch_statuses=fetch_statuses,
         )
         if empty_required_component_endpoints:
-            dv_name = lookup_data.get("name", "Unknown") if isinstance(lookup_data, dict) else "Unknown"
+            dv_name = _display_data_view_name(lookup_data.get("name") if isinstance(lookup_data, dict) else None)
             empty_required_components = ", ".join(empty_required_component_endpoints)
             missing_all_standard_components = (
                 set(empty_required_component_endpoints) == STANDARD_COMPONENT_ENDPOINTS
@@ -3806,7 +3819,7 @@ def process_single_dataview(
         validation_error_message = validation_result.error_message
 
         if validation_failed and execution_policy.validation_required_for_output:
-            dv_name = lookup_data.get("name", "Unknown") if isinstance(lookup_data, dict) else "Unknown"
+            dv_name = _display_data_view_name(lookup_data.get("name") if isinstance(lookup_data, dict) else None)
             if allow_partial_for_sdr:
                 logger.warning(
                     "Data quality validation failed at runtime, but continuing due to --allow-partial (exploratory mode).",
@@ -3840,7 +3853,7 @@ def process_single_dataview(
                 )
 
         if quality_report_only:
-            dv_name = lookup_data.get("name", "Unknown") if isinstance(lookup_data, dict) else "Unknown"
+            dv_name = _display_data_view_name(lookup_data.get("name") if isinstance(lookup_data, dict) else None)
             return _finalize_result(
                 data_view_name=dv_name,
                 success=True,
@@ -3880,7 +3893,9 @@ def process_single_dataview(
                 from cja_auto_sdr.inventory.derived_fields import DerivedFieldInventoryBuilder
 
                 builder = DerivedFieldInventoryBuilder(logger=logger)
-                dv_name = lookup_data.get("name", data_view_id) if isinstance(lookup_data, dict) else data_view_id
+                dv_name = _display_data_view_name(
+                    lookup_data.get("name", data_view_id) if isinstance(lookup_data, dict) else data_view_id
+                )
                 derived_inventory = builder.build(metrics, dimensions, data_view_id, dv_name)
 
                 derived_df = derived_inventory.get_dataframe()
@@ -3909,7 +3924,9 @@ def process_single_dataview(
                 from cja_auto_sdr.inventory.calculated_metrics import CalculatedMetricsInventoryBuilder
 
                 builder = CalculatedMetricsInventoryBuilder(logger=logger)
-                dv_name = lookup_data.get("name", data_view_id) if isinstance(lookup_data, dict) else data_view_id
+                dv_name = _display_data_view_name(
+                    lookup_data.get("name", data_view_id) if isinstance(lookup_data, dict) else data_view_id
+                )
                 with cja_inventory_lock:
                     calculated_inventory = builder.build(cja, data_view_id, dv_name)
 
@@ -3941,7 +3958,9 @@ def process_single_dataview(
                 from cja_auto_sdr.inventory.segments import SegmentsInventoryBuilder
 
                 builder = SegmentsInventoryBuilder(logger=logger)
-                dv_name = lookup_data.get("name", data_view_id) if isinstance(lookup_data, dict) else data_view_id
+                dv_name = _display_data_view_name(
+                    lookup_data.get("name", data_view_id) if isinstance(lookup_data, dict) else data_view_id
+                )
                 with cja_inventory_lock:
                     segments_inventory = builder.build(cja, data_view_id, dv_name)
 
@@ -4120,12 +4139,10 @@ def process_single_dataview(
             logger.error(_format_error_msg("applying JSON formatting", error=e))
 
         # Create Excel file name
-        raw_dv_name = lookup_data.get("name", "Unknown") if isinstance(lookup_data, dict) else "Unknown"
-        # Results and summaries show the real name; only the file name is sanitized.
-        dv_name = raw_dv_name if isinstance(raw_dv_name, str) else "Unknown"
+        dv_name = _display_data_view_name(lookup_data.get("name") if isinstance(lookup_data, dict) else None)
         try:
-            # Sanitize filename
-            safe_name = "".join(c for c in raw_dv_name if c.isalnum() or c in (" ", "-", "_")).rstrip()
+            # Sanitize filename (results and summaries show the real name; only the file name is sanitized)
+            safe_name = "".join(c for c in dv_name if c.isalnum() or c in (" ", "-", "_")).rstrip()
             excel_file_name = f"CJA_DataView_{safe_name}_{data_view_id}_SDR.xlsx"
 
             # Add output directory path

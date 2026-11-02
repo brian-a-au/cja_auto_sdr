@@ -2690,4 +2690,92 @@ class TestProcessSingleDataviewDisplayName:
 
         assert result.success is True
         assert result.data_view_name == "Unknown"
-        assert Path(result.output_file).name == "CJA_DataView_dv_1_SDR.xlsx"
+        assert Path(result.output_file).name == "CJA_DataView_Unknown_dv_1_SDR.xlsx"
+
+
+def _run_real_writers(tmp_path, lookup, **kwargs):
+    """Run process_single_dataview end to end with the real writers and a mocked API."""
+    out = tmp_path / "out"
+    out.mkdir(exist_ok=True)
+    cfg = tmp_path / "cfg.json"
+    cfg.write_text(json.dumps({"org_id": "o@AdobeOrg", "client_id": "c", "secret": "s", "scopes": "openid"}))
+    metrics = pd.DataFrame(
+        [{"id": "metrics/m1", "name": "M1", "type": "int", "title": "M1", "description": "d1"}],
+    )
+    dimensions = pd.DataFrame(
+        [{"id": "variables/d1", "name": "D1", "type": "string", "title": "D1", "description": "x"}],
+    )
+    fetcher = Mock()
+    fetcher.fetch_all_data.return_value = (metrics, dimensions, lookup)
+    with (
+        patch("cja_auto_sdr.generator.initialize_cja", return_value=Mock()),
+        patch("cja_auto_sdr.generator.ParallelAPIFetcher", return_value=fetcher),
+    ):
+        result = process_single_dataview(
+            data_view_id=lookup.get("id", "dv_1"),
+            config_file=str(cfg),
+            output_dir=str(out),
+            quiet=True,
+            **kwargs,
+        )
+    return result, out
+
+
+class TestNullDataViewNameDocuments:
+    """A null data view name must read "Unknown" in every SDR document (SDR-1, SDR-7)."""
+
+    def test_null_name_documents_show_unknown(self, tmp_path, caplog):
+        import logging
+
+        caplog.set_level(logging.ERROR)
+        result, out = _run_real_writers(
+            tmp_path, {"id": "dv_1", "name": None, "owner": {"name": "O"}}, output_format="all"
+        )
+
+        assert result.success is True
+        assert result.data_view_name == "Unknown"
+        md = next(out.glob("*.md")).read_text()
+        html = next(out.glob("*.html")).read_text()
+        js = json.loads(next(out.glob("*.json")).read_text())
+        assert "**Data View Name:** Unknown" in md
+        assert ">Unknown<" in html
+        assert js["metadata"]["Data View Name"] == "Unknown"
+        assert not any("Error creating filename" in r.getMessage() for r in caplog.records)
+
+    def test_inventory_name_is_unknown(self, tmp_path):
+        result, out = _run_real_writers(
+            tmp_path,
+            {"id": "dv_1", "name": None, "owner": {"name": "O"}},
+            output_format="json",
+            include_derived_inventory=True,
+        )
+
+        assert result.success is True
+        js = json.loads(next(out.glob("*.json")).read_text())
+        assert "None" not in json.dumps(js["metadata"].get("Data View Name"))
+        assert js["metadata"]["Data View Name"] == "Unknown"
+
+    def test_display_name_helper(self):
+        from cja_auto_sdr.generator import _display_data_view_name
+
+        assert _display_data_view_name(None) == "Unknown"
+        assert _display_data_view_name(float("nan")) == "Unknown"
+        assert _display_data_view_name("") == "Unknown"
+        assert _display_data_view_name("   ") == "Unknown"
+        assert _display_data_view_name("Prod") == "Prod"
+
+    def test_early_failure_null_name_is_unknown(self, tmp_path):
+        lookup = {"id": "dv_1", "name": None, "owner": {"name": "O"}}
+        cfg = tmp_path / "cfg.json"
+        cfg.write_text(json.dumps({"org_id": "o@AdobeOrg", "client_id": "c", "secret": "s", "scopes": "openid"}))
+        empty = pd.DataFrame()
+        fetcher = Mock()
+        fetcher.fetch_all_data.return_value = (empty, empty, lookup)
+        with (
+            patch("cja_auto_sdr.generator.initialize_cja", return_value=Mock()),
+            patch("cja_auto_sdr.generator.ParallelAPIFetcher", return_value=fetcher),
+        ):
+            result = process_single_dataview(
+                data_view_id="dv_1", config_file=str(cfg), output_dir=str(tmp_path), quiet=True
+            )
+        assert result.data_view_name == "Unknown"

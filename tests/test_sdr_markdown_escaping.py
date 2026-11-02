@@ -199,3 +199,17 @@ def test_markdown_table_matches_reference():
             df, "Sheet", "empty|msg"
         )
         assert df_to_markdown_table(df, "Sheet") == _reference_df_to_markdown_table(df, "Sheet")
+
+
+def test_markdown_metadata_none_nan_blank(tmp_path):
+    import logging
+    from pathlib import Path
+
+    from cja_auto_sdr.output.sdr import write_markdown_output
+
+    path = write_markdown_output({}, {"A": None, "B": float("nan")}, "t", str(tmp_path), logging.getLogger("t"))
+    text = Path(path).read_text()
+    assert "**A:** \n" in text
+    assert "**B:** \n" in text
+    assert "None" not in text
+    assert "nan" not in text

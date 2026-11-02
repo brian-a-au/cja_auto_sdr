@@ -159,7 +159,8 @@ class SnapshotManager:
             )
 
         dv_info = lookup_assessment.payload or {}
-        dv_name = dv_info.get("name", "Unknown")
+        raw_name = dv_info.get("name")
+        dv_name = raw_name if isinstance(raw_name, str) and raw_name.strip() else "Unknown"
         dv_owner = dv_info.get("owner", {})
         owner_name = dv_owner.get("name", "") if isinstance(dv_owner, dict) else str(dv_owner)
         dv_description = dv_info.get("description", "")
