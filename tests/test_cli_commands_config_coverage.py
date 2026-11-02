@@ -866,3 +866,70 @@ class TestConfigCommandsUnsearchableParent:
             result = validate_config_only(config_file=str(unsearchable_dir / "config.json"))
         assert result is False
         assert "not found" in capsys.readouterr().out.lower()
+
+
+# ---------------------------------------------------------------------------
+# CRED-22 / CRED-23: diagnostics read config.json values the way real runs do
+# ---------------------------------------------------------------------------
+
+
+class TestConfigDiagnosticsUseCleanedValues:
+    def _write(self, tmp_path, payload):
+        path = tmp_path / "config.json"
+        path.write_text(json.dumps(payload))
+        return path
+
+    def test_validate_config_accepts_list_secret(self, tmp_path, capsys):
+        from cja_auto_sdr.cli.commands.config import validate_config_only
+
+        path = self._write(
+            tmp_path,
+            {"org_id": "ORG@AdobeOrg", "client_id": "cid12345678", "secret": ["s3cretvalue", "other"]},
+        )
+        gen = _make_generator_mock(python_version_info=(3, 14, 0))
+        gen.load_credentials_from_env.return_value = None
+        with patch("cja_auto_sdr.cli.commands.config._generator_module", return_value=gen):
+            validate_config_only(config_file=str(path))
+        out = capsys.readouterr().out
+        assert "secret: must be a string" not in out
+        assert "secret: s3cr" in out
+
+    def test_validate_config_still_reports_numeric_secret_type_error(self, tmp_path, capsys):
+        from cja_auto_sdr.cli.commands.config import validate_config_only
+
+        path = self._write(tmp_path, {"org_id": "ORG@AdobeOrg", "client_id": "cid12345678", "secret": 12345})
+        gen = _make_generator_mock(python_version_info=(3, 14, 0))
+        gen.load_credentials_from_env.return_value = None
+        with patch("cja_auto_sdr.cli.commands.config._generator_module", return_value=gen):
+            validate_config_only(config_file=str(path))
+        assert "secret: must be a string" in capsys.readouterr().out
+
+    def test_config_json_whitespace_org_id_is_invalid(self, tmp_path, capsys, monkeypatch):
+        from cja_auto_sdr.cli.commands.config import show_config_status
+
+        for var in ("ORG_ID", "CLIENT_ID", "SECRET", "SCOPES", "SANDBOX"):
+            monkeypatch.delenv(var, raising=False)
+        path = self._write(tmp_path, {"org_id": "   ", "client_id": "cid12345678", "secret": "sec1234567"})
+        result = show_config_status(str(path), output_json=True)
+        data = json.loads(capsys.readouterr().out)
+        assert result is False
+        assert data["valid"] is False
+        assert data["credentials"]["org_id"]["set"] is False
+
+    def test_config_status_list_scopes_use_compact_form(self, tmp_path, capsys, monkeypatch):
+        from cja_auto_sdr.cli.commands.config import show_config_status
+
+        for var in ("ORG_ID", "CLIENT_ID", "SECRET", "SCOPES", "SANDBOX"):
+            monkeypatch.delenv(var, raising=False)
+        path = self._write(
+            tmp_path,
+            {
+                "org_id": "ORG@AdobeOrg",
+                "client_id": "cid12345678",
+                "secret": ["sec1234567"],
+                "scopes": ["openid", "AdobeID"],
+            },
+        )
+        assert show_config_status(str(path), output_json=True) is True
+        data = json.loads(capsys.readouterr().out)
+        assert data["credentials"]["scopes"]["value"] == "openid,AdobeID"
