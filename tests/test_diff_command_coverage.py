@@ -1117,7 +1117,7 @@ def _hunt_pair(tmp_path):
 class TestDiffOutputDestinationSafety:
     """DIFF-20: --diff-output follows the staged Excel writer's destination rules."""
 
-    def test_hard_linked_destination_rejected(self, tmp_path, monkeypatch):
+    def test_hard_linked_destination_rejected(self, tmp_path, monkeypatch, capsys):
         a, b = _hunt_pair(tmp_path)
         real = tmp_path / "real.xlsx"
         real.write_text("old")
@@ -1127,6 +1127,9 @@ class TestDiffOutputDestinationSafety:
             monkeypatch, ["--compare-snapshots", a, b, "--format", "excel", "--diff-output", str(hard), "--quiet"]
         )
         assert code == 1
+        assert "ERROR: Cannot write --diff-output: Diff output destination has multiple hard links" in (
+            capsys.readouterr().err
+        )
         assert os.stat(hard).st_nlink == 2
         assert real.read_text() == "old"
 
@@ -1293,3 +1296,77 @@ def test_diff_step_summary_blanks_null_names():
     text = build_diff_step_summary(result)
     assert not re.search(r"\bNone\b", text)
     assert not re.search(r"\bnan\b", text, re.IGNORECASE)
+
+
+class TestDiffOutputDestinationMessage:
+    """A --diff-output destination problem is reported as such, not as a failed comparison."""
+
+    def _hard_link(self, tmp_path):
+        real = tmp_path / "real.json"
+        real.write_text("old")
+        hard = tmp_path / "hard.json"
+        os.link(real, hard)
+        return hard
+
+    def _live_cja(self, monkeypatch):
+        from unittest.mock import MagicMock
+
+        import pandas as pd
+
+        cja = MagicMock()
+        cja.getDataView.side_effect = lambda dv, **_k: {"id": dv, "name": "DV", "owner": {"name": "O"}}
+        cja.getMetrics.return_value = pd.DataFrame([{"id": "m1", "name": "M", "type": "int", "description": "x"}])
+        cja.getDimensions.return_value = pd.DataFrame([{"id": "d1", "name": "D", "type": "string"}])
+        monkeypatch.setattr("cja_auto_sdr.generator.configure_cjapy", lambda **k: (True, "test", None))
+        monkeypatch.setattr("cja_auto_sdr.generator.cjapy.CJA", lambda: cja)
+
+    @pytest.mark.parametrize("output_format", ["json", "excel"])
+    def test_compare_snapshots(self, tmp_path, monkeypatch, capsys, output_format):
+        a, b = _hunt_pair(tmp_path)
+        hard = self._hard_link(tmp_path)
+        code = _hunt_main(
+            monkeypatch,
+            ["--compare-snapshots", a, b, "--format", output_format, "--diff-output", str(hard), "--quiet"],
+        )
+        err = capsys.readouterr().err
+        assert code == 1
+        assert "ERROR: Cannot write --diff-output:" in err
+        assert "Failed to compare" not in err
+
+    def test_diff_snapshot(self, tmp_path, monkeypatch, capsys):
+        from cja_auto_sdr.diff.commands import handle_diff_snapshot_command
+
+        self._live_cja(monkeypatch)
+        snap = _hunt_snap(tmp_path / "s.json", dv="dv_1")
+        hard = self._hard_link(tmp_path)
+        success, _changes, _code = handle_diff_snapshot_command(
+            data_view_id="dv_1",
+            snapshot_file=snap,
+            output_format="json",
+            output_dir=str(tmp_path),
+            diff_output=str(hard),
+            quiet=True,
+        )
+        err = capsys.readouterr().err
+        assert success is False
+        assert "ERROR: Cannot write --diff-output:" in err
+        assert "multiple hard links" in err
+        assert "Failed to compare" not in err
+
+    def test_diff_live(self, tmp_path, monkeypatch, capsys):
+        from cja_auto_sdr.diff.commands import handle_diff_command
+
+        self._live_cja(monkeypatch)
+        hard = self._hard_link(tmp_path)
+        success, _changes, _code = handle_diff_command(
+            source_id="dv_1",
+            target_id="dv_2",
+            output_format="json",
+            output_dir=str(tmp_path),
+            diff_output=str(hard),
+            quiet=True,
+        )
+        err = capsys.readouterr().err
+        assert success is False
+        assert "ERROR: Cannot write --diff-output:" in err
+        assert "Failed to compare" not in err

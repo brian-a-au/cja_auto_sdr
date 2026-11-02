@@ -42,6 +42,14 @@ def _generator_module():
 _SINGLE_FILE_DIFF_FORMATS = frozenset({"json", "markdown", "html", "excel"})
 
 
+class _DiffOutputDestinationError(OutputError):
+    """The ``--diff-output`` destination cannot be written (hard-linked or not a regular file)."""
+
+
+def _print_diff_output_destination_error(generator: Any, error: OutputError) -> None:
+    print(generator.ConsoleColors.error(f"ERROR: Cannot write --diff-output: {error!s}"), file=sys.stderr)
+
+
 def _write_diff_report(
     render: Callable[[str | Path], str | None],
     *,
@@ -60,7 +68,10 @@ def _write_diff_report(
     output under ``output_dir`` and say so on stderr.
     """
     if diff_output and not output_to_stdout and output_format in _SINGLE_FILE_DIFF_FORMATS:
-        destination, previous_mode = prepare_staged_destination(diff_output, label="Diff output")
+        try:
+            destination, previous_mode = prepare_staged_destination(diff_output, label="Diff output")
+        except OutputError as e:
+            raise _DiffOutputDestinationError(str(e)) from e
         destination.parent.mkdir(parents=True, exist_ok=True)
         staging_dir = Path(tempfile.mkdtemp(prefix=".diff-", dir=destination.parent))
         try:
@@ -478,27 +489,31 @@ def handle_diff_command(
         if not quiet_diff:
             effective_format = "pr-comment" if format_pr_comment else output_format
             base_filename = f"diff_{source_id}_{target_id}_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}"
-            _write_diff_report(
-                lambda directory: generator.write_diff_output(
-                    diff_result,
-                    effective_format,
-                    base_filename,
-                    directory,
-                    logger,
-                    changes_only,
-                    summary_only,
-                    side_by_side,
-                    use_color=generator.ConsoleColors.is_enabled() and not no_color,
-                    group_by_field=group_by_field,
-                    group_by_field_limit=group_by_field_limit,
+            try:
+                _write_diff_report(
+                    lambda directory: generator.write_diff_output(
+                        diff_result,
+                        effective_format,
+                        base_filename,
+                        directory,
+                        logger,
+                        changes_only,
+                        summary_only,
+                        side_by_side,
+                        use_color=generator.ConsoleColors.is_enabled() and not no_color,
+                        group_by_field=group_by_field,
+                        group_by_field_limit=group_by_field_limit,
+                        output_to_stdout=output_to_stdout,
+                    ),
+                    output_format=effective_format,
+                    output_dir=output_dir,
+                    diff_output=diff_output,
+                    quiet=quiet,
                     output_to_stdout=output_to_stdout,
-                ),
-                output_format=effective_format,
-                output_dir=output_dir,
-                diff_output=diff_output,
-                quiet=quiet,
-                output_to_stdout=output_to_stdout,
-            )
+                )
+            except _DiffOutputDestinationError as e:
+                _print_diff_output_destination_error(generator, e)
+                return False, False, None
             if not quiet and output_format != "console" and not output_to_stdout:
                 print()
                 print(generator.ConsoleColors.success("Diff report generated successfully"))
@@ -835,27 +850,31 @@ def handle_diff_snapshot_command(
         if not quiet_diff:
             effective_format = "pr-comment" if format_pr_comment else output_format
             base_filename = f"diff_{data_view_id}_snapshot_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}"
-            _write_diff_report(
-                lambda directory: generator.write_diff_output(
-                    diff_result,
-                    effective_format,
-                    base_filename,
-                    directory,
-                    logger,
-                    changes_only,
-                    summary_only,
-                    side_by_side,
-                    use_color=generator.ConsoleColors.is_enabled() and not no_color,
-                    group_by_field=group_by_field,
-                    group_by_field_limit=group_by_field_limit,
+            try:
+                _write_diff_report(
+                    lambda directory: generator.write_diff_output(
+                        diff_result,
+                        effective_format,
+                        base_filename,
+                        directory,
+                        logger,
+                        changes_only,
+                        summary_only,
+                        side_by_side,
+                        use_color=generator.ConsoleColors.is_enabled() and not no_color,
+                        group_by_field=group_by_field,
+                        group_by_field_limit=group_by_field_limit,
+                        output_to_stdout=output_to_stdout,
+                    ),
+                    output_format=effective_format,
+                    output_dir=output_dir,
+                    diff_output=diff_output,
+                    quiet=quiet,
                     output_to_stdout=output_to_stdout,
-                ),
-                output_format=effective_format,
-                output_dir=output_dir,
-                diff_output=diff_output,
-                quiet=quiet,
-                output_to_stdout=output_to_stdout,
-            )
+                )
+            except _DiffOutputDestinationError as e:
+                _print_diff_output_destination_error(generator, e)
+                return False, False, None
             if not quiet and output_format != "console" and not output_to_stdout:
                 print()
                 print(generator.ConsoleColors.success("Diff report generated successfully"))
@@ -1018,27 +1037,31 @@ def handle_compare_snapshots_command(
             source_base = Path(source_file).stem
             target_base = Path(target_file).stem
             base_filename = f"diff_{source_base}_vs_{target_base}_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}"
-            _write_diff_report(
-                lambda directory: generator.write_diff_output(
-                    diff_result,
-                    effective_format,
-                    base_filename,
-                    directory,
-                    logger,
-                    changes_only,
-                    summary_only,
-                    side_by_side,
-                    use_color=generator.ConsoleColors.is_enabled() and not no_color,
-                    group_by_field=group_by_field,
-                    group_by_field_limit=group_by_field_limit,
+            try:
+                _write_diff_report(
+                    lambda directory: generator.write_diff_output(
+                        diff_result,
+                        effective_format,
+                        base_filename,
+                        directory,
+                        logger,
+                        changes_only,
+                        summary_only,
+                        side_by_side,
+                        use_color=generator.ConsoleColors.is_enabled() and not no_color,
+                        group_by_field=group_by_field,
+                        group_by_field_limit=group_by_field_limit,
+                        output_to_stdout=output_to_stdout,
+                    ),
+                    output_format=effective_format,
+                    output_dir=output_dir,
+                    diff_output=diff_output,
+                    quiet=quiet,
                     output_to_stdout=output_to_stdout,
-                ),
-                output_format=effective_format,
-                output_dir=output_dir,
-                diff_output=diff_output,
-                quiet=quiet,
-                output_to_stdout=output_to_stdout,
-            )
+                )
+            except _DiffOutputDestinationError as e:
+                _print_diff_output_destination_error(generator, e)
+                return False, False, None
             if not quiet and output_format != "console" and not output_to_stdout:
                 print()
                 print(generator.ConsoleColors.success("Diff report generated successfully"))
