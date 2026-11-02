@@ -1,6 +1,7 @@
 """Tests for org-report trending: snapshot discovery, deltas, and drift scoring."""
 
 import json
+import logging
 import sys
 from datetime import UTC, datetime, timedelta
 
@@ -1386,6 +1387,8 @@ def _write_healthy_org_history(cache):
 
 @pytest.mark.parametrize("reader", ["metadata", "trending"])
 def test_org_history_discovery_skips_decoding_failures(tmp_path, malformed_org_snapshot_bytes, caplog, reader):
+    # Earlier tests can leave the root logger at ERROR; capture warnings regardless.
+    caplog.set_level(logging.WARNING)
     cache = OrgReportCache(cache_dir=tmp_path)
     old_path, new_path = _write_healthy_org_history(cache)
     malformed_path = new_path.parent / "bad.json"
@@ -1422,6 +1425,7 @@ def test_org_history_retention_preserves_undecodable_files(tmp_path, malformed_o
 
 
 def test_org_history_with_only_decoding_failures_returns_empty(tmp_path, malformed_org_snapshot_bytes, caplog):
+    caplog.set_level(logging.WARNING)
     cache = OrgReportCache(cache_dir=tmp_path)
     snapshot_dir = cache.get_org_report_snapshot_dir("test_org")
     snapshot_dir.mkdir(parents=True)

@@ -3169,6 +3169,72 @@ class TestOrgReportOutputHandling:
             assert "Data Views:" in captured.out
             assert captured.err == ""
 
+    def _run_org_stats(self, sample_result, output_format, tmp_path, quiet=True):
+        with (
+            patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "ok", {"org_id": "org_123"})),
+            patch("cja_auto_sdr.generator.cjapy.CJA", return_value=Mock()),
+            patch("cja_auto_sdr.generator.OrgComponentAnalyzer") as mock_analyzer,
+            patch("cja_auto_sdr.generator.build_org_step_summary", return_value="summary"),
+            patch("cja_auto_sdr.generator.append_github_step_summary"),
+        ):
+            mock_analyzer.return_value.run_analysis.return_value = sample_result
+            return run_org_report(
+                config_file="config.json",
+                output_format=output_format,
+                output_path=None,
+                output_dir=str(tmp_path),
+                org_config=OrgReportConfig(org_stats_only=True),
+                profile=None,
+                quiet=quiet,
+            )
+
+    @pytest.mark.parametrize("output_format", ["excel", "csv", "markdown", "html"])
+    def test_org_stats_warns_for_unsupported_format(self, sample_result, capsys, tmp_path, output_format):
+        """--org-stats writes console or JSON only; other formats get a warning, not silence."""
+        success, thresholds = self._run_org_stats(sample_result, output_format, tmp_path)
+
+        assert (success, thresholds) == (True, False)
+        expected = f"Warning: --org-stats only writes console or JSON output; --format {output_format} was ignored."
+        assert expected in capsys.readouterr().err
+
+    @pytest.mark.parametrize("output_format", ["console", "json"])
+    def test_org_stats_supported_format_has_no_warning(self, sample_result, capsys, tmp_path, output_format):
+        self._run_org_stats(sample_result, output_format, tmp_path)
+
+        assert "--org-stats only writes" not in capsys.readouterr().err
+
+    def test_org_report_cross_org_baseline_exits_1(self, sample_result, capsys, tmp_path):
+        """A baseline from another org still writes the report, then fails the run."""
+        from cja_auto_sdr.generator import build_org_report_json_data
+
+        baseline = build_org_report_json_data(sample_result)
+        baseline["org_id"] = "ORG_OTHER@AdobeOrg"
+        baseline_path = tmp_path / "baseline.json"
+        baseline_path.write_text(json.dumps(baseline), encoding="utf-8")
+        out_dir = tmp_path / "out"
+
+        with (
+            patch("cja_auto_sdr.generator.configure_cjapy", return_value=(True, "ok", {"org_id": "org_123"})),
+            patch("cja_auto_sdr.generator.cjapy.CJA", return_value=Mock()),
+            patch("cja_auto_sdr.generator.OrgComponentAnalyzer") as mock_analyzer,
+            patch("cja_auto_sdr.generator.append_github_step_summary"),
+        ):
+            mock_analyzer.return_value.run_analysis.return_value = sample_result
+            success, _ = run_org_report(
+                config_file="config.json",
+                output_format="json",
+                output_path=None,
+                output_dir=str(out_dir),
+                org_config=OrgReportConfig(compare_org_report=str(baseline_path), skip_lock=True),
+                profile=None,
+                quiet=True,
+            )
+
+        assert success is False
+        captured = capsys.readouterr()
+        assert "ORG_OTHER@AdobeOrg" in captured.out + captured.err
+        assert list(out_dir.glob("*.json"))
+
     def test_csv_output_to_stdout_errors(self, sample_result, capsys):
         """CSV org-report should error on stdout since it writes multiple files."""
         with (
@@ -5164,3 +5230,48 @@ class TestOrgReportRunSummaryDetails:
         details = self._merge_details({})
         assert "lock" not in details
         assert "execution_settings" in details
+
+
+def _run_main(argv, tmp_path, monkeypatch):
+    from cja_auto_sdr.generator import main
+
+    monkeypatch.chdir(tmp_path)
+    with patch.object(sys, "argv", ["cja_auto_sdr", *argv]), pytest.raises(SystemExit) as exc_info:
+        main()
+    return exc_info.value.code
+
+
+def test_org_report_negative_limit_exits_1(tmp_path, monkeypatch, capsys):
+    with patch("cja_auto_sdr.generator.run_org_report", return_value=(True, False)) as run:
+        code = _run_main(["--org-report", "--limit", "-1"], tmp_path, monkeypatch)
+
+    assert code == 1
+    assert "--limit cannot be negative" in capsys.readouterr().err
+    run.assert_not_called()
+
+
+def test_core_threshold_out_of_range_exits_2(tmp_path, monkeypatch, capsys):
+    with patch("cja_auto_sdr.generator.run_org_report", return_value=(True, False)) as run:
+        code = _run_main(["--org-report", "--core-threshold", "50"], tmp_path, monkeypatch)
+
+    assert code == 2
+    assert "must be between 0.0 and 1.0" in capsys.readouterr().err
+    run.assert_not_called()
+
+
+@pytest.mark.parametrize("value", ["0.0", "1.0", "0.57"])
+def test_core_threshold_bounds_accepted(value):
+    from cja_auto_sdr.generator import parse_arguments
+
+    args = parse_arguments(["--org-report", "--core-threshold", value])
+    assert args.core_threshold == float(value)
+
+
+@pytest.mark.parametrize("option", ["--core-threshold", "--overlap-threshold"])
+def test_threshold_nan_is_rejected(option, tmp_path, monkeypatch, capsys):
+    with patch("cja_auto_sdr.generator.run_org_report", return_value=(True, False)) as run:
+        code = _run_main(["--org-report", option, "nan"], tmp_path, monkeypatch)
+
+    assert code == 2
+    assert "must be between 0.0 and 1.0" in capsys.readouterr().err
+    run.assert_not_called()

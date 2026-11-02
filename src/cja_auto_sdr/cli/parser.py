@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import math
 import os
 import sys
 from collections.abc import Callable
@@ -104,7 +105,8 @@ def _bounded_float(min_val: float, max_val: float):
 
     def _type(value: str) -> float:
         f = float(value)
-        if f < min_val or f > max_val:
+        # NaN fails every comparison, so test it explicitly.
+        if math.isnan(f) or f < min_val or f > max_val:
             raise argparse.ArgumentTypeError(f"must be between {min_val} and {max_val}, got {f}")
         return f
 
@@ -1168,7 +1170,7 @@ Requirements:
 
     org_group.add_argument(
         "--core-threshold",
-        type=float,
+        type=_bounded_float(0.0, 1.0),
         default=0.5,
         metavar="PERCENT",
         help='Threshold for "core" components as fraction of data views '

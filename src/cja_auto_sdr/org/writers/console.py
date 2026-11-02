@@ -9,7 +9,7 @@ from cja_auto_sdr.org.models import (
     OrgReportResult,
     OrgReportTrending,
 )
-from cja_auto_sdr.org.writers.common import _governance_check_rows
+from cja_auto_sdr.org.writers.common import _governance_check_rows, common_band_label, threshold_percent
 from cja_auto_sdr.org.writers.common import _render_distribution_bar as _render_distribution_bar_impl
 from cja_auto_sdr.org.writers.compat import make_override_proxy
 from cja_auto_sdr.org.writers.trending import _print_trending_console_section as _print_trending_console_section_impl
@@ -106,7 +106,7 @@ def write_org_report_console(
     dist = result.distribution
     # Build correct label for core threshold: "50% DVs" for percentage, ">=5 DVs" for absolute count
     if config.core_min_count is None:
-        core_threshold_label = f"{int(config.core_threshold * 100)}%"
+        core_threshold_label = f"{threshold_percent(config.core_threshold)}%"
     else:
         core_threshold_label = f">={config.core_min_count}"
 
@@ -124,7 +124,7 @@ def write_org_report_console(
         f"{'Core (in ' + core_threshold_label + core_label_suffix + ')':<30} {len(dist.core_metrics):>12} {len(dist.core_dimensions):>12} {dist.total_core:>10}",
     )
     print(
-        f"{'Common (in 25-49% DVs)':<30} {len(dist.common_metrics):>12} {len(dist.common_dimensions):>12} {dist.total_common:>10}",
+        f"{common_band_label(config.core_threshold, config.core_min_count, prefix='in '):<30} {len(dist.common_metrics):>12} {len(dist.common_dimensions):>12} {dist.total_common:>10}",
     )
     print(
         f"{'Limited (in 2+ DVs)':<30} {len(dist.limited_metrics):>12} {len(dist.limited_dimensions):>12} {dist.total_limited:>10}",
@@ -337,7 +337,7 @@ def write_org_report_console(
         styles = audit.get("case_styles", {})
         print("Case styles distribution:")
         for style, count in sorted(styles.items(), key=lambda x: -x[1]):
-            pct = count / audit.get("total_components", 1) * 100
+            pct = count / (audit.get("total_components") or 1) * 100
             print(f"  {style:<15} {count:>6} ({pct:>5.1f}%)")
         if audit.get("recommendations"):
             print("\nNaming Recommendations:")

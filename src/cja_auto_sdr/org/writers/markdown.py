@@ -19,7 +19,7 @@ from cja_auto_sdr.org.models import (
 from cja_auto_sdr.org.writers.common import (
     _format_recommendation_context_entries as _format_recommendation_context_entries_impl,
 )
-from cja_auto_sdr.org.writers.common import _governance_check_rows
+from cja_auto_sdr.org.writers.common import _governance_check_rows, common_band_label, threshold_percent
 from cja_auto_sdr.org.writers.common import (
     _normalize_recommendation_for_json as _normalize_recommendation_for_json_impl,
 )
@@ -115,8 +115,8 @@ def write_org_report_markdown(
     dist = result.distribution
     # Build correct label for core threshold
     if result.parameters.core_min_count is None:
-        core_label = f"{int(result.parameters.core_threshold * 100)}%+"
-        core_desc = f"{int(result.parameters.core_threshold * 100)}% or more of"
+        core_label = f"{threshold_percent(result.parameters.core_threshold)}%+"
+        core_desc = f"{threshold_percent(result.parameters.core_threshold)}% or more of"
     else:
         core_label = f">={result.parameters.core_min_count}"
         core_desc = f"{result.parameters.core_min_count} or more"
@@ -125,7 +125,7 @@ def write_org_report_markdown(
         f"| Core ({core_label} DVs) | {len(dist.core_metrics)} | {len(dist.core_dimensions)} | {dist.total_core} |",
     )
     lines.append(
-        f"| Common (25-49% DVs) | {len(dist.common_metrics)} | {len(dist.common_dimensions)} | {dist.total_common} |",
+        f"| {common_band_label(result.parameters.core_threshold, result.parameters.core_min_count)} | {len(dist.common_metrics)} | {len(dist.common_dimensions)} | {dist.total_common} |",
     )
     lines.append(
         f"| Limited (2+ DVs) | {len(dist.limited_metrics)} | {len(dist.limited_dimensions)} | {dist.total_limited} |",
@@ -214,10 +214,10 @@ def write_org_report_markdown(
         effective_threshold = effective_governance_overlap_threshold(result.parameters.overlap_threshold)
         threshold_note = ""
         if result.parameters.overlap_threshold > 0.9:
-            threshold_note = (
-                f" (configured {int(result.parameters.overlap_threshold * 100)}%, capped at 90% for governance checks)"
-            )
-        lines.append(f"Data view pairs with >= {int(effective_threshold * 100)}% Jaccard similarity{threshold_note}.")
+            threshold_note = f" (configured {threshold_percent(result.parameters.overlap_threshold)}%, capped at 90% for governance checks)"
+        lines.append(
+            f"Data view pairs with >= {threshold_percent(effective_threshold)}% Jaccard similarity{threshold_note}."
+        )
         lines.append("")
         lines.append("| Data View 1 | Data View 2 | Similarity | Shared |")
         lines.append("|-------------|-------------|------------|-------:|")

@@ -1412,3 +1412,37 @@ def test_save_survives_corrupt_disk_file(tmp_path, caplog):
         a.put_many([_summary("dv_a")])
     assert _disk_ids(tmp_path) == {"dv_a"}
     assert "Failed to load org report cache" in caplog.text
+
+
+def _analyzer_with_cached(cached: DataViewSummary, *, validate_cache: bool):
+    from cja_auto_sdr.org.analyzer import OrgComponentAnalyzer
+    from cja_auto_sdr.org.models import OrgReportConfig
+
+    cache = Mock()
+    cache.get.return_value = cached
+    cache._lookup_validated.return_value = (True, cached)
+    config = OrgReportConfig(use_cache=True, validate_cache=validate_cache)
+    return OrgComponentAnalyzer(Mock(), config, logging.getLogger("test_org_cache"), cache=cache)
+
+
+@pytest.mark.parametrize("validate_cache", [False, True])
+def test_cache_hit_uses_listing_name(validate_cache):
+    """A renamed data view shows its current listing name, not the cached one."""
+    cached = _summary("dv_1")
+    cached = DataViewSummary(**{**cached.__dict__, "data_view_name": "Old Name"})
+    analyzer = _analyzer_with_cached(cached, validate_cache=validate_cache)
+
+    summaries = analyzer._fetch_all_data_views([{"id": "dv_1", "name": "New Name"}])
+
+    assert [s.data_view_name for s in summaries] == ["New Name"]
+    assert cached.data_view_name == "Old Name"  # the cached object is not mutated
+
+
+@pytest.mark.parametrize("listing_row", [{"id": "dv_1"}, {"id": "dv_1", "name": ""}, {"id": "dv_1", "name": None}])
+def test_cache_hit_keeps_name_when_listing_name_missing(listing_row):
+    cached = DataViewSummary(**{**_summary("dv_1").__dict__, "data_view_name": "Old Name"})
+    analyzer = _analyzer_with_cached(cached, validate_cache=False)
+
+    summaries = analyzer._fetch_all_data_views([listing_row])
+
+    assert [s.data_view_name for s in summaries] == ["Old Name"]
