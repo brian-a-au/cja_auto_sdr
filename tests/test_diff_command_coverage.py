@@ -1076,3 +1076,81 @@ def test_cross_dv_inventory_error_console_text_unchanged(tmp_path, capsys):
     assert "  Source: DV dv_A (dv_A)" in err
     assert "  Target: DV dv_B (dv_B)" in err
     assert "Remove --include-segments, --include-calculated, --include-derived" in err
+
+
+# ==================== v3.13.10 diff hunt helpers ====================
+
+
+def _hunt_snap(path, dv="dv_1", created="2026-10-01T00:00:00+00:00", **kw):
+    data = {
+        "snapshot_version": "2.0",
+        "created_at": created,
+        "data_view_id": dv,
+        "data_view_name": "DV",
+        "owner": "o",
+        "description": "d",
+        "metrics": [{"id": "m1", "name": "M", "description": "a"}],
+        "dimensions": [],
+    }
+    data.update(kw)
+    path.write_text(json.dumps(data), encoding="utf-8")
+    return str(path)
+
+
+def _hunt_main(monkeypatch, argv):
+    import sys
+
+    from cja_auto_sdr.generator import main
+
+    monkeypatch.setattr(sys, "argv", ["cja_auto_sdr", *argv])
+    with pytest.raises(SystemExit) as exc:
+        main()
+    return exc.value.code
+
+
+def _hunt_pair(tmp_path):
+    a = _hunt_snap(tmp_path / "a.json")
+    b = _hunt_snap(tmp_path / "b.json", metrics=[{"id": "m1", "name": "M", "description": "b"}])
+    return a, b
+
+
+class TestDiffOutputDestinationSafety:
+    """DIFF-20: --diff-output follows the staged Excel writer's destination rules."""
+
+    def test_hard_linked_destination_rejected(self, tmp_path, monkeypatch):
+        a, b = _hunt_pair(tmp_path)
+        real = tmp_path / "real.xlsx"
+        real.write_text("old")
+        hard = tmp_path / "hard.xlsx"
+        os.link(real, hard)
+        code = _hunt_main(
+            monkeypatch, ["--compare-snapshots", a, b, "--format", "excel", "--diff-output", str(hard), "--quiet"]
+        )
+        assert code == 1
+        assert os.stat(hard).st_nlink == 2
+        assert real.read_text() == "old"
+
+    def test_existing_file_mode_kept(self, tmp_path, monkeypatch):
+        import stat
+
+        a, b = _hunt_pair(tmp_path)
+        report = tmp_path / "r.md"
+        report.write_text("x")
+        report.chmod(0o600)
+        _hunt_main(
+            monkeypatch, ["--compare-snapshots", a, b, "--format", "markdown", "--diff-output", str(report), "--quiet"]
+        )
+        assert stat.S_IMODE(report.stat().st_mode) == 0o600
+        assert report.read_text() != "x"
+
+    def test_symlink_destination_stays_symlink(self, tmp_path, monkeypatch):
+        a, b = _hunt_pair(tmp_path)
+        target = tmp_path / "t.json"
+        target.write_text("{}")
+        link = tmp_path / "s.json"
+        link.symlink_to(target.name)
+        _hunt_main(
+            monkeypatch, ["--compare-snapshots", a, b, "--format", "json", "--diff-output", str(link), "--quiet"]
+        )
+        assert link.is_symlink()
+        assert target.read_text() != "{}"

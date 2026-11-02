@@ -18,6 +18,7 @@ from cja_auto_sdr.core.colors import ConsoleColors
 from cja_auto_sdr.core.exceptions import OutputError
 from cja_auto_sdr.core.json_io import write_text_atomic_compatible
 from cja_auto_sdr.diff.snapshot import _annotate_snapshot_failure
+from cja_auto_sdr.output.excel_staging import prepare_staged_destination
 
 if TYPE_CHECKING:
     from cja_auto_sdr.diff.models import DiffResult
@@ -58,7 +59,7 @@ def _write_diff_report(
     output under ``output_dir`` and say so on stderr.
     """
     if diff_output and not output_to_stdout and output_format in _SINGLE_FILE_DIFF_FORMATS:
-        destination = Path(diff_output)
+        destination, previous_mode = prepare_staged_destination(diff_output, label="Diff output")
         destination.parent.mkdir(parents=True, exist_ok=True)
         staging_dir = Path(tempfile.mkdtemp(prefix=".diff-", dir=destination.parent))
         try:
@@ -66,6 +67,8 @@ def _write_diff_report(
             rendered = [path for path in staging_dir.iterdir() if path.is_file()]
             if len(rendered) != 1:
                 raise OutputError(f"Expected one {output_format} diff report, found {len(rendered)}")
+            if previous_mode is not None:
+                rendered[0].chmod(previous_mode)
             os.replace(rendered[0], destination)
         finally:
             shutil.rmtree(staging_dir, ignore_errors=True)
