@@ -143,7 +143,7 @@ def resolve_agent_quiet(
     whether the effective output destination (after any agent-mode coercion)
     still targets stdout.
     """
-    if _cli_option_specified_fn()("--quiet"):
+    if getattr(args, "quiet_explicit", False) or _cli_option_specified_fn()("--quiet"):
         return True
 
     if is_stdout_path(getattr(args, "run_summary_json", None)):

@@ -2107,6 +2107,8 @@ def _validate_semantic_flag_relationships(
         _exit_error("--profile-overwrite requires --profile-import")
     if getattr(args, "org_report", False) and isinstance(getattr(args, "org_limit", None), int) and args.org_limit < 0:
         _exit_error("--limit cannot be negative")
+    if getattr(args, "agent_mode", False) and getattr(args, "interactive", False):
+        _exit_error("--agent-mode cannot be used with --interactive")
     # Watch mode rejections.
     watch_active = getattr(args, "watch_data_views", None) is not None
     if getattr(args, "watch_interval", None) is not None and not watch_active:
@@ -2195,6 +2197,16 @@ def _validate_semantic_flag_relationships(
             _exit_error("--watch is incompatible with --list-calculated-metrics")
         if getattr(args, "trending_window", None) is not None:
             _exit_error("--watch is incompatible with --trending-window")
+        # One-shot modes that would otherwise be silently replaced by a live polling loop.
+        for dest, flag in (
+            ("dry_run", "--dry-run"),
+            ("config_status", "--config-status"),
+            ("config_json", "--config-json"),
+            ("validate_config", "--validate-config"),
+            ("interactive", "--interactive"),
+        ):
+            if getattr(args, dest, False):
+                _exit_error(f"--watch is incompatible with {flag}")
         # Positional data view IDs are ignored once --watch is set — reject them
         # explicitly rather than silently watching the wrong set. Example footgun:
         # `cja_auto_sdr dv_old --watch dv_new --interval 1h` would otherwise watch

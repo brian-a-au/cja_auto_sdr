@@ -1624,5 +1624,7 @@ Requirements:
         return parser
 
     args = parser.parse_args(argv)
+    # Record the user's own quiet choice (-q, -qy, --quiet) before any mode logic adjusts args.quiet.
+    args.quiet_explicit = bool(getattr(args, "quiet", False))
     _apply_agent_mode_defaults(args, argv, known_long_options=_configured_long_options(parser))
     return args

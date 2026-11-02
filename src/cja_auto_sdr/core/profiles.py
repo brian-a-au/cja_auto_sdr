@@ -16,7 +16,7 @@ from cja_auto_sdr.api.client import _normalize_dataview_listing_payload_or_raise
 from cja_auto_sdr.api.quality_policy import _canonical_quality_policy_key
 from cja_auto_sdr.core.colors import ConsoleColors
 from cja_auto_sdr.core.constants import BANNER_WIDTH, CREDENTIAL_FIELDS, ENV_VAR_MAPPING
-from cja_auto_sdr.core.credentials import filter_credentials
+from cja_auto_sdr.core.credentials import filter_credentials, normalize_credential_field
 from cja_auto_sdr.core.exceptions import (
     ProfileConfigError,
     ProfileNotFoundError,
@@ -465,7 +465,9 @@ def _normalize_import_credentials(raw_credentials: dict[str, Any]) -> dict[str, 
         key = alias_map.get(key, key)
         if key not in CREDENTIAL_FIELDS["all"]:
             continue
-        value = str(raw_value).strip().strip('"').strip("'")
+        # Same list handling as config.json: first secret, comma-joined scopes.
+        text = normalize_credential_field(key, raw_value) if isinstance(raw_value, (list, tuple)) else str(raw_value)
+        value = text.strip().strip('"').strip("'")
         if value:
             normalized[key] = value
 
