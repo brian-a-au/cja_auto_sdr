@@ -261,7 +261,7 @@ Releasing publishes `cja-auto-sdr` to PyPI. The full runbook is [`RELEASING.md`]
 
 - **Trigger:** pushing a `v*.*.*` tag starts `.github/workflows/release.yml`. It builds and checks the packages, uploads to PyPI with **Trusted Publishing (OIDC)**, and creates the GitHub release. There are no API tokens.
 - **Names:** the PyPI trusted publisher is registered for workflow `release.yml` and environment `pypi`. Do not rename either.
-- **Human-initiated:** only a maintainer pushes the tag and approves the `pypi` deployment. Agent and unattended runs never publish (see [AGENTS.md](AGENTS.md#releasing)).
+- **Maintainer-approved:** the maintainer pushes the tag and approves the `pypi` deployment, or asks an agent to do it in the session. An agent never pushes a release tag or approves a deployment without that request, and unattended runs never publish (see [AGENTS.md](AGENTS.md#releasing) and [RELEASING.md](RELEASING.md#releasing-with-a-coding-agent)).
 - **Docs/CI-only changes need no release** — merge to `main` with no version bump, tag, or publish.
 
 ---

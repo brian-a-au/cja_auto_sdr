@@ -2,7 +2,7 @@
 
 How to cut a release of `cja-auto-sdr` and publish it to [PyPI](https://pypi.org/project/cja-auto-sdr/).
 
-> A maintainer starts every release by pushing a version tag, and then approves the `pypi` deployment. Agent and unattended runs never publish. See [AGENTS.md](AGENTS.md#releasing).
+> A maintainer approves every release. The maintainer can push the tag and approve the `pypi` deployment, or can ask a coding agent to do these steps in the session. Unattended runs never publish, e.g. scheduled jobs, CI, or `--agent-mode` runs. See [AGENTS.md](AGENTS.md#releasing).
 
 ## How publishing works
 
@@ -76,6 +76,26 @@ gh run watch --workflow release.yml
 
 - Check that the new version is on <https://pypi.org/project/cja-auto-sdr/>.
 - Check that `gh release view v<version>` shows the CHANGELOG notes, the wheel, the source package, and `SHA256SUMS`.
+
+## Releasing with a coding agent
+
+A coding agent can do steps 4 to 6 when the maintainer asks for that release in the session. The agent uses the maintainer's `gh` login. The `pypi` environment allows the same account that pushed the tag to approve the deployment, because `prevent_self_review` is false. The agent must have the maintainer's approval for the version before it pushes the tag, and it must not push a tag or approve a deployment on its own.
+
+After the tag is pushed, the agent finds the run and approves the waiting deployment:
+
+```bash
+run_id="$(gh run list --workflow release.yml --branch v<version> --limit 1 --json databaseId --jq '.[0].databaseId')"
+# Wait until build passes and publish waits for approval. Stop if the run ends instead.
+while status="$(gh run view "$run_id" --json status --jq .status)"; [ "$status" = queued ] || [ "$status" = in_progress ]; do sleep 30; done
+[ "$status" = waiting ] || { echo "release run ended with status $status"; exit 1; }
+gh api "repos/brian-a-au/cja_auto_sdr/actions/runs/$run_id/pending_deployments" \
+  --jq '.[] | {environment: .environment.name, id: .environment.id, can_approve: .current_user_can_approve}'
+gh api -X POST "repos/brian-a-au/cja_auto_sdr/actions/runs/$run_id/pending_deployments" \
+  -F 'environment_ids[]=<pypi environment id>' -f state=approved -f comment="Approved by the maintainer for v<version>"
+gh run watch "$run_id" --exit-status
+```
+
+Use the `id` from the `pending_deployments` output as the environment id. Approve only when `environment` is `pypi` and `can_approve` is true.
 
 ## Notes
 
