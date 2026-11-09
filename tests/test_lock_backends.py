@@ -206,8 +206,10 @@ def test_lock_manager_fails_closed_when_lease_heartbeat_write_fails(monkeypatch:
             lambda handle, info: (_ for _ in ()).throw(OSError(errno.EIO, "heartbeat write failed")),
         )
 
+        # The heartbeat thread marks the lock lost first and calls release after it
+        # logs the failure, so wait for both before checking either.
         deadline = time.time() + 4
-        while time.time() < deadline and not manager.lock_lost:
+        while time.time() < deadline and not (manager.lock_lost and release_calls["count"] >= 1):
             time.sleep(0.05)
 
         assert manager.lock_lost is True
