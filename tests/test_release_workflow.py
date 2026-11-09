@@ -1,4 +1,4 @@
-"""Contract tests for .github/workflows/release.yml and codeql.yml.
+"""Contract tests for .github/workflows/release.yml, codeql.yml, and action pins.
 
 The PyPI trusted publisher is registered for the file name release.yml and
 the environment pypi, so these tests pin both names, the tag trigger, and the
@@ -124,7 +124,7 @@ def test_build_checks_the_tag_changelog_and_installed_wheel(jobs) -> None:
     assert "update_test_counts.py --check" in build
     assert "check_pypi_readme_links.py README.md" in build
     assert "check_pypi_readme_links.py dist/packages/*" in build
-    assert "twine check" in build
+    assert "twine==7.0.0 check" in build
     assert "--cov-fail-under=95" in build
     assert "uv build --out-dir dist/packages" in build
     assert "--help" in build
@@ -152,13 +152,16 @@ def test_github_release_attaches_packages_sums_and_changelog_notes(jobs) -> None
         assert asset in github_release
 
 
-@pytest.mark.parametrize("workflow", [RELEASE, CODEQL], ids=lambda path: path.name)
+@pytest.mark.parametrize("workflow", sorted(WORKFLOWS.glob("*.yml")), ids=lambda path: path.name)
 def test_every_action_is_pinned_to_a_commit(workflow: Path) -> None:
     uses = re.findall(r"uses:\s*(\S+)", workflow.read_text(encoding="utf-8"))
 
     assert uses
     unpinned = [ref for ref in uses if not re.fullmatch(r"[\w.-]+/[\w./-]+@[0-9a-f]{40}", ref)]
     assert unpinned == []
+    # Dependabot keeps the version comment in step with the SHA; a pin without one is hard to review.
+    uncommented = re.findall(r"uses:\s*\S+@[0-9a-f]{40}[ \t]*$", workflow.read_text(encoding="utf-8"), re.MULTILINE)
+    assert uncommented == []
 
 
 def test_codeql_analyzes_python_and_actions_with_security_and_quality() -> None:

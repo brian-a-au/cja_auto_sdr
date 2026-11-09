@@ -1,6 +1,8 @@
-# Keeps GitHub Actions pins current. setup-uv v8+ no longer publishes
-# floating major tags (supply-chain hardening), so workflows pin exact
-# versions and rely on this config to surface updates.
+# Keeps GitHub Actions pins current. Every action in .github/workflows is
+# pinned by commit SHA with the version in a trailing comment, e.g.
+# `@<sha> # v7`, because a tag can be moved and a commit cannot. Dependabot
+# updates the SHA and the comment together. tests/test_release_workflow.py
+# fails when a workflow uses an action that is not pinned by commit.
 version: 2
 updates:
   - package-ecosystem: uv
