@@ -739,8 +739,8 @@ jobs:
   governance:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.14'
       - run: pip install uv && uv sync
@@ -756,7 +756,7 @@ jobs:
           CLIENT_ID: ${{ secrets.CLIENT_ID }}
           SECRET: ${{ secrets.SECRET }}
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: governance-reports
           path: ./reports/
@@ -912,9 +912,9 @@ jobs:
   generate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.14'
 
@@ -934,7 +934,7 @@ jobs:
           SECRET: ${{ secrets.SECRET }}
           SCOPES: ${{ secrets.SCOPES }}
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: sdr-reports
           path: ./artifacts/*.xlsx
@@ -954,9 +954,9 @@ jobs:
   drift-check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.14'
 
@@ -979,7 +979,7 @@ jobs:
 
       - name: Comment on PR
         if: github.event_name == 'pull_request' && steps.drift.outputs.exit_code != '0'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const fs = require('fs');
@@ -992,7 +992,7 @@ jobs:
             });
 
       - name: Upload snapshots
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: snapshots
           path: ./snapshots/*.json

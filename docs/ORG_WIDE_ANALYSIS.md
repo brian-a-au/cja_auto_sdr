@@ -771,10 +771,10 @@ jobs:
   governance:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: '3.14'
 
@@ -782,7 +782,7 @@ jobs:
         run: pip install cja-auto-sdr
 
       - name: Download previous report
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: org-report-baseline
           path: ./baseline/
@@ -803,7 +803,7 @@ jobs:
           cja_auto_sdr --org-report --compare-org-report baseline/org-report.json
 
       - name: Upload as new baseline
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: org-report-baseline
           path: current.json
