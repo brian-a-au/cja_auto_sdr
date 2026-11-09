@@ -716,8 +716,8 @@ jobs:
   generate-sdr:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.14'
       - run: pip install uv && uv sync
@@ -728,7 +728,7 @@ jobs:
           SECRET: ${{ secrets.ADOBE_SECRET }}
           SCOPES: ${{ secrets.ADOBE_SCOPES }}
         run: cja_auto_sdr "Production Data View" --output-dir ./reports --format excel
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: sdr-reports
           path: ./reports/
