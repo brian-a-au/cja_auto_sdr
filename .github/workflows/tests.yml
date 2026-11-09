@@ -31,8 +31,11 @@ jobs:
               - "pyproject.toml"
               - "scripts/check_pypi_readme_links.py"
               - "scripts/check_version_sync.py"
+              - "scripts/release_notes.py"
               - "tests/test_check_pypi_readme_links.py"
-              - ".github/workflows/patch-release-gate.yml"
+              - "tests/test_release_notes.py"
+              - "tests/test_release_workflow.py"
+              - ".github/workflows/codeql.yml"
               - ".github/workflows/release.yml"
               - ".github/workflows/tests.yml"
 
@@ -60,6 +63,8 @@ jobs:
           uv run --locked pytest -q
           tests/test_check_version_sync.py
           tests/test_check_pypi_readme_links.py
+          tests/test_release_notes.py
+          tests/test_release_workflow.py
           tests/test_cli_color_policy_e2e.py
 
   test-unit:

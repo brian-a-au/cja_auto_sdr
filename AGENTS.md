@@ -277,7 +277,20 @@ Prefer exact data view IDs (`dv_...`) over names for unattended automation. Name
 
 ## Releasing
 
-Releasing `cja-auto-sdr` to PyPI is **human-initiated**: it happens only when a maintainer publishes a GitHub Release, which fires `.github/workflows/release.yml` to build and upload over Trusted Publishing (OIDC). Agent and unattended runs — `--agent-mode`, scheduled jobs, CI — never publish; they have no path to trigger a release. See [`RELEASING.md`](RELEASING.md) for the runbook.
+Releasing `cja-auto-sdr` to PyPI needs the maintainer's approval. Pushing a `v*.*.*` tag starts `.github/workflows/release.yml`. The workflow builds and checks the packages, then waits for an approval of the `pypi` environment before it uploads to PyPI over Trusted Publishing (OIDC) and creates the GitHub release.
+
+A coding agent may push the release tag and approve the `pypi` deployment only when the maintainer asks for that release in the session. Without that request, an agent never merges, pushes a release tag, or approves a deployment. Unattended runs never publish, e.g. scheduled jobs, CI, or `--agent-mode` runs. The commands for an agent release are in [`RELEASING.md`](RELEASING.md#releasing-with-a-coding-agent).
+
+The release steps are:
+
+1. Open a PR with the version bump and the `CHANGELOG.md` section.
+2. Merge it with `gh pr merge <number> --merge`. `main` is protected.
+3. Optionally, do a dry run with "Run workflow" on the `release` workflow. It checks and builds but uploads nothing.
+4. Tag the merged commit with `git tag vX.Y.Z && git push origin vX.Y.Z`.
+5. Approve the `pypi` deployment in the run.
+6. Check PyPI and the GitHub release.
+
+See [`RELEASING.md`](RELEASING.md) for the full runbook.
 
 ## See Also
 

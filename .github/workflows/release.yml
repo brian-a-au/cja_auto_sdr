@@ -1,16 +1,21 @@
 name: release
 
-# Publishes cja-auto-sdr to PyPI via Trusted Publishing (OIDC) when a
-# GitHub release is published. No API tokens: the `pypi` environment is
-# registered as a trusted publisher on PyPI against this workflow file.
+# Builds cja-auto-sdr, publishes it to PyPI, and creates the GitHub release,
+# all from a pushed version tag. See RELEASING.md for the runbook.
 #
-# Release flow (see CLAUDE.md):
-#   git tag v<version>
-#   gh release create v<version> --latest   # <- fires this workflow
+#   git tag v<version> && git push origin v<version>
+#
+# PyPI uses Trusted Publishing (OIDC). The trusted publisher on pypi.org is
+# registered for this file name (release.yml) and the `pypi` environment, so
+# neither may be renamed. No API token is stored anywhere.
 
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - 'v*.*.*'
+  # Dry run: every check, the build, and the installed-wheel smoke test.
+  # publish and github-release are skipped, so nothing is uploaded.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -22,50 +27,212 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 45
+    env:
+      UV_PYTHON: "3.14"
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10.3.3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          python-version: "3.14"
+          # check_version_sync.py --require-tag looks the release tag up in git.
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
           enable-cache: true
           cache-dependency-glob: uv.lock
           prune-cache: false
-      - name: Build sdist and wheel
+
+      - name: Set up Python
+        run: uv python install "$UV_PYTHON"
+
+      - name: Sync dependencies
+        run: uv sync --locked --dev --extra clustering
+
+      - name: Verify Python runtime
         run: |
-          rm -f dist/*.whl dist/*.tar.gz
-          uv build
-      - name: Validate distribution metadata
-        run: uvx twine check dist/*
-      - name: Validate PyPI README links
-        run: uv run python scripts/check_pypi_readme_links.py dist/*
-      - name: Verify tag matches built version
+          uv run --locked python - <<'PYTHON'
+          import os
+          import sys
+
+          expected = tuple(map(int, os.environ["UV_PYTHON"].split(".")))
+          actual = sys.version_info[:2]
+          print(f"Requested Python {os.environ['UV_PYTHON']}; running {sys.version}", flush=True)
+          if actual != expected:
+              raise SystemExit(f"Python version mismatch: expected {expected}, got {actual}")
+          PYTHON
+
+      - name: Read package version
+        id: version
         run: |
-          tag="${GITHUB_REF_NAME#v}"
-          if [ ! -f "dist/cja_auto_sdr-${tag}-py3-none-any.whl" ]; then
-            echo "No wheel matching release tag ${GITHUB_REF_NAME} (expected version ${tag}) in dist/:" >&2
-            ls -1 dist/ >&2
+          version="$(uv run --locked python -c 'from scripts.check_version_sync import get_canonical_version; print(get_canonical_version())')"
+          echo "Package version: $version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Verify tag matches package version
+        if: github.event_name == 'push'
+        env:
+          PKG_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if [ "$GITHUB_REF_NAME" != "v$PKG_VERSION" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match package version $PKG_VERSION (expected v$PKG_VERSION)" >&2
             exit 1
           fi
-      - name: Upload distributions
-        uses: actions/upload-artifact@v7
+
+      - name: Verify version, changelog, docs, and release tag
+        env:
+          REQUIRE_TAG: ${{ github.event_name == 'push' && 'true' || 'false' }}
+        run: |
+          if [ "$REQUIRE_TAG" = "true" ]; then
+            uv run --locked python scripts/check_version_sync.py --require-tag
+          else
+            echo "Dry run: checking version references without the tag requirement."
+            uv run --locked python scripts/check_version_sync.py
+          fi
+
+      - name: Extract release notes from CHANGELOG.md
+        # Fails when CHANGELOG.md has no section, or an empty one, for this version.
+        env:
+          PKG_VERSION: ${{ steps.version.outputs.version }}
+        run: uv run --locked python scripts/release_notes.py "$PKG_VERSION" --output dist/RELEASE_NOTES.md
+
+      - name: Verify test counts are up to date
+        run: uv run --locked python scripts/update_test_counts.py --check
+
+      - name: Verify PyPI README links
+        run: uv run --locked python scripts/check_pypi_readme_links.py README.md
+
+      - name: Lint
+        run: |
+          uv run --locked ruff check src/ tests/ scripts/ examples/
+          uv run --locked ruff format --check src/ tests/ scripts/ examples/
+
+      - name: Unit tests (95% coverage gate)
+        # Keep the whole-package --cov=cja_auto_sdr form; dotted module paths break numpy imports.
+        run: >
+          uv run --locked pytest tests/ -q --tb=short
+          -m "unit and not slow" -n auto
+          --cov=cja_auto_sdr --cov-report=term --cov-fail-under=95
+
+      - name: Integration, end-to-end, slow, and smoke tests
+        run: uv run --locked pytest tests/ -q --tb=short -m "integration or e2e or slow or smoke"
+
+      - name: Build distributions
+        run: |
+          rm -rf dist/packages
+          uv build --out-dir dist/packages
+
+      - name: Validate distribution metadata
+        run: uvx twine check dist/packages/*
+
+      - name: Validate PyPI README links in the built packages
+        run: uv run --locked python scripts/check_pypi_readme_links.py dist/packages/*
+
+      - name: Verify built files match package version
+        env:
+          PKG_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          cd dist/packages
+          ls -1
+          for name in "cja_auto_sdr-${PKG_VERSION}-py3-none-any.whl" "cja_auto_sdr-${PKG_VERSION}.tar.gz"; do
+            if [ ! -f "$name" ]; then
+              echo "::error::missing $name; the built version does not match $PKG_VERSION" >&2
+              exit 1
+            fi
+          done
+          # uv build also writes a .gitignore here, so count only the packages.
+          set -- *.whl *.tar.gz
+          if [ "$#" -ne 2 ]; then
+            echo "::error::expected exactly one wheel and one source package" >&2
+            exit 1
+          fi
+
+      - name: Smoke installed wheel
+        # A new environment with only the wheel and its dependencies, run from
+        # outside the checkout so nothing is imported from the source tree.
+        env:
+          PKG_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          smoke="$RUNNER_TEMP/wheel-smoke"
+          uv venv "$smoke" --python "$UV_PYTHON"
+          uv pip install --python "$smoke/bin/python" dist/packages/*.whl
+          cd "$RUNNER_TEMP"
+          "$smoke/bin/cja_auto_sdr" --help > help.txt
+          head -5 help.txt
+          version_output="$("$smoke/bin/cja_auto_sdr" --version)"
+          echo "$version_output"
+          if ! grep -qF "$PKG_VERSION" <<<"$version_output"; then
+            echo "::error::installed CLI reports '$version_output', expected version $PKG_VERSION" >&2
+            exit 1
+          fi
+          "$smoke/bin/python" -m cja_auto_sdr --help > /dev/null
+
+      - name: Generate SHA256SUMS
+        run: cd dist/packages && sha256sum -- *.whl *.tar.gz > ../SHA256SUMS
+
+      - name: Store verified distributions
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: dist
-          path: dist/
+          path: |
+            dist/packages/*.whl
+            dist/packages/*.tar.gz
+            dist/SHA256SUMS
+            dist/RELEASE_NOTES.md
           if-no-files-found: error
 
   publish:
     needs: build
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
+    # Trusted publishing: the pypi.org publisher names this workflow and this
+    # environment. The OIDC id-token below is the whole credential.
     environment: pypi
     permissions:
-      id-token: write # required for OIDC trusted publishing
+      id-token: write
     steps:
-      - name: Download distributions
-        uses: actions/download-artifact@v8
+      - name: Fetch distributions
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: dist
-          path: dist/
-      - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+          path: dist
+
+      - name: Verify distribution digests
+        run: cd dist/packages && sha256sum -c ../SHA256SUMS
+
+      - name: Upload distributions to PyPI
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
+        with:
+          packages-dir: dist/packages/
+
+  github-release:
+    needs: publish
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Fetch distributions
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: dist
+          path: dist
+
+      - name: Verify distribution digests
+        run: cd dist/packages && sha256sum -c ../SHA256SUMS
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
+        with:
+          name: ${{ github.ref_name }}
+          body_path: dist/RELEASE_NOTES.md
+          make_latest: "true"
+          fail_on_unmatched_files: true
+          files: |
+            dist/packages/*.whl
+            dist/packages/*.tar.gz
+            dist/SHA256SUMS

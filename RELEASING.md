@@ -2,57 +2,106 @@
 
 How to cut a release of `cja-auto-sdr` and publish it to [PyPI](https://pypi.org/project/cja-auto-sdr/).
 
-> Releasing is **human-initiated**. A publish happens only when a maintainer publishes a GitHub Release; agent and unattended runs never publish. See [AGENTS.md](AGENTS.md#releasing).
+> A maintainer approves every release. The maintainer can push the tag and approve the `pypi` deployment, or can ask a coding agent to do these steps in the session. Unattended runs never publish, e.g. scheduled jobs, CI, or `--agent-mode` runs. See [AGENTS.md](AGENTS.md#releasing).
 
 ## How publishing works
 
-`.github/workflows/release.yml` runs on the `release: published` event. It builds the sdist and wheel with `uv build`, validates metadata with `twine check`, rejects repository-relative links in the built PyPI README, verifies the release tag matches the built version, then uploads to PyPI using **Trusted Publishing (OIDC)**. There are no stored API tokens: GitHub Actions mints a short-lived OIDC token that PyPI verifies against the registered publisher (owner `brian-a-au`, repo `cja_auto_sdr`, workflow `release.yml`, environment `pypi`).
+`.github/workflows/release.yml` runs when a tag that matches `v*.*.*` is pushed. It has three jobs.
+
+1. `build` runs on every trigger. It does these checks and steps:
+   - Checks that the tag is `v` plus the version in `src/cja_auto_sdr/core/version.py`.
+   - Runs `scripts/check_version_sync.py --require-tag`. This checks the version references in the 8 tracked files, checks that the tag exists, and checks that the tag ref matches the version.
+   - Runs `scripts/release_notes.py`, which fails when `CHANGELOG.md` has no section, or an empty section, for the version. The section becomes the GitHub release notes.
+   - Runs `scripts/update_test_counts.py --check` and `scripts/check_pypi_readme_links.py README.md`.
+   - Runs Ruff, the unit tests with the 95% coverage gate, and the integration, end-to-end, slow, and smoke tests.
+   - Builds the wheel and the source package with `uv build`, then runs `twine check` and the README link check on the built files.
+   - Checks that the built file names match the version.
+   - Installs the wheel into a new environment and runs `cja_auto_sdr --help` and `--version`.
+   - Writes `SHA256SUMS` and stores the packages, the sums, and the release notes as the `dist` artifact.
+2. `publish` runs only for a tag push. It uses the `pypi` environment, which waits for a maintainer to approve it. It checks the sums and uploads the packages with Trusted Publishing (OIDC).
+3. `github-release` runs after `publish`. It checks the sums again and creates the GitHub release. The release has the `CHANGELOG.md` section as its body, and the wheel, the source package, and `SHA256SUMS` as its files.
+
+There are no stored API tokens. GitHub Actions makes a short-lived OIDC token, and PyPI checks it against the registered trusted publisher. The publisher is registered for owner `brian-a-au`, repository `cja_auto_sdr`, workflow `release.yml`, and environment `pypi`. Do not rename the workflow file or the environment, or PyPI rejects the upload.
 
 ## Runbook
 
-### 1. Bump the version
+### 1. Open a PR with the version bump
 
-Update `src/cja_auto_sdr/core/version.py` and add a `CHANGELOG.md` entry, then sync the remaining version references. The complete list is the [Version Bump Checklist](CLAUDE.md#version-bump-checklist) — 8 files, validated by `scripts/check_version_sync.py`. Verify locally before opening the PR:
+Update `src/cja_auto_sdr/core/version.py` and add a `CHANGELOG.md` section for the version. Then update the other version references. The full list is the [Version Bump Checklist](CLAUDE.md#version-bump-checklist), and `scripts/check_version_sync.py` checks all 8 files. Run these checks before you open the PR:
 
 ```bash
 uv run python scripts/check_version_sync.py
+uv run python scripts/release_notes.py
 uv run python scripts/update_test_counts.py --check
 uv build
 uvx twine check dist/*
 uv run python scripts/check_pypi_readme_links.py dist/*
 ```
 
-### 2. Merge to `main`
+### 2. Merge the PR
 
-Open a PR with the version bump and merge it once CI is green. The release tag must point at the merged commit on `main`.
-
-### 3. Tag the release
+`main` is protected, so merge through the PR once all required checks pass:
 
 ```bash
-git tag v<version>            # e.g. git tag v3.11.6
+gh pr merge <number> --merge
+```
+
+### 3. Optional dry run
+
+In GitHub, open Actions, pick the `release` workflow, and click "Run workflow" on `main`. The dry run does every check in `build`, including the build and the installed-wheel smoke test. It skips the tag checks, `publish`, and `github-release`, so it uploads nothing.
+
+```bash
+gh workflow run release.yml --ref main
+```
+
+### 4. Tag the merged commit
+
+```bash
+git switch main && git pull
+git tag v<version>            # e.g. git tag v3.13.11
 git push origin v<version>
 ```
 
-Pushing the tag triggers `patch-release-gate.yml`, which re-runs `check_version_sync.py --require-tag` and confirms the tag ref matches the canonical version.
+Pushing the tag starts `release.yml`.
 
-### 4. Publish the GitHub Release
+### 5. Approve the `pypi` deployment
 
-```bash
-gh release create v<version> --latest --title "v<version> — <summary>" --notes "..."
-```
-
-Publishing the Release fires `release.yml`, which builds and uploads to PyPI. Watch it complete:
+When `build` passes, `publish` waits for approval. Open the run in Actions, click "Review deployments", select `pypi`, and approve it. You can also watch the run from the terminal:
 
 ```bash
 gh run watch --workflow release.yml
 ```
 
-`gh release create` creates the tag if it does not already exist, so step 3 is optional when you release straight from `main`.
+### 6. Check PyPI and the GitHub release
+
+- Check that the new version is on <https://pypi.org/project/cja-auto-sdr/>.
+- Check that `gh release view v<version>` shows the CHANGELOG notes, the wheel, the source package, and `SHA256SUMS`.
+
+## Releasing with a coding agent
+
+A coding agent can do steps 4 to 6 when the maintainer asks for that release in the session. The agent uses the maintainer's `gh` login. The `pypi` environment allows the same account that pushed the tag to approve the deployment, because `prevent_self_review` is false. The agent must have the maintainer's approval for the version before it pushes the tag, and it must not push a tag or approve a deployment on its own.
+
+After the tag is pushed, the agent finds the run and approves the waiting deployment:
+
+```bash
+run_id="$(gh run list --workflow release.yml --branch v<version> --limit 1 --json databaseId --jq '.[0].databaseId')"
+# Wait until build passes and publish waits for approval. Stop if the run ends instead.
+while status="$(gh run view "$run_id" --json status --jq .status)"; [ "$status" = queued ] || [ "$status" = in_progress ]; do sleep 30; done
+[ "$status" = waiting ] || { echo "release run ended with status $status"; exit 1; }
+gh api "repos/brian-a-au/cja_auto_sdr/actions/runs/$run_id/pending_deployments" \
+  --jq '.[] | {environment: .environment.name, id: .environment.id, can_approve: .current_user_can_approve}'
+gh api -X POST "repos/brian-a-au/cja_auto_sdr/actions/runs/$run_id/pending_deployments" \
+  -F 'environment_ids[]=<pypi environment id>' -f state=approved -f comment="Approved by the maintainer for v<version>"
+gh run watch "$run_id" --exit-status
+```
+
+Use the `id` from the `pending_deployments` output as the environment id. Approve only when `environment` is `pypi` and `can_approve` is true.
 
 ## Notes
 
-- **No tokens.** Publishing uses OIDC Trusted Publishing; there are no PyPI API tokens in the repo or in Actions secrets.
-- **Tag/version guard.** `release.yml` fails the build if the release tag does not match the version built from `version.py`, so a mistagged release cannot publish.
-- **PyPI is immutable.** A version can never be re-uploaded or overwritten, and a deleted version number cannot be reused. Bump the version for every publish; never retag an existing one.
-- **Docs and CI-only changes need no release.** Changes that do not affect the published package (documentation, workflows, tests) ship by merging to `main` — no version bump, tag, or PyPI publish.
-- **First publish.** The inaugural release (v3.11.5) created the project on PyPI and converted the pending Trusted Publisher to active; every release since is fully automatic.
+- **No tokens.** Publishing uses OIDC Trusted Publishing. There are no PyPI API tokens in the repository or in Actions secrets.
+- **Protected tags.** The "Protect release tags" ruleset blocks deleting or moving a `v*` tag.
+- **Tag and version guard.** The `build` job fails when the tag does not match the version in `version.py`, so a wrong tag cannot publish.
+- **PyPI is immutable.** You can never upload a version again or overwrite it, and you cannot reuse a deleted version number. Bump the version for every publish, and never move an existing tag.
+- **A failed run.** If `build` fails, nothing is uploaded. Fix the problem in a new PR with a new version, because the old tag cannot move. If `github-release` fails after `publish` passed, the version is already on PyPI. Rerun the failed job from the run page.
+- **Docs and CI-only changes need no release.** Changes that do not affect the published package, e.g. a workflow change, ship by merging to `main` with no version bump, tag, or publish.

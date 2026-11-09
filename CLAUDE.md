@@ -20,7 +20,7 @@ CJA SDR Generator — a CLI tool for generating Solution Design Reference (SDR) 
 - Build system: **hatchling** (dynamic version from `src/cja_auto_sdr/core/version.py`)
 - Entry points: `cja_auto_sdr` and `cja-auto-sdr` (both via `__main__:main`)
 - Current version: v3.13.10
-- Tests: **9,836** across 176 files at **95% coverage gate**
+- Tests: **9,861** across 178 files at **95% coverage gate**
 - Dependencies: cjapy, numpy, pandas, xlsxwriter, tqdm
 - Optional deps: scipy (clustering), python-dotenv (env), argcomplete (completion)
 
@@ -191,10 +191,10 @@ uv run pytest tests/ --collect-only -q  # Get accurate test count
 | `lint.yml` | Ruff check + format, actionlint, shellcheck |
 | `dependency-review.yml` | Blocks pull requests that introduce moderate-or-higher vulnerable dependencies |
 | `version-sync.yml` | `scripts/check_version_sync.py` — single source of truth for version consistency |
-| `patch-release-gate.yml` | Release validation (version, changelog, docs, tag ref, test counts) |
 | `test-counts.yml` | Validates README test count inventory is current |
 | `update-badges.yml` | Refreshes README coverage/test-count badges from the main `tests` run's `test-metrics` artifact (no re-run) |
-| `release.yml` | Publishes to PyPI via Trusted Publishing (OIDC) on GitHub release; `pypi` environment, no API tokens |
+| `release.yml` | Runs on a pushed `v*.*.*` tag. `build` runs the release checks (tag, version sync, CHANGELOG section, test counts, README links), lint, the full test suite, `uv build`, and an installed-wheel smoke test. `publish` uploads to PyPI over Trusted Publishing (OIDC) after approval of the `pypi` environment. `github-release` creates the release with the CHANGELOG notes. "Run workflow" is a dry run of `build` only |
+| `codeql.yml` | CodeQL advanced setup for `python` and `actions` with `security-and-quality` queries, on PRs, pushes to `main`, and weekly. Default setup must stay off |
 
 ### Test Organization
 
@@ -244,11 +244,14 @@ All of these files must be updated (validated by `scripts/check_version_sync.py`
 
 > **Full runbook (source of truth):** [`RELEASING.md`](RELEASING.md).
 
-```bash
-# After updating all version files:
-git tag v<version>
-gh release create v<version> --latest   # release.yml then builds + publishes to PyPI over OIDC
-```
+1. Open a PR with the version bump and the `CHANGELOG.md` section.
+2. Merge it with `gh pr merge <number> --merge`. `main` is protected.
+3. Optionally, do a dry run: "Run workflow" on the `release` workflow, or `gh workflow run release.yml --ref main`. It uploads nothing.
+4. Tag the merged commit: `git tag v<version> && git push origin v<version>`. This starts `release.yml`.
+5. Approve the `pypi` deployment in the run.
+6. Check PyPI and the GitHub release (`gh release view v<version>`).
+
+`release.yml` creates the GitHub release itself, so do not run `gh release create`.
 
 ---
 
@@ -256,8 +259,9 @@ gh release create v<version> --latest   # release.yml then builds + publishes to
 
 Releasing publishes `cja-auto-sdr` to PyPI. The full runbook is [`RELEASING.md`](RELEASING.md).
 
-- **Trigger:** publishing a GitHub Release fires `.github/workflows/release.yml`, which builds and uploads to PyPI via **Trusted Publishing (OIDC)** — no API tokens.
-- **Human-initiated:** only a maintainer publishing a Release triggers a publish; agent and unattended runs never publish (see [AGENTS.md](AGENTS.md#releasing)).
+- **Trigger:** pushing a `v*.*.*` tag starts `.github/workflows/release.yml`. It builds and checks the packages, uploads to PyPI with **Trusted Publishing (OIDC)**, and creates the GitHub release. There are no API tokens.
+- **Names:** the PyPI trusted publisher is registered for workflow `release.yml` and environment `pypi`. Do not rename either.
+- **Maintainer-approved:** the maintainer pushes the tag and approves the `pypi` deployment, or asks an agent to do it in the session. An agent never pushes a release tag or approves a deployment without that request, and unattended runs never publish (see [AGENTS.md](AGENTS.md#releasing) and [RELEASING.md](RELEASING.md#releasing-with-a-coding-agent)).
 - **Docs/CI-only changes need no release** — merge to `main` with no version bump, tag, or publish.
 
 ---
