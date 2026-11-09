@@ -132,7 +132,7 @@ tests/
 ├── test_dependabot_review.py       # Dependabot review and merge trust boundaries
 ├── test_check_version_sync.py       # Version string sync validation across files
 ├── test_release_notes.py            # CHANGELOG section extraction for release notes
-├── test_release_workflow.py         # release.yml and codeql.yml workflow contracts
+├── test_release_workflow.py         # release.yml, codeql.yml, and action pin contracts
 ├── test_cli_color_policy_e2e.py     # End-to-end CLI color policy behavior tests
 ├── test_completion.py               # Shell completion flag (--completion bash/zsh/fish)
 ├── test_derived_fields_coverage.py  # Derived field complexity scoring, logic summary, predicates
@@ -190,7 +190,7 @@ tests/
 └── README.md                        # This file
 ```
 
-**Total: 9,861 comprehensive tests**
+**Total: 9,869 comprehensive tests**
 
 ### Test Count Breakdown
 
@@ -199,16 +199,16 @@ tests/
 
 | Category | Tests | Files | Notes |
 |----------|-------|-------|-------|
-| `unit` | 9,699 | 171 | Default primary category for files without explicit integration/e2e/smoke scope |
+| `unit` | 9,707 | 171 | Default primary category for files without explicit integration/e2e/smoke scope |
 | `integration` | 123 | 3 | Cross-module integration suites |
 | `e2e` | 23 | 2 | End-to-end suites with a mocked external boundary |
 | `smoke` | 16 | 2 | Lightweight command-mode coverage |
 | `slow` | 0 | 0 | Overlay marker; these tests are also counted in a primary category |
-| **Primary Total** | **9,861** | **178** | **unit + integration + e2e + smoke** |
+| **Primary Total** | **9,869** | **178** | **unit + integration + e2e + smoke** |
 
 | CI Slice | Tests | Files | Selector |
 |----------|-------|-------|----------|
-| `test-unit` | 9,699 | 171 | `-m "unit and not slow"` |
+| `test-unit` | 9,707 | 171 | `-m "unit and not slow"` |
 | `test-integration` | 146 | 5 | `-m "integration or e2e or slow"` |
 | `smoke-test` | 16 | 2 | `-m smoke` |
 
@@ -340,7 +340,7 @@ tests/
 | `test_dependabot_review.py` | 69 | Dependabot review and merge trust boundaries |
 | `test_check_version_sync.py` | 18 | Version string sync validation across files |
 | `test_release_notes.py` | 10 | CHANGELOG section extraction for release notes |
-| `test_release_workflow.py` | 15 | release.yml and codeql.yml workflow contracts |
+| `test_release_workflow.py` | 23 | release.yml, codeql.yml, and action pin contracts |
 | `test_cli_color_policy_e2e.py` | 7 | End-to-end CLI color policy behavior tests |
 | `test_discovery_exceptions.py` | 6 | Discovery exception classification contracts |
 | `test_orchestrator.py` | 19 | Automation orchestrator wrapper CLI and exit-code handling |
@@ -396,7 +396,7 @@ tests/
 | `test_diff_snapshot_retention.py` | 102 | Diff snapshot-retention parse-cache characterization test |
 | `test_diff_comparator_normalize.py` | 22 | Diff field-normalization type-fast-path characterization test |
 | `test_logging_diagnostics.py` | 2 | emit_diagnostic isEnabledFor guard characterization tests |
-| **Total** | **9,861** | **Collected via pytest --collect-only** |
+| **Total** | **9,869** | **Collected via pytest --collect-only** |
 
 ## Running Tests
 
@@ -854,7 +854,7 @@ the `tests/README.md` inventory tree or count table.
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (9,861 tests total)
+- [x] Comprehensive test coverage (9,869 tests total)
 - [x] Org-wide analysis tests (test_org_report.py) - 257 tests (including large org scaling, output path aliases, memory warnings, smart cache invalidation)
 - [x] Org-wide analysis integration tests (test_org_report_integration.py) - 46 tests (end-to-end flows, caching, filtering, governance thresholds)
 - [x] Profile management tests (test_profiles.py) - 112 tests

@@ -125,7 +125,7 @@ jobs:
           uv build --out-dir dist/packages
 
       - name: Validate distribution metadata
-        run: uvx twine check dist/packages/*
+        run: uvx twine==7.0.0 check dist/packages/*
 
       - name: Validate PyPI README links in the built packages
         run: uv run --locked python scripts/check_pypi_readme_links.py dist/packages/*
