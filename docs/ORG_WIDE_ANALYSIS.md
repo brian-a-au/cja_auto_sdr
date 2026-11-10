@@ -759,34 +759,44 @@ the CLI prints an error, still writes the org report, and exits 1.
 
 #### CI/CD Trending Example
 
-Track changes between org-report runs with GitHub Actions:
+Track changes between org-report runs with GitHub Actions. Each run downloads the report from the last successful run, compares the new report with it, and stores the new report as the next baseline.
+
+A job can only download artifacts from its own run with `actions/download-artifact` unless you give it a run ID and a token. This example uses the `gh` CLI, which is installed on GitHub-hosted runners, to find the last successful run and download its report. The job needs `actions: read` permission for this.
 
 ```yaml
 name: Weekly Governance Check
 on:
   schedule:
     - cron: '0 9 * * 1'  # Every Monday 9 AM
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read  # needed to download the report from the previous run
 
 jobs:
   governance:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: '3.14'
 
       - name: Install cja-auto-sdr
         run: pip install cja-auto-sdr
 
-      - name: Download previous report
-        uses: actions/download-artifact@v4
-        with:
-          name: org-report-baseline
-          path: ./baseline/
-        continue-on-error: true  # First run won't have baseline
+      - name: Download the report from the last successful run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          prev="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$GITHUB_WORKFLOW" \
+            --status success --limit 1 --json databaseId --jq '.[0].databaseId // empty')"
+          if [ -z "$prev" ]; then
+            echo "No earlier successful run, so this run has no baseline."
+          elif ! gh run download "$prev" --repo "$GITHUB_REPOSITORY" --name org-report-baseline --dir baseline; then
+            echo "Run $prev has no org-report-baseline artifact, so this run has no baseline."
+          fi
 
       - name: Run org-report
         env:
@@ -795,19 +805,23 @@ jobs:
           SECRET: ${{ secrets.CJA_CLIENT_SECRET }}
           SCOPES: ${{ secrets.CJA_SCOPES }}
         run: |
-          cja_auto_sdr --org-report --format json --output current.json
+          # --compare-org-report exits 1 when the baseline file is missing, so pass it only when there is one.
+          if [ -f baseline/org-report.json ]; then
+            cja_auto_sdr --org-report --format json --output org-report.json \
+              --compare-org-report baseline/org-report.json
+          else
+            cja_auto_sdr --org-report --format json --output org-report.json
+          fi
 
-      - name: Compare with baseline
-        if: hashFiles('baseline/org-report.json') != ''
-        run: |
-          cja_auto_sdr --org-report --compare-org-report baseline/org-report.json
-
-      - name: Upload as new baseline
-        uses: actions/upload-artifact@v4
+      - name: Store the report as the next baseline
+        uses: actions/upload-artifact@v7
         with:
           name: org-report-baseline
-          path: current.json
+          path: org-report.json
+          retention-days: 90
 ```
+
+The comparison is printed in the job log. If the org report fails, the run fails, and the next run keeps using the older baseline. If no run succeeds for 90 days, the baseline artifact expires and the next run starts without one.
 
 #### Local Trending Example
 
