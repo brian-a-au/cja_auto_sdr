@@ -22,6 +22,21 @@ from tests.category_rules import auto_test_markers_for_file
 
 
 @pytest.fixture(autouse=True)
+def isolate_home_dir(tmp_path_factory, monkeypatch):
+    """Point the home directory at an empty temporary folder for every test.
+
+    The org report lock and cache default to ~/.cja_auto_sdr/, and profiles to
+    ~/.cja/. Without this, tests wrote lock and cache files into the real home
+    folder, and parallel workers that used the same org ID blocked each other
+    on one shared lock file. Path.home() reads HOME on POSIX and USERPROFILE on
+    Windows. Tests that need a specific home still set HOME themselves.
+    """
+    home = tmp_path_factory.mktemp("home")
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+
+
+@pytest.fixture(autouse=True)
 def clear_fast_path_option_spec_cache():
     """Reset fast-path CLI option cache between tests for isolation."""
     from cja_auto_sdr.__main__ import _fast_path_option_spec
