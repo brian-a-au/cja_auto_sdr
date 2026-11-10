@@ -65,7 +65,11 @@ def _mark_full_fidelity_baseline(payload):
 
 
 def _write_signal(path: str, value: str) -> None:
-    Path(path).write_text(value, encoding="utf-8")
+    # Write a temporary file and rename it, so a reader never sees the file
+    # before it holds the value. Path.write_text creates the file empty first.
+    tmp_path = f"{path}.tmp"
+    Path(tmp_path).write_text(value, encoding="utf-8")
+    os.replace(tmp_path, path)
 
 
 def _read_signal(path: Path) -> str | None:
