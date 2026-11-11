@@ -216,7 +216,7 @@ def auto_detect_workers(num_data_views: int = 1, total_components: int = 0) -> i
     # If we know component count, adjust based on complexity
     # More components = more memory per worker, so use fewer workers
     if total_components > 0:
-        # Large data views (>5000 components) - reduce workers to manage memory
+        # Very large data views (>10000 components) - reduce workers further to manage memory
         if total_components > 10000:
             workers = max(1, workers // 3)
         # Large data views (>5000 components) - reduce workers to manage memory

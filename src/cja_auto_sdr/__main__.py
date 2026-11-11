@@ -1,7 +1,7 @@
 """Fast-path entry point for CJA Auto SDR.
 
 Lightweight flags (``--version``, ``--help``, ``--exit-codes``,
-``--completion``) are handled here *before* any heavyweight imports
+``--explain-exit-code``, ``--completion``) are handled here *before* any heavyweight imports
 (pandas, cjapy, tqdm) so that simple informational queries return in
 under 100 ms.
 

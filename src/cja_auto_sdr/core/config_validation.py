@@ -230,17 +230,13 @@ def validate_config_file(config_file: str | Path, logger: logging.Logger) -> boo
     3. Required fields presence
     4. Field type validation
     5. Empty value detection
-    6. Private key file validation (if path provided)
 
     Args:
         config_file: Path to the configuration JSON file
         logger: Logger instance for output
 
     Returns:
-        True if validation passes, False otherwise
-
-    Raises:
-        ConfigurationError: If validation fails (when exceptions are preferred)
+        True if validation passes, False otherwise. Problems are logged, not raised.
     """
     validation_errors = []
     validation_warnings = []

@@ -39,7 +39,7 @@ class OrgReportConfig:
         cache_max_age_hours: Maximum cache age in hours
         clear_cache: Clear cache before running
         enable_clustering: Enable hierarchical clustering
-        cluster_method: Clustering method (ward, average, complete)
+        cluster_method: Clustering method (average, complete)
         isolated_review_threshold: Min isolated components to trigger review recommendation
     """
 
@@ -211,7 +211,7 @@ class DataViewSummary:
 
         This is the *read-time* normalization layer and the canonical accessor
         that all output writers should use.  It complements the *write-time*
-        layer in ``OrgAnalyzer._normalize_exception_message`` which runs once
+        layer in ``OrgComponentAnalyzer._normalize_exception_message`` which runs once
         at capture time.  Returns None when there is no fetch failure.
         """
         if self.error is None:

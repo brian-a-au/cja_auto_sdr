@@ -4300,7 +4300,7 @@ def process_single_dataview(
                         # This improves performance by 15-25% by reusing format objects
                         format_cache = ExcelFormatCache(writer.book)
 
-                        # Write sheets in order, with Data Quality first for visibility
+                        # Write sheets in order: Metadata, Coverage, Data Quality, DataView, then components
                         sheets_to_write = []
 
                         # Skip standard sheets when output policy omits them.
@@ -4906,7 +4906,7 @@ def run_dry_run(
         all_passed = False
 
     # Calculate time estimates
-    # Based on benchmarks: ~0.5s per component for validation, ~0.1s without
+    # Rough estimate: ~0.01s per component with validation, ~0.005s without, plus per-view API overhead
     total_components = total_metrics + total_dimensions
     est_time_with_validation = total_components * 0.01 + len(data_views) * 2  # API overhead per view
     est_time_skip_validation = total_components * 0.005 + len(data_views) * 1.5

@@ -1445,8 +1445,7 @@ class OrgComponentAnalyzer:
             self.logger.warning("Clustering failed: %s", e)
             return None
 
-        # Determine optimal number of clusters using silhouette or fixed threshold
-        # Using a distance threshold of 0.5 (50% dissimilarity)
+        # Cut the tree at a fixed distance threshold of 0.5 (50% dissimilarity)
         threshold = 0.5
         labels = fcluster(Z, t=threshold, criterion="distance")
 
