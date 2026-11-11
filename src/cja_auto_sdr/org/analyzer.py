@@ -945,6 +945,52 @@ class OrgComponentAnalyzer:
         description = raw_description if isinstance(raw_description, str) else None
         return owner, owner_id, created, modified, description
 
+    def _fetch_component_summary(
+        self, cja: Any, component: str, dv_id: str
+    ) -> tuple[set[str], dict[str, str] | None, int, int]:
+        """Fetch one component kind ("metrics" or "dimensions") for a data view.
+
+        Returns (ids, names, standard_count, derived_count). ``names`` stays None
+        unless names were requested, and the counts stay 0 unless component types
+        were requested.
+        """
+        df = fetch_component_payload(
+            cja,
+            component,
+            dv_id,
+            inclType=True,
+            full=True,
+            expansion=ORG_REPORT_COMPONENT_EXPANSION,
+        )
+        if isinstance(df, ComponentFetchFailure):
+            raise RuntimeError(df.message)
+        ids: set[str] = set()
+        names = None
+        standard_count = 0
+        derived_count = 0
+        if df is not None and not df.empty:
+            if "id" in df.columns:
+                ids = set(df["id"].dropna().astype(str).tolist())
+            # Capture names if requested (vectorized)
+            if self.config.include_names and "name" in df.columns:
+                valid = df.dropna(subset=["id", "name"])
+                names = dict(zip(valid["id"].astype(str), valid["name"].astype(str), strict=False))
+            # Count standard vs derived components (vectorized)
+            if self.config.include_component_types:
+                type_col = (
+                    df.get("type", pd.Series("", index=df.index, dtype=object)).fillna("").astype(str).str.lower()
+                )
+                source_col = (
+                    df.get("sourceFieldType", pd.Series("", index=df.index, dtype=object))
+                    .fillna("")
+                    .astype(str)
+                    .str.lower()
+                )
+                is_derived = type_col.str.contains("derived", na=False) | source_col.str.contains("derived", na=False)
+                derived_count = int(is_derived.sum())
+                standard_count = len(df) - derived_count
+        return ids, names, standard_count, derived_count
+
     def _fetch_data_view_components(self, dv: dict[str, Any]) -> DataViewSummary:
         """Fetch metrics and dimensions for a single data view.
 
@@ -960,103 +1006,15 @@ class OrgComponentAnalyzer:
 
         try:
             cja = self._get_thread_client()
-            # Fetch metrics
-            metrics_df = fetch_component_payload(
-                cja,
-                "metrics",
-                dv_id,
-                inclType=True,
-                full=True,
-                expansion=ORG_REPORT_COMPONENT_EXPANSION,
+            metric_ids, metric_names, standard_metric_count, derived_metric_count = self._fetch_component_summary(
+                cja, "metrics", dv_id
             )
-            if isinstance(metrics_df, ComponentFetchFailure):
-                raise RuntimeError(metrics_df.message)
-            metric_ids = set()
-            metric_names = None
-            standard_metric_count = 0
-            derived_metric_count = 0
-            if metrics_df is not None and not metrics_df.empty:
-                if "id" in metrics_df.columns:
-                    metric_ids = set(metrics_df["id"].dropna().astype(str).tolist())
-                # Capture names if requested (vectorized)
-                if self.config.include_names and "name" in metrics_df.columns:
-                    valid = metrics_df.dropna(subset=["id", "name"])
-                    metric_names = dict(zip(valid["id"].astype(str), valid["name"].astype(str), strict=False))
-                # Count standard vs derived metrics (vectorized)
-                if self.config.include_component_types:
-                    type_col = (
-                        metrics_df.get(
-                            "type",
-                            pd.Series("", index=metrics_df.index, dtype=object),
-                        )
-                        .fillna("")
-                        .astype(str)
-                        .str.lower()
-                    )
-                    source_col = (
-                        metrics_df.get(
-                            "sourceFieldType",
-                            pd.Series("", index=metrics_df.index, dtype=object),
-                        )
-                        .fillna("")
-                        .astype(str)
-                        .str.lower()
-                    )
-                    is_derived = type_col.str.contains("derived", na=False) | source_col.str.contains(
-                        "derived",
-                        na=False,
-                    )
-                    derived_metric_count = int(is_derived.sum())
-                    standard_metric_count = len(metrics_df) - derived_metric_count
-
-            # Fetch dimensions
-            dimensions_df = fetch_component_payload(
-                cja,
-                "dimensions",
-                dv_id,
-                inclType=True,
-                full=True,
-                expansion=ORG_REPORT_COMPONENT_EXPANSION,
-            )
-            if isinstance(dimensions_df, ComponentFetchFailure):
-                raise RuntimeError(dimensions_df.message)
-            dimension_ids = set()
-            dimension_names = None
-            standard_dimension_count = 0
-            derived_dimension_count = 0
-            if dimensions_df is not None and not dimensions_df.empty:
-                if "id" in dimensions_df.columns:
-                    dimension_ids = set(dimensions_df["id"].dropna().astype(str).tolist())
-                # Capture names if requested (vectorized)
-                if self.config.include_names and "name" in dimensions_df.columns:
-                    valid = dimensions_df.dropna(subset=["id", "name"])
-                    dimension_names = dict(zip(valid["id"].astype(str), valid["name"].astype(str), strict=False))
-                # Count standard vs derived dimensions (vectorized)
-                if self.config.include_component_types:
-                    type_col = (
-                        dimensions_df.get(
-                            "type",
-                            pd.Series("", index=dimensions_df.index, dtype=object),
-                        )
-                        .fillna("")
-                        .astype(str)
-                        .str.lower()
-                    )
-                    source_col = (
-                        dimensions_df.get(
-                            "sourceFieldType",
-                            pd.Series("", index=dimensions_df.index, dtype=object),
-                        )
-                        .fillna("")
-                        .astype(str)
-                        .str.lower()
-                    )
-                    is_derived = type_col.str.contains("derived", na=False) | source_col.str.contains(
-                        "derived",
-                        na=False,
-                    )
-                    derived_dimension_count = int(is_derived.sum())
-                    standard_dimension_count = len(dimensions_df) - derived_dimension_count
+            (
+                dimension_ids,
+                dimension_names,
+                standard_dimension_count,
+                derived_dimension_count,
+            ) = self._fetch_component_summary(cja, "dimensions", dv_id)
 
             # Fetch metadata if enabled
             owner = None
