@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 import math
 import os
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -178,8 +179,13 @@ def write_diff_excel_output(
                     writer, sheet_name="Coverage", index=False
                 )
 
-            # Helper function to write diff sheet
-            def write_diff_sheet(diffs: list[ComponentDiff], sheet_name: str):
+            # Helper function to write a diff sheet. Component and inventory sheets share it
+            # and differ only in the function that renders the Details cell.
+            def write_diff_sheet(
+                diffs: list[ComponentDiff] | list[InventoryItemDiff],
+                sheet_name: str,
+                detail: Callable[..., str],
+            ):
                 if changes_only:
                     diffs = [d for d in diffs if d.change_type != ChangeType.UNCHANGED]
 
@@ -193,7 +199,7 @@ def write_diff_excel_output(
                         "Status": diff.change_type.value.upper(),
                         "ID": _excel_text(diff.id),
                         "Name": _excel_text(diff.name),
-                        "Details": _get_change_detail(diff, truncate=False, max_len=_EXCEL_CELL_LIMIT),
+                        "Details": detail(diff, truncate=False, max_len=_EXCEL_CELL_LIMIT),
                     }
                     for diff in diffs
                 ]
@@ -217,56 +223,14 @@ def write_diff_excel_output(
                     row_values = [rows[row_idx - 1][k] for k in ("Status", "ID", "Name", "Details")]
                     worksheet.write_row(row_idx, 0, row_values, fmt)
 
-            write_diff_sheet(diff_result.metric_diffs, "Metrics Diff")
-            write_diff_sheet(diff_result.dimension_diffs, "Dimensions Diff")
-
-            # Helper function to write inventory diff sheet
-            def write_inventory_diff_sheet(diffs: list[InventoryItemDiff] | None, sheet_name: str):
-                if diffs is None:  # pragma: no cover — outer caller already guards against None
-                    return
-
-                if changes_only:
-                    diffs = [d for d in diffs if d.change_type != ChangeType.UNCHANGED]
-
-                if not diffs:
-                    df = pd.DataFrame({"Message": ["No changes"]})
-                    df.to_excel(writer, sheet_name=sheet_name, index=False)
-                    return
-
-                rows = [
-                    {
-                        "Status": diff.change_type.value.upper(),
-                        "ID": _excel_text(diff.id),
-                        "Name": _excel_text(diff.name),
-                        "Details": _get_inventory_change_detail(diff, truncate=False, max_len=_EXCEL_CELL_LIMIT),
-                    }
-                    for diff in diffs
-                ]
-
-                df = pd.DataFrame(rows)
-                # Header only: the write_row loop below writes each data row once.
-                df.head(0).to_excel(writer, sheet_name=sheet_name, index=False)
-
-                # Apply color formatting
-                worksheet = writer.sheets[sheet_name]
-                for row_idx, diff in enumerate(diffs, start=1):
-                    if diff.change_type == ChangeType.ADDED:
-                        fmt = added_format
-                    elif diff.change_type == ChangeType.REMOVED:
-                        fmt = removed_format
-                    elif diff.change_type == ChangeType.MODIFIED:
-                        fmt = modified_format
-                    else:
-                        fmt = normal_format
-
-                    row_values = [rows[row_idx - 1][k] for k in ("Status", "ID", "Name", "Details")]
-                    worksheet.write_row(row_idx, 0, row_values, fmt)
+            write_diff_sheet(diff_result.metric_diffs, "Metrics Diff", _get_change_detail)
+            write_diff_sheet(diff_result.dimension_diffs, "Dimensions Diff", _get_change_detail)
 
             # Write inventory diff sheets if present
             if diff_result.calc_metrics_diffs is not None:
-                write_inventory_diff_sheet(diff_result.calc_metrics_diffs, "Calc Metrics Diff")
+                write_diff_sheet(diff_result.calc_metrics_diffs, "Calc Metrics Diff", _get_inventory_change_detail)
             if diff_result.segments_diffs is not None:
-                write_inventory_diff_sheet(diff_result.segments_diffs, "Segments Diff")
+                write_diff_sheet(diff_result.segments_diffs, "Segments Diff", _get_inventory_change_detail)
 
         logger.info(f"Diff Excel file created: {excel_file}")
         return excel_file
