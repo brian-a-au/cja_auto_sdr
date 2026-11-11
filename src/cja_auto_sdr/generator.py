@@ -1536,8 +1536,6 @@ def _normalize_exit_code(code: Any) -> int:
         return 0
     if isinstance(code, int):
         return code
-    if isinstance(code, bool):
-        return int(code)
     return 1
 
 
@@ -3640,7 +3638,7 @@ def process_single_dataview(
 
         # Log tuner statistics if tuning was enabled
         tuner_stats = fetcher.get_tuner_statistics()
-        if tuner_stats is not None and isinstance(tuner_stats, dict):
+        if isinstance(tuner_stats, dict):
             logger.info(
                 f"API tuner stats: {tuner_stats['scale_ups']} scale-ups, "
                 f"{tuner_stats['scale_downs']} scale-downs, "
@@ -4236,7 +4234,7 @@ def process_single_dataview(
             metadata_dict = _metadata_dataframe_to_dict(metadata_df)
 
         # Base filename without extension
-        base_filename = output_path.stem if isinstance(output_path, Path) else Path(output_path).stem
+        base_filename = output_path.stem
 
         # Determine which formats to generate
         if output_format == "all":
@@ -4342,7 +4340,7 @@ def process_single_dataview(
                                             "Status": [f"No {name.lower()} found for this data view"],
                                             "Data View ID": [data_view_id],
                                             "Note": [
-                                                "This data view has no associated " + name.lower().replace(" ", " "),
+                                                "This data view has no associated " + name.lower(),
                                             ],
                                         },
                                     )
@@ -4774,7 +4772,7 @@ def run_dry_run(
             operation_name="getDataViews (dry-run)",
         )
         if isinstance(available_dvs, (list, tuple, pd.DataFrame)):
-            dv_count = len(available_dvs) if hasattr(available_dvs, "__len__") else 0
+            dv_count = len(available_dvs)
             print("  ✓ API connection successful")
             print(f"  ✓ Found {dv_count} accessible data view(s)")
         elif available_dvs is None:
@@ -8252,11 +8250,6 @@ def _main_impl(run_state: dict[str, Any] | None = None):
     circuit_breaker_config = execution_context["circuit_breaker_config"]
     inventory_order = execution_context["inventory_order"]
 
-    successful_results: list[ProcessingResult] = []
-    quality_report_results: list[ProcessingResult] = []
-    processed_results: list[ProcessingResult] = []
-    overall_failure = False
-    processing_failures_detected = False
     execution_result = _execute_sdr_processing_modes(
         args,
         data_views=data_views,
@@ -8272,9 +8265,9 @@ def _main_impl(run_state: dict[str, Any] | None = None):
         api_auto_tune_requested=execution_context["api_auto_tune_requested"],
         circuit_breaker_enabled=execution_context["circuit_breaker_enabled"],
     )
-    successful_results = list(execution_result["successful_results"])
-    quality_report_results = list(execution_result["quality_report_results"])
-    processed_results = list(execution_result["processed_results"])
+    successful_results: list[ProcessingResult] = list(execution_result["successful_results"])
+    quality_report_results: list[ProcessingResult] = list(execution_result["quality_report_results"])
+    processed_results: list[ProcessingResult] = list(execution_result["processed_results"])
     overall_failure = bool(execution_result["overall_failure"])
     processing_failures_detected = bool(execution_result["processing_failures_detected"])
     _merge_run_details(run_state, execution_settings=execution_result["execution_settings"])
