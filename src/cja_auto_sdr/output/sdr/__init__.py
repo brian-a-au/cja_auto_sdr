@@ -182,13 +182,11 @@ def apply_excel_formatting(
 
             # Write severity counts in order
             row = 2
-            total_count = 0
             for sev in DataQualityChecker.SEVERITY_ORDER:
                 count = severity_counts.get(sev, 0)
                 if count > 0 or sev in ["CRITICAL", "HIGH", "MEDIUM", "LOW"]:  # Always show main levels
                     worksheet.write(row, 0, sev, summary_cell)
                     worksheet.write(row, 1, int(count), summary_cell)
-                    total_count += count
                     row += 1
 
             # Set column widths for summary
