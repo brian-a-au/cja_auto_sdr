@@ -1419,6 +1419,13 @@ class DerivedFieldInventoryBuilder:
 
         return ""
 
+    def _input_field_name(self, func_obj: dict[str, Any]) -> Any:
+        """Return a function's input field: the first arg's short name, else its ``field`` label."""
+        args = func_obj.get("args", [])
+        if isinstance(args, list) and args and isinstance(args[0], dict):
+            return self._get_field_short_name(args[0].get("id", ""))
+        return func_obj.get("field", "") or ""
+
     def _describe_typecast_logic(self, functions: list[dict[str, Any]]) -> str:
         """Generate detailed description of typecast logic."""
         for func_obj in self._iter_function_dicts(functions):
@@ -1426,15 +1433,7 @@ class DerivedFieldInventoryBuilder:
                 continue
 
             target_type = func_obj.get("type", func_obj.get("to", ""))
-            field_ref = func_obj.get("field", "")
-            input_field = ""
-
-            # Find the input field from args or referenced label
-            args = func_obj.get("args", [])
-            if isinstance(args, list) and args and isinstance(args[0], dict):
-                input_field = self._get_field_short_name(args[0].get("id", ""))
-            elif field_ref:
-                input_field = field_ref
+            input_field = self._input_field_name(func_obj)
 
             if input_field and target_type:
                 return f"Converts {input_field} to {target_type}"
@@ -1450,14 +1449,7 @@ class DerivedFieldInventoryBuilder:
                 continue
 
             interval = func_obj.get("bucket", func_obj.get("interval", func_obj.get("granularity", "")))
-            field_ref = func_obj.get("field", "")
-            input_field = ""
-
-            args = func_obj.get("args", [])
-            if isinstance(args, list) and args and isinstance(args[0], dict):
-                input_field = self._get_field_short_name(args[0].get("id", ""))
-            elif field_ref:
-                input_field = field_ref
+            input_field = self._input_field_name(func_obj)
 
             if input_field and interval:
                 return f"Buckets {input_field} by {interval}"
@@ -1473,14 +1465,7 @@ class DerivedFieldInventoryBuilder:
                 continue
 
             component = func_obj.get("component", func_obj.get("part", func_obj.get("slice", "")))
-            field_ref = func_obj.get("field", "")
-            input_field = ""
-
-            args = func_obj.get("args", [])
-            if isinstance(args, list) and args and isinstance(args[0], dict):
-                input_field = self._get_field_short_name(args[0].get("id", ""))
-            elif field_ref:
-                input_field = field_ref
+            input_field = self._input_field_name(func_obj)
 
             if input_field and component:
                 return f"Extracts {component} from {input_field}"
@@ -1497,14 +1482,7 @@ class DerivedFieldInventoryBuilder:
 
             src_tz = func_obj.get("from", func_obj.get("source-timezone", func_obj.get("sourceTimezone", "")))
             dst_tz = func_obj.get("to", func_obj.get("target-timezone", func_obj.get("targetTimezone", "")))
-            field_ref = func_obj.get("field", "")
-            input_field = ""
-
-            args = func_obj.get("args", [])
-            if isinstance(args, list) and args and isinstance(args[0], dict):
-                input_field = self._get_field_short_name(args[0].get("id", ""))
-            elif field_ref:
-                input_field = field_ref
+            input_field = self._input_field_name(func_obj)
 
             if input_field and src_tz and dst_tz:
                 return f"Shifts {input_field} from {src_tz} to {dst_tz}"
@@ -1523,14 +1501,7 @@ class DerivedFieldInventoryBuilder:
 
             find_val = func_obj.get("find", func_obj.get("pattern", func_obj.get("search", "")))
             replace_val = func_obj.get("replace", func_obj.get("replacement", func_obj.get("with", "")))
-            field_ref = func_obj.get("field", "")
-            input_field = ""
-
-            args = func_obj.get("args", [])
-            if isinstance(args, list) and args and isinstance(args[0], dict):
-                input_field = self._get_field_short_name(args[0].get("id", ""))
-            elif field_ref:
-                input_field = field_ref
+            input_field = self._input_field_name(func_obj)
 
             # Truncate long patterns/replacements
             if find_val:
@@ -1560,14 +1531,7 @@ class DerivedFieldInventoryBuilder:
                 continue
 
             delimiter = func_obj.get("delimiter", func_obj.get("separator", "/"))
-            field_ref = func_obj.get("field", "")
-            input_field = ""
-
-            args = func_obj.get("args", [])
-            if isinstance(args, list) and args and isinstance(args[0], dict):
-                input_field = self._get_field_short_name(args[0].get("id", ""))
-            elif field_ref:
-                input_field = field_ref
+            input_field = self._input_field_name(func_obj)
 
             if input_field:
                 return f"Counts depth of {input_field} using '{delimiter}' separator"
