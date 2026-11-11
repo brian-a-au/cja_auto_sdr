@@ -4102,12 +4102,16 @@ def process_single_dataview(
             logger.error(_format_error_msg("creating metadata", error=e))
             metadata_df = pd.DataFrame({"Property": ["Error"], "Value": ["Failed to create metadata"]})
 
+        # json.dumps(value, indent=2) builds this same encoder on every call; the
+        # formatter runs once per cell, so build it once.
+        encode_json_cell = json.JSONEncoder(indent=2).encode
+
         # Function to format JSON cells
         def format_json_cell(value):
             """Format JSON objects for Excel display"""
             try:
                 if isinstance(value, (dict, list)):
-                    return json.dumps(value, indent=2)
+                    return encode_json_cell(value)
                 return value
             except (TypeError, ValueError) as e:
                 logger.warning(f"Error formatting JSON cell: {e!s}")
