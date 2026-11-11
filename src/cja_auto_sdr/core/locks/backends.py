@@ -502,8 +502,6 @@ class FcntlFileLockBackend:
         result = self.acquire_result(lock_path, stale_threshold_seconds)
         if result.status == AcquireStatus.ACQUIRED and result.handle is not None:
             return result.handle
-        if result.status == AcquireStatus.BACKEND_UNAVAILABLE and result.error is not None:
-            raise result.error
         if result.error is not None:
             raise result.error
         return None
