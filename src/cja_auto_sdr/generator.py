@@ -3225,12 +3225,7 @@ def process_inventory_summary(
         print(ConsoleColors.error(f"ERROR: Failed to fetch data view: {e}"), file=sys.stderr)
         _print_api_hint(e, context="data_view_lookup")
         return {"error": str(e)}
-    except (RuntimeError, AttributeError) as e:  # Residual non-API failures (e.g. cjapy internals)
-        print(ConsoleColors.error(f"ERROR: Failed to fetch data view (unexpected): {e}"), file=sys.stderr)
-        _print_api_hint(e, context="data_view_lookup")
-        logger.debug("Unexpected error fetching data view", exc_info=True)
-        return {"error": str(e)}
-    except Exception as e:
+    except Exception as e:  # Residual non-API failures (e.g. cjapy internals)
         if isinstance(e, SystemError):
             raise
         print(ConsoleColors.error(f"ERROR: Failed to fetch data view (unexpected): {e}"), file=sys.stderr)
@@ -4796,11 +4791,7 @@ def run_dry_run(
     except RECOVERABLE_CONFIG_API_EXCEPTIONS as e:
         all_passed = False
         return _fail_dry_run_api_connection(e)
-    except (RuntimeError, AttributeError) as e:  # Residual non-API failures (e.g. cjapy internals)
-        logger.debug("Unexpected dry-run API connection failure", exc_info=True)
-        all_passed = False
-        return _fail_dry_run_api_connection(e)
-    except Exception as e:
+    except Exception as e:  # Residual non-API failures (e.g. cjapy internals)
         if isinstance(e, SystemError):
             raise
         logger.debug("Unexpected dry-run API connection failure", exc_info=True)
@@ -4849,13 +4840,7 @@ def run_dry_run(
             invalid_count += 1
             all_passed = False
             continue
-        except (RuntimeError, AttributeError) as e:  # Residual non-API failures (e.g. cjapy internals)
-            logger.debug(f"Unexpected dry-run validation error for {dv_id}: {e!s}", exc_info=True)
-            _print_dry_run_data_view_error(e, context="data_view_lookup")
-            invalid_count += 1
-            all_passed = False
-            continue
-        except Exception as e:
+        except Exception as e:  # Residual non-API failures (e.g. cjapy internals)
             if isinstance(e, SystemError):
                 raise
             logger.debug(f"Unexpected dry-run validation error for {dv_id}: {e!s}", exc_info=True)
@@ -4898,13 +4883,7 @@ def run_dry_run(
             invalid_count += 1
             all_passed = False
             continue
-        except (RuntimeError, AttributeError) as e:  # Residual non-API failures (e.g. cjapy internals)
-            logger.debug(f"Unexpected dry-run component validation error for {dv_id}: {e!s}", exc_info=True)
-            _print_dry_run_data_view_error(e)
-            invalid_count += 1
-            all_passed = False
-            continue
-        except Exception as e:
+        except Exception as e:  # Residual non-API failures (e.g. cjapy internals)
             if isinstance(e, SystemError):
                 raise
             logger.debug(f"Unexpected dry-run component validation error for {dv_id}: {e!s}", exc_info=True)
