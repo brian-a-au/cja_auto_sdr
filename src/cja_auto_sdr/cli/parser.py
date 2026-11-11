@@ -8,7 +8,6 @@ while the rest of the generator focuses on data processing.
 from __future__ import annotations
 
 import argparse
-import logging
 import math
 import os
 import sys
@@ -157,6 +156,9 @@ def parse_arguments(
     # metadata only (option discovery/introspection) and should remain
     # lightweight without importing API/bootstrap dependencies.
     if not return_parser:
+        # logging is imported here so parser-only callers (the fast path) skip it.
+        import logging
+
         from cja_auto_sdr.api.client import _bootstrap_dotenv
 
         _bootstrap_dotenv(logging.getLogger(__name__))

@@ -9,10 +9,10 @@ from __future__ import annotations
 import os
 import re
 import sys
-from pathlib import Path
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
-from cja_auto_sdr.core.error_policies import RECOVERABLE_OPEN_FILE_EXCEPTIONS
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 class ConsoleColors:
@@ -252,6 +252,10 @@ def open_file_in_default_app(file_path: str | Path) -> bool:
     import platform
     import subprocess
     import webbrowser
+
+    # Imported here with the other heavy modules: error_policies pulls in subprocess,
+    # which the fast-path flags (--version, --help, ...) never need.
+    from cja_auto_sdr.core.error_policies import RECOVERABLE_OPEN_FILE_EXCEPTIONS
 
     file_path = str(file_path)
     logger = logging.getLogger(__name__)
