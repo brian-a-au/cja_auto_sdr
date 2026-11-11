@@ -105,46 +105,9 @@ def write_diff_pr_comment_output(
     lines.append("")
 
     # Collapsible details
-    metric_changes = [d for d in diff_result.metric_diffs if d.change_type != ChangeType.UNCHANGED]
-    dim_changes = [d for d in diff_result.dimension_diffs if d.change_type != ChangeType.UNCHANGED]
-
-    if metric_changes:
-        lines.append("<details>")
-        lines.append(f"<summary>📈 Metrics Changes ({len(metric_changes)})</summary>")
-        lines.append("")
-        lines.append("| Change | ID | Name |")
-        lines.append("|--------|----|----- |")
-        for diff in metric_changes[:25]:
-            symbol = {ChangeType.ADDED: "➕", ChangeType.REMOVED: "➖", ChangeType.MODIFIED: "✏️"}.get(
-                diff.change_type,
-                "",
-            )
-            lines.append(f"| {symbol} | `{_esc(diff.id)}` | {_esc(_display_name(diff.name))} |")
-        if len(metric_changes) > 25:
-            lines.append(f"| ... | | +{len(metric_changes) - 25} more |")
-        lines.append("")
-        lines.append("</details>")
-        lines.append("")
-
-    if dim_changes:
-        lines.append("<details>")
-        lines.append(f"<summary>📏 Dimensions Changes ({len(dim_changes)})</summary>")
-        lines.append("")
-        lines.append("| Change | ID | Name |")
-        lines.append("|--------|----|----- |")
-        for diff in dim_changes[:25]:
-            symbol = {ChangeType.ADDED: "➕", ChangeType.REMOVED: "➖", ChangeType.MODIFIED: "✏️"}.get(
-                diff.change_type,
-                "",
-            )
-            lines.append(f"| {symbol} | `{_esc(diff.id)}` | {_esc(_display_name(diff.name))} |")
-        if len(dim_changes) > 25:
-            lines.append(f"| ... | | +{len(dim_changes) - 25} more |")
-        lines.append("")
-        lines.append("</details>")
-        lines.append("")
-
     for title, inventory_diffs in (
+        ("📈 Metrics Changes", diff_result.metric_diffs),
+        ("📏 Dimensions Changes", diff_result.dimension_diffs),
         ("🧮 Calculated Metrics Changes", diff_result.calc_metrics_diffs),
         ("🧩 Segments Changes", diff_result.segments_diffs),
     ):
