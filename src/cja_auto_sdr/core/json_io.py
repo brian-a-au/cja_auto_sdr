@@ -237,13 +237,7 @@ def _write_direct_json_compatible(
         default=default,
         trailing_newline=trailing_newline,
     )
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(text)
-        f.flush()
-        os.fsync(f.fileno())
-
-    if file_mode is not None:
-        os.chmod(path, file_mode)
+    _write_direct_text_compatible(path, text, encoding="utf-8", file_mode=file_mode)
 
 
 def _stage_json_write(
@@ -265,10 +259,7 @@ def _stage_json_write(
         default=default,
         trailing_newline=trailing_newline,
     )
-    with open(tmp_path, "w", encoding="utf-8") as f:
-        f.write(text)
-        f.flush()
-        os.fsync(f.fileno())
+    _stage_text_write(tmp_path, text, encoding="utf-8")
 
 
 def _stage_text_write(tmp_path: Path, content: str, *, encoding: str) -> None:
