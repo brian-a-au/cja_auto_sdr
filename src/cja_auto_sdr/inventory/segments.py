@@ -892,7 +892,7 @@ class SegmentsInventoryBuilder:
                 return self._describe_definition(container_def, max_depth)
 
         # Handle logical operators
-        if func == "and":
+        if func in ("and", "or"):
             preds = node.get("preds", [])
             if isinstance(preds, list) and preds:
                 parts = []
@@ -901,20 +901,9 @@ class SegmentsInventoryBuilder:
                     if desc:
                         parts.append(desc)
                 if parts:
-                    suffix = f" AND +{len(preds) - 3} more" if len(preds) > 3 else ""
-                    return " AND ".join(parts) + suffix
-
-        if func == "or":
-            preds = node.get("preds", [])
-            if isinstance(preds, list) and preds:
-                parts = []
-                for p in preds[:3]:
-                    desc = self._describe_definition(p, max_depth - 1)
-                    if desc:
-                        parts.append(desc)
-                if parts:
-                    suffix = f" OR +{len(preds) - 3} more" if len(preds) > 3 else ""
-                    return " OR ".join(parts) + suffix
+                    joiner = " AND " if func == "and" else " OR "
+                    suffix = f"{joiner}+{len(preds) - 3} more" if len(preds) > 3 else ""
+                    return joiner.join(parts) + suffix
 
         if func == "not":
             pred = node.get("pred", {})

@@ -1193,22 +1193,15 @@ class DerivedFieldInventoryBuilder:
                 return f"{field} matches /{short_pattern}/"
 
         # Logical operators
-        elif func == "and":
+        elif func in ("and", "or"):
             preds = pred.get("preds", [])
             if isinstance(preds, list) and preds:
                 parts = [self._describe_predicate(p, max_depth - 1, label_map, match_field) for p in preds[:3]]
                 parts = [p for p in parts if p]
                 if parts:
-                    suffix = f" AND +{len(preds) - 3} more" if len(preds) > 3 else ""
-                    return " AND ".join(parts) + suffix
-        elif func == "or":
-            preds = pred.get("preds", [])
-            if isinstance(preds, list) and preds:
-                parts = [self._describe_predicate(p, max_depth - 1, label_map, match_field) for p in preds[:3]]
-                parts = [p for p in parts if p]
-                if parts:
-                    suffix = f" OR +{len(preds) - 3} more" if len(preds) > 3 else ""
-                    return " OR ".join(parts) + suffix
+                    joiner = " AND " if func == "and" else " OR "
+                    suffix = f"{joiner}+{len(preds) - 3} more" if len(preds) > 3 else ""
+                    return joiner.join(parts) + suffix
 
         # Handle "true" predicate (default/catch-all)
         elif func == "true":
