@@ -514,19 +514,11 @@ class CalculatedMetricsInventoryBuilder:
 
         # Get the formula from the definition
         raw_formula = definition.get("formula")
-        if raw_formula is None:
-            self.logger.warning(f"Skipping metric '{metric_name}' ({metric_id}) - no formula in definition")
-            if stats:
-                stats.record_skip("no formula in definition", metric_id)
-            return None
-
-        if isinstance(raw_formula, str) and not raw_formula.strip():
-            self.logger.warning(f"Skipping metric '{metric_name}' ({metric_id}) - no formula in definition")
-            if stats:
-                stats.record_skip("no formula in definition", metric_id)
-            return None
-
-        if isinstance(raw_formula, (dict, list)) and not raw_formula:
+        if (
+            raw_formula is None
+            or (isinstance(raw_formula, str) and not raw_formula.strip())
+            or (isinstance(raw_formula, (dict, list)) and not raw_formula)
+        ):
             self.logger.warning(f"Skipping metric '{metric_name}' ({metric_id}) - no formula in definition")
             if stats:
                 stats.record_skip("no formula in definition", metric_id)
