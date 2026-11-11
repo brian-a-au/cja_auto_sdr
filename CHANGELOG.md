@@ -9,6 +9,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.13.11] - 2026-11-11
+
+This patch makes several paths faster and removes duplicated and unreachable code. It adds no feature, flag, or output field. Output files, exit codes, and log messages are the same as in v3.13.10, with one exception in an error case that is listed under Changed.
+
+### Performance
+
+- **Fast-path flags:** `--version`, `--help`, `--exit-codes`, `--explain-exit-code`, and `--completion` no longer import `logging`, `subprocess`, and `pathlib`. They run about 8 ms (about 14%) faster.
+- **Org report with `--include-drift`:** each high-overlap pair now finds its overlap recommendation with one lookup. Before, each pair scanned every recommendation. With 4,950 such pairs the step drops from about 556 ms to about 6 ms. With 19,900 pairs it drops from about 9.1 s to about 28 ms. An org with few near-copy data views sees no difference.
+- **Org report snapshot hash:** the content hash reuses one JSON encoder. Hashing a report for 200 data views drops from about 218 ms to about 97 ms.
+- **Snapshots:** cleaning a snapshot payload of non-finite numbers drops from about 52 ms to about 22 ms for 5,000 components. Saving a Git snapshot of that size drops from about 130 ms to about 49 ms. Listing 60 snapshot files drops from about 95 ms to about 62 ms.
+- **SDR generation:** the JSON cell formatter builds its encoder once per data view, which saves about 15 to 20 ms on a data view with 5,000 components.
+- **Notion output:** building the table blocks for a data view with 4,000 components drops from about 400 ms to about 300 ms.
+
+### Changed
+
+- **Git snapshot files on a serialization error:** if a value cannot be serialized while a Git snapshot file is written, the file is now left empty. Before, it was left partly written. The error is the same, and a successful write produces the same bytes.
+- **Internal cleanup:** duplicated code in the org fetch, the diff commands, the diff Excel and PR comment writers, the inventory summaries, and the JSON write helpers now goes through shared helpers. Unreachable branches and unused variables are removed. None of this changes output.
+
+### Documentation
+
+- Corrected comments and docstrings that contradicted the code.
+- Corrected `CLAUDE.md`, `README.md`, `pytest.ini`, and `docs/INSTALLATION.md` where they contradicted the repo, e.g., `uv sync --extra dev` fails because `dev` is a dependency group that `uv sync` installs by default.
+
 ## [3.13.10] - 2026-11-02
 
 This patch fixes bugs in SDR output, diff and snapshot output, the org report, CLI contracts, and credential and profile handling. Several results change on purpose:
