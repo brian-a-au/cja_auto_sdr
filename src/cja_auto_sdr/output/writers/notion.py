@@ -166,11 +166,8 @@ def _table_block(df: pd.DataFrame) -> dict | None:
         return None
     rows = [_table_row_block(cols)]
     for _, row in df.iterrows():
-        rows.append(
-            _table_row_block(
-                [str(row[c]) if not _is_missing(row[c]) else "" for c in cols],
-            ),
-        )
+        values = [row[c] for c in cols]
+        rows.append(_table_row_block(["" if _is_missing(value) else str(value) for value in values]))
     return {
         "object": "block",
         "type": "table",
