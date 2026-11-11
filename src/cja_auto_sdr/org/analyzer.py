@@ -1690,19 +1690,25 @@ class OrgComponentAnalyzer:
 
         # Recommendation: Drift in high-overlap pairs (if drift enabled)
         if self.config.include_drift and similarity_pairs:
+            # Index the first review_overlap recommendation for each (dv1, dv2), in list
+            # order, so each pair is one lookup instead of a scan of every recommendation.
+            overlap_recs: dict[tuple[Any, Any], dict[str, Any]] = {}
+            for rec in recommendations:
+                if rec.get("type") == "review_overlap":
+                    overlap_recs.setdefault((rec.get("data_view_1"), rec.get("data_view_2")), rec)
             for pair in similarity_pairs:
                 drift_count = len(pair.only_in_dv1) + len(pair.only_in_dv2)
                 if pair.jaccard_similarity >= GOVERNANCE_MAX_OVERLAP_THRESHOLD and drift_count > 0:
                     # Update existing overlap recommendation with drift info
-                    for rec in recommendations:
-                        if (
-                            rec.get("type") == "review_overlap"
-                            and rec.get("data_view_1") == pair.dv1_id
-                            and rec.get("data_view_2") == pair.dv2_id
-                        ):
-                            rec["drift_count"] = drift_count
-                            rec["reason"] += f" Differs by {drift_count} components."
-                            break
+                    overlap_rec = overlap_recs.get((pair.dv1_id, pair.dv2_id))
+                    # The == re-check keeps ids that are not equal to themselves (NaN) unmatched, as before.
+                    if (
+                        overlap_rec is not None
+                        and overlap_rec.get("data_view_1") == pair.dv1_id
+                        and overlap_rec.get("data_view_2") == pair.dv2_id
+                    ):
+                        overlap_rec["drift_count"] = drift_count
+                        overlap_rec["reason"] += f" Differs by {drift_count} components."
 
         return recommendations
 
