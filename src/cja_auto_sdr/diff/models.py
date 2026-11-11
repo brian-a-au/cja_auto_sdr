@@ -473,7 +473,9 @@ class DataViewSnapshot:
             if not isinstance(rows, list):
                 raise ValueError(f"Invalid snapshot: {field} must be an array")
             for index, row in enumerate(rows):
-                if not isinstance(row, Mapping):
+                # Rows parsed from JSON are plain dicts; the exact-type test skips the
+                # slower abstract-class check, which still runs for every other type.
+                if type(row) is not dict and not isinstance(row, Mapping):
                     raise ValueError(f"Invalid snapshot: {field}[{index}] must be an object")
                 item_id = row.get(id_field)
                 if not item_id:
