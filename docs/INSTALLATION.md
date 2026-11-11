@@ -434,7 +434,7 @@ uv pip install "cja-auto-sdr[env]"
 uv pip install "cja-auto-sdr[full]"
 
 # For development with all features (all platforms)
-uv sync --extra clustering --extra dev
+uv sync --extra clustering
 ```
 
 ## Verifying Installation

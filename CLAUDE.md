@@ -22,7 +22,7 @@ CJA SDR Generator — a CLI tool for generating Solution Design Reference (SDR) 
 - Current version: v3.13.10
 - Tests: **9,869** across 178 files at **95% coverage gate**
 - Dependencies: cjapy, numpy, pandas, xlsxwriter, tqdm
-- Optional deps: scipy (clustering), python-dotenv (env), argcomplete (completion)
+- Optional deps: scipy (clustering), python-dotenv (env), argcomplete (completion), notion-client (notion)
 
 ---
 
@@ -34,7 +34,7 @@ CJA SDR Generator — a CLI tool for generating Solution Design Reference (SDR) 
 src/cja_auto_sdr/
 ├── __init__.py              # Lazy forwarding (__version__, main → generator)
 ├── __main__.py              # Fast-path entry point (~553 lines)
-├── generator.py             # Main orchestrator (~7K lines, monolithic workhorse)
+├── generator.py             # Main orchestrator (~8.4K lines, monolithic workhorse)
 │
 ├── api/                     # API client, resilience & caching
 │   ├── client.py            # CJA API wrapper + .env bootstrap
@@ -178,8 +178,8 @@ Fast-path flags (no heavy imports): `--version`/`-V`, `--help`/`-h`, `--exit-cod
 ```bash
 uv run pytest tests/                    # Full test suite
 uv run pytest tests/ -x -q              # Quick fail-fast run
-uv run ruff check src/ tests/           # Lint (41 active rule sets)
-uv run ruff format src/ tests/          # Format check
+uv run ruff check src/ tests/ scripts/ examples/           # Lint (41 active rule sets), same paths as CI
+uv run ruff format --check src/ tests/ scripts/ examples/  # Format check (drop --check to rewrite files)
 uv run pytest tests/ --collect-only -q  # Get accurate test count
 ```
 
@@ -188,8 +188,10 @@ uv run pytest tests/ --collect-only -q  # Get accurate test count
 | Workflow | Purpose |
 |----------|---------|
 | `tests.yml` | Unit tests (95% coverage gate, `-n auto` xdist), integration/e2e/slow/Linux smoke tests, macOS/Windows smoke tests (3.14 on PRs, 3.11+3.14 on main), package build + no-extras + pip-on-3.11 install checks |
-| `lint.yml` | Ruff check + format, actionlint, shellcheck |
+| `lint.yml` | Ruff check + format, actionlint, shellcheck, lockfile check (`uv lock --check`) |
 | `dependency-review.yml` | Blocks pull requests that introduce moderate-or-higher vulnerable dependencies |
+| `dependabot-policy.yml` | Runs `scripts/dependabot_review.py` on pull requests to review the author and the actual lockfile changes |
+| `dependabot-auto-merge.yml` | After the checks finish, runs the same review with `--apply` to approve and merge Dependabot PRs that pass the policy (see `docs/DEPENDABOT_AUTOMATION.md`) |
 | `version-sync.yml` | `scripts/check_version_sync.py` — single source of truth for version consistency |
 | `test-counts.yml` | Validates README test count inventory is current |
 | `update-badges.yml` | Refreshes README coverage/test-count badges from the main `tests` run's `test-metrics` artifact (no re-run) |
@@ -220,7 +222,7 @@ Run this verification sequence before tagging:
 uv run pytest tests/ --collect-only -q                                            # 1. Verify test collection
 uv run pytest -q tests/test_generator_mock_contract.py tests/test_backwards_compat.py tests/test_lazy_forwarding.py  # 2. Contract tests
 uv run pytest tests/ -x -q                                                        # 3. Full suite
-uv run ruff check src/ tests/                                                     # 4. Lint clean
+uv run ruff check src/ tests/ scripts/ examples/                                   # 4. Lint clean
 ```
 
 ---
@@ -294,7 +296,7 @@ When adding new CLI flags, update these docs:
 
 ### Documentation Inventory (`docs/`)
 
-23 files covering: quickstart, CLI reference, quick reference, configuration, installation, use cases, agent automation, org-wide analysis, diff comparison, data quality, batch processing, output formats, performance, git integration, shell completion, troubleshooting, failure codes, data view names, inventory overview, calculated metrics inventory, derived fields inventory, segments inventory, notion setup.
+25 files covering: quickstart, CLI reference, quick reference, configuration, installation, use cases, agent automation, org-wide analysis, diff comparison, data quality, batch processing, output formats, performance, git integration, shell completion, troubleshooting, failure codes, data view names, inventory overview, calculated metrics inventory, derived fields inventory, segments inventory, notion setup, dependabot automation, resilience layering. Subfolders: `agent-playbooks/` and `performance/`.
 
 ---
 
@@ -305,9 +307,14 @@ When adding new CLI flags, update these docs:
 | `check_version_sync.py` | Validates version consistency across 8 files against canonical source |
 | `update_test_counts.py` | Updates/validates test counts in README files (`--check` for CI) |
 | `orchestrator.py` | Subprocess orchestration for programmatic automation |
-| `github_actions_audit.py` | GitHub Actions workflow audit helper |
+| `github_actions_audit.py` | Helpers for the example GitHub Actions SDR audit workflow in `examples/` |
 | `create_sample_outputs.py` | Generate sample output files |
 | `stress_test.py` | Load/performance testing utilities |
+| `benchmark_workloads.py` | Deterministic offline workload baselines (`docs/performance/workloads.md`) |
+| `benchmark_pairwise_jaccard.py` | Compares the Jaccard helper with its version at a git ref (`docs/performance/pairwise-jaccard.md`) |
+| `check_pypi_readme_links.py` | Rejects repository-relative links in the PyPI long description |
+| `release_notes.py` | Prints the `CHANGELOG.md` section for one version (used by `release.yml`) |
+| `dependabot_review.py` | Reviews Dependabot lockfile updates for the dependabot workflows |
 
 ---
 
@@ -319,4 +326,4 @@ When adding new CLI flags, update these docs:
 - **Per-file ignores:** Extensive — see `pyproject.toml [tool.ruff.lint.per-file-ignores]`
   - `generator.py`: F401 (re-exports), T201 (CLI output), RUF001/3 (Unicode symbols)
   - `tests/**`: Relaxed B, SIM, PERF, security, and print rules
-  - `*/__init__.py` in subpackages: F822 (lazy forwarding `__getattr__`)
+  - Modules in `api/`, `cli/`, `diff/`, `inventory/`, `output/`, `pipeline/` and `core/profiles.py`: F822 (lazy forwarding `__getattr__`)
