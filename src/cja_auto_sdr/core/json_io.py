@@ -21,12 +21,20 @@ _DIRECTORY_FSYNC_BEST_EFFORT_ERRNOS = {
 }
 
 
+# Exact builtin types that replace_non_finite() always returns unchanged. They are
+# most of a payload's leaves, so checking them first skips the container, float and
+# numpy tests. Subclasses (enums, numpy scalars) do not match and take the full path.
+_PASSTHROUGH_SCALAR_TYPES = frozenset({str, int, bool, type(None)})
+
+
 def replace_non_finite(value: Any) -> Any:
     """Return a copy of *value* with every float NaN/inf/-inf replaced by ``None``.
 
     Recurses into dicts, lists, and tuples. numpy floating scalars are handled too;
     every other value (including numpy ints and bools) is returned as the same object.
     """
+    if type(value) in _PASSTHROUGH_SCALAR_TYPES:
+        return value
     if isinstance(value, dict):
         return {k: replace_non_finite(v) for k, v in value.items()}
     if isinstance(value, list):
