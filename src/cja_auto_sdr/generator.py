@@ -1536,8 +1536,6 @@ def _normalize_exit_code(code: Any) -> int:
         return 0
     if isinstance(code, int):
         return code
-    if isinstance(code, bool):
-        return int(code)
     return 1
 
 
@@ -3225,12 +3223,7 @@ def process_inventory_summary(
         print(ConsoleColors.error(f"ERROR: Failed to fetch data view: {e}"), file=sys.stderr)
         _print_api_hint(e, context="data_view_lookup")
         return {"error": str(e)}
-    except (RuntimeError, AttributeError) as e:  # Residual non-API failures (e.g. cjapy internals)
-        print(ConsoleColors.error(f"ERROR: Failed to fetch data view (unexpected): {e}"), file=sys.stderr)
-        _print_api_hint(e, context="data_view_lookup")
-        logger.debug("Unexpected error fetching data view", exc_info=True)
-        return {"error": str(e)}
-    except Exception as e:
+    except Exception as e:  # Residual non-API failures (e.g. cjapy internals)
         if isinstance(e, SystemError):
             raise
         print(ConsoleColors.error(f"ERROR: Failed to fetch data view (unexpected): {e}"), file=sys.stderr)
@@ -3645,7 +3638,7 @@ def process_single_dataview(
 
         # Log tuner statistics if tuning was enabled
         tuner_stats = fetcher.get_tuner_statistics()
-        if tuner_stats is not None and isinstance(tuner_stats, dict):
+        if isinstance(tuner_stats, dict):
             logger.info(
                 f"API tuner stats: {tuner_stats['scale_ups']} scale-ups, "
                 f"{tuner_stats['scale_downs']} scale-downs, "
@@ -4102,12 +4095,16 @@ def process_single_dataview(
             logger.error(_format_error_msg("creating metadata", error=e))
             metadata_df = pd.DataFrame({"Property": ["Error"], "Value": ["Failed to create metadata"]})
 
+        # json.dumps(value, indent=2) builds this same encoder on every call; the
+        # formatter runs once per cell, so build it once.
+        encode_json_cell = json.JSONEncoder(indent=2).encode
+
         # Function to format JSON cells
         def format_json_cell(value):
             """Format JSON objects for Excel display"""
             try:
                 if isinstance(value, (dict, list)):
-                    return json.dumps(value, indent=2)
+                    return encode_json_cell(value)
                 return value
             except (TypeError, ValueError) as e:
                 logger.warning(f"Error formatting JSON cell: {e!s}")
@@ -4237,7 +4234,7 @@ def process_single_dataview(
             metadata_dict = _metadata_dataframe_to_dict(metadata_df)
 
         # Base filename without extension
-        base_filename = output_path.stem if isinstance(output_path, Path) else Path(output_path).stem
+        base_filename = output_path.stem
 
         # Determine which formats to generate
         if output_format == "all":
@@ -4303,7 +4300,7 @@ def process_single_dataview(
                         # This improves performance by 15-25% by reusing format objects
                         format_cache = ExcelFormatCache(writer.book)
 
-                        # Write sheets in order, with Data Quality first for visibility
+                        # Write sheets in order: Metadata, Coverage, Data Quality, DataView, then components
                         sheets_to_write = []
 
                         # Skip standard sheets when output policy omits them.
@@ -4343,7 +4340,7 @@ def process_single_dataview(
                                             "Status": [f"No {name.lower()} found for this data view"],
                                             "Data View ID": [data_view_id],
                                             "Note": [
-                                                "This data view has no associated " + name.lower().replace(" ", " "),
+                                                "This data view has no associated " + name.lower(),
                                             ],
                                         },
                                     )
@@ -4775,7 +4772,7 @@ def run_dry_run(
             operation_name="getDataViews (dry-run)",
         )
         if isinstance(available_dvs, (list, tuple, pd.DataFrame)):
-            dv_count = len(available_dvs) if hasattr(available_dvs, "__len__") else 0
+            dv_count = len(available_dvs)
             print("  ✓ API connection successful")
             print(f"  ✓ Found {dv_count} accessible data view(s)")
         elif available_dvs is None:
@@ -4792,11 +4789,7 @@ def run_dry_run(
     except RECOVERABLE_CONFIG_API_EXCEPTIONS as e:
         all_passed = False
         return _fail_dry_run_api_connection(e)
-    except (RuntimeError, AttributeError) as e:  # Residual non-API failures (e.g. cjapy internals)
-        logger.debug("Unexpected dry-run API connection failure", exc_info=True)
-        all_passed = False
-        return _fail_dry_run_api_connection(e)
-    except Exception as e:
+    except Exception as e:  # Residual non-API failures (e.g. cjapy internals)
         if isinstance(e, SystemError):
             raise
         logger.debug("Unexpected dry-run API connection failure", exc_info=True)
@@ -4845,13 +4838,7 @@ def run_dry_run(
             invalid_count += 1
             all_passed = False
             continue
-        except (RuntimeError, AttributeError) as e:  # Residual non-API failures (e.g. cjapy internals)
-            logger.debug(f"Unexpected dry-run validation error for {dv_id}: {e!s}", exc_info=True)
-            _print_dry_run_data_view_error(e, context="data_view_lookup")
-            invalid_count += 1
-            all_passed = False
-            continue
-        except Exception as e:
+        except Exception as e:  # Residual non-API failures (e.g. cjapy internals)
             if isinstance(e, SystemError):
                 raise
             logger.debug(f"Unexpected dry-run validation error for {dv_id}: {e!s}", exc_info=True)
@@ -4894,13 +4881,7 @@ def run_dry_run(
             invalid_count += 1
             all_passed = False
             continue
-        except (RuntimeError, AttributeError) as e:  # Residual non-API failures (e.g. cjapy internals)
-            logger.debug(f"Unexpected dry-run component validation error for {dv_id}: {e!s}", exc_info=True)
-            _print_dry_run_data_view_error(e)
-            invalid_count += 1
-            all_passed = False
-            continue
-        except Exception as e:
+        except Exception as e:  # Residual non-API failures (e.g. cjapy internals)
             if isinstance(e, SystemError):
                 raise
             logger.debug(f"Unexpected dry-run component validation error for {dv_id}: {e!s}", exc_info=True)
@@ -4925,7 +4906,7 @@ def run_dry_run(
         all_passed = False
 
     # Calculate time estimates
-    # Based on benchmarks: ~0.5s per component for validation, ~0.1s without
+    # Rough estimate: ~0.01s per component with validation, ~0.005s without, plus per-view API overhead
     total_components = total_metrics + total_dimensions
     est_time_with_validation = total_components * 0.01 + len(data_views) * 2  # API overhead per view
     est_time_skip_validation = total_components * 0.005 + len(data_views) * 1.5
@@ -8269,11 +8250,6 @@ def _main_impl(run_state: dict[str, Any] | None = None):
     circuit_breaker_config = execution_context["circuit_breaker_config"]
     inventory_order = execution_context["inventory_order"]
 
-    successful_results: list[ProcessingResult] = []
-    quality_report_results: list[ProcessingResult] = []
-    processed_results: list[ProcessingResult] = []
-    overall_failure = False
-    processing_failures_detected = False
     execution_result = _execute_sdr_processing_modes(
         args,
         data_views=data_views,
@@ -8289,9 +8265,9 @@ def _main_impl(run_state: dict[str, Any] | None = None):
         api_auto_tune_requested=execution_context["api_auto_tune_requested"],
         circuit_breaker_enabled=execution_context["circuit_breaker_enabled"],
     )
-    successful_results = list(execution_result["successful_results"])
-    quality_report_results = list(execution_result["quality_report_results"])
-    processed_results = list(execution_result["processed_results"])
+    successful_results: list[ProcessingResult] = list(execution_result["successful_results"])
+    quality_report_results: list[ProcessingResult] = list(execution_result["quality_report_results"])
+    processed_results: list[ProcessingResult] = list(execution_result["processed_results"])
     overall_failure = bool(execution_result["overall_failure"])
     processing_failures_detected = bool(execution_result["processing_failures_detected"])
     _merge_run_details(run_state, execution_settings=execution_result["execution_settings"])

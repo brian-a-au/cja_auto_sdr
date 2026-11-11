@@ -182,13 +182,11 @@ def apply_excel_formatting(
 
             # Write severity counts in order
             row = 2
-            total_count = 0
             for sev in DataQualityChecker.SEVERITY_ORDER:
                 count = severity_counts.get(sev, 0)
                 if count > 0 or sev in ["CRITICAL", "HIGH", "MEDIUM", "LOW"]:  # Always show main levels
                     worksheet.write(row, 0, sev, summary_cell)
                     worksheet.write(row, 1, int(count), summary_cell)
-                    total_count += count
                     row += 1
 
             # Set column widths for summary
@@ -1170,8 +1168,8 @@ def escape_markdown(text: Any) -> str:
 def df_to_markdown_table(df: pd.DataFrame, sheet_name: str, empty_message: str | None = None) -> str:
     """Convert DataFrame to markdown table format.
 
-    Escaping is column-vectorized via `str.replace()` rather than a per-cell
-    `apply(axis=1)` call, for better performance on large DataFrames.
+    Cells are escaped column by column in plain Python rather than with a
+    per-row `apply(axis=1)` call, for better performance on large DataFrames.
     """
     if df.empty:
         if empty_message:
@@ -1185,7 +1183,7 @@ def df_to_markdown_table(df: pd.DataFrame, sheet_name: str, empty_message: str |
     # Separator row with left alignment
     separator_row = "| " + " | ".join(["---"] * len(headers)) + " |"
 
-    # Data rows - column-wise vectorized escaping instead of per-row apply()
+    # Data rows - column-wise escaping instead of per-row apply()
     # `astype(object)` first: pandas nullable extension dtypes (Int64, Float64,
     # boolean, category) reject writing the "" fill value in-place via `.where()`
     # and raise TypeError, so upcast to plain object dtype before filling blanks.

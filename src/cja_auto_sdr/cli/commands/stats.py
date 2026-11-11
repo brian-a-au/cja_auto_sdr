@@ -221,13 +221,13 @@ def resolve_data_view_names(
                 logger.error("  → Name matching uses fuzzy nearest-match mode")
             logger.error("  → Run 'cja_auto_sdr --list-dataviews' to see all available names")
 
+        resolved_name_by_id = {
+            resolved_id: id_to_name_lookup[resolved_id]
+            for resolved_id in resolved_ids
+            if resolved_id in id_to_name_lookup
+        }
         if not resolved_ids and unresolved_names:
             unresolved_label = unresolved_names[0]
-            resolved_name_by_id = {
-                resolved_id: id_to_name_lookup[resolved_id]
-                for resolved_id in resolved_ids
-                if resolved_id in id_to_name_lookup
-            }
             resolution_diagnostics = generator.NameResolutionDiagnostics(
                 error_type="not_found",
                 error_message=(
@@ -237,13 +237,7 @@ def resolve_data_view_names(
                 resolved_name_by_id=resolved_name_by_id,
             )
         else:
-            resolution_diagnostics = generator.NameResolutionDiagnostics(
-                resolved_name_by_id={
-                    resolved_id: id_to_name_lookup[resolved_id]
-                    for resolved_id in resolved_ids
-                    if resolved_id in id_to_name_lookup
-                }
-            )
+            resolution_diagnostics = generator.NameResolutionDiagnostics(resolved_name_by_id=resolved_name_by_id)
 
         logger.info("Resolved %s identifier(s) to %s data view ID(s)", len(identifiers), len(resolved_ids))
         return _build_name_resolution_result(

@@ -1,4 +1,4 @@
-"""Output writer registry (thin wrapper around generator implementations)."""
+"""Output writer registry (maps format names to the writer functions)."""
 
 from __future__ import annotations
 

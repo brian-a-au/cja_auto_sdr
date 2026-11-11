@@ -773,9 +773,14 @@ def is_org_report_snapshot_payload(data: Any) -> bool:
     )
 
 
+# One reusable encoder for sort keys: json.dumps() with non-default options builds
+# a fresh JSONEncoder on every call, and the sort key runs once per collection item.
+_SNAPSHOT_SORT_KEY_ENCODER = json.JSONEncoder(sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str)
+
+
 def _canonical_snapshot_sort_key(value: Any) -> str:
     """Return a stable sort key for order-insensitive snapshot collections."""
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str)
+    return _SNAPSHOT_SORT_KEY_ENCODER.encode(value)
 
 
 def _canonicalize_snapshot_value(value: Any) -> Any:
@@ -785,6 +790,9 @@ def _canonicalize_snapshot_value(value: Any) -> Any:
     equivalent payloads remain stable across set iteration and differing input
     ordering from separate CLI processes.
     """
+    if type(value) is str:
+        # Most leaves are plain strings, which are never a mapping or a collection.
+        return value
     if isinstance(value, Mapping):
         return {key: _canonicalize_snapshot_value(item) for key, item in value.items()}
     if isinstance(value, (list, tuple, set, frozenset)):

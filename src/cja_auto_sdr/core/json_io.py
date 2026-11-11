@@ -21,12 +21,20 @@ _DIRECTORY_FSYNC_BEST_EFFORT_ERRNOS = {
 }
 
 
+# Exact builtin types that replace_non_finite() always returns unchanged. They are
+# most of a payload's leaves, so checking them first skips the container, float and
+# numpy tests. Subclasses (enums, numpy scalars) do not match and take the full path.
+_PASSTHROUGH_SCALAR_TYPES = frozenset({str, int, bool, type(None)})
+
+
 def replace_non_finite(value: Any) -> Any:
     """Return a copy of *value* with every float NaN/inf/-inf replaced by ``None``.
 
     Recurses into dicts, lists, and tuples. numpy floating scalars are handled too;
     every other value (including numpy ints and bools) is returned as the same object.
     """
+    if type(value) in _PASSTHROUGH_SCALAR_TYPES:
+        return value
     if isinstance(value, dict):
         return {k: replace_non_finite(v) for k, v in value.items()}
     if isinstance(value, list):
@@ -229,13 +237,7 @@ def _write_direct_json_compatible(
         default=default,
         trailing_newline=trailing_newline,
     )
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(text)
-        f.flush()
-        os.fsync(f.fileno())
-
-    if file_mode is not None:
-        os.chmod(path, file_mode)
+    _write_direct_text_compatible(path, text, encoding="utf-8", file_mode=file_mode)
 
 
 def _stage_json_write(
@@ -257,10 +259,7 @@ def _stage_json_write(
         default=default,
         trailing_newline=trailing_newline,
     )
-    with open(tmp_path, "w", encoding="utf-8") as f:
-        f.write(text)
-        f.flush()
-        os.fsync(f.fileno())
+    _stage_text_write(tmp_path, text, encoding="utf-8")
 
 
 def _stage_text_write(tmp_path: Path, content: str, *, encoding: str) -> None:

@@ -335,10 +335,7 @@ class OrgReportCache:
         file_path = snapshot_dir / (
             f"org_report_{self._sanitize_org_id(resolved_org_id)}_{timestamp_slug}_{snapshot_id[:8]}.json"
         )
-        try:
-            write_json_atomic(file_path, payload, indent=2, ensure_ascii=False)
-        except (OSError, TypeError, ValueError):
-            raise
+        write_json_atomic(file_path, payload, indent=2, ensure_ascii=False)
 
         return file_path
 

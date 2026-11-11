@@ -99,8 +99,11 @@ def write_org_report_excel(
     - Summary: Overview statistics
     - Data Views: List of all analyzed data views
     - Core Components: Components in threshold% of DVs
-    - Distribution: Component distribution breakdown
+    - Isolated by DV: Components found in only one data view
     - Similarity: High-overlap pairs
+    - Drift Details: Per-pair differences (when drift is included)
+    - Clusters: Data view clusters (when clustering is enabled)
+    - Governance Checks: Threshold check results
     - Recommendations: Actionable items
     - Trending: Multi-snapshot trending data (if provided)
 

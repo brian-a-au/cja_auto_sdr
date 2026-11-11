@@ -678,7 +678,7 @@ class CircuitBreaker:
         Record a failed request.
 
         Args:
-            exception: The exception that caused the failure (for logging)
+            _exception: The exception that caused the failure (accepted for callers; unused)
 
         Side Effects:
             - Increments failure count
@@ -862,7 +862,7 @@ def retry_with_backoff(
                         elif isinstance(e, (ConnectionError, TimeoutError, OSError)):
                             error_msg = ErrorMessageHelper.get_network_error_message(e, operation=func.__name__)
                             _logger.error("\n" + error_msg)
-                        else:  # pragma: no cover — RETRYABLE_EXCEPTIONS exhausted above
+                        else:  # pragma: no cover — only reached with caller-supplied retryable_exceptions
                             _logger.error("Error: %s", e)
                             _logger.error(
                                 "Troubleshooting: Check network connectivity, verify API credentials, or try again later",
@@ -955,8 +955,6 @@ def make_api_call_with_retry(
             time_until_retry=stats["time_until_retry_seconds"],
         )
 
-    last_exception = None
-
     for attempt in range(max_retries + 1):
         try:
             result = api_func(*args, **kwargs)
@@ -991,8 +989,6 @@ def make_api_call_with_retry(
 
             return result
         except RETRYABLE_EXCEPTIONS as e:
-            last_exception = e
-
             if attempt == max_retries:
                 _logger.error("All %s attempts failed for %s", max_retries + 1, operation_name)
 
@@ -1037,6 +1033,4 @@ def make_api_call_with_retry(
                 circuit_breaker.record_failure(e)
             raise
 
-    if last_exception:  # pragma: no cover — unreachable; loop always returns or raises
-        raise last_exception
     raise RuntimeError(f"Retry loop exited unexpectedly for {operation_name}")  # pragma: no cover

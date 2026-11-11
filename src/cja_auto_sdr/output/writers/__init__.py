@@ -1,4 +1,4 @@
-"""Output writers (current implementations live in generator for compatibility)."""
+"""Output writers (implementations live in cja_auto_sdr.output.sdr; these modules forward to it)."""
 
 from __future__ import annotations
 

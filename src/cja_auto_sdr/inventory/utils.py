@@ -2,9 +2,9 @@
 CJA Inventory Shared Utilities
 
 Common utility functions used across all CJA inventory modules:
-- cja_calculated_metrics_inventory.py
-- cja_derived_fields_inventory.py
-- cja_segments_inventory.py
+- calculated_metrics.py
+- derived_fields.py
+- segments.py
 
 This module provides shared functionality to eliminate code duplication
 and ensure consistent behavior across inventory types.

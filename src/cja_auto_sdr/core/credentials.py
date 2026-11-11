@@ -314,7 +314,9 @@ class CredentialResolver:
             CredentialSourceError: If the profile cannot be loaded, has no
                 credential fields, or is missing required fields
         """
-        # Import here to avoid circular dependency — profile functions are still in generator.py
+        # Import here to avoid a circular dependency. The function lives in core/profiles.py;
+        # it is reached through generator's wrapper on purpose, because tests patch
+        # cja_auto_sdr.generator.load_profile_credentials.
         from cja_auto_sdr.generator import load_profile_credentials
 
         self.logger.info("Loading credentials from profile '%s'...", profile_name)

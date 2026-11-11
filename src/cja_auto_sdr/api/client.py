@@ -302,13 +302,12 @@ def initialize_cja(
             Callers that already verified the connection or fetch data right away can pass False.
 
     Returns:
-        Initialized CJA instance, or None if initialization fails
-
-    Raises:
-        ConfigurationError: If credentials are invalid or missing
-        APIError: If API connection fails
+        Initialized CJA instance, or None if initialization fails. Failures
+        (missing or invalid credentials, connection errors) are logged, not raised.
     """
-    # Import here to avoid circular dependency — this helper still lives in generator.py
+    # Import here to avoid a circular dependency. The helper lives in core/profiles.py; it is
+    # reached through generator's wrapper on purpose, because tests patch
+    # cja_auto_sdr.generator.resolve_active_profile.
     from cja_auto_sdr.generator import resolve_active_profile
 
     logger = logger or logging.getLogger(__name__)

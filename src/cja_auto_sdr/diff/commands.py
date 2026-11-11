@@ -188,6 +188,32 @@ def _emit_requested_inventory_failure(generator: Any, exc: Exception, *, is_mach
     return True
 
 
+def _warn_threshold_exit_code(
+    generator: Any, diff_result: Any, warn_threshold: float | None, *, quiet_diff: bool
+) -> int | None:
+    """Return exit code 3 when the larger change percentage exceeds ``warn_threshold``.
+
+    Prints the warning to stderr unless ``quiet_diff`` is set. Returns None when no
+    threshold was given or it was not exceeded.
+    """
+    exit_code_override = None
+    if warn_threshold is not None:
+        max_change_pct = max(
+            diff_result.summary.metrics_change_percent,
+            diff_result.summary.dimensions_change_percent,
+        )
+        if max_change_pct > warn_threshold:
+            exit_code_override = 3
+            if not quiet_diff:
+                print(
+                    generator.ConsoleColors.warning(
+                        f"WARNING: Change threshold exceeded! {max_change_pct:.1f}% > {warn_threshold}%"
+                    ),
+                    file=sys.stderr,
+                )
+    return exit_code_override
+
+
 def handle_snapshot_command(
     data_view_id: str,
     snapshot_file: str,
@@ -470,21 +496,7 @@ def handle_diff_command(
         )
         diff_result = comparator.compare(source_snapshot, target_snapshot, source_label, target_label)
 
-        exit_code_override = None
-        if warn_threshold is not None:
-            max_change_pct = max(
-                diff_result.summary.metrics_change_percent,
-                diff_result.summary.dimensions_change_percent,
-            )
-            if max_change_pct > warn_threshold:
-                exit_code_override = 3
-                if not quiet_diff:
-                    print(
-                        generator.ConsoleColors.warning(
-                            f"WARNING: Change threshold exceeded! {max_change_pct:.1f}% > {warn_threshold}%"
-                        ),
-                        file=sys.stderr,
-                    )
+        exit_code_override = _warn_threshold_exit_code(generator, diff_result, warn_threshold, quiet_diff=quiet_diff)
 
         if not quiet_diff:
             effective_format = "pr-comment" if format_pr_comment else output_format
@@ -831,21 +843,7 @@ def handle_diff_snapshot_command(
             source_label, target_label = labels
         diff_result = comparator.compare(source_snapshot, target_snapshot, source_label, target_label)
 
-        exit_code_override = None
-        if warn_threshold is not None:
-            max_change_pct = max(
-                diff_result.summary.metrics_change_percent,
-                diff_result.summary.dimensions_change_percent,
-            )
-            if max_change_pct > warn_threshold:
-                exit_code_override = 3
-                if not quiet_diff:
-                    print(
-                        generator.ConsoleColors.warning(
-                            f"WARNING: Change threshold exceeded! {max_change_pct:.1f}% > {warn_threshold}%"
-                        ),
-                        file=sys.stderr,
-                    )
+        exit_code_override = _warn_threshold_exit_code(generator, diff_result, warn_threshold, quiet_diff=quiet_diff)
 
         if not quiet_diff:
             effective_format = "pr-comment" if format_pr_comment else output_format
@@ -1016,21 +1014,7 @@ def handle_compare_snapshots_command(
         )
         diff_result = comparator.compare(source_snapshot, target_snapshot, source_label, target_label)
 
-        exit_code_override = None
-        if warn_threshold is not None:
-            max_change_pct = max(
-                diff_result.summary.metrics_change_percent,
-                diff_result.summary.dimensions_change_percent,
-            )
-            if max_change_pct > warn_threshold:
-                exit_code_override = 3
-                if not quiet_diff:
-                    print(
-                        generator.ConsoleColors.warning(
-                            f"WARNING: Change threshold exceeded! {max_change_pct:.1f}% > {warn_threshold}%"
-                        ),
-                        file=sys.stderr,
-                    )
+        exit_code_override = _warn_threshold_exit_code(generator, diff_result, warn_threshold, quiet_diff=quiet_diff)
 
         if not quiet_diff:
             effective_format = "pr-comment" if format_pr_comment else output_format
