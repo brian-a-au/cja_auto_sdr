@@ -1,17 +1,21 @@
 # Contributing to cja_auto_sdr
 
-Thank you for your interest in this project. This guide explains how to set up
-the project, what checks a change must pass, and how to open a pull request.
+Thanks for your interest. This project has a narrow scope on purpose. It
+generates Solution Design Reference (SDR) documents from Adobe Customer Journey
+Analytics data views, and it tracks how those documents change over time.
+
+Please open an issue to discuss a new feature before you write code for it.
+Small fixes and documentation corrections can go straight to a pull request.
 
 By taking part, you agree to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 Report security issues privately as described in [SECURITY.md](SECURITY.md). Do
-not report them in a public issue.
+not put a vulnerability, Adobe credentials, or customer data view data in a
+public issue or pull request.
+
+The rest of this guide explains how to set up the project, what checks a change
+must pass, and how to open a pull request.
 
 ## Before you start
-
-For a new feature or a change in behavior, open an issue first so we can agree
-on the approach. Small fixes, e.g., a typo in the docs, can go straight to a
-pull request.
 
 Never include real credentials, `config.json`, `.env` files, profile contents,
 or output from a real Adobe organization in an issue, a pull request, or a test
