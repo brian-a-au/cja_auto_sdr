@@ -74,7 +74,7 @@ places are:
 - `README.md`
 - The guide for that feature, e.g., `docs/DIFF_COMPARISON.md`
 
-Add a short entry for user facing changes to the top section of
+Add a short entry for user facing changes under the `[Unreleased]` heading in
 [CHANGELOG.md](CHANGELOG.md).
 
 ## Pull requests
