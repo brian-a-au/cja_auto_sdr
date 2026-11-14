@@ -517,6 +517,9 @@ cja_auto_sdr/
 ├── uv.lock                    # Dependency lock file for reproducible builds
 ├── README.md                  # This file
 ├── CHANGELOG.md               # Version history and release notes
+├── CODE_OF_CONDUCT.md         # Community standards (Contributor Covenant 2.1)
+├── CONTRIBUTING.md            # Setup, checks, and pull request guide
+├── SECURITY.md                # Vulnerability reporting and data handling
 ├── LICENSE                    # License file
 ├── config.json.example        # Config file template
 ├── .env.example               # Environment variable template
@@ -529,3 +532,38 @@ cja_auto_sdr/
 - [cjapy Library](https://github.com/pitchmuc/cjapy)
 - [uv Package Manager](https://github.com/astral-sh/uv)
 - [Counterpart project: `aa_auto_sdr`](https://github.com/brian-a-au/aa_auto_sdr) — Adobe Analytics equivalent
+
+## Contributing
+
+Contributions are welcome. Read
+[`CONTRIBUTING.md`](https://github.com/brian-a-au/cja_auto_sdr/blob/main/CONTRIBUTING.md)
+before you open a pull request. It covers setup, the checks each change must
+pass, and which docs to update.
+
+## Code of Conduct
+
+Everyone who takes part in this project is expected to follow the
+[`CODE_OF_CONDUCT.md`](https://github.com/brian-a-au/cja_auto_sdr/blob/main/CODE_OF_CONDUCT.md),
+which adopts the Contributor Covenant, version 2.1.
+
+## Security
+
+Report security issues privately as described in
+[`SECURITY.md`](https://github.com/brian-a-au/cja_auto_sdr/blob/main/SECURITY.md).
+Do not put a vulnerability, credentials, or data from a real Adobe organization
+in a public issue. The tool's output files contain details about your
+organization, so review them before you share them.
+
+## License
+
+MIT. See [`LICENSE`](https://github.com/brian-a-au/cja_auto_sdr/blob/main/LICENSE).
+
+## Trademarks
+
+cja_auto_sdr is an independent project. It is not affiliated with, endorsed by,
+sponsored by, or supported by Adobe Inc. Adobe, Adobe Analytics, Adobe
+Experience Platform, and Customer Journey Analytics are trademarks or registered
+trademarks of Adobe Inc. in the United States and other countries. Notion is a
+trademark of Notion Labs, Inc. This project uses these names only to say which
+products it works with. For help with an Adobe product, contact Adobe. For help
+with this tool, open an issue in this repository.
