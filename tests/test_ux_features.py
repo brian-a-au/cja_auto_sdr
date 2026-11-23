@@ -459,11 +459,11 @@ class TestCombinedFeatures:
 class TestVersionUpdated:
     """Test that version is correct"""
 
-    def test_version_is_3_13_11(self):
-        """Test that version is 3.13.11"""
+    def test_version_is_3_13_12(self):
+        """Test that version is 3.13.12"""
         from cja_auto_sdr.generator import __version__
 
-        assert __version__ == "3.13.11"
+        assert __version__ == "3.13.12"
 
 
 class TestFormatAutoDetection:
