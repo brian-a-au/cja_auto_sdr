@@ -102,7 +102,7 @@ RETRY_JITTER_RANGE: tuple[float, float] = (0.5, 1.5)
 
 # HTTP status codes that should trigger a retry at the project layer.
 #
-# cjapy 0.3.1's AdobeRequest._build_session installs a urllib3.Retry adapter that
+# cjapy's (0.3.1 and later) AdobeRequest._build_session installs a urllib3.Retry adapter that
 # handles 429/500/502/503/504 with exponential backoff (status_forcelist). By the
 # time responses for those statuses reach us, cjapy has already retried. Keeping
 # them in this set would stack project retries on top of the adapter's retries
@@ -112,7 +112,7 @@ RETRY_JITTER_RANGE: tuple[float, float] = (0.5, 1.5)
 # responsibility.
 RETRYABLE_STATUS_CODES: set[int] = {408}
 
-# Statuses handled by cjapy 0.3.1's urllib3.Retry adapter `status_forcelist`.
+# Statuses handled by cjapy's (0.3.1 and later) urllib3.Retry adapter `status_forcelist`.
 # When a payload carrying one of these codes reaches the project layer, the
 # adapter has already exhausted its own retries — the payload is a genuine
 # upstream failure signal. The project retry wrapper does NOT retry these

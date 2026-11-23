@@ -178,7 +178,7 @@ def test_cli_requested_collection_failure_exit_and_summary(
     cja.getMetrics.return_value = []
     cja.getDimensions.return_value = []
     monkeypatch.setattr(sys, "argv", args)
-    api_method = cja.getFilters if module == "segments" else cja.getCalculatedMetrics
+    api_method = cja.getSegments if module == "segments" else cja.getCalculatedMetrics
     failure = {
         "timeout": OSError("inventory timeout"),
         "401": RuntimeError("HTTP 401 Unauthorized"),

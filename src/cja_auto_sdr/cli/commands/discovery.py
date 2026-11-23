@@ -506,7 +506,7 @@ _DIMENSIONS_COMPONENT_FETCH_SPEC = _ComponentFetchSpec(
 )
 
 _SEGMENTS_COMPONENT_FETCH_SPEC = _ComponentFetchSpec(
-    method_name="getFilters",
+    method_name="getSegments",
     data_view_arg_name="dataIds",
     kwargs={"full": True},
 )

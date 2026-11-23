@@ -9,8 +9,10 @@ Tests cover:
 - DataFrame output
 """
 
+import inspect
 import json
 import os
+import re
 import subprocess
 import sys
 import textwrap
@@ -182,7 +184,7 @@ def sample_regex_segment():
 def mock_cja_instance(sample_simple_segment, sample_complex_segment):
     """Create a mock CJA instance with segments"""
     mock_cja = Mock()
-    mock_cja.getFilters.return_value = pd.DataFrame([sample_simple_segment, sample_complex_segment])
+    mock_cja.getSegments.return_value = pd.DataFrame([sample_simple_segment, sample_complex_segment])
     return mock_cja
 
 
@@ -190,7 +192,7 @@ def mock_cja_instance(sample_simple_segment, sample_complex_segment):
 def mock_cja_instance_list_response(sample_simple_segment, sample_complex_segment):
     """Create a mock CJA instance that returns a list (not DataFrame)"""
     mock_cja = Mock()
-    mock_cja.getFilters.return_value = [sample_simple_segment, sample_complex_segment]
+    mock_cja.getSegments.return_value = [sample_simple_segment, sample_complex_segment]
     return mock_cja
 
 
@@ -198,7 +200,7 @@ def mock_cja_instance_list_response(sample_simple_segment, sample_complex_segmen
 def mock_cja_instance_empty():
     """Create a mock CJA instance with no segments"""
     mock_cja = Mock()
-    mock_cja.getFilters.return_value = pd.DataFrame()
+    mock_cja.getSegments.return_value = pd.DataFrame()
     return mock_cja
 
 
@@ -237,7 +239,7 @@ class TestSegmentsInventoryBuilder:
         builder = SegmentsInventoryBuilder()
         builder.build(mock_cja_instance, "dv_abc123", "Test")
 
-        mock_cja_instance.getFilters.assert_called_once_with(dataIds="dv_abc123", full=True)
+        mock_cja_instance.getSegments.assert_called_once_with(dataIds="dv_abc123", full=True)
 
     def test_complexity_score_calculated(self, mock_cja_instance):
         """Test that complexity scores are calculated"""
@@ -250,7 +252,7 @@ class TestSegmentsInventoryBuilder:
     def test_dimension_references_extracted(self, sample_simple_segment):
         """Test that dimension references are extracted correctly"""
         mock_cja = Mock()
-        mock_cja.getFilters.return_value = [sample_simple_segment]
+        mock_cja.getSegments.return_value = [sample_simple_segment]
 
         builder = SegmentsInventoryBuilder()
         inventory = builder.build(mock_cja, "dv_test", "Test")
@@ -262,7 +264,7 @@ class TestSegmentsInventoryBuilder:
     def test_metric_references_extracted(self, sample_complex_segment):
         """Test that metric references are extracted correctly"""
         mock_cja = Mock()
-        mock_cja.getFilters.return_value = [sample_complex_segment]
+        mock_cja.getSegments.return_value = [sample_complex_segment]
 
         builder = SegmentsInventoryBuilder()
         inventory = builder.build(mock_cja, "dv_test", "Test")
@@ -275,7 +277,7 @@ class TestSegmentsInventoryBuilder:
     def test_functions_extracted(self, sample_simple_segment):
         """Test that functions are extracted correctly"""
         mock_cja = Mock()
-        mock_cja.getFilters.return_value = [sample_simple_segment]
+        mock_cja.getSegments.return_value = [sample_simple_segment]
 
         builder = SegmentsInventoryBuilder()
         inventory = builder.build(mock_cja, "dv_test", "Test")
@@ -286,7 +288,7 @@ class TestSegmentsInventoryBuilder:
     def test_owner_extracted(self, sample_simple_segment):
         """Test that owner is extracted from nested structure"""
         mock_cja = Mock()
-        mock_cja.getFilters.return_value = [sample_simple_segment]
+        mock_cja.getSegments.return_value = [sample_simple_segment]
 
         builder = SegmentsInventoryBuilder()
         inventory = builder.build(mock_cja, "dv_test", "Test")
@@ -297,7 +299,7 @@ class TestSegmentsInventoryBuilder:
     def test_container_type_extracted(self, sample_simple_segment):
         """Test that container type (context) is extracted"""
         mock_cja = Mock()
-        mock_cja.getFilters.return_value = [sample_simple_segment]
+        mock_cja.getSegments.return_value = [sample_simple_segment]
 
         builder = SegmentsInventoryBuilder()
         inventory = builder.build(mock_cja, "dv_test", "Test")
@@ -314,7 +316,7 @@ class TestSegmentsInventoryBuilder:
             "owner": {"name": "Test"},
         }
         mock_cja = Mock()
-        mock_cja.getFilters.return_value = [segment_no_def]
+        mock_cja.getSegments.return_value = [segment_no_def]
 
         builder = SegmentsInventoryBuilder()
         inventory = builder.build(mock_cja, "dv_test", "Test")
@@ -331,7 +333,7 @@ class TestSegmentsInventoryBuilder:
             "definition": {"func": "segment", "container": {}},
         }
         mock_cja = Mock()
-        mock_cja.getFilters.return_value = [segment_nan_id]
+        mock_cja.getSegments.return_value = [segment_nan_id]
 
         builder = SegmentsInventoryBuilder()
         inventory = builder.build(mock_cja, "dv_test", "Test")
@@ -416,7 +418,7 @@ class TestComplexityScore:
     def test_simple_segment_low_complexity(self, sample_simple_segment):
         """Test that simple segments have low complexity"""
         mock_cja = Mock()
-        mock_cja.getFilters.return_value = [sample_simple_segment]
+        mock_cja.getSegments.return_value = [sample_simple_segment]
 
         builder = SegmentsInventoryBuilder()
         inventory = builder.build(mock_cja, "dv_test", "Test")
@@ -427,7 +429,7 @@ class TestComplexityScore:
     def test_nested_segment_higher_complexity(self, sample_nested_segment):
         """Test that nested segments have higher complexity"""
         mock_cja = Mock()
-        mock_cja.getFilters.return_value = [sample_nested_segment]
+        mock_cja.getSegments.return_value = [sample_nested_segment]
 
         builder = SegmentsInventoryBuilder()
         inventory = builder.build(mock_cja, "dv_test", "Test")
@@ -438,7 +440,7 @@ class TestComplexityScore:
     def test_sequence_segment_adds_complexity(self, sample_sequence_segment):
         """Test that sequential segments add complexity"""
         mock_cja = Mock()
-        mock_cja.getFilters.return_value = [sample_sequence_segment]
+        mock_cja.getSegments.return_value = [sample_sequence_segment]
 
         builder = SegmentsInventoryBuilder()
         inventory = builder.build(mock_cja, "dv_test", "Test")
@@ -450,7 +452,7 @@ class TestComplexityScore:
     def test_regex_segment_adds_complexity(self, sample_regex_segment):
         """Test that regex patterns add complexity"""
         mock_cja = Mock()
-        mock_cja.getFilters.return_value = [sample_regex_segment]
+        mock_cja.getSegments.return_value = [sample_regex_segment]
 
         builder = SegmentsInventoryBuilder()
         inventory = builder.build(mock_cja, "dv_test", "Test")
@@ -462,7 +464,7 @@ class TestComplexityScore:
     def test_logic_operators_counted(self, sample_complex_segment):
         """Test that logic operators are counted"""
         mock_cja = Mock()
-        mock_cja.getFilters.return_value = [sample_complex_segment]
+        mock_cja.getSegments.return_value = [sample_complex_segment]
 
         builder = SegmentsInventoryBuilder()
         inventory = builder.build(mock_cja, "dv_test", "Test")
@@ -480,7 +482,7 @@ class TestDefinitionSummary:
     def test_contains_summary(self, sample_simple_segment):
         """Test definition summary for contains condition"""
         mock_cja = Mock()
-        mock_cja.getFilters.return_value = [sample_simple_segment]
+        mock_cja.getSegments.return_value = [sample_simple_segment]
 
         builder = SegmentsInventoryBuilder()
         inventory = builder.build(mock_cja, "dv_test", "Test")
@@ -496,7 +498,7 @@ class TestDefinitionSummary:
     def test_visitor_context_summary(self, sample_complex_segment):
         """Test definition summary for visitor-level segment"""
         mock_cja = Mock()
-        mock_cja.getFilters.return_value = [sample_complex_segment]
+        mock_cja.getSegments.return_value = [sample_complex_segment]
 
         builder = SegmentsInventoryBuilder()
         inventory = builder.build(mock_cja, "dv_test", "Test")
@@ -512,7 +514,7 @@ class TestDefinitionSummary:
     def test_sequence_summary(self, sample_sequence_segment):
         """Test definition summary for sequential segment"""
         mock_cja = Mock()
-        mock_cja.getFilters.return_value = [sample_sequence_segment]
+        mock_cja.getSegments.return_value = [sample_sequence_segment]
 
         builder = SegmentsInventoryBuilder()
         inventory = builder.build(mock_cja, "dv_test", "Test")
@@ -528,7 +530,7 @@ class TestDefinitionSummary:
     def test_exclude_summary(self, sample_exclude_segment):
         """Test definition summary for exclusion segment"""
         mock_cja = Mock()
-        mock_cja.getFilters.return_value = [sample_exclude_segment]
+        mock_cja.getSegments.return_value = [sample_exclude_segment]
 
         builder = SegmentsInventoryBuilder()
         inventory = builder.build(mock_cja, "dv_test", "Test")
@@ -561,7 +563,7 @@ class TestEdgeCases:
             },
         }
         mock_cja = Mock()
-        mock_cja.getFilters.return_value = [segment]
+        mock_cja.getSegments.return_value = [segment]
 
         builder = SegmentsInventoryBuilder()
         inventory = builder.build(mock_cja, "dv_test", "Test")
@@ -583,7 +585,7 @@ class TestEdgeCases:
             },
         }
         mock_cja = Mock()
-        mock_cja.getFilters.return_value = [segment]
+        mock_cja.getSegments.return_value = [segment]
 
         builder = SegmentsInventoryBuilder()
         inventory = builder.build(mock_cja, "dv_test", "Test")
@@ -594,7 +596,7 @@ class TestEdgeCases:
         """Test handling of empty definition"""
         segment = {"id": "s_test", "name": "Test", "description": "", "definition": {}}
         mock_cja = Mock()
-        mock_cja.getFilters.return_value = [segment]
+        mock_cja.getSegments.return_value = [segment]
 
         builder = SegmentsInventoryBuilder()
         inventory = builder.build(mock_cja, "dv_test", "Test")
@@ -605,7 +607,7 @@ class TestEdgeCases:
     def test_api_error_handling(self):
         """Test handling of API errors"""
         mock_cja = Mock()
-        mock_cja.getFilters.side_effect = Exception("API Error")
+        mock_cja.getSegments.side_effect = Exception("API Error")
 
         builder = SegmentsInventoryBuilder()
 
@@ -617,7 +619,7 @@ class TestEdgeCases:
     def test_none_response(self):
         """Test handling of None API response"""
         mock_cja = Mock()
-        mock_cja.getFilters.return_value = None
+        mock_cja.getSegments.return_value = None
 
         builder = SegmentsInventoryBuilder()
         inventory = builder.build(mock_cja, "dv_test", "Test")
@@ -627,7 +629,7 @@ class TestEdgeCases:
     def test_unexpected_response_type(self):
         """Test handling of unexpected response type"""
         mock_cja = Mock()
-        mock_cja.getFilters.return_value = "unexpected"
+        mock_cja.getSegments.return_value = "unexpected"
 
         builder = SegmentsInventoryBuilder()
         inventory = builder.build(mock_cja, "dv_test", "Test")
@@ -653,7 +655,7 @@ class TestEdgeCases:
             },
         }
         mock_cja = Mock()
-        mock_cja.getFilters.return_value = [segment]
+        mock_cja.getSegments.return_value = [segment]
 
         builder = SegmentsInventoryBuilder()
         inventory = builder.build(mock_cja, "dv_test", "Test")
@@ -675,7 +677,7 @@ class TestEdgeCases:
             },
         }
         mock_cja = Mock()
-        mock_cja.getFilters.return_value = [segment]
+        mock_cja.getSegments.return_value = [segment]
 
         builder = SegmentsInventoryBuilder()
         inventory = builder.build(mock_cja, "dv_test", "Test")
@@ -694,7 +696,7 @@ class TestEdgeCases:
             },
         }
         mock_cja = Mock()
-        mock_cja.getFilters.return_value = [segment]
+        mock_cja.getSegments.return_value = [segment]
 
         builder = SegmentsInventoryBuilder()
         inventory = builder.build(mock_cja, "dv_test", "Test")
@@ -714,7 +716,7 @@ class TestEdgeCases:
             },
         }
         mock_cja = Mock()
-        mock_cja.getFilters.return_value = ["bad_payload", valid_segment]
+        mock_cja.getSegments.return_value = ["bad_payload", valid_segment]
 
         builder = SegmentsInventoryBuilder()
         inventory = builder.build(mock_cja, "dv_test", "Test")
@@ -735,7 +737,7 @@ class TestEdgeCases:
             },
         }
         mock_cja = Mock()
-        mock_cja.getFilters.return_value = [segment]
+        mock_cja.getSegments.return_value = [segment]
 
         builder = SegmentsInventoryBuilder()
         inventory = builder.build(mock_cja, "dv_test", "Test")
@@ -757,7 +759,7 @@ class TestEdgeCases:
             },
         }
         mock_cja = Mock()
-        mock_cja.getFilters.return_value = [segment]
+        mock_cja.getSegments.return_value = [segment]
 
         builder = SegmentsInventoryBuilder()
         inventory = builder.build(mock_cja, "dv_test", "Test")
@@ -1031,7 +1033,7 @@ def test_functions_used_order_is_stable_across_hash_seeds():
                    {"func": "gt", "metric": "metrics/revenue", "val": 100},
                    {"func": "gte", "metric": "metrics/orders", "val": 3}]}}}
         cja = Mock()
-        cja.getFilters.return_value = [seg]
+        cja.getSegments.return_value = [seg]
         s = SegmentsInventoryBuilder().build(cja, "dv_test", "Test").segments[0]
         print(json.dumps([s.functions_used, s.functions_used_internal, s.to_dict()["functions_used"]]))
     """)
@@ -1194,23 +1196,54 @@ class TestCjaPayloadShapes:
 
 
 def test_build_retries_transient_connection_error(mock_cja_instance):
-    """A transient ConnectionError on getFilters is retried, then the build succeeds."""
-    good = mock_cja_instance.getFilters.return_value
-    mock_cja_instance.getFilters.side_effect = [ConnectionError("reset"), good]
+    """A transient ConnectionError on getSegments is retried, then the build succeeds."""
+    good = mock_cja_instance.getSegments.return_value
+    mock_cja_instance.getSegments.side_effect = [ConnectionError("reset"), good]
 
     with patch("cja_auto_sdr.api.resilience.time.sleep"):
         inventory = SegmentsInventoryBuilder().build(mock_cja_instance, "dv_test", "Test View")
 
-    assert mock_cja_instance.getFilters.call_count == 2
+    assert mock_cja_instance.getSegments.call_count == 2
     assert inventory.total_segments == 2
 
 
 def test_build_does_not_retry_error_body_keyerror(mock_cja_instance):
     """cjapy error bodies raise KeyError('content'); that is not transient, so no retry and it fails closed."""
-    mock_cja_instance.getFilters.side_effect = KeyError("content")
+    mock_cja_instance.getSegments.side_effect = KeyError("content")
 
     with patch("cja_auto_sdr.api.resilience.time.sleep") as sleep, pytest.raises(KeyError):
         SegmentsInventoryBuilder().build(mock_cja_instance, "dv_test", "Test View")
 
-    assert mock_cja_instance.getFilters.call_count == 1
+    assert mock_cja_instance.getSegments.call_count == 1
     sleep.assert_not_called()
+
+
+# cjapy 0.3.2 deprecated these in favor of the *Segment* methods (removal planned for 1.0).
+_DEPRECATED_CJAPY_FILTER_METHODS = (
+    "getFilters",
+    "getFilter",
+    "createFilter",
+    "updateFilter",
+    "deleteFilter",
+    "validateFilter",
+)
+
+
+def test_source_avoids_deprecated_cjapy_filter_methods():
+    """No module under src/ calls the cjapy filter methods that 0.3.2 deprecated."""
+    src_root = Path(__file__).resolve().parents[1] / "src" / "cja_auto_sdr"
+    pattern = re.compile(r"\b(?:" + "|".join(_DEPRECATED_CJAPY_FILTER_METHODS) + r")\b")
+    offenders = [
+        f"{path.relative_to(src_root)}:{number}"
+        for path in sorted(src_root.rglob("*.py"))
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1)
+        if pattern.search(line)
+    ]
+    assert offenders == []
+
+
+def test_installed_cjapy_get_segments_accepts_inventory_arguments():
+    """The installed cjapy exposes getSegments with the arguments the inventory passes."""
+    cjapy = pytest.importorskip("cjapy")
+    parameters = inspect.signature(cjapy.CJA.getSegments).parameters
+    assert {"dataIds", "full"} <= parameters.keys()

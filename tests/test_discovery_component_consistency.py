@@ -35,7 +35,7 @@ from cja_auto_sdr.generator import (
         ),
         (
             generator._SEGMENTS_COMPONENT_FETCH_SPEC,
-            "getFilters",
+            "getSegments",
             (),
             {"dataIds": "dv_test", "full": True},
         ),
@@ -95,7 +95,7 @@ def test_hidden_component_counts_are_consistent_across_describe_list_and_stats(
 
     cja.getMetrics.side_effect = _get_metrics
     cja.getDimensions.side_effect = _get_dimensions
-    cja.getFilters.return_value = []
+    cja.getSegments.return_value = []
     cja.getCalculatedMetrics.return_value = []
 
     describe_out = io.StringIO()

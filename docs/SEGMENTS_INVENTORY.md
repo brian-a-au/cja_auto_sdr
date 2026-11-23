@@ -290,7 +290,7 @@ Some fields may show as "-" if:
 If you encounter API errors:
 - Check your CJA API credentials are valid
 - Verify network connectivity
-- The `getFilters` API endpoint must be accessible
+- The segments API endpoint (`getSegments`) must be accessible
 
 ## Related Documentation
 

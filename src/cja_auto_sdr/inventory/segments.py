@@ -398,7 +398,7 @@ class SegmentsInventoryBuilder:
         try:
             # Get segments (filters) filtered by data view ID
             segments_df = make_api_call_with_retry(
-                cja.getFilters, dataIds=data_view_id, full=True, logger=self.logger, operation_name="getFilters"
+                cja.getSegments, dataIds=data_view_id, full=True, logger=self.logger, operation_name="getSegments"
             )
 
             # Normalize API response (handles DataFrame, list, None)
