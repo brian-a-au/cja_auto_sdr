@@ -38,6 +38,7 @@ src/cja_auto_sdr/
 │
 ├── api/                     # API client, resilience & caching
 │   ├── client.py            # CJA API wrapper + .env bootstrap
+│   ├── dataview_listing.py  # list_data_views(): one large page (cjapy first-page bug)
 │   ├── resilience.py        # Circuit breaker, retry with jitter, batching
 │   ├── cache.py             # Response caching with TTL + size limits
 │   ├── fetch.py             # Parallel fetching with worker optimization

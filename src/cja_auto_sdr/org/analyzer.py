@@ -23,7 +23,8 @@ from typing import TYPE_CHECKING, Any
 import pandas as pd
 from tqdm import tqdm
 
-from cja_auto_sdr.api.client import _normalize_dataview_listing_payload_or_raise, list_data_views
+from cja_auto_sdr.api.client import _normalize_dataview_listing_payload_or_raise
+from cja_auto_sdr.api.dataview_listing import list_data_views
 from cja_auto_sdr.api.fetch import ComponentFetchFailure, fetch_component_payload
 from cja_auto_sdr.core.constants import (
     DEFAULT_ORG_REPORT_WORKERS,

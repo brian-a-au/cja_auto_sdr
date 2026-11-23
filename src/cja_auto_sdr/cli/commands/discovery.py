@@ -21,7 +21,8 @@ from typing import Any
 
 import pandas as pd
 
-from cja_auto_sdr.api.client import _normalize_dataview_listing_payload_or_raise, list_data_views
+from cja_auto_sdr.api.client import _normalize_dataview_listing_payload_or_raise
+from cja_auto_sdr.api.dataview_listing import list_data_views
 from cja_auto_sdr.api.resilience import make_api_call_with_retry
 from cja_auto_sdr.core.colors import ConsoleColors
 from cja_auto_sdr.core.discovery_exceptions import (

@@ -805,7 +805,7 @@ class TestListDataViews:
     """list_data_views() works around cjapy returning only the first page (pitchmuc/cjapy#34)."""
 
     def test_requests_one_large_page_and_returns_payload_unchanged(self):
-        from cja_auto_sdr.api.client import list_data_views
+        from cja_auto_sdr.api.dataview_listing import list_data_views
         from cja_auto_sdr.core.constants import DATA_VIEW_LIST_LIMIT
 
         cja = Mock()
@@ -819,7 +819,7 @@ class TestListDataViews:
     def test_warns_when_the_listing_fills_the_page(self, as_dataframe, caplog):
         import pandas as pd
 
-        from cja_auto_sdr.api.client import list_data_views
+        from cja_auto_sdr.api.dataview_listing import list_data_views
         from cja_auto_sdr.core.constants import DATA_VIEW_LIST_LIMIT
 
         rows = [{"id": f"dv_{n}"} for n in range(DATA_VIEW_LIST_LIMIT)]
@@ -838,7 +838,7 @@ class TestListDataViews:
         ids=["short-list", "none", "error-dict"],
     )
     def test_no_warning_below_the_limit_or_for_non_listings(self, payload, caplog):
-        from cja_auto_sdr.api.client import list_data_views
+        from cja_auto_sdr.api.dataview_listing import list_data_views
 
         cja = Mock()
         cja.getDataViews.return_value = payload

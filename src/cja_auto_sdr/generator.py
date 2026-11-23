@@ -2902,8 +2902,8 @@ from cja_auto_sdr.api.client import (
     _normalize_dataview_listing_payload_or_raise,
     configure_cjapy,
     initialize_cja,
-    list_data_views,
 )
+from cja_auto_sdr.api.dataview_listing import list_data_views
 from cja_auto_sdr.core.config_validation import (
     ConfigValidator,
     validate_config_file,

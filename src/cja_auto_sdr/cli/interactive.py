@@ -121,7 +121,7 @@ def interactive_select_dataviews(config_file: str = "config.json", profile: str 
         cja = generator.cjapy.CJA()
 
         print("Fetching available data views...")
-        from cja_auto_sdr.api.client import list_data_views
+        from cja_auto_sdr.api.dataview_listing import list_data_views
 
         available_dvs = list_data_views(cja)
         normalized_dvs = (
@@ -327,7 +327,7 @@ def interactive_wizard(config_file: str = "config.json", profile: str | None = N
         cja = generator.cjapy.CJA()
 
         print("Fetching available data views...")
-        from cja_auto_sdr.api.client import list_data_views
+        from cja_auto_sdr.api.dataview_listing import list_data_views
 
         available_dvs = list_data_views(cja)
         normalized_dvs = (
