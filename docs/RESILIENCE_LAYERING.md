@@ -6,7 +6,7 @@ truth for what statuses each layer owns and why.
 
 ## Upstream: `cjapy.connector.AdobeRequest`
 
-`cjapy>=0.3.1` installs a session-level `urllib3.Retry` adapter inside
+`cjapy` 0.3.1 and later (this project requires `cjapy>=0.3.2`) install a session-level `urllib3.Retry` adapter inside
 `AdobeRequest._build_session`:
 
 | Setting                        | Value                              |

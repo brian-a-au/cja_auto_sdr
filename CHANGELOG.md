@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- The minimum cjapy version is now 0.3.2. cjapy 0.3.2 no longer installs the archived `pathlib` and `pathlib2` backports or `pytest`, so they are gone from the install, and `uv audit` no longer reports "pathlib is archived" ([pitchmuc/cjapy#28](https://github.com/pitchmuc/cjapy/issues/28)).
+- The segments inventory (`--include-segments`) and segment discovery now call cjapy's `getSegments` instead of `getFilters`. cjapy 0.3.2 deprecated `getFilters` and plans to remove it in 1.0. The request and the results are the same. Log and retry messages for this call now name `getSegments`.
+
 ## [3.13.11] - 2026-11-11
 
 This patch makes several paths faster and removes duplicated and unreachable code. It adds no feature, flag, or output field. Output files, exit codes, and log messages are the same as in v3.13.10, with one exception in an error case that is listed under Changed.

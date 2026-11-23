@@ -4180,7 +4180,7 @@ class TestDescribeDataview:
         }
         cja.getMetrics.return_value = [{"id": f"m{i}"} for i in range(5)]
         cja.getDimensions.return_value = [{"id": f"d{i}"} for i in range(3)]
-        cja.getFilters.return_value = [{"id": f"s{i}"} for i in range(2)]
+        cja.getSegments.return_value = [{"id": f"s{i}"} for i in range(2)]
         cja.getCalculatedMetrics.return_value = [{"id": f"cm{i}"} for i in range(1)]
 
         import io
@@ -4203,7 +4203,7 @@ class TestDescribeDataview:
         assert dv["components"]["total"] == 11
         cja.getMetrics.assert_called_once_with("dv_1", inclType="hidden", full=True)
         cja.getDimensions.assert_called_once_with("dv_1", inclType="hidden", full=True)
-        cja.getFilters.assert_called_once_with(dataIds="dv_1", full=True)
+        cja.getSegments.assert_called_once_with(dataIds="dv_1", full=True)
         cja.getCalculatedMetrics.assert_called_once_with(dataIds="dv_1", full=True)
 
     @patch("cja_auto_sdr.generator.cjapy")
@@ -4228,7 +4228,7 @@ class TestDescribeDataview:
         }
         cja.getMetrics.return_value = [{"id": "m1"}]
         cja.getDimensions.return_value = [{"id": "d1"}]
-        cja.getFilters.return_value = []
+        cja.getSegments.return_value = []
         cja.getCalculatedMetrics.return_value = []
 
         import io
@@ -4283,7 +4283,7 @@ class TestDescribeDataview:
 
         cja.getMetrics.side_effect = _get_metrics
         cja.getDimensions.side_effect = _get_dimensions
-        cja.getFilters.return_value = []
+        cja.getSegments.return_value = []
         cja.getCalculatedMetrics.return_value = []
 
         import io
@@ -4318,7 +4318,7 @@ class TestDescribeDataview:
         }
         cja.getMetrics.return_value = [{"id": "m1"}]
         cja.getDimensions.return_value = [{"id": "d1"}]
-        cja.getFilters.return_value = []
+        cja.getSegments.return_value = []
         cja.getCalculatedMetrics.return_value = []
 
         import io
@@ -4350,7 +4350,7 @@ class TestDescribeDataview:
         }
         cja.getMetrics.return_value = [{"id": "m1"}, {"id": "m2"}]
         cja.getDimensions.return_value = [{"id": "d1"}]
-        cja.getFilters.return_value = [{"id": "s1"}]
+        cja.getSegments.return_value = [{"id": "s1"}]
         cja.getCalculatedMetrics.return_value = []
 
         import io
@@ -4387,7 +4387,7 @@ class TestDescribeDataview:
         }
         cja.getMetrics.return_value = [{"id": "m1"}]
         cja.getDimensions.return_value = [{"id": "d1"}]
-        cja.getFilters.return_value = []
+        cja.getSegments.return_value = []
         cja.getCalculatedMetrics.return_value = []
 
         import io
@@ -4436,7 +4436,7 @@ class TestDescribeDataview:
         )
         cja.getMetrics.return_value = [{"id": "m1"}]
         cja.getDimensions.return_value = [{"id": "d1"}]
-        cja.getFilters.return_value = []
+        cja.getSegments.return_value = []
         cja.getCalculatedMetrics.return_value = []
 
         import io
@@ -4480,7 +4480,7 @@ class TestDescribeDataview:
         )
         cja.getMetrics.return_value = [{"id": "m1"}]
         cja.getDimensions.return_value = [{"id": "d1"}]
-        cja.getFilters.return_value = []
+        cja.getSegments.return_value = []
         cja.getCalculatedMetrics.return_value = []
 
         import io
@@ -4532,7 +4532,7 @@ class TestDescribeDataview:
         )
         cja.getMetrics.return_value = [{"id": "m1"}]
         cja.getDimensions.return_value = [{"id": "d1"}]
-        cja.getFilters.return_value = []
+        cja.getSegments.return_value = []
         cja.getCalculatedMetrics.return_value = []
 
         f = io.StringIO()
@@ -4548,7 +4548,7 @@ class TestDescribeDataview:
     @patch("cja_auto_sdr.generator.configure_cjapy")
     @patch("cja_auto_sdr.generator.resolve_active_profile", return_value=None)
     def test_describe_dataview_graceful_segment_failure(self, mock_profile, mock_configure, mock_cjapy):
-        """If getFilters fails, segments count shows as N/A."""
+        """If getSegments fails, segments count shows as N/A."""
         mock_configure.return_value = (True, "config", None)
         cja = mock_cjapy.CJA.return_value
         cja.getDataView.return_value = {
@@ -4562,7 +4562,7 @@ class TestDescribeDataview:
         }
         cja.getMetrics.return_value = [{"id": "m1"}]
         cja.getDimensions.return_value = [{"id": "d1"}]
-        cja.getFilters.side_effect = Exception("API error")
+        cja.getSegments.side_effect = Exception("API error")
         cja.getCalculatedMetrics.return_value = []
 
         import io
@@ -4653,7 +4653,7 @@ class TestDescribeDataview:
         assert "dv_missing" in payload["error"]
         cja.getMetrics.assert_not_called()
         cja.getDimensions.assert_not_called()
-        cja.getFilters.assert_not_called()
+        cja.getSegments.assert_not_called()
         cja.getCalculatedMetrics.assert_not_called()
 
     @patch("cja_auto_sdr.generator.cjapy")
@@ -4684,7 +4684,7 @@ class TestDescribeDataview:
         assert "dv_missing" in payload["error"]
         cja.getMetrics.assert_not_called()
         cja.getDimensions.assert_not_called()
-        cja.getFilters.assert_not_called()
+        cja.getSegments.assert_not_called()
         cja.getCalculatedMetrics.assert_not_called()
 
     @patch("cja_auto_sdr.generator.cjapy")
@@ -4803,7 +4803,7 @@ class TestDescribeDataview:
         assert payload["error_type"] == "not_found"
         cja.getMetrics.assert_not_called()
         cja.getDimensions.assert_not_called()
-        cja.getFilters.assert_not_called()
+        cja.getSegments.assert_not_called()
         cja.getCalculatedMetrics.assert_not_called()
 
     @patch("cja_auto_sdr.generator.cjapy")
@@ -4824,7 +4824,7 @@ class TestDescribeDataview:
         }
         cja.getMetrics.return_value = {"statusCode": 500, "message": "backend timeout"}
         cja.getDimensions.return_value = [{"id": "d1"}]
-        cja.getFilters.return_value = []
+        cja.getSegments.return_value = []
         cja.getCalculatedMetrics.return_value = []
 
         import io
@@ -4866,7 +4866,7 @@ class TestDescribeDataview:
 
         cja.getMetrics.return_value = pd.DataFrame(columns=["id", "name", "type"])
         cja.getDimensions.return_value = pd.DataFrame(columns=["id", "name", "type"])
-        cja.getFilters.return_value = pd.DataFrame(columns=["id", "name", "type"])
+        cja.getSegments.return_value = pd.DataFrame(columns=["id", "name", "type"])
         cja.getCalculatedMetrics.return_value = pd.DataFrame(columns=["id", "name", "type"])
 
         import io
@@ -4891,7 +4891,7 @@ class TestDescribeDataview:
     [
         (list_metrics, "getMetrics"),
         (list_dimensions, "getDimensions"),
-        (list_segments, "getFilters"),
+        (list_segments, "getSegments"),
         (list_calculated_metrics, "getCalculatedMetrics"),
     ],
 )
@@ -4933,7 +4933,7 @@ def test_list_inspection_commands_na_identity_fields_treated_as_not_found(
     [
         (list_metrics, "getMetrics"),
         (list_dimensions, "getDimensions"),
-        (list_segments, "getFilters"),
+        (list_segments, "getSegments"),
         (list_calculated_metrics, "getCalculatedMetrics"),
     ],
 )
@@ -4972,7 +4972,7 @@ def test_list_inspection_commands_get_dataview_apierror_status_treated_as_not_fo
     [
         (list_metrics, "getMetrics"),
         (list_dimensions, "getDimensions"),
-        (list_segments, "getFilters"),
+        (list_segments, "getSegments"),
         (list_calculated_metrics, "getCalculatedMetrics"),
     ],
 )
@@ -5017,7 +5017,7 @@ def test_list_inspection_commands_get_dataview_non_api_wrapper_404_treated_as_no
     [
         (list_metrics, "getMetrics"),
         (list_dimensions, "getDimensions"),
-        (list_segments, "getFilters"),
+        (list_segments, "getSegments"),
         (list_calculated_metrics, "getCalculatedMetrics"),
     ],
 )
@@ -5068,7 +5068,7 @@ def test_list_inspection_commands_get_dataview_apierror_message_treated_as_not_f
         ),
         (
             list_segments,
-            "getFilters",
+            "getSegments",
             "segments",
             [{"id": "s1", "name": "Segment One"}],
         ),
@@ -5118,7 +5118,7 @@ def test_list_inspection_commands_use_canonical_dataview_name_over_preferred_que
     [
         (list_metrics, "getMetrics", "metrics"),
         (list_dimensions, "getDimensions", "dimensions"),
-        (list_segments, "getFilters", "segments"),
+        (list_segments, "getSegments", "segments"),
         (list_calculated_metrics, "getCalculatedMetrics", "calculatedMetrics"),
     ],
 )
@@ -5638,7 +5638,7 @@ class TestListSegments:
         cja.getDataView.return_value = {"id": "dv_1", "name": "Test View"}
         import pandas as pd
 
-        cja.getFilters.return_value = pd.DataFrame(
+        cja.getSegments.return_value = pd.DataFrame(
             [
                 {
                     "id": "s1",
@@ -5669,7 +5669,7 @@ class TestListSegments:
         assert seg["owner"] == "Jane"
         assert seg["approved"] is True
         assert seg["tags"] == ["prod"]
-        cja.getFilters.assert_called_once_with(dataIds="dv_1", full=True)
+        cja.getSegments.assert_called_once_with(dataIds="dv_1", full=True)
 
     @patch("cja_auto_sdr.generator.cjapy")
     @patch("cja_auto_sdr.generator.configure_cjapy")
@@ -5681,7 +5681,7 @@ class TestListSegments:
         cja.getDataView.return_value = {"id": "dv_1", "name": "Test View"}
         import pandas as pd
 
-        cja.getFilters.return_value = pd.DataFrame(
+        cja.getSegments.return_value = pd.DataFrame(
             [
                 {
                     "id": "s1",
@@ -5720,7 +5720,7 @@ class TestListSegments:
         cja.getDataView.return_value = {"id": "dv_1", "name": "Test View"}
         import pandas as pd
 
-        cja.getFilters.return_value = pd.DataFrame(
+        cja.getSegments.return_value = pd.DataFrame(
             [
                 {
                     "id": "s1",
@@ -5755,7 +5755,7 @@ class TestListSegments:
         cja.getDataView.return_value = {"id": "dv_1", "name": "Test View"}
         import pandas as pd
 
-        cja.getFilters.return_value = pd.DataFrame(
+        cja.getSegments.return_value = pd.DataFrame(
             [
                 {
                     "id": "s1",
@@ -5815,7 +5815,7 @@ class TestListSegments:
         cja.getDataView.return_value = {"id": "dv_1", "name": "Test View"}
         import pandas as pd
 
-        cja.getFilters.return_value = pd.DataFrame(
+        cja.getSegments.return_value = pd.DataFrame(
             [
                 {
                     "id": "s1",
@@ -5850,7 +5850,7 @@ class TestListSegments:
         cja.getDataView.return_value = {"id": "dv_1", "name": "Test View"}
         import pandas as pd
 
-        cja.getFilters.return_value = pd.DataFrame(
+        cja.getSegments.return_value = pd.DataFrame(
             [
                 {
                     "id": "s1",
@@ -5886,7 +5886,7 @@ class TestListSegments:
         cja.getDataView.return_value = {"id": "dv_1", "name": "Test View"}
         import pandas as pd
 
-        cja.getFilters.return_value = pd.DataFrame(
+        cja.getSegments.return_value = pd.DataFrame(
             [
                 {
                     "id": "s1",
@@ -5932,7 +5932,7 @@ class TestListSegments:
         cja.getDataView.return_value = {"id": "dv_1", "name": "Test View"}
         import pandas as pd
 
-        cja.getFilters.return_value = pd.DataFrame()
+        cja.getSegments.return_value = pd.DataFrame()
 
         import io
         from contextlib import redirect_stdout
@@ -5955,7 +5955,7 @@ class TestListSegments:
         cja.getDataView.return_value = {"id": "dv_1", "name": "Test View"}
         import pandas as pd
 
-        cja.getFilters.return_value = pd.DataFrame(columns=["id", "name", "type"])
+        cja.getSegments.return_value = pd.DataFrame(columns=["id", "name", "type"])
 
         import io
         from contextlib import redirect_stdout
@@ -5979,7 +5979,7 @@ class TestListSegments:
         cja.getDataView.return_value = {"errorCode": "not_found", "errorDescription": "missing"}
         import pandas as pd
 
-        cja.getFilters.return_value = pd.DataFrame()
+        cja.getSegments.return_value = pd.DataFrame()
 
         import io
         from contextlib import redirect_stderr, redirect_stdout
@@ -5992,7 +5992,7 @@ class TestListSegments:
         assert result is False
         payload = json.loads(err.getvalue())
         assert payload["error_type"] == "not_found"
-        cja.getFilters.assert_not_called()
+        cja.getSegments.assert_not_called()
 
     @patch("cja_auto_sdr.generator.cjapy")
     @patch("cja_auto_sdr.generator.configure_cjapy")
@@ -6002,7 +6002,7 @@ class TestListSegments:
         mock_configure.return_value = (True, "config", None)
         cja = mock_cjapy.CJA.return_value
         cja.getDataView.return_value = {"id": "dv_1", "name": "Test View"}
-        cja.getFilters.return_value = {"statusCode": 403, "errorCode": "forbidden"}
+        cja.getSegments.return_value = {"statusCode": 403, "errorCode": "forbidden"}
 
         import io
         from contextlib import redirect_stderr, redirect_stdout

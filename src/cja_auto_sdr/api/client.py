@@ -205,7 +205,7 @@ def configure_cjapy(
 def _looks_like_dataview_listing(payload: object) -> bool:
     """Return True when a getDataViews() payload is plausibly a data-view list.
 
-    cjapy 0.3.1 returns parsed JSON, so a dict like ``{"statusCode": 500, ...}``
+    cjapy (0.3.1 and later) returns parsed JSON, so a dict like ``{"statusCode": 500, ...}``
     would previously be treated as a successful connection. A real listing is
     either a list/tuple of rows or a pandas DataFrame.
     """

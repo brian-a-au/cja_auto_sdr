@@ -9,7 +9,7 @@ Component inventories provide comprehensive documentation of CJA analytics compo
 | Inventory | CLI Flag | Source | Diff Support |
 |-----------|----------|--------|--------------|
 | [Calculated Metrics](./CALCULATED_METRICS_INVENTORY.md) | `--include-calculated` | CJA API (`getCalculatedMetrics`) | Yes (same DV only)† |
-| [Segments](./SEGMENTS_INVENTORY.md) | `--include-segments` | CJA API (`getFilters`) | Yes (same DV only)† |
+| [Segments](./SEGMENTS_INVENTORY.md) | `--include-segments` | CJA API (`getSegments`) | Yes (same DV only)† |
 | [Derived Fields](./DERIVED_FIELDS_INVENTORY.md) | `--include-derived` | Data View components | No* |
 | **All Inventories** | `--include-all-inventory` | All sources | Yes (smart mode)‡ |
 

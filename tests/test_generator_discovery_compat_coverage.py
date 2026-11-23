@@ -149,7 +149,7 @@ def test_fetch_describe_dataview_machine_readable_outputs_match_extracted_module
         }
         cja.getMetrics.return_value = [{"id": "m1"}, {"id": "m2"}]
         cja.getDimensions.return_value = [{"id": "d1"}]
-        cja.getFilters.return_value = [{"id": "s1"}]
+        cja.getSegments.return_value = [{"id": "s1"}]
         cja.getCalculatedMetrics.return_value = [{"id": "cm1"}]
         return cja
 
@@ -185,7 +185,7 @@ def test_fetch_describe_dataview_table_wraps_description_and_handles_na_total() 
         }
         cja.getMetrics.return_value = [{"id": "m1"}]
         cja.getDimensions.return_value = [{"id": "d1"}]
-        cja.getFilters.side_effect = RuntimeError("segment lookup failed")
+        cja.getSegments.side_effect = RuntimeError("segment lookup failed")
         cja.getCalculatedMetrics.return_value = []
         return cja
 

@@ -28,7 +28,7 @@ from cja_auto_sdr.core.exceptions import CircuitBreakerOpen, RetryableHTTPError
 from cja_auto_sdr.core.logging import emit_diagnostic
 
 # Keys examined on dict-shaped cjapy payloads when recovering the HTTP status code.
-# cjapy 0.3.1 returns parsed JSON and does not inject a snake_case status_code; the
+# cjapy (0.3.1 and later) returns parsed JSON and does not inject a snake_case status_code; the
 # real payloads expose statusCode (camelCase), optionally nested under error/response.
 _STATUS_KEY_CANDIDATES: tuple[str, ...] = (
     "status_code",
@@ -959,7 +959,7 @@ def make_api_call_with_retry(
         try:
             result = api_func(*args, **kwargs)
 
-            # Check for HTTP status code in response. cjapy 0.3.1 returns parsed
+            # Check for HTTP status code in response. cjapy (0.3.1 and later) returns parsed
             # JSON dicts exposing camelCase statusCode (optionally nested under
             # error/response), so we normalize across all supported shapes.
             status_code = _extract_http_status_code_from_result(result)

@@ -1562,7 +1562,7 @@ WARNING - Segments inventory is empty
 **Causes:**
 - No segments are associated with the data view
 - API credentials don't have permission to read segments
-- The `getFilters` API endpoint is not accessible
+- The segments API endpoint (`getSegments`) is not accessible
 
 **Solutions:**
 1. Verify segments exist in CJA UI for the data view
