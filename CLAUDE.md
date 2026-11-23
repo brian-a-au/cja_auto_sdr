@@ -20,7 +20,7 @@ CJA SDR Generator — a CLI tool for generating Solution Design Reference (SDR) 
 - Build system: **hatchling** (dynamic version from `src/cja_auto_sdr/core/version.py`)
 - Entry points: `cja_auto_sdr` and `cja-auto-sdr` (both via `__main__:main`)
 - Current version: v3.13.11
-- Tests: **9,871** across 178 files at **95% coverage gate**
+- Tests: **9,878** across 178 files at **95% coverage gate**
 - Dependencies: cjapy, numpy, pandas, xlsxwriter, tqdm
 - Optional deps: scipy (clustering), python-dotenv (env), argcomplete (completion), notion-client (notion)
 
@@ -38,6 +38,7 @@ src/cja_auto_sdr/
 │
 ├── api/                     # API client, resilience & caching
 │   ├── client.py            # CJA API wrapper + .env bootstrap
+│   ├── dataview_listing.py  # list_data_views(): one large page (cjapy first-page bug)
 │   ├── resilience.py        # Circuit breaker, retry with jitter, batching
 │   ├── cache.py             # Response caching with TTL + size limits
 │   ├── fetch.py             # Parallel fetching with worker optimization

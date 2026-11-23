@@ -24,6 +24,7 @@ import pandas as pd
 from tqdm import tqdm
 
 from cja_auto_sdr.api.client import _normalize_dataview_listing_payload_or_raise
+from cja_auto_sdr.api.dataview_listing import list_data_views
 from cja_auto_sdr.api.fetch import ComponentFetchFailure, fetch_component_payload
 from cja_auto_sdr.core.constants import (
     DEFAULT_ORG_REPORT_WORKERS,
@@ -635,7 +636,7 @@ class OrgComponentAnalyzer:
             raise ValueError("--sample must be at least 1")
 
         try:
-            all_data_views = self.cja.getDataViews()
+            all_data_views = list_data_views(self.cja, self.logger)
         except Exception as e:  # Intentional: API boundary, return empty result to preserve command resilience.
             self.logger.error("Failed to list data views: %s", e)
             return [], False, 0

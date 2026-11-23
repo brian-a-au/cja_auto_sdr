@@ -503,7 +503,9 @@ def validate_config_only(
         cja = generator.cjapy.CJA()
         print(generator.ConsoleColors.success("  \u2713 CJA client initialized"))
 
-        available_dvs = cja.getDataViews()
+        from cja_auto_sdr.api.dataview_listing import list_data_views
+
+        available_dvs = list_data_views(cja)
         if available_dvs is not None:
             normalized_dvs = generator._normalize_dataview_listing_payload_or_raise(
                 available_dvs,

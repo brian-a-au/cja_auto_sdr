@@ -799,3 +799,69 @@ class TestConfigureCjapyEnvProfileResolution:
         assert success is True
         assert display_source == "Profile: env-profile"
         mock_resolver.resolve.assert_called_once_with(profile="env-profile", config_file="config.json")
+
+
+class TestListDataViews:
+    """list_data_views() works around cjapy returning only the first page (pitchmuc/cjapy#34)."""
+
+    def test_requests_one_large_page_and_returns_payload_unchanged(self):
+        from cja_auto_sdr.api.dataview_listing import list_data_views
+        from cja_auto_sdr.core.constants import DATA_VIEW_LIST_LIMIT
+
+        cja = Mock()
+        rows = [{"id": "dv_1"}, {"id": "dv_2"}]
+        cja.getDataViews.return_value = rows
+
+        assert list_data_views(cja) is rows
+        cja.getDataViews.assert_called_once_with(limit=DATA_VIEW_LIST_LIMIT)
+
+    @pytest.mark.parametrize("as_dataframe", [False, True])
+    def test_warns_when_the_listing_fills_the_page(self, as_dataframe, caplog):
+        import pandas as pd
+
+        from cja_auto_sdr.api.dataview_listing import list_data_views
+        from cja_auto_sdr.core.constants import DATA_VIEW_LIST_LIMIT
+
+        rows = [{"id": f"dv_{n}"} for n in range(DATA_VIEW_LIST_LIMIT)]
+        cja = Mock()
+        cja.getDataViews.return_value = pd.DataFrame(rows) if as_dataframe else rows
+        logger = logging.getLogger("test_list_data_views")
+
+        with caplog.at_level(logging.WARNING, logger="test_list_data_views"):
+            list_data_views(cja, logger)
+
+        assert any("may be missing" in record.getMessage() for record in caplog.records)
+
+    @pytest.mark.parametrize(
+        "payload",
+        [[{"id": "dv_1"}], None, {"statusCode": 500, "message": "boom"}],
+        ids=["short-list", "none", "error-dict"],
+    )
+    def test_no_warning_below_the_limit_or_for_non_listings(self, payload, caplog):
+        from cja_auto_sdr.api.dataview_listing import list_data_views
+
+        cja = Mock()
+        cja.getDataViews.return_value = payload
+
+        with caplog.at_level(logging.WARNING):
+            assert list_data_views(cja) is payload
+
+        assert not [record for record in caplog.records if "may be missing" in record.getMessage()]
+
+    def test_source_lists_data_views_only_through_the_helper(self):
+        """Every getDataViews() call in src/ must pass limit, or the listing is cut at 100."""
+        import ast
+
+        src_root = Path(__file__).resolve().parents[1] / "src" / "cja_auto_sdr"
+        offenders = []
+        for path in sorted(src_root.rglob("*.py")):
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                if (
+                    isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Attribute)
+                    and node.func.attr == "getDataViews"
+                    and not any(keyword.arg == "limit" for keyword in node.keywords)
+                ):
+                    offenders.append(f"{path.relative_to(src_root)}:{node.lineno}")
+        assert offenders == []

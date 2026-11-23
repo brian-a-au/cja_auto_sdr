@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from cja_auto_sdr.api.client import _normalize_dataview_listing_payload_or_raise
+from cja_auto_sdr.api.dataview_listing import list_data_views
 from cja_auto_sdr.api.quality_policy import _canonical_quality_policy_key
 from cja_auto_sdr.core.colors import ConsoleColors
 from cja_auto_sdr.core.constants import BANNER_WIDTH, CREDENTIAL_FIELDS, ENV_VAR_MAPPING
@@ -760,7 +761,7 @@ def test_profile(profile_name: str) -> bool:
     try:
         generator._config_from_env(credentials, logger)
         cja = generator.cjapy.CJA()
-        dataviews = cja.getDataViews()
+        dataviews = list_data_views(cja, logger)
         normalized_dataviews = (
             []
             if dataviews is None
