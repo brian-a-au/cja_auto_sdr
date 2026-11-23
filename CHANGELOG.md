@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.13.12] - 2026-11-23
+
+This patch fixes data view listings that stopped at 100 data views, and moves to cjapy 0.3.2. Output files, flags, and exit codes are the same as in v3.13.11. Log and retry messages for the segments call now name `getSegments`, and a new warning appears when a data view listing may be incomplete.
+
 ### Fixed
 
 - Data view listings no longer stop at 100 data views. cjapy 0.3.2 and earlier return only the first page of data views, because they read a `last` key that the data views endpoint does not send ([pitchmuc/cjapy#34](https://github.com/pitchmuc/cjapy/pull/34)). With cjapy's default page size of 100, an organization with more data views silently lost the rest in `--org-report`, `--list-dataviews`, the connection and dataset listings, interactive selection, `--validate-config`, profile tests, and data view name lookups. Every listing now asks for up to 1,000 data views on one page. If a listing fills that page, a warning says that data views may be missing.
