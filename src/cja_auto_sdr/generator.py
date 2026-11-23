@@ -2902,6 +2902,7 @@ from cja_auto_sdr.api.client import (
     _normalize_dataview_listing_payload_or_raise,
     configure_cjapy,
     initialize_cja,
+    list_data_views,
 )
 from cja_auto_sdr.core.config_validation import (
     ConfigValidator,
@@ -2992,7 +2993,7 @@ def validate_data_view(cja: cjapy.CJA, data_view_id: str, logger: logging.Logger
             # Try to list available data views to provide context
             available_count = None
             try:
-                available_dvs = cja.getDataViews()
+                available_dvs = list_data_views(cja, logger)
                 normalized_dvs = (
                     []
                     if available_dvs is None
@@ -5169,7 +5170,7 @@ def get_cached_data_views(cja, cache_key: str, logger: logging.Logger) -> list[d
 
     # Fetch from API
     logger.debug("Fetching data views from API (cache miss)")
-    available_dvs = cja.getDataViews()
+    available_dvs = list_data_views(cja, logger)
 
     if available_dvs is None:
         return []

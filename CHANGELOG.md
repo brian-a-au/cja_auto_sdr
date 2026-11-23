@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Data view listings no longer stop at 100 data views. cjapy 0.3.2 and earlier return only the first page of data views, because they read a `last` key that the data views endpoint does not send ([pitchmuc/cjapy#34](https://github.com/pitchmuc/cjapy/pull/34)). With cjapy's default page size of 100, an organization with more data views silently lost the rest in `--org-report`, `--list-dataviews`, the connection and dataset listings, interactive selection, `--validate-config`, profile tests, and data view name lookups. Every listing now asks for up to 1,000 data views on one page. If a listing fills that page, a warning says that data views may be missing.
+
 ### Changed
 
 - The minimum cjapy version is now 0.3.2. cjapy 0.3.2 no longer installs the archived `pathlib` and `pathlib2` backports or `pytest`, so they are gone from the install, and `uv audit` no longer reports "pathlib is archived" ([pitchmuc/cjapy#28](https://github.com/pitchmuc/cjapy/issues/28)).

@@ -21,7 +21,7 @@ from typing import Any
 
 import pandas as pd
 
-from cja_auto_sdr.api.client import _normalize_dataview_listing_payload_or_raise
+from cja_auto_sdr.api.client import _normalize_dataview_listing_payload_or_raise, list_data_views
 from cja_auto_sdr.api.resilience import make_api_call_with_retry
 from cja_auto_sdr.core.colors import ConsoleColors
 from cja_auto_sdr.core.discovery_exceptions import (
@@ -1194,7 +1194,7 @@ def _fetch_dataviews(
         # Local imports to avoid circular dependency: generator -> discovery -> generator
         from cja_auto_sdr.generator import _format_as_csv, _format_as_table
 
-        available_dvs = cja.getDataViews()
+        available_dvs = list_data_views(cja)
         normalized_dvs = (
             []
             if available_dvs is None
@@ -1557,7 +1557,7 @@ def _fetch_connections(
         if not connections:
             # Check whether data views reference connections we can't see
             # (the GET /connections API requires product-admin privileges).
-            available_dvs = cja.getDataViews()
+            available_dvs = list_data_views(cja)
             available_dvs = (
                 []
                 if available_dvs is None
@@ -1765,7 +1765,7 @@ def _fetch_datasets(
             conn_map[conn_id] = conn_info
 
         # Step 2: Fetch all data views
-        available_dvs = cja.getDataViews()
+        available_dvs = list_data_views(cja)
         available_dvs = (
             []
             if available_dvs is None

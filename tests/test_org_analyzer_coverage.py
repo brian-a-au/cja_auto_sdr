@@ -19,6 +19,7 @@ from unittest.mock import Mock, patch
 import pandas as pd
 import pytest
 
+from cja_auto_sdr.core.constants import DATA_VIEW_LIST_LIMIT
 from cja_auto_sdr.core.exceptions import APIError, MemoryLimitExceeded
 from cja_auto_sdr.org.analyzer import OrgComponentAnalyzer
 from cja_auto_sdr.org.models import (
@@ -2575,7 +2576,7 @@ class TestRunAnalysisLockedEmptyOrg:
             result = analyzer.run_analysis()
         assert result.data_view_summaries == []
         assert result.total_available_data_views == 0
-        mock_cja.getDataViews.assert_called_once_with()
+        mock_cja.getDataViews.assert_called_once_with(limit=DATA_VIEW_LIST_LIMIT)
         mock_cja.getMetrics.assert_not_called()
         mock_cja.getDimensions.assert_not_called()
         mock_lock.__exit__.assert_called_once()
