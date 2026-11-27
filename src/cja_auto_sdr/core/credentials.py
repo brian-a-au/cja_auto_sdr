@@ -270,19 +270,17 @@ def _comparable_credential(credentials: dict[str, str]) -> dict[str, str]:
 
 
 def dotenv_and_config_differ(config_file: str | Path) -> tuple[bool, str | None]:
-    """Report whether ``.env`` and the config file in one folder hold different credentials.
+    """Report whether the ``.env`` file and the config file hold different credentials.
 
-    Returns ``(True, path of the .env file)`` when both files are in the same
-    folder, each holds every field that this release needs (org_id, client_id and
-    secret), and one of the four credential fields differs.
+    Returns ``(True, path of the .env file)`` when each file holds every field
+    that this release needs (org_id, client_id and secret), and one of the four
+    credential fields differs. The standard names this notice for two files in
+    one folder. This release also reads a ``.env`` file in a parent folder, so
+    the check covers that file too.
     """
     snapshot = dotenv_snapshot()
     config_path = Path(config_file)
     if not snapshot.path or not os.path.isfile(config_path):
-        return False, None
-    dotenv_folder = os.path.realpath(os.path.dirname(os.path.abspath(snapshot.path)))
-    config_folder = os.path.realpath(os.path.dirname(os.path.abspath(config_path)))
-    if dotenv_folder != config_folder:
         return False, None
 
     from_dotenv = filter_credentials(
@@ -318,10 +316,13 @@ def partial_environment_message(missing: list[str], *, next_source: str) -> str:
 
 def dotenv_and_config_message(dotenv_path: str, config_file: str | Path, used: str) -> str:
     """Return the notice text for ``.env`` and a config file that hold different credentials."""
-    return (
+    message = (
         f"{dotenv_path} and {Path(config_file).resolve()} hold different credentials. This run uses {used}. "
         "Keep the credential in one of the two files, so that a later release cannot pick the other one."
     )
+    if os.path.realpath(os.path.dirname(os.path.abspath(dotenv_path))) != os.path.realpath(os.getcwd()):
+        message += f" Release {STRICT_LOOKUP_RELEASE} will read a .env file in the working folder only."
+    return message
 
 
 def describe_environment_source(origins: dict[str, str], dotenv_path: str | None) -> str:

@@ -56,7 +56,7 @@ To include optional features, install the matching extras:
 
 ```bash
 pip install "cja-auto-sdr[clustering]"   # scipy-based clustering
-pip install "cja-auto-sdr[env]"          # .env credential loading
+pip install "cja-auto-sdr[env]"          # same as the plain install since v3.14.0
 pip install "cja-auto-sdr[completion]"   # shell completion
 pip install "cja-auto-sdr[notion]"       # Notion publishing
 pip install "cja-auto-sdr[full]"         # everything above
@@ -290,13 +290,7 @@ SCOPES=your_scopes_from_developer_console
 # SANDBOX=your_sandbox_name
 ```
 
-To enable `.env` file loading, install the optional dependency:
-
-```bash
-uv add python-dotenv
-# or
-pip install python-dotenv
-```
+The tool reads `.env` files on every install. `python-dotenv` is a required dependency since v3.14.0, so there is nothing more to install.
 
 See `.env.example` for a complete template.
 
@@ -392,6 +386,7 @@ dependencies = [
     "pandas>=2.3.3",
     "xlsxwriter>=3.2.9",
     "tqdm>=4.66.0",
+    "python-dotenv>=1.0.0",
 ]
 
 [project.optional-dependencies]
@@ -410,13 +405,14 @@ dev = ["pytest>=8.3.4", "pytest-cov>=4.1.0"]
 | `pandas` | Data manipulation |
 | `xlsxwriter` | Excel generation |
 | `tqdm` | Progress bars |
+| `python-dotenv` | Load credentials and settings from `.env` files |
 
 ### Optional Dependencies
 
 | Extra | Package | Purpose |
 |-------|---------|---------|
 | `clustering` | `scipy` | Hierarchical clustering for `--cluster` flag |
-| `env` | `python-dotenv` | Load credentials from `.env` files |
+| `env` | `python-dotenv` | Kept so that `cja-auto-sdr[env]` still installs. `python-dotenv` is a required dependency since v3.14.0 |
 | `completion` | `argcomplete` | Shell tab completion |
 | `full` | All of the above | Install everything |
 

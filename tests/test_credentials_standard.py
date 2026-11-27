@@ -611,15 +611,26 @@ class TestLookupNotices:
 
         assert "Notice [" not in capsys.readouterr().err
 
-    def test_files_in_different_folders_give_no_notice(self, workdir, capsys):
-        _write_dotenv(workdir.parent, CRED_A)
+    def test_a_dotenv_in_a_parent_folder_is_compared_too(self, workdir, capsys):
+        dotenv_path = _write_dotenv(workdir.parent, CRED_A)
         _write_config(workdir / "config.json", CRED_B)
 
         success, _source, credentials = _lookup()
 
         assert success is True
         assert credentials == CRED_A
-        assert "Notice [dotenv_and_config_differ]" not in capsys.readouterr().err
+        err = capsys.readouterr().err
+        assert err.count("Notice [dotenv_and_config_differ]") == 1
+        assert f"This run uses the .env file ({dotenv_path})." in err
+        assert "Release 4.0 will read a .env file in the working folder only." in err
+
+    def test_a_dotenv_in_the_working_folder_has_no_parent_folder_sentence(self, workdir, capsys):
+        _write_dotenv(workdir, CRED_A)
+        _write_config(workdir / "config.json", CRED_B)
+
+        _lookup()
+
+        assert "in the working folder only" not in capsys.readouterr().err
 
     def test_a_partial_file_gives_no_differ_notice(self, workdir):
         _write_dotenv(workdir, _without(CRED_A, "secret"))

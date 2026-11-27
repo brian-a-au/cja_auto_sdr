@@ -159,7 +159,7 @@ uv run cja_auto_sdr --config-status --config-json --agent-mode
 | Discovery / inspection (`--list-*`, `--describe-dataview`) | Yes             | JSON to stdout for machine-readable flows; prefer exact IDs for unattended inspection |
 | Org-report (`--org-report`)                         | Yes                      | JSON to stdout; advisories block included; `--format console --output -` is also valid for human-readable stdout |
 | Diff family (`--diff`, `--diff-snapshot`, `--compare-with-prev`, `--compare-snapshots`) | Yes | JSON to stdout; advisories block included |
-| Validation / preflight (`--validate-config`, `--config-status`) | Partial        | Use `--config-status --config-json` for JSON state; `--validate-config` is primarily exit-code driven |
+| Validation / preflight (`--validate-config`, `--config-status`, `--show-config`) | Partial        | Use `--show-config --format json` or `--config-status --config-json` for JSON state; `--validate-config` is primarily exit-code driven |
 | Fast-path flags (`--version`, `--completion`)       | Partial                  | Informational fast paths tolerate `--agent-mode`, but the preset itself is not applied before exit |
 | Interactive mode (`--interactive`)                  | No                       | Interactive prompts are not suitable for unattended pipelines |
 
@@ -327,6 +327,16 @@ Combine with `--agent-mode` for consistent JSON log output:
 ```bash
 uv run cja_auto_sdr --config-status --config-json --agent-mode
 ```
+
+### --show-config --format json
+
+Reports how the tool finds the credential, without an API call. The JSON names every source that holds a value, the path of each file, the masked client ID, `secret_set`, the scopes, any problems, and any notices. It has the `adobe-credentials/v1/config-check` shape, which is described in the [Configuration Guide](CONFIGURATION.md#show-where-the-credential-comes-from). The command exits 0 when `ok` is true and 1 when it is not.
+
+```bash
+uv run cja_auto_sdr --show-config --format json | jq '{ok, source, notices}'
+```
+
+Notices and warnings about credentials are plain text lines on stderr. They start with `Notice [code]:` or `Warning [code]:`. They can appear on any command that reads a credential, and they never go to stdout.
 
 Recommended preflight sequence for automated pipelines:
 

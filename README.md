@@ -68,7 +68,8 @@ A **Solution Design Reference** is the essential documentation that bridges your
 | | Trending & Drift | Compare reports over time to detect changes |
 | **Multi-Org** | Profile Management | Switch between Adobe Organizations with `--profile client-a` |
 | | Interactive Profile Setup | Create profiles interactively with `--profile-add` |
-| | Profile Testing | Validate credentials with `--profile-test` before use |
+| | Profile Testing | Test sign-in and data view access separately with `--profile-test` |
+| | Credential Source Check | See every credential source and file path with `--show-config` (no API call) |
 | **Developer UX** | Quick Stats Mode | Get metrics/dimensions count instantly with `--stats` (no full report) |
 | | Connection & Dataset Discovery | `--list-connections` and `--list-datasets` for infrastructure inventory |
 | | Discovery Inspection | Drill into a data view's metrics, dimensions, segments, and calculated metrics |
@@ -321,6 +322,7 @@ cja_auto_sdr "Production Analytics"
 | List segments | `cja_auto_sdr --list-segments dv_abc123` |
 | List calculated metrics | `cja_auto_sdr --list-calculated-metrics dv_abc123 --format json` |
 | Validate config only | `cja_auto_sdr --validate-config` |
+| Show where the credential comes from | `cja_auto_sdr --show-config` |
 | **Diff Comparison** (default: console output) | |
 | Compare two Data Views | `cja_auto_sdr --diff dv_1 dv_2` |
 | Compare by name | `cja_auto_sdr --diff "Production" "Staging"` |
@@ -497,7 +499,7 @@ cja_auto_sdr/
 │   └── ...                    # Additional guides
 ├── examples/                  # Automation and GitHub Actions examples
 ├── scripts/                   # Utility scripts
-├── tests/                     # Test suite (9,881+ tests)
+├── tests/                     # Test suite (10,150+ tests)
 │   ├── category_rules.py      # File-based test-category rules
 │   ├── conftest.py            # Pytest fixtures and auto-marking
 │   ├── README.md              # Test inventory and execution guide

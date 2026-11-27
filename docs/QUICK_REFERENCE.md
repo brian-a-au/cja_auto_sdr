@@ -312,8 +312,11 @@ cja_auto_sdr --profile-list
 cja_auto_sdr --profile client-a --list-dataviews
 cja_auto_sdr -p client-b "Main Data View" --format excel
 
-# Test profile connectivity
+# Test a profile: sign-in first, then the data views call
 cja_auto_sdr --profile-test client-a
+
+# Show where the credential comes from (no API call)
+cja_auto_sdr --show-config
 
 # Import a profile non-interactively from JSON or .env file
 cja_auto_sdr --profile-import client-c ./client-c.env
@@ -337,7 +340,8 @@ cja_auto_sdr --list-dataviews  # Uses client-a
 | `--open` | Open generated file(s) in default application | SDR only |
 | `--stats` | Quick statistics only (no full report) | SDR only |
 | `--interactive`, `-i` | Interactively select data views from a numbered list | SDR only |
-| `--config-file PATH` | Use custom config file (default: config.json) | All modes |
+| `--config-file PATH`, `--config PATH` | Use custom config file (default: config.json) | All modes |
+| `--show-config` | Show every credential source, the path of each file, and any notices, without an API call. Add `--format json` for JSON | Config |
 | `--log-level LEVEL` | Set logging: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL` | All modes |
 | `--log-format FORMAT` | Log output: `text` (default) or `json` (structured) | All modes |
 | `--workers N` | Parallel workers: `auto` (default) or `1-256` | SDR only |

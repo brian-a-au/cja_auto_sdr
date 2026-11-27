@@ -20,9 +20,10 @@ CJA SDR Generator — a CLI tool for generating Solution Design Reference (SDR) 
 - Build system: **hatchling** (dynamic version from `src/cja_auto_sdr/core/version.py`)
 - Entry points: `cja_auto_sdr` and `cja-auto-sdr` (both via `__main__:main`)
 - Current version: v3.13.13
-- Tests: **9,881** across 178 files at **95% coverage gate**
-- Dependencies: cjapy, numpy, pandas, xlsxwriter, tqdm
-- Optional deps: scipy (clustering), python-dotenv (env), argcomplete (completion), notion-client (notion)
+- Tests: **10,150** across 181 files at **95% coverage gate**
+- Dependencies: cjapy, numpy, pandas, xlsxwriter, tqdm, python-dotenv
+- Optional deps: scipy (clustering), argcomplete (completion), notion-client (notion). The `env` extra still lists python-dotenv so that `cja-auto-sdr[env]` installs
+- Credentials standard: the tool meets Levels 1 and 2 of the Adobe credentials standard v1. `known-differences.json` lists the Level 3 rules it does not apply yet, and `tests/standard_cases/` holds the shared cases (copied with `sync_cases.py`, do not edit by hand)
 
 ---
 
@@ -38,6 +39,7 @@ src/cja_auto_sdr/
 │
 ├── api/                     # API client, resilience & caching
 │   ├── client.py            # CJA API wrapper + .env bootstrap
+│   ├── sign_in.py           # Token request of the live test (--profile-test), with the standard's codes
 │   ├── dataview_listing.py  # list_data_views(): one large page (cjapy first-page bug)
 │   ├── resilience.py        # Circuit breaker, retry with jitter, batching
 │   ├── cache.py             # Response caching with TTL + size limits
@@ -60,6 +62,7 @@ src/cja_auto_sdr/
 │       ├── discovery.py     # Central discovery extraction (canonical source)
 │       ├── list.py          # List commands (backwards-compat re-exports)
 │       ├── config.py        # --config-status, --validate-config, --sample-config
+│       ├── show_config.py   # --show-config: the config check of the credentials standard
 │       └── stats.py         # Stats and diagnostics
 │
 ├── core/                    # Utilities, constants & configuration
@@ -69,6 +72,7 @@ src/cja_auto_sdr/
 │   ├── config_validation.py # Config validation helpers
 │   ├── colors.py            # Console color formatting
 │   ├── credentials.py       # API credential resolution
+│   ├── credential_notices.py # Client ID mask, notice/warning lines, file modes, .env record
 │   ├── exit_codes.py        # Exit code definitions + explainer
 │   ├── exceptions.py        # Custom exception hierarchy
 │   ├── advisories.py        # Advisory system for actionable warnings
@@ -165,7 +169,7 @@ src/cja_auto_sdr/
 | Trending | `--trending-window N` | Drift detection over time window |
 | Watch | `--watch <dv_ids...> --interval N` | Continuous monitoring loop |
 | Discovery | `--list-dataviews` etc. | List available resources |
-| Config | `--config-status`, `--validate-config`, `--profile-*` | Profile/config management |
+| Config | `--show-config`, `--config-status`, `--validate-config`, `--profile-*` | Profile/config management |
 | Stats | `--stats` | Diagnostics and statistics |
 
 Fast-path flags (no heavy imports): `--version`/`-V`, `--help`/`-h`, `--exit-codes`, `--explain-exit-code CODE`, `--completion {bash,zsh,fish}`

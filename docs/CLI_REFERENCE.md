@@ -97,7 +97,7 @@ cja-auto-sdr [OPTIONS] DATA_VIEW_ID_OR_NAME [...]
 | `-q, --quiet` | Suppress output except errors. Discovery and `--stats` table output keep their rows and drop the banner, progress lines, and usage hints | False |
 | `--open` | Open generated file(s) in default application after creation | False |
 | `--show-timings` | Display performance timing breakdown after processing | False |
-| `--config-json` | Output `--config-status` as machine-readable JSON (for scripting and CI/CD) | False |
+| `--config-json` | Output `--config-status` as machine-readable JSON (for scripting and CI/CD). With `--show-config`, it prints the config check JSON instead | False |
 | `--yes, -y` | Skip confirmation prompts (e.g., for large batch operations) | False |
 | `--completion {bash,zsh,fish}` | Generate shell completion activation script for the specified shell and exit. Prints install instructions if argcomplete is not installed | - |
 
@@ -190,7 +190,8 @@ An exception inside a validation check or worker fails the run with `DQ_VALIDATI
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `--config-file PATH` | Path to configuration file | config.json |
+| `--config-file PATH`, `--config PATH` | Path to configuration file. `--config` is a second name for the same option | config.json |
+| `--show-config` | Show where the credential comes from, without an API call. It lists every source that holds a value, the path of each file, the masked client ID, whether the secret is set, the scopes, any problems, and any notices. Use `--format json` for JSON output. Exits 0 when the credential is ready to use and 1 when it is not | - |
 | `--config-status` | Show configuration status (source, fields, masked credentials) without API call. The secret is shown as `****` and the client ID as its first 4 and last 4 characters. Faster than `--validate-config` for quick troubleshooting | - |
 | `--log-level LEVEL` | DEBUG, INFO, WARNING, ERROR, CRITICAL | INFO |
 | `--log-format FORMAT` | Log output format: `text` (human-readable) or `json` (structured logging for Splunk, ELK, CloudWatch) | text |
@@ -208,7 +209,7 @@ Manage credentials for multiple Adobe Organizations. Profiles are stored in `~/.
 | `--profile-list` | List all available profiles with their org_id | - |
 | `--profile-add NAME` | Create a new profile interactively | - |
 | `--profile-show NAME` | Show profile configuration. The secret is shown as `****` and the client ID as its first 4 and last 4 characters | - |
-| `--profile-test NAME` | Test profile credentials and API connectivity | - |
+| `--profile-test NAME` | Test a profile against Adobe. It reports sign-in and the data views call (`getDataViews`) separately. Use `--format json` for JSON output | - |
 | `--profile-import NAME FILE` | Import profile non-interactively from JSON/.env file or a profile directory | - |
 | `--profile-overwrite` | With `--profile-import`, allow replacing an existing profile | False |
 
@@ -232,8 +233,9 @@ cja_auto_sdr --profile-list
 cja_auto_sdr --profile client-a --list-dataviews
 cja_auto_sdr -p client-a "My Data View" --format excel
 
-# Test profile connectivity
+# Test a profile: sign-in first, then the data views call
 cja_auto_sdr --profile-test client-a
+cja_auto_sdr --profile-test client-a --format json
 
 # Import a profile from JSON/.env without prompts
 cja_auto_sdr --profile-import client-b ./client-b.env
@@ -721,7 +723,7 @@ Three new `INFO`-level diagnostic events are emitted via `emit_diagnostic()` (vi
 | Snapshot / diff family | `--snapshot`, `--list-snapshots`, `--prune-snapshots`, `--diff-snapshot`, `--compare-with-prev`, `--compare-snapshots`, `--diff-labels` |
 | Profile management | `--profile-list`, `--profile-add`, `--profile-import`, `--profile-test`, `--profile-show` |
 | Git integration | `--git-init`, `--git-commit`, `--git-push` |
-| One-shot modes | `--dry-run`, `--config-status`, `--config-json`, `--validate-config`, `--interactive` |
+| One-shot modes | `--dry-run`, `--show-config`, `--config-status`, `--config-json`, `--validate-config`, `--interactive` |
 
 In addition, `--watch` requires a data view ID matching the `dv_*` prefix; names and numeric-only inputs are rejected with the same exit code `1` semantic rejection.
 
@@ -844,6 +846,10 @@ cja_auto_sdr --batch "Prod" "Stage" "Test" --continue-on-error
 ```bash
 # Quick check of configuration status (no API call, fast)
 cja_auto_sdr --config-status
+
+# Show every credential source and the path of each file (no API call)
+cja_auto_sdr --show-config
+cja_auto_sdr --show-config --format json
 
 # Validate configuration and API connectivity (no data view needed)
 cja_auto_sdr --validate-config

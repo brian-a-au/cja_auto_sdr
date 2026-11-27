@@ -34,6 +34,7 @@ snapshot for future diff comparisons.
 - Requires network access to the Adobe CJA API (`analytics.adobe.io`).
 - Credentials must have read access to at least one data view.
 - Does not create or modify CJA configurations.
+- `--show-config` reports which credential source the tool uses, without an API call.
 - The `--validate-config` flag verifies credentials without generating output;
   it is a prerequisite check, not a full SDR generation step.
 

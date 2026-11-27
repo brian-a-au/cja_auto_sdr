@@ -22,7 +22,7 @@ Not every manifest parameter is valid for every command within a family. The `co
 - **`cja_sdr_discover`**: `data_view_id` is required only for `describe_dataview`, `list_metrics`, `list_dimensions`, `list_segments`, `list_calculated_metrics`. It is unused for `list_dataviews`, `list_connections`, `list_datasets`.
 - **`cja_sdr_diff`**: `source`/`target` apply to `diff`. `compare_snapshots_source`/`compare_snapshots_target` apply to `compare_snapshots`. `snapshot` applies to `diff_snapshot`. `compare_with_prev` requires only a data view ID (passed as `source`). `output` is for stdout JSON only. `diff_output` names the output file: it captures `console` or `format_pr_comment: true` text and receives the `json`, `markdown`, `html`, or `excel` report. Without it, file-writing formats create auto-named artifacts under `output_dir`. `csv` writes several files, so it always uses `output_dir`.
 - **`cja_sdr_governance`**: `duplicate_threshold` is an integer count of high-similarity pairs. `isolated_threshold` is a `0.0-1.0` percentage. `output` can target stdout or a named location, but the shape depends on `format`: JSON/Excel/Markdown/HTML create a single file, CSV expands to a directory of multiple files, and console ignores named file paths. `output_dir` controls auto-named artifacts.
-- **`cja_sdr_config`**: `config_json` applies only to `config_status`.
+- **`cja_sdr_config`**: `config_json` applies to `config_status` and `show_config`. With `show_config` it gives the `adobe-credentials/v1/config-check` shape.
 
 ---
 
