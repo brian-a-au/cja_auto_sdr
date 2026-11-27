@@ -45,6 +45,10 @@ EXTENSION_TO_FORMAT: dict[str, str] = {
 # Width of banner separator lines (used across CLI output)
 BANNER_WIDTH: int = 80
 
+# What the config and profile commands print in place of a secret that is set.
+# It has a fixed length, so it shows neither a character nor the length of the secret.
+HIDDEN_VALUE_DISPLAY: str = "****"
+
 # Progress bar format for tqdm instances
 TQDM_BAR_FORMAT: str = "{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}]"
 

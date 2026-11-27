@@ -90,7 +90,8 @@ class ConfigValidator:
         # Adobe client IDs are typically 32 hex characters
         if len(client_id) < 16:
             return False, (
-                f"CLIENT_ID '{client_id[:8]}...' appears too short. Adobe OAuth client IDs are typically 32 characters."
+                f"CLIENT_ID appears too short ({len(client_id)} characters). "
+                "Adobe OAuth client IDs are typically 32 characters."
             )
 
         return True, None

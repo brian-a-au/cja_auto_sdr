@@ -842,6 +842,10 @@ class TestShowProfileExtended:
         assert "1234567890abcdef1234567890abcdef" not in captured.out
         # But partial display should appear (first 4 chars)
         assert "1234" in captured.out
+        # No part of the secret appears, and the stars do not show its length
+        assert "secret_" not in captured.out
+        assert "enough" not in captured.out
+        assert "  secret: ****\n" in captured.out
 
     def test_show_profile_displays_banner(self, tmp_path, capsys):
         """show_profile should display a banner with profile name."""

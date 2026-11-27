@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- The tool no longer prints any part of the secret. `--config-status`, `--config-json`, `--profile-show` and `--validate-config` used to print the first 4 and last 4 characters of the secret, with one star for each hidden character. They now print `****` for a secret that is set, so the output shows no character of the secret and not its length. The client ID still shows its first 4 and last 4 characters.
+- The "CLIENT_ID appears too short" error no longer prints the first 8 characters of the client ID. It gives the length of the value, e.g., `CLIENT_ID appears too short (8 characters)`.
+
+### Changed
+
+- In `--config-json` output, `credentials.secret.value` is now always `"****"` when a secret is set. A script that compared this value with part of the secret needs to read `credentials.secret.set`. The other fields are the same.
+
 ## [3.13.12] - 2026-11-23
 
 This patch fixes data view listings that stopped at 100 data views, and moves to cjapy 0.3.2. Output files, flags, and exit codes are the same as in v3.13.11. Log and retry messages for the segments call now name `getSegments`, and a new warning appears when a data view listing may be incomplete.

@@ -315,7 +315,7 @@ uv run cja_auto_sdr --validate-config
 
 ### --config-status --config-json
 
-Emits the effective resolved configuration as a JSON object. Useful for audit logging and pipeline diagnostics. Credentials are masked in the output.
+Emits the effective resolved configuration as a JSON object. Useful for audit logging and pipeline diagnostics. Credentials are masked in the output. The `secret` value is always `"****"` when a secret is set, and the client ID shows its first 4 and last 4 characters. Read the `set` field to learn whether a credential is present.
 
 ```bash
 uv run cja_auto_sdr --config-status --config-json

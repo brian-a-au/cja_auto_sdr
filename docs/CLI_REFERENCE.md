@@ -191,7 +191,7 @@ An exception inside a validation check or worker fails the run with `DQ_VALIDATI
 | Option | Description | Default |
 |--------|-------------|---------|
 | `--config-file PATH` | Path to configuration file | config.json |
-| `--config-status` | Show configuration status (source, fields, masked credentials) without API call. Faster than `--validate-config` for quick troubleshooting | - |
+| `--config-status` | Show configuration status (source, fields, masked credentials) without API call. The secret is shown as `****` and the client ID as its first 4 and last 4 characters. Faster than `--validate-config` for quick troubleshooting | - |
 | `--log-level LEVEL` | DEBUG, INFO, WARNING, ERROR, CRITICAL | INFO |
 | `--log-format FORMAT` | Log output format: `text` (human-readable) or `json` (structured logging for Splunk, ELK, CloudWatch) | text |
 | `--production` | Minimal logging for performance | False |
@@ -207,7 +207,7 @@ Manage credentials for multiple Adobe Organizations. Profiles are stored in `~/.
 | `--profile NAME`, `-p NAME` | Use named profile from `~/.cja/orgs/<NAME>/` | `$CJA_PROFILE` |
 | `--profile-list` | List all available profiles with their org_id | - |
 | `--profile-add NAME` | Create a new profile interactively | - |
-| `--profile-show NAME` | Show profile configuration (secrets masked) | - |
+| `--profile-show NAME` | Show profile configuration. The secret is shown as `****` and the client ID as its first 4 and last 4 characters | - |
 | `--profile-test NAME` | Test profile credentials and API connectivity | - |
 | `--profile-import NAME FILE` | Import profile non-interactively from JSON/.env file or a profile directory | - |
 | `--profile-overwrite` | With `--profile-import`, allow replacing an existing profile | False |
