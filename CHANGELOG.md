@@ -15,7 +15,7 @@ This release makes the tool meet Levels 1 and 2 of the Adobe credentials standar
 
 - `--show-config` shows where the credential comes from, without an API call. It lists every source that holds a value, highest first, with the path of each file. A profile is shown with both of its files, and a `.env` file is shown with the path where the tool found it. The report also has the masked client ID, whether the secret is set, the scopes, any problems, and any notices. `--show-config --format json` prints the `adobe-credentials/v1/config-check` shape. `--show-config --config-json` prints the same JSON. The command exits 0 when the credential is ready to use, and 1 when it is not.
 - `--config` is a second name for `--config-file`.
-- `--profile-test NAME --format json` prints the result as JSON in the `adobe-credentials/v1/live-test` shape.
+- `--profile-test NAME --format json` prints the result as JSON in the `adobe-credentials/v1/live-test` shape. `--agent-mode` sets `--format json`, so `--profile-test NAME --agent-mode` now prints this JSON and not the text.
 - The tool prints a notice when release 4.0 will act differently in your setup. A notice is one line on stderr that starts with `Notice [code]:`. It is printed once per run, and it never changes the result, the exit code, or stdout. The notices are:
   - `dotenv_and_config_differ`: the `.env` file and the config file hold different credentials. The notice names the source that this run uses.
   - `partial_source_skipped`: the environment variables hold some of the four credential fields and a required one is missing. The notice names the missing variables. The tool skips the variables and reads the config file, as before.

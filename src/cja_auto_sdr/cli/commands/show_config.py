@@ -367,7 +367,7 @@ class _ConfigCheck:
             "credential": {
                 "org_id": credential.get("org_id") or None,
                 "client_id": mask_client_id(credential["client_id"]) if credential.get("client_id") else None,
-                "secret_set": bool(credential.get("secret")),
+                "secret_set": "secret" in _fields_of(credential),
                 "scopes": credential.get("scopes") or None,
                 "sandbox": credential.get("sandbox") or None,
             },
