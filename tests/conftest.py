@@ -70,6 +70,21 @@ def block_adobe_sign_in(monkeypatch):
 
 
 @pytest.fixture
+def clean_root_logging():
+    """Remove the log handlers that a run of main() adds."""
+    import logging
+
+    root = logging.getLogger()
+    before, level = list(root.handlers), root.level
+    yield
+    for handler in list(root.handlers):
+        if handler not in before:
+            root.removeHandler(handler)
+            handler.close()
+    root.setLevel(level)
+
+
+@pytest.fixture
 def sign_in_ok(monkeypatch):
     """Make the stubbed sign-in service answer with a token."""
     from cja_auto_sdr.api import sign_in

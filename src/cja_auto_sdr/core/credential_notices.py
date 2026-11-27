@@ -116,13 +116,18 @@ def reset_credential_notice_state() -> None:
 # ==================== FILE AND FOLDER MODES ====================
 
 
+def _file_modes_apply() -> bool:
+    """Return False on Windows, where the mode bits do not describe access."""
+    return os.name != "nt"
+
+
 def readable_by_others(path: str | Path) -> bool:
     """Return True when the group or other users can read the file at *path*.
 
     The mode of a symlink's target is the one that counts. The check is skipped
     on Windows, where the mode bits do not describe access.
     """
-    if os.name == "nt":
+    if not _file_modes_apply():
         return False
     try:
         mode = os.stat(path).st_mode
@@ -157,7 +162,7 @@ def make_private_dirs(path: Path) -> None:
             break
         current = current.parent
     path.mkdir(parents=True, exist_ok=True)
-    if os.name == "nt":
+    if not _file_modes_apply():
         return
     for created in missing:
         os.chmod(created, _PRIVATE_DIR_MODE)

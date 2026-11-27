@@ -208,19 +208,6 @@ def build_case(case: dict[str, Any], tmp_path: Path, monkeypatch: pytest.MonkeyP
 # ==================== RUNNING THE TOOL ====================
 
 
-@pytest.fixture
-def clean_root_logging():
-    """Remove the log handlers that a run of main() adds."""
-    root = logging.getLogger()
-    before, level = list(root.handlers), root.level
-    yield
-    for handler in list(root.handlers):
-        if handler not in before:
-            root.removeHandler(handler)
-            handler.close()
-    root.setLevel(level)
-
-
 def run_cli(argv: list[str], capsys: pytest.CaptureFixture[str]) -> tuple[int, str, str]:
     """Run the command line in this process. Returns the exit code, stdout and stderr."""
     from cja_auto_sdr.generator import main
