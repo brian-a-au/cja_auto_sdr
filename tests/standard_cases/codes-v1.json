@@ -1,0 +1,63 @@
+{
+  "spec": "adobe-credentials/v1",
+  "codes": {
+    "bad_client_id": {
+      "result": "sign_in",
+      "meaning": "Adobe does not know the client ID.",
+      "fix": "Copy the client ID again from the credential in the Adobe Developer Console."
+    },
+    "bad_secret": {
+      "result": "sign_in",
+      "meaning": "Adobe knows the client ID and rejected the secret.",
+      "fix": "Copy the client secret again from the Adobe Developer Console. A secret that was replaced no longer works."
+    },
+    "scopes_rejected": {
+      "result": "sign_in",
+      "meaning": "Adobe rejected one or more scopes.",
+      "fix": "Copy the scopes exactly as the Adobe Developer Console shows them for this credential."
+    },
+    "wrong_org": {
+      "result": "sign_in",
+      "meaning": "The token belongs to a different organization than org_id.",
+      "fix": "Use the organization ID shown beside the credential in the Adobe Developer Console."
+    },
+    "sign_in_failed": {
+      "result": "sign_in",
+      "meaning": "Sign-in failed for a reason the tool cannot name. The message holds Adobe's own text.",
+      "fix": "Read the message, then check the credential in the Adobe Developer Console."
+    },
+    "no_product_access": {
+      "result": "product_access",
+      "meaning": "Sign-in worked and the product gave the credential nothing.",
+      "fix": "See rule L2.6 for the fix for each product."
+    },
+    "unreachable": {
+      "result": "either",
+      "meaning": "The tool could not reach Adobe, or the answer did not come from Adobe.",
+      "fix": "Check the network, the proxy and Adobe's status page, then try again."
+    }
+  },
+  "errors": {
+    "no_credential": "No source gave a credential. The message names the ways to give one.",
+    "partial_source": "A source had some of the four fields and not all of them. The message names the missing fields.",
+    "profile_not_found": "The named profile does not exist.",
+    "invalid_profile_name": "The profile name breaks rule L1.4.",
+    "profile_and_config_both_given": "A profile and a config file were both given.",
+    "variable_forms_differ": "The AHD_ names and the plain names are both set with different values."
+  },
+  "notices": {
+    "dotenv_and_config_differ": "The .env file and the config file in one folder hold different complete credentials.",
+    "partial_source_skipped": "A source had some of the four fields and was skipped. The notice names the missing fields.",
+    "mixed_sources": "The four fields came from more than one source.",
+    "profile_and_config_both_given": "A profile and a config file were both given.",
+    "profile_variable_not_used": "The profile variable is set and this release does not read it.",
+    "plain_variables_not_used": "ORG_ID, CLIENT_ID, SECRET and SCOPES are set and this release does not read them.",
+    "variable_forms_differ": "The AHD_ names and the plain names are both set with different values.",
+    "default_scopes_used": "No scopes were given, so the tool used its built-in scopes."
+  },
+  "warnings": {
+    "file_readable_by_others": "A credential file can be read by the group or by other users.",
+    "unknown_key": "A file holds a key the tool does not know. This is a debug line.",
+    "upper_case_key": "A file holds a credential key in upper case, and the key was not read."
+  }
+}

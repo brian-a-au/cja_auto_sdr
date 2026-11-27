@@ -1,0 +1,29 @@
+{
+  "spec": "adobe-credentials/v1",
+  "tool": "cja_auto_sdr",
+  "tool_version": "3.14.0",
+  "not_applicable": [
+    {
+      "rule": "L2.2 (AHD_ names)",
+      "reason": "The AHD_ variable names belong to aa-health-duckdb. This tool reads ORG_ID, CLIENT_ID, SECRET and SCOPES only."
+    },
+    {
+      "rule": "L2.6 (Analytics)",
+      "reason": "This is a Customer Journey Analytics tool, so it uses the CJA message for no access."
+    }
+  ],
+  "differences": [
+    {
+      "rule": "L3.1",
+      "cases": ["lookup-002", "lookup-003", "lookup-008", "lookup-009"],
+      "summary": "The lookup order is profile, then the environment variables, then the config file. A profile from --profile or CJA_PROFILE beats a config file given with --config-file, and so do the environment variables. --profile and --config-file together use the profile and print a notice. The .env file is searched in the working folder and then in its parent folders, and it is loaded into the environment, so it can set CJA_PROFILE and it is not a source of its own.",
+      "planned": "4.0.0"
+    },
+    {
+      "rule": "L3.2",
+      "cases": ["partial-001", "partial-002", "partial-004"],
+      "summary": "A partial set of environment variables, with or without values from .env, is skipped with a notice and the config file is used. The environment variables and .env are merged key by key. In a profile, .env overrides config.json key by key. The tool prints the mixed_sources notice for both merges.",
+      "planned": "4.0.0"
+    }
+  ]
+}

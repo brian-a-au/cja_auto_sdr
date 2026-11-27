@@ -1,0 +1,250 @@
+{
+  "spec": "adobe-credentials/v1",
+  "area": "sign-in-codes",
+  "note": "The code for each answer from a stubbed sign-in service and a stubbed product. The answers follow what aa-health-duckdb handles today. They were not recorded from Adobe.",
+  "cases": [
+    {
+      "id": "signin-001",
+      "level": 2,
+      "rule": "L2.5",
+      "title": "A token and a product answer",
+      "given": {
+        "command": "live_test",
+        "sign_in_answer": {
+          "status": 200,
+          "body": {
+            "access_token": "stub-token",
+            "expires_in": 86399
+          }
+        },
+        "product_answer": "has_access"
+      },
+      "expect": {
+        "json_schema": "live-test-v1",
+        "sign_in": {
+          "ok": true,
+          "code": null
+        },
+        "product_access": {
+          "ok": true,
+          "code": null
+        }
+      }
+    },
+    {
+      "id": "signin-002",
+      "level": 2,
+      "rule": "L2.5",
+      "title": "Adobe does not know the client ID",
+      "given": {
+        "command": "live_test",
+        "sign_in_answer": {
+          "status": 400,
+          "body": {
+            "error": "invalid_client",
+            "error_description": "invalid client_id parameter"
+          }
+        }
+      },
+      "expect": {
+        "sign_in": {
+          "ok": false,
+          "code": "bad_client_id"
+        },
+        "product_access": {
+          "ok": null,
+          "code": null
+        }
+      }
+    },
+    {
+      "id": "signin-003",
+      "level": 2,
+      "rule": "L2.5",
+      "title": "Adobe rejects the secret",
+      "given": {
+        "command": "live_test",
+        "sign_in_answer": {
+          "status": 401,
+          "body": {
+            "error": "invalid_client",
+            "error_description": "invalid client_secret parameter"
+          }
+        }
+      },
+      "expect": {
+        "sign_in": {
+          "ok": false,
+          "code": "bad_secret"
+        },
+        "product_access": {
+          "ok": null,
+          "code": null
+        }
+      }
+    },
+    {
+      "id": "signin-004",
+      "level": 2,
+      "rule": "L2.5",
+      "title": "Adobe rejects a scope",
+      "given": {
+        "command": "live_test",
+        "sign_in_answer": {
+          "status": 400,
+          "body": {
+            "error": "invalid_scope",
+            "error_description": "scope is not allowed"
+          }
+        }
+      },
+      "expect": {
+        "sign_in": {
+          "ok": false,
+          "code": "scopes_rejected"
+        }
+      }
+    },
+    {
+      "id": "signin-005",
+      "level": 2,
+      "rule": "L2.5",
+      "title": "An error the tool cannot name keeps Adobe's message",
+      "given": {
+        "command": "live_test",
+        "sign_in_answer": {
+          "status": 400,
+          "body": {
+            "error": "unauthorized_client",
+            "error_description": "The client is not allowed to use this grant"
+          }
+        }
+      },
+      "expect": {
+        "sign_in": {
+          "ok": false,
+          "code": "sign_in_failed",
+          "message_contains": "not allowed to use this grant"
+        }
+      }
+    },
+    {
+      "id": "signin-006",
+      "level": 2,
+      "rule": "L2.5",
+      "title": "Adobe's message is cut to 200 characters",
+      "given": {
+        "command": "live_test",
+        "sign_in_answer": {
+          "status": 400,
+          "body": {
+            "error": "other",
+            "error_description": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          }
+        }
+      },
+      "expect": {
+        "sign_in": {
+          "ok": false,
+          "code": "sign_in_failed",
+          "message_excludes": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        }
+      }
+    },
+    {
+      "id": "signin-007",
+      "level": 2,
+      "rule": "L2.5",
+      "title": "The network is down",
+      "given": {
+        "command": "live_test",
+        "sign_in_answer": "connection_error"
+      },
+      "expect": {
+        "sign_in": {
+          "ok": false,
+          "code": "unreachable"
+        }
+      }
+    },
+    {
+      "id": "signin-008",
+      "level": 2,
+      "rule": "L2.5",
+      "title": "A 200 answer without a token did not come from Adobe",
+      "given": {
+        "command": "live_test",
+        "sign_in_answer": {
+          "status": 200,
+          "body": {
+            "page": "login"
+          }
+        }
+      },
+      "expect": {
+        "sign_in": {
+          "ok": false,
+          "code": "unreachable"
+        }
+      }
+    },
+    {
+      "id": "signin-009",
+      "level": 2,
+      "rule": "L2.6",
+      "title": "Sign-in works and the product gives nothing",
+      "given": {
+        "command": "live_test",
+        "sign_in_answer": {
+          "status": 200,
+          "body": {
+            "access_token": "stub-token",
+            "expires_in": 86399
+          }
+        },
+        "product_answer": "no_access"
+      },
+      "expect": {
+        "sign_in": {
+          "ok": true,
+          "code": null
+        },
+        "product_access": {
+          "ok": false,
+          "code": "no_product_access",
+          "message_contains_by_product": {
+            "aa": "Analytics product profile",
+            "cja": "CJA product profile"
+          }
+        }
+      }
+    },
+    {
+      "id": "signin-010",
+      "level": 2,
+      "rule": "L2.5",
+      "title": "Sign-in works and the product cannot be reached",
+      "given": {
+        "command": "live_test",
+        "sign_in_answer": {
+          "status": 200,
+          "body": {
+            "access_token": "stub-token",
+            "expires_in": 86399
+          }
+        },
+        "product_answer": "connection_error"
+      },
+      "expect": {
+        "sign_in": {
+          "ok": true,
+          "code": null
+        },
+        "product_access": {
+          "ok": false,
+          "code": "unreachable"
+        }
+      }
+    }
+  ]
+}

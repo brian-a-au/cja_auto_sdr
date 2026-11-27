@@ -24,6 +24,9 @@ dependencies = [
     "pandas>=2.3.3,<4",
     "xlsxwriter>=3.2.9",
     "tqdm>=4.66.0",
+    # Required since 3.14.0, so a .env file is read on every install. The `env` and
+    # `full` extras still list it, so `cja-auto-sdr[env]` keeps working as an install target.
+    "python-dotenv>=1.0.0",
     # Security floors for transitive dependencies (pulled via cjapy->requests and
     # notion-client->httpx). Promoted to direct deps so the secure minimum is enforced
     # in our lockfile and propagated to PyPI installers. Remove once upstream raises floors.

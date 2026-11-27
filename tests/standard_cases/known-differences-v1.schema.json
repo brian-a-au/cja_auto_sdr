@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "adobe-credentials/v1/known-differences",
+  "title": "A tool's list of rules it does not meet yet",
+  "type": "object",
+  "required": [
+    "spec",
+    "tool",
+    "tool_version",
+    "differences"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "spec": {
+      "const": "adobe-credentials/v1"
+    },
+    "tool": {
+      "type": "string"
+    },
+    "tool_version": {
+      "type": "string",
+      "description": "The release this list describes."
+    },
+    "not_applicable": {
+      "type": "array",
+      "description": "Rules that do not apply to this tool, each with a reason.",
+      "items": {
+        "type": "object",
+        "required": [
+          "rule",
+          "reason"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "rule": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "differences": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "rule",
+          "summary"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "rule": {
+            "type": "string",
+            "pattern": "^L[123]\\.[0-9]+$"
+          },
+          "cases": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The shared cases that fail because of this difference."
+          },
+          "summary": {
+            "type": "string",
+            "description": "What the tool does today."
+          },
+          "planned": {
+            "type": "string",
+            "description": "The release that removes the difference, when one is planned."
+          }
+        }
+      }
+    }
+  }
+}

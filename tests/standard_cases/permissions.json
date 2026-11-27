@@ -1,0 +1,131 @@
+{
+  "spec": "adobe-credentials/v1",
+  "area": "permissions",
+  "note": "File and folder modes. A tool skips these cases on Windows.",
+  "cases": [
+    {
+      "id": "perm-001",
+      "level": 1,
+      "rule": "L1.3",
+      "title": "A new profile folder is created as 0700",
+      "given": {
+        "action": "create_profile",
+        "profile_name": "prod",
+        "credential": "A"
+      },
+      "expect": {
+        "folder_mode": "0700"
+      }
+    },
+    {
+      "id": "perm-002",
+      "level": 1,
+      "rule": "L1.3",
+      "title": "A new profile file is written as 0600",
+      "given": {
+        "action": "create_profile",
+        "profile_name": "prod",
+        "credential": "A"
+      },
+      "expect": {
+        "file_mode": "0600"
+      }
+    },
+    {
+      "id": "perm-003",
+      "level": 1,
+      "rule": "L1.3",
+      "title": "A profiles folder that already exists keeps its mode",
+      "given": {
+        "action": "create_profile",
+        "profile_name": "prod",
+        "credential": "A",
+        "existing_folder_mode": "0755"
+      },
+      "expect": {
+        "existing_folder_mode": "0755"
+      }
+    },
+    {
+      "id": "perm-004",
+      "level": 1,
+      "rule": "L1.3",
+      "title": "A profile file that others can read gives one warning",
+      "given": {
+        "sources": {
+          "flag_profile": {
+            "name": "prod",
+            "credential": "A",
+            "file_mode": "0644"
+          }
+        },
+        "command": "config_check"
+      },
+      "expect": {
+        "source": "flag_profile",
+        "warning": "file_readable_by_others",
+        "warning_count": 1
+      }
+    },
+    {
+      "id": "perm-005",
+      "level": 1,
+      "rule": "L1.3",
+      "title": "A config file that the group can read gives one warning",
+      "given": {
+        "sources": {
+          "default_config": {
+            "credential": "A",
+            "file_mode": "0640"
+          }
+        },
+        "command": "config_check"
+      },
+      "expect": {
+        "source": "default_config",
+        "warning": "file_readable_by_others",
+        "warning_count": 1
+      }
+    },
+    {
+      "id": "perm-006",
+      "level": 1,
+      "rule": "L1.3",
+      "title": "A private file gives no warning",
+      "given": {
+        "sources": {
+          "default_config": {
+            "credential": "A",
+            "file_mode": "0600"
+          }
+        },
+        "command": "config_check"
+      },
+      "expect": {
+        "source": "default_config",
+        "warning_count": 0
+      }
+    },
+    {
+      "id": "perm-007",
+      "level": 1,
+      "rule": "L1.3",
+      "title": "The mode of a symlink's target is the one that is checked",
+      "given": {
+        "sources": {
+          "default_config": {
+            "credential": "A",
+            "file_mode": "0644",
+            "through_symlink": true
+          }
+        },
+        "command": "config_check"
+      },
+      "expect": {
+        "source": "default_config",
+        "warning": "file_readable_by_others",
+        "warning_count": 1
+      }
+    }
+  ]
+}

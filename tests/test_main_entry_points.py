@@ -386,7 +386,7 @@ class TestMainImplProfileManagement:
                 _main_impl()
 
         assert exc_info.value.code == 0
-        mock_test.assert_called_once_with("myprofile")
+        mock_test.assert_called_once_with("myprofile", output_format="table")
 
     @patch("cja_auto_sdr.generator._cli_option_specified", _mock_cli_option_specified)
     @patch("cja_auto_sdr.generator.show_profile")

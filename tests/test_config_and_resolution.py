@@ -588,8 +588,11 @@ class TestValidateConfigOnlyDependenciesStep:
         output = capsys.readouterr().out
         assert "[2/5] Checking dependencies..." in output
         # Core deps should all show with checkmark
-        for pkg in ("cjapy", "pandas", "numpy", "xlsxwriter", "tqdm"):
+        for pkg in ("cjapy", "pandas", "numpy", "xlsxwriter", "tqdm", "python-dotenv"):
             assert pkg in output
+        # python-dotenv is required, so it is not listed as optional.
+        assert "python-dotenv not installed" not in output
+        assert ".env file loading" not in output
 
     @patch("cja_auto_sdr.generator._config_from_env")
     @patch("cja_auto_sdr.generator.cjapy")
@@ -609,7 +612,6 @@ class TestValidateConfigOnlyDependenciesStep:
         assert "optional" in output
         assert "--org-report clustering" in output or "org-report" in output
         assert "shell tab-completion" in output
-        assert ".env file loading" in output
 
     def test_missing_core_dependency_fails(self, capsys: pytest.CaptureFixture) -> None:
         """Missing core dependency should fail validation."""
@@ -631,6 +633,24 @@ class TestValidateConfigOnlyDependenciesStep:
         assert "pandas (not installed)" in output
         assert "VALIDATION FAILED" in output
 
+    def test_missing_python_dotenv_fails(self, capsys: pytest.CaptureFixture) -> None:
+        """python-dotenv is a required dependency, so validation fails without it."""
+        import importlib.metadata
+
+        from cja_auto_sdr.generator import validate_config_only
+
+        original_version = importlib.metadata.version
+
+        def mock_version(pkg):
+            if pkg == "python-dotenv":
+                raise importlib.metadata.PackageNotFoundError(pkg)
+            return original_version(pkg)
+
+        with patch("cja_auto_sdr.generator.importlib.metadata.version", side_effect=mock_version):
+            result = validate_config_only()
+        assert result is False
+        assert "python-dotenv (not installed)" in capsys.readouterr().out
+
     def test_missing_optional_dependency_does_not_fail(self, capsys: pytest.CaptureFixture) -> None:
         """Missing optional dependency should NOT fail validation."""
         import importlib.metadata
@@ -640,7 +660,7 @@ class TestValidateConfigOnlyDependenciesStep:
         original_version = importlib.metadata.version
 
         def mock_version(pkg):
-            if pkg in ("scipy", "argcomplete", "python-dotenv"):
+            if pkg in ("scipy", "argcomplete"):
                 raise importlib.metadata.PackageNotFoundError(pkg)
             return original_version(pkg)
 
@@ -651,7 +671,6 @@ class TestValidateConfigOnlyDependenciesStep:
         output = capsys.readouterr().out
         assert "scipy not installed (optional" in output
         assert "argcomplete not installed (optional" in output
-        assert "python-dotenv not installed (optional" in output
         # Should NOT fail at step 2 — it should proceed to step 3
         assert "[3/5]" in output
 

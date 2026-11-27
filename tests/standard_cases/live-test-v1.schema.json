@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "adobe-credentials/v1/live-test",
+  "title": "Live test output (rule L2.5)",
+  "type": "object",
+  "required": [
+    "schema",
+    "tool",
+    "tool_version",
+    "product",
+    "ok",
+    "source",
+    "sign_in",
+    "product_access"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "schema": {
+      "const": "adobe-credentials/v1/live-test"
+    },
+    "tool": {
+      "type": "string"
+    },
+    "tool_version": {
+      "type": "string"
+    },
+    "product": {
+      "enum": [
+        "aa",
+        "cja"
+      ]
+    },
+    "ok": {
+      "type": "boolean",
+      "description": "True when both results are ok."
+    },
+    "source": {
+      "type": "object",
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "flag_profile",
+            "flag_config",
+            "profile_variable",
+            "environment",
+            "dotenv",
+            "default_config"
+          ]
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "sign_in": {
+      "type": "object",
+      "required": [
+        "ok",
+        "code",
+        "message"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "ok": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "description": "Null when the step did not run."
+        },
+        "code": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "A code from codes-v1.json, or null when ok."
+        },
+        "message": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "product_access": {
+      "type": "object",
+      "required": [
+        "ok",
+        "code",
+        "message"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "ok": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "description": "Null when the step did not run."
+        },
+        "code": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "A code from codes-v1.json, or null when ok."
+        },
+        "message": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "description": "ok is null when sign-in failed, because the product call did not run."
+    }
+  }
+}

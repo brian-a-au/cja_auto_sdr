@@ -36,6 +36,51 @@ def isolate_home_dir(tmp_path_factory, monkeypatch):
     monkeypatch.setenv("USERPROFILE", str(home))
 
 
+CREDENTIAL_VARIABLES = ("ORG_ID", "CLIENT_ID", "SECRET", "SCOPES", "SANDBOX", "CJA_PROFILE", "CJA_HOME")
+
+
+@pytest.fixture(autouse=True)
+def isolate_credential_environment(monkeypatch):
+    """Clear the credential variables for every test, so no test sees the developer's own.
+
+    monkeypatch records each variable here, so a value that a test or the .env
+    bootstrap sets later is removed again when the test ends. The record of the
+    notice and warning lines already shown is cleared as well.
+    """
+    from cja_auto_sdr.core import credential_notices
+
+    for name in CREDENTIAL_VARIABLES:
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.delenv(credential_notices.SHOWN_MESSAGES_VARIABLE, raising=False)
+    monkeypatch.setattr(credential_notices, "_dotenv_record", None)
+
+
+@pytest.fixture(autouse=True)
+def block_adobe_sign_in(monkeypatch):
+    """Stop any test from sending a token request to Adobe.
+
+    A test that needs a sign-in answer replaces ``post_token_request`` itself.
+    """
+    from cja_auto_sdr.api import sign_in
+
+    def _blocked(_fields):
+        raise AssertionError("A test tried to call Adobe's sign-in service. Stub sign_in.post_token_request.")
+
+    monkeypatch.setattr(sign_in, "post_token_request", _blocked)
+
+
+@pytest.fixture
+def sign_in_ok(monkeypatch):
+    """Make the stubbed sign-in service answer with a token."""
+    from cja_auto_sdr.api import sign_in
+
+    monkeypatch.setattr(
+        sign_in,
+        "post_token_request",
+        lambda _fields: (200, {"access_token": "stub-token", "expires_in": 86399}),
+    )
+
+
 @pytest.fixture(autouse=True)
 def clear_fast_path_option_spec_cache():
     """Reset fast-path CLI option cache between tests for isolation."""

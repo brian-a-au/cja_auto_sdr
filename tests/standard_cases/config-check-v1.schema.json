@@ -1,0 +1,209 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "adobe-credentials/v1/config-check",
+  "title": "Config check output (rule L2.4)",
+  "type": "object",
+  "required": [
+    "schema",
+    "tool",
+    "tool_version",
+    "product",
+    "ok",
+    "profile",
+    "sources",
+    "credential",
+    "problems",
+    "notices"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "schema": {
+      "const": "adobe-credentials/v1/config-check"
+    },
+    "tool": {
+      "type": "string"
+    },
+    "tool_version": {
+      "type": "string"
+    },
+    "product": {
+      "enum": [
+        "aa",
+        "cja"
+      ]
+    },
+    "ok": {
+      "type": "boolean",
+      "description": "True when all four fields were found and there is no problem."
+    },
+    "profile": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "The profile in use, or null."
+    },
+    "sources": {
+      "type": "array",
+      "description": "Every source the tool looked at that held a value, highest first.",
+      "items": {
+        "type": "object",
+        "required": [
+          "kind",
+          "used",
+          "fields"
+        ],
+        "additionalProperties": true,
+        "properties": {
+          "kind": {
+            "enum": [
+              "flag_profile",
+              "flag_config",
+              "profile_variable",
+              "environment",
+              "dotenv",
+              "default_config"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "description": "A plain name, e.g., 'profile prod'."
+          },
+          "path": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The file, when the source is a file."
+          },
+          "used": {
+            "type": "boolean",
+            "description": "True when a field of the credential came from this source."
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "org_id",
+                "client_id",
+                "secret",
+                "scopes",
+                "sandbox"
+              ]
+            },
+            "description": "The fields this source holds. Never their values."
+          },
+          "skipped": {
+            "enum": [
+              "partial",
+              "lower_priority",
+              null
+            ],
+            "description": "Why the source was not used."
+          },
+          "missing": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "org_id",
+                "client_id",
+                "secret",
+                "scopes"
+              ]
+            },
+            "description": "For a partial source, the fields it lacks."
+          }
+        }
+      }
+    },
+    "credential": {
+      "type": "object",
+      "required": [
+        "org_id",
+        "client_id",
+        "secret_set",
+        "scopes"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "org_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "client_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Masked as in rule L1.2."
+        },
+        "secret_set": {
+          "type": "boolean"
+        },
+        "scopes": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sandbox": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "not": {
+        "required": [
+          "secret"
+        ]
+      }
+    },
+    "problems": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "additionalProperties": true,
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "field": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "notices": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "additionalProperties": true,
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "field": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

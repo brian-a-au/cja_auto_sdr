@@ -17,6 +17,15 @@ from cja_auto_sdr.core.constants import (
     CREDENTIAL_FIELDS,
     ENV_VAR_MAPPING,
 )
+from cja_auto_sdr.core.credential_notices import (
+    STANDARD_FIELDS,
+    dotenv_snapshot,
+    emit_notice,
+    environment_field_origins,
+    note_file_keys,
+    variable_names,
+    warn_if_readable_by_others,
+)
 from cja_auto_sdr.core.exceptions import (
     CredentialSourceError,
     ProfileConfigError,
@@ -161,14 +170,16 @@ class JsonFileCredentialLoader(CredentialLoader):
     def source_name(self) -> str:
         return f"json:{self.file_path.name}"
 
-    def _load_impl(self, _logger: logging.Logger) -> dict[str, Any] | None:
+    def _load_impl(self, logger: logging.Logger) -> dict[str, Any] | None:
         if not os.path.exists(self.file_path):
             return None
 
+        warn_if_readable_by_others(self.file_path)
         with open(self.file_path, encoding="utf-8") as f:
             config = json.load(f)
 
         if isinstance(config, dict):
+            note_file_keys(config, self.file_path, logger)
             return config
         return None
 
@@ -230,6 +241,99 @@ class EnvironmentCredentialLoader(CredentialLoader):
         return credentials or None
 
 
+# ==================== LEVEL 3 NOTICES ====================
+
+# The release that applies the strict lookup rules of the Adobe credentials standard.
+STRICT_LOOKUP_RELEASE = "4.0"
+
+
+def missing_standard_fields(credentials: dict[str, Any] | None) -> list[str]:
+    """Return the fields of the four credential fields that *credentials* lacks."""
+    present = credentials or {}
+    return [name for name in STANDARD_FIELDS if not present.get(name)]
+
+
+def _read_config_credentials_quietly(config_path: Path) -> dict[str, str]:
+    """Read the credential fields of a config file, with no log line and no warning."""
+    try:
+        with open(config_path, encoding="utf-8") as f:
+            payload = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    return filter_credentials(payload) if isinstance(payload, dict) else {}
+
+
+def _comparable_credential(credentials: dict[str, str]) -> dict[str, str]:
+    comparable = {name: credentials.get(name, "") for name in STANDARD_FIELDS}
+    comparable["scopes"] = normalize_scopes_value(comparable["scopes"], compact=True)
+    return comparable
+
+
+def dotenv_and_config_differ(config_file: str | Path) -> tuple[bool, str | None]:
+    """Report whether ``.env`` and the config file in one folder hold different credentials.
+
+    Returns ``(True, path of the .env file)`` when both files are in the same
+    folder, each holds every field that this release needs (org_id, client_id and
+    secret), and one of the four credential fields differs.
+    """
+    snapshot = dotenv_snapshot()
+    config_path = Path(config_file)
+    if not snapshot.path or not os.path.isfile(config_path):
+        return False, None
+    dotenv_folder = os.path.realpath(os.path.dirname(os.path.abspath(snapshot.path)))
+    config_folder = os.path.realpath(os.path.dirname(os.path.abspath(config_path)))
+    if dotenv_folder != config_folder:
+        return False, None
+
+    from_dotenv = filter_credentials(
+        {name: snapshot.values.get(variable) for name, variable in ENV_VAR_MAPPING.items()}
+    )
+    from_config = _read_config_credentials_quietly(config_path)
+    required = CREDENTIAL_FIELDS["required"]
+    if not all(from_dotenv.get(name) for name in required) or not all(from_config.get(name) for name in required):
+        return False, None
+    return _comparable_credential(from_dotenv) != _comparable_credential(from_config), snapshot.path
+
+
+def mixed_environment_message(origins: dict[str, str], dotenv_path: str | None) -> str | None:
+    """Return the notice text when the four fields mix the environment and ``.env``, else None."""
+    from_environment = [name for name in STANDARD_FIELDS if origins.get(name) == "environment"]
+    from_dotenv = [name for name in STANDARD_FIELDS if origins.get(name) == "dotenv"]
+    if not from_environment or not from_dotenv:
+        return None
+    return (
+        f"The credential mixes the environment variables ({variable_names(from_environment)}) "
+        f"with {dotenv_path or '.env'} ({variable_names(from_dotenv)}). This run uses them together. "
+        f"Release {STRICT_LOOKUP_RELEASE} will take all four fields from one source."
+    )
+
+
+def partial_environment_message(missing: list[str], *, next_source: str) -> str:
+    """Return the notice text for a partial set of environment variables that is skipped."""
+    return (
+        f"The environment variables hold part of a credential. Missing: {variable_names(missing)}. "
+        f"This run skips them and {next_source}. Release {STRICT_LOOKUP_RELEASE} will stop with an error instead."
+    )
+
+
+def dotenv_and_config_message(dotenv_path: str, config_file: str | Path, used: str) -> str:
+    """Return the notice text for ``.env`` and a config file that hold different credentials."""
+    return (
+        f"{dotenv_path} and {Path(config_file).resolve()} hold different credentials. This run uses {used}. "
+        "Keep the credential in one of the two files, so that a later release cannot pick the other one."
+    )
+
+
+def describe_environment_source(origins: dict[str, str], dotenv_path: str | None) -> str:
+    """Name the source of a credential that was read from the environment."""
+    kinds = {origins.get(name) for name in STANDARD_FIELDS if name in origins}
+    if kinds == {"dotenv"}:
+        return f"the .env file ({dotenv_path})"
+    if "dotenv" in kinds:
+        return f"the environment variables together with the .env file ({dotenv_path})"
+    return "the environment variables"
+
+
 # ==================== CREDENTIAL RESOLVER ====================
 
 
@@ -268,6 +372,29 @@ class CredentialResolver:
         Raises:
             CredentialSourceError: If no valid credentials found
         """
+        credentials, source = self._resolve(profile, config_file)
+        self._notice_dotenv_and_config(config_file, source)
+        return credentials, source
+
+    def _notice_dotenv_and_config(self, config_file: str | Path, source: str) -> None:
+        """Print a notice when .env and the config file in one folder hold different credentials."""
+        differ, dotenv_path = dotenv_and_config_differ(config_file)
+        if not differ or dotenv_path is None:
+            return
+        if source.startswith("profile:"):
+            used = f"the profile {source.split(':', 1)[1]}"
+        elif source == "environment":
+            used = describe_environment_source(environment_field_origins(), dotenv_path)
+        else:
+            used = f"the config file ({Path(config_file).resolve()})"
+        emit_notice("dotenv_and_config_differ", dotenv_and_config_message(dotenv_path, config_file, used))
+
+    def _resolve(
+        self,
+        profile: str | None = None,
+        config_file: str | Path = "config.json",
+    ) -> tuple[dict[str, str], str]:
+        """Find the credential. This is the lookup itself, with no notice."""
         # 1. Try profile credentials (highest priority)
         if profile:
             creds, source = self._try_profile(profile)
@@ -372,8 +499,19 @@ class CredentialResolver:
             is_valid, _ = validate_credentials(creds, self.logger, strict=True, source="environment")
             if is_valid:
                 self.logger.info("Using credentials from environment variables")
+                snapshot = dotenv_snapshot()
+                mixed = mixed_environment_message(environment_field_origins(snapshot), snapshot.path)
+                if mixed:
+                    emit_notice("mixed_sources", mixed)
                 return creds, "environment"
             self.logger.debug("Environment credentials invalid, trying next source")
+            missing = missing_standard_fields(creds)
+            if len(missing) < len(STANDARD_FIELDS) and any(name in CREDENTIAL_FIELDS["required"] for name in missing):
+                # Some of the four fields are set and a required one is not: a partial source.
+                emit_notice(
+                    "partial_source_skipped",
+                    partial_environment_message(missing, next_source="reads the config file"),
+                )
 
         return None, ""
 

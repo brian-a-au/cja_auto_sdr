@@ -1,0 +1,232 @@
+{
+  "spec": "adobe-credentials/v1",
+  "area": "config-check",
+  "note": "What the config check reports. It makes no network call.",
+  "cases": [
+    {
+      "id": "check-001",
+      "level": 2,
+      "rule": "L2.4",
+      "title": "The JSON output matches the shared shape",
+      "given": {
+        "sources": {
+          "environment": {
+            "credential": "A"
+          }
+        },
+        "command": "config_check"
+      },
+      "expect": {
+        "json_schema": "config-check-v1",
+        "ok": true
+      }
+    },
+    {
+      "id": "check-002",
+      "level": 2,
+      "rule": "L2.4",
+      "title": "The JSON names the source and the masked client ID, and has no secret field",
+      "given": {
+        "sources": {
+          "flag_profile": {
+            "name": "prod",
+            "credential": "A"
+          }
+        },
+        "command": "config_check"
+      },
+      "expect": {
+        "source": "flag_profile",
+        "profile": "prod",
+        "client_id": "aaaa****4444",
+        "secret_set": true,
+        "has_no_secret_field": true
+      }
+    },
+    {
+      "id": "check-003",
+      "level": 2,
+      "rule": "L2.4",
+      "title": "The scopes are reported exactly as given",
+      "given": {
+        "sources": {
+          "environment": {
+            "credential": "B"
+          }
+        },
+        "command": "config_check"
+      },
+      "expect": {
+        "scopes": "openid,AdobeID,read_organizations"
+      }
+    },
+    {
+      "id": "check-004",
+      "level": 2,
+      "rule": "L2.4",
+      "title": "A partial source that was skipped is named with its missing fields",
+      "given": {
+        "sources": {
+          "environment": {
+            "credential": "A",
+            "omit": [
+              "secret",
+              "scopes"
+            ]
+          },
+          "default_config": {
+            "credential": "B"
+          }
+        },
+        "command": "config_check"
+      },
+      "expect": {
+        "skipped_source": "environment",
+        "missing": [
+          "secret",
+          "scopes"
+        ]
+      }
+    },
+    {
+      "id": "check-005",
+      "level": 2,
+      "rule": "L2.4",
+      "title": "No credential anywhere is a problem, not a crash",
+      "given": {
+        "sources": {},
+        "command": "config_check"
+      },
+      "expect": {
+        "ok": false,
+        "problem": "no_credential"
+      }
+    },
+    {
+      "id": "check-006",
+      "level": 2,
+      "rule": "L2.4",
+      "title": "The config check makes no network call",
+      "given": {
+        "sources": {
+          "environment": {
+            "credential": "A"
+          }
+        },
+        "command": "config_check",
+        "network": "blocked"
+      },
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "id": "check-007",
+      "level": 2,
+      "rule": "L2.1",
+      "title": "An unknown key in a file is ignored with a debug line",
+      "given": {
+        "sources": {
+          "default_config": {
+            "credential": "A",
+            "extra_keys": {
+              "note": "x"
+            }
+          }
+        },
+        "command": "config_check"
+      },
+      "expect": {
+        "source": "default_config",
+        "debug": "unknown_key"
+      }
+    },
+    {
+      "id": "check-008",
+      "level": 2,
+      "rule": "L2.1",
+      "title": "Scopes are not changed by the tool",
+      "given": {
+        "sources": {
+          "default_config": {
+            "credential": "A",
+            "override": {
+              "scopes": "AdobeID, openid ,additional_info.projectedProductContext"
+            }
+          }
+        },
+        "command": "config_check"
+      },
+      "expect": {
+        "scopes": "AdobeID, openid ,additional_info.projectedProductContext"
+      }
+    },
+    {
+      "id": "check-009",
+      "level": 2,
+      "rule": "L2.1",
+      "products": [
+        "aa"
+      ],
+      "title": "An Analytics tool accepts sandbox in a file and ignores it",
+      "given": {
+        "sources": {
+          "flag_profile": {
+            "name": "prod",
+            "credential": "A",
+            "extra_keys": {
+              "sandbox": "dev"
+            }
+          }
+        },
+        "command": "config_check"
+      },
+      "expect": {
+        "source": "flag_profile",
+        "ok": true
+      }
+    },
+    {
+      "id": "check-010",
+      "level": 2,
+      "rule": "L2.3",
+      "products": [
+        "aa"
+      ],
+      "title": "An Analytics tool reads profiles from ~/.aa/orgs",
+      "given": {
+        "sources": {
+          "flag_profile": {
+            "name": "prod",
+            "credential": "A"
+          }
+        },
+        "command": "config_check"
+      },
+      "expect": {
+        "profile_folder": "~/.aa/orgs/prod"
+      }
+    },
+    {
+      "id": "check-011",
+      "level": 2,
+      "rule": "L2.3",
+      "products": [
+        "cja"
+      ],
+      "title": "A CJA tool reads profiles from ~/.cja/orgs",
+      "given": {
+        "sources": {
+          "flag_profile": {
+            "name": "prod",
+            "credential": "A"
+          }
+        },
+        "command": "config_check"
+      },
+      "expect": {
+        "profile_folder": "~/.cja/orgs/prod"
+      }
+    }
+  ]
+}
