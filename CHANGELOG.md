@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.13.13] - 2026-11-27
+
+This patch stops the config and profile commands from printing part of the secret. It adds no feature or flag. Output files and exit codes are the same as in v3.13.12. The text of four commands and one error message changed, and one value in `--config-json` output changed. Both are listed below.
+
 ### Security
 
 - The tool no longer prints any part of the secret. `--config-status`, `--config-json`, `--profile-show` and `--validate-config` used to print the first 4 and last 4 characters of the secret, with one star for each hidden character. They now print `****` for a secret that is set, so the output shows no character of the secret and not its length. The client ID still shows its first 4 and last 4 characters.
