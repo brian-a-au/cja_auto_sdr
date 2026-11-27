@@ -23,7 +23,11 @@ from typing import Any
 from cja_auto_sdr.core.constants import CREDENTIAL_FIELDS, ENV_VAR_MAPPING, HIDDEN_VALUE_DISPLAY
 
 __all__ = [
+    "CONFIG_CHECK_SCHEMA",
+    "LIVE_TEST_SCHEMA",
+    "PRODUCT",
     "STANDARD_FIELDS",
+    "TOOL_NAME",
     "DotenvSnapshot",
     "dotenv_snapshot",
     "emit_notice",

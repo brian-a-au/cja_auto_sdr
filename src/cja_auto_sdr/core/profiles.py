@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from cja_auto_sdr.api import sign_in as sign_in_module
-from cja_auto_sdr.api.client import _normalize_dataview_listing_payload_or_raise
+from cja_auto_sdr.api.client import _build_cjapy_config_kwargs, _normalize_dataview_listing_payload_or_raise
 from cja_auto_sdr.api.dataview_listing import list_data_views
 from cja_auto_sdr.api.quality_policy import _canonical_quality_policy_key
 from cja_auto_sdr.api.sign_in import MESSAGE_LIMIT, NO_PRODUCT_ACCESS_MESSAGE
@@ -823,7 +823,8 @@ def test_profile(profile_name: str, output_format: str = "table") -> bool:  # no
         return finish(False)
 
     say("3. Signing in to Adobe...")
-    signed_in = sign_in_module.request_token(credentials)
+    # Sign in with the values that cjapy gets, e.g. scopes without spaces.
+    signed_in = sign_in_module.request_token(_build_cjapy_config_kwargs(credentials))
     result["sign_in"] = signed_in.as_dict()
     if not signed_in.ok:
         print(ConsoleColors.error(f"   Sign-in: FAILED ({signed_in.code})"), file=sys.stderr)

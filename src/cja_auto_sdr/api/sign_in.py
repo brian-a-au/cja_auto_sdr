@@ -5,8 +5,8 @@ the live test makes its own request here to say why sign-in failed. The result
 uses the codes of the Adobe credentials standard, version 1. No value of the
 credential or of the token goes into a message.
 
-This module imports only the standard library, ``urllib3`` and ``core``
-modules that import nothing from ``api``.
+This module imports only the standard library, ``urllib3`` and
+``core.constants``, so it joins no import cycle.
 """
 
 from __future__ import annotations
@@ -20,7 +20,6 @@ from urllib.parse import urlencode
 import urllib3
 
 from cja_auto_sdr.core.constants import HIDDEN_VALUE_DISPLAY
-from cja_auto_sdr.core.credentials import normalize_credential_value, normalize_scopes_value
 
 __all__ = [
     "IMS_SIGN_IN_URL",
@@ -105,11 +104,12 @@ def request_token(credentials: Mapping[str, Any]) -> SignInResult:
     """Ask Adobe's sign-in service for a token and say how it went.
 
     The request is the one ``cjapy`` makes: a ``client_credentials`` grant with
-    the client ID, the secret and the scopes.
+    the client ID, the secret and the scopes. *credentials* holds the values as
+    ``cjapy`` gets them, e.g. from ``api.client._build_cjapy_config_kwargs``.
     """
-    client_id = normalize_credential_value(credentials.get("client_id"))
-    client_credential = normalize_credential_value(credentials.get("secret"))
-    scopes = normalize_scopes_value(credentials.get("scopes"), compact=True)
+    client_id = str(credentials.get("client_id") or "")
+    client_credential = str(credentials.get("secret") or "")
+    scopes = str(credentials.get("scopes") or "")
     fields = {
         "grant_type": "client_credentials",
         "client_id": client_id,

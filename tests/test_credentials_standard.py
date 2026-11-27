@@ -670,7 +670,7 @@ class TestSignIn:
 
         monkeypatch.setattr(sign_in, "post_token_request", _post)
 
-        result = sign_in.request_token({**CRED_A, "scopes": "openid, AdobeID"})
+        result = sign_in.request_token({**CRED_A, "scopes": "openid,AdobeID"})
 
         assert result == sign_in.SignInResult(True)
         assert result.as_dict() == {"ok": True, "code": None, "message": None}
@@ -1376,6 +1376,34 @@ class TestProfileTest:
         assert "   Data views accessible: 2" in out
         assert "Profile test: PASSED" in out
         assert err == ""
+
+    def test_sign_in_sends_the_values_that_cjapy_gets(self, capsys, monkeypatch):
+        seen = {}
+
+        def _post(fields):
+            seen.update(fields)
+            return 200, {"access_token": "stub-token"}
+
+        monkeypatch.setattr(sign_in, "post_token_request", _post)
+        _write_config(_profile_folder("spaced") / "config.json", {**CRED_A, "scopes": " openid, AdobeID "})
+
+        passed, _out, _err, _cja = _run_profile_test(capsys, product=[], name="spaced")
+
+        assert passed is True
+        assert seen["scope"] == "openid,AdobeID"
+        assert seen["client_id"] == CRED_A["client_id"]
+
+    def test_empty_values_are_sent_as_empty_text(self, monkeypatch):
+        seen = {}
+
+        def _post(fields):
+            seen.update(fields)
+            return 400, {"error": "invalid_client", "error_description": "invalid client_id parameter"}
+
+        monkeypatch.setattr(sign_in, "post_token_request", _post)
+
+        assert sign_in.request_token({"client_id": None}).code == "bad_client_id"
+        assert seen == {"grant_type": "client_credentials", "client_id": "", "client_secret": "", "scope": ""}
 
     @pytest.mark.usefixtures("sign_in_ok")
     def test_json_output_has_the_live_test_shape(self, capsys):
