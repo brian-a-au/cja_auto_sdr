@@ -136,6 +136,9 @@ class TestValidateClientId:
         valid, error = ConfigValidator.validate_client_id("short123")
         assert valid is False
         assert "appears too short" in error
+        # The message gives the length and no character of the value.
+        assert "short" not in error.replace("too short", "")
+        assert "(8 characters)" in error
 
     def test_valid_client_id(self):
         """Valid long client_id passes."""

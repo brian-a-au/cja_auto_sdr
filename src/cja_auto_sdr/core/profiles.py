@@ -16,7 +16,12 @@ from cja_auto_sdr.api.client import _normalize_dataview_listing_payload_or_raise
 from cja_auto_sdr.api.dataview_listing import list_data_views
 from cja_auto_sdr.api.quality_policy import _canonical_quality_policy_key
 from cja_auto_sdr.core.colors import ConsoleColors
-from cja_auto_sdr.core.constants import BANNER_WIDTH, CREDENTIAL_FIELDS, ENV_VAR_MAPPING
+from cja_auto_sdr.core.constants import (
+    BANNER_WIDTH,
+    CREDENTIAL_FIELDS,
+    ENV_VAR_MAPPING,
+    HIDDEN_VALUE_DISPLAY,
+)
 from cja_auto_sdr.core.credentials import filter_credentials, normalize_credential_field
 from cja_auto_sdr.core.exceptions import (
     ProfileConfigError,
@@ -688,11 +693,14 @@ def show_profile(profile_name: str) -> bool:
     print("Credentials:")
     print("-" * 40)
 
-    sensitive_fields = {"secret", "client_id"}
     for key in ["org_id", "client_id", "secret", "scopes", "sandbox"]:
         if key in credentials:
             value = credentials[key]
-            if key in sensitive_fields:
+            if key == "secret":
+                # No part of the secret is shown. A profile with an empty secret has no
+                # secret key here, because the loader drops empty values.
+                display_value = HIDDEN_VALUE_DISPLAY
+            elif key == "client_id":
                 display_value = generator.mask_sensitive_value(value)
             else:
                 display_value = value

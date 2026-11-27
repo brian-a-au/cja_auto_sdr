@@ -892,7 +892,8 @@ class TestConfigDiagnosticsUseCleanedValues:
             validate_config_only(config_file=str(path))
         out = capsys.readouterr().out
         assert "secret: must be a string" not in out
-        assert "secret: s3cr" in out
+        assert "secret: ****" in out
+        assert "s3cr" not in out
 
     def test_validate_config_still_reports_numeric_secret_type_error(self, tmp_path, capsys):
         from cja_auto_sdr.cli.commands.config import validate_config_only
@@ -933,3 +934,61 @@ class TestConfigDiagnosticsUseCleanedValues:
         assert show_config_status(str(path), output_json=True) is True
         data = json.loads(capsys.readouterr().out)
         assert data["credentials"]["scopes"]["value"] == "openid,AdobeID"
+
+
+class TestSecretIsNeverShown:
+    """The config commands print that the secret is set, and no character of it."""
+
+    SECRET = "zq7-fake-test-value-not-a-credential-kx9"
+    CLIENT_ID = "1234567890abcdef1234567890abcdef"
+
+    def _write(self, tmp_path):
+        path = tmp_path / "config.json"
+        path.write_text(json.dumps({"org_id": "ORG@AdobeOrg", "client_id": self.CLIENT_ID, "secret": self.SECRET}))
+        return path
+
+    def _clear_env(self, monkeypatch):
+        for var in ("ORG_ID", "CLIENT_ID", "SECRET", "SCOPES", "SANDBOX"):
+            monkeypatch.delenv(var, raising=False)
+
+    def _assert_no_part_of_secret(self, out):
+        assert self.SECRET not in out
+        assert self.SECRET[:4] not in out
+        assert self.SECRET[-4:] not in out
+
+    def test_config_status_text_hides_the_whole_secret(self, tmp_path, capsys, monkeypatch):
+        from cja_auto_sdr.cli.commands.config import show_config_status
+
+        self._clear_env(monkeypatch)
+        assert show_config_status(str(self._write(tmp_path))) is True
+        out = capsys.readouterr().out
+        self._assert_no_part_of_secret(out)
+        assert "SECRET: ****" in out
+        # The stars have a fixed length, so they do not show how long the secret is.
+        assert "*****" not in out.split("SECRET:")[1].splitlines()[0]
+        # The client ID still shows its first 4 and last 4 characters.
+        assert "CLIENT_ID: 1234" in out
+        assert self.CLIENT_ID not in out
+
+    def test_config_json_hides_the_whole_secret(self, tmp_path, capsys, monkeypatch):
+        from cja_auto_sdr.cli.commands.config import show_config_status
+
+        self._clear_env(monkeypatch)
+        assert show_config_status(str(self._write(tmp_path)), output_json=True) is True
+        out = capsys.readouterr().out
+        self._assert_no_part_of_secret(out)
+        data = json.loads(out)
+        assert data["credentials"]["secret"] == {"value": "****", "set": True, "required": True}
+        assert data["credentials"]["client_id"]["value"].startswith("1234")
+
+    def test_validate_config_hides_the_whole_secret(self, tmp_path, capsys):
+        from cja_auto_sdr.cli.commands.config import validate_config_only
+
+        gen = _make_generator_mock(python_version_info=(3, 14, 0))
+        gen.load_credentials_from_env.return_value = None
+        with patch("cja_auto_sdr.cli.commands.config._generator_module", return_value=gen):
+            validate_config_only(config_file=str(self._write(tmp_path)))
+        out = capsys.readouterr().out
+        self._assert_no_part_of_secret(out)
+        assert "secret: ****" in out
+        assert "client_id: 1234****cdef" in out

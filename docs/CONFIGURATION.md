@@ -548,7 +548,7 @@ CJA_PROFILE=client-b cja_auto_sdr --list-dataviews
 |---------|-------------|
 | `--profile-list` | List all available profiles |
 | `--profile-add NAME` | Create a new profile interactively |
-| `--profile-show NAME` | Show profile configuration (secrets masked) |
+| `--profile-show NAME` | Show profile configuration. The secret is shown as `****` and the client ID as its first 4 and last 4 characters |
 | `--profile-test NAME` | Test profile credentials and API connectivity |
 | `--profile-import NAME FILE` | Import profile non-interactively from JSON/.env file (or profile directory) |
 | `--profile-overwrite` | With `--profile-import`, allow replacing an existing profile |

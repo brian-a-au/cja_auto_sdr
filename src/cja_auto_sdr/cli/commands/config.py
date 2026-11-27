@@ -11,7 +11,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from cja_auto_sdr.core.constants import MIN_PYTHON_VERSION
+from cja_auto_sdr.core.constants import HIDDEN_VALUE_DISPLAY, MIN_PYTHON_VERSION
 
 __all__ = [
     "_check_output_dir_access",
@@ -211,7 +211,10 @@ def show_config_status(config_file: str = "config.json", profile: str | None = N
     for key, _display_name, required, sensitive in fields:
         value = config_data.get(key, "")
         if value:
-            if sensitive:
+            if key == "secret":
+                # No part of the secret is shown, in the text or in the JSON.
+                display_value = HIDDEN_VALUE_DISPLAY
+            elif sensitive:
                 if isinstance(value, str) and len(value) > 8:
                     masked = value[:4] + "*" * (len(value) - 8) + value[-4:]
                 else:
@@ -332,7 +335,9 @@ def validate_config_only(
                 missing.append(field_name)
             elif creds.get(field_name):
                 value = creds[field_name]
-                if field_name in ["secret", "client_id"]:
+                if field_name == "secret":
+                    masked = HIDDEN_VALUE_DISPLAY
+                elif field_name == "client_id":
                     masked = value[:4] + "****" + value[-4:] if len(value) > 8 else "****"
                 else:
                     masked = value
