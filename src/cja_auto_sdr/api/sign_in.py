@@ -5,21 +5,24 @@ the live test makes its own request here to say why sign-in failed. The result
 uses the codes of the Adobe credentials standard, version 1. No value of the
 credential or of the token goes into a message.
 
-This module imports only the standard library, ``urllib3`` and
-``core.constants``, so it joins no import cycle.
+The request goes through ``requests``, as the one of ``cjapy`` does, so it uses
+the same proxy variables and the same certificate settings. A sign-in that
+works for ``cjapy`` therefore works here.
+
+This module imports only the standard library, ``requests``,
+``core.constants`` and ``core.credential_notices``, so it joins no import cycle.
 """
 
 from __future__ import annotations
 
-import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
-from urllib.parse import urlencode
 
-import urllib3
+import requests
 
 from cja_auto_sdr.core.constants import HIDDEN_VALUE_DISPLAY
+from cja_auto_sdr.core.credential_notices import mask_client_id
 
 __all__ = [
     "IMS_SIGN_IN_URL",
@@ -76,27 +79,26 @@ def post_token_request(fields: Mapping[str, str]) -> tuple[int, Any]:
 
     This is the only function here that uses the network. Tests replace it.
     """
-    response = urllib3.request(
-        "POST",
+    response = requests.post(
         IMS_SIGN_IN_URL,
-        body=urlencode(dict(fields)),
-        headers={"Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json"},
-        timeout=urllib3.Timeout(connect=_CONNECT_TIMEOUT, read=_READ_TIMEOUT),
-        retries=False,
+        data=dict(fields),
+        headers={"Accept": "application/json"},
+        timeout=(_CONNECT_TIMEOUT, _READ_TIMEOUT),
     )
     try:
-        body = json.loads(response.data.decode("utf-8"))
+        body = response.json()
     except ValueError:
         body = None
-    return response.status, body
+    return response.status_code, body
 
 
-def _adobe_message(description: str, error: str, status: int, hidden_values: tuple[str, ...]) -> str:
-    """Return Adobe's own message, with any credential value removed, cut to the limit."""
+def _adobe_message(description: str, error: str, status: int, client_id: str, client_credential: str) -> str:
+    """Return Adobe's own message, cut to the limit, with no secret and no full client ID."""
     text = description or error or f"Adobe answered HTTP {status}."
-    for hidden in hidden_values:
-        if hidden:
-            text = text.replace(hidden, HIDDEN_VALUE_DISPLAY)
+    if client_credential:
+        text = text.replace(client_credential, HIDDEN_VALUE_DISPLAY)
+    if client_id:
+        text = text.replace(client_id, mask_client_id(client_id))
     return text[:MESSAGE_LIMIT]
 
 
@@ -118,7 +120,7 @@ def request_token(credentials: Mapping[str, Any]) -> SignInResult:
     }
     try:
         status, body = post_token_request(fields)
-    except (urllib3.exceptions.HTTPError, OSError):
+    except (requests.RequestException, OSError):
         return SignInResult(False, "unreachable", _MESSAGES["unreachable"])
 
     answer = body if isinstance(body, dict) else {}
@@ -141,5 +143,5 @@ def request_token(credentials: Mapping[str, Any]) -> SignInResult:
     return SignInResult(
         False,
         "sign_in_failed",
-        _adobe_message(description, error, status, (client_credential,)),
+        _adobe_message(description, error, status, client_id, client_credential),
     )

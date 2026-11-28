@@ -23,7 +23,7 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
-import urllib3
+import requests
 
 from cja_auto_sdr.api import client as api_client
 from cja_auto_sdr.api import sign_in
@@ -336,7 +336,7 @@ def run_config_check_case(case: dict[str, Any], tmp_path, monkeypatch, capsys, c
     given, expect = case["given"], case["expect"]
     built = build_case(case, tmp_path, monkeypatch)
     if given.get("network") == "blocked":
-        monkeypatch.setattr(urllib3, "request", MagicMock(side_effect=AssertionError("network call")))
+        monkeypatch.setattr(requests.Session, "send", MagicMock(side_effect=AssertionError("network call")))
         monkeypatch.setattr(api_client.cjapy, "CJA", MagicMock(side_effect=AssertionError("network call")))
 
     with caplog.at_level(logging.DEBUG):
@@ -404,7 +404,7 @@ def run_config_check_case(case: dict[str, Any], tmp_path, monkeypatch, capsys, c
 def _stub_sign_in(answer: Any):
     def _post(_fields):
         if answer == "connection_error":
-            raise urllib3.exceptions.ProtocolError("stubbed connection error")
+            raise requests.ConnectionError("stubbed connection error")
         return answer["status"], answer["body"]
 
     return _post

@@ -14,11 +14,10 @@ import os
 import stat
 import sys
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
-import urllib3
+import requests
 
 from cja_auto_sdr import generator
 from cja_auto_sdr.api import client as api_client
@@ -705,7 +704,10 @@ class TestSignIn:
         assert result.message
         assert CRED_A["secret"] not in result.message
 
-    @pytest.mark.parametrize("error", [urllib3.exceptions.ProtocolError("down"), OSError("down"), TimeoutError()])
+    @pytest.mark.parametrize(
+        "error",
+        [requests.ConnectionError("down"), requests.Timeout("slow"), OSError("down"), TimeoutError()],
+    )
     def test_a_network_error_is_unreachable(self, monkeypatch, error):
         def _post(_fields):
             raise error
@@ -731,6 +733,17 @@ class TestSignIn:
 
         assert result.message == "client_secret **** is not valid for this client"
 
+    def test_a_full_client_id_in_adobes_message_is_masked(self, monkeypatch):
+        description = f"The client {CRED_A['client_id']} may not use this grant"
+        monkeypatch.setattr(
+            sign_in, "post_token_request", _answer(400, {"error": "other", "error_description": description})
+        )
+
+        result = sign_in.request_token(CRED_A)
+
+        assert CRED_A["client_id"] not in result.message
+        assert result.message == f"The client {mask_client_id(CRED_A['client_id'])} may not use this grant"
+
     def test_an_answer_with_no_text_names_the_error_or_the_status(self, monkeypatch):
         monkeypatch.setattr(sign_in, "post_token_request", _answer(400, {"error": "access_denied"}))
         assert sign_in.request_token(CRED_A).message == "access_denied"
@@ -740,7 +753,7 @@ class TestSignIn:
 
 
 class TestPostTokenRequest:
-    """The one function that uses the network, run against a stubbed urllib3."""
+    """The one function that uses the network, run against a stubbed ``requests.post``."""
 
     @pytest.fixture(autouse=True)
     def _real_function(self, monkeypatch):
@@ -750,21 +763,41 @@ class TestPostTokenRequest:
     real = staticmethod(sign_in.post_token_request)
 
     def test_it_posts_a_form_to_adobes_sign_in_service(self):
-        response = SimpleNamespace(status=200, data=b'{"access_token": "stub-token"}')
-        with patch.object(sign_in.urllib3, "request", return_value=response) as request:
+        response = MagicMock(status_code=200)
+        response.json.return_value = {"access_token": "stub-token"}
+        with patch.object(sign_in.requests, "post", return_value=response) as post:
             status, body = sign_in.post_token_request({"grant_type": "client_credentials", "scope": "a,b"})
 
         assert (status, body) == (200, {"access_token": "stub-token"})
-        args, kwargs = request.call_args
-        assert args == ("POST", "https://ims-na1.adobelogin.com/ims/token/v3")
-        assert kwargs["body"] == "grant_type=client_credentials&scope=a%2Cb"
-        assert kwargs["headers"]["Content-Type"] == "application/x-www-form-urlencoded"
-        assert kwargs["retries"] is False
+        args, kwargs = post.call_args
+        assert args == ("https://ims-na1.adobelogin.com/ims/token/v3",)
+        # requests encodes a dict as a form, as it does for the token request of cjapy.
+        assert kwargs["data"] == {"grant_type": "client_credentials", "scope": "a,b"}
+        assert kwargs["timeout"] == (10.0, 60.0)
 
     def test_an_answer_that_is_not_json_has_no_body(self):
-        response = SimpleNamespace(status=503, data=b"<html>busy</html>")
-        with patch.object(sign_in.urllib3, "request", return_value=response):
+        response = MagicMock(status_code=503)
+        response.json.side_effect = requests.exceptions.JSONDecodeError("no json", "<html>busy</html>", 0)
+        with patch.object(sign_in.requests, "post", return_value=response):
             assert sign_in.post_token_request({}) == (503, None)
+
+    def test_the_request_uses_the_proxy_of_the_environment(self, monkeypatch):
+        # cjapy signs in through requests, which reads HTTPS_PROXY. The live test must take
+        # the same road, or it reports "unreachable" on a network where cjapy can sign in.
+        seen = {}
+
+        def _send(_session, request, **kwargs):
+            seen["url"], seen["proxies"] = request.url, dict(kwargs["proxies"])
+            raise requests.ConnectionError("stopped before any connection")
+
+        monkeypatch.setenv("HTTPS_PROXY", "http://proxy.invalid:3128")
+        monkeypatch.delenv("NO_PROXY", raising=False)
+        monkeypatch.delenv("no_proxy", raising=False)
+        monkeypatch.setattr(requests.Session, "send", _send)
+
+        assert sign_in.request_token(CRED_A).code == "unreachable"
+        assert seen["url"] == sign_in.IMS_SIGN_IN_URL
+        assert seen["proxies"]["https"] == "http://proxy.invalid:3128"
 
 
 # ==================== THE CONFIG CHECK ====================
