@@ -8438,6 +8438,11 @@ def _main_impl(run_state: dict[str, Any] | None = None):
 
 def main():
     """Main entry point with optional run summary emission."""
+    # A notice or a warning is shown once per run. Start with an empty record, so that a
+    # record inherited from another run of the tool cannot hide a line of this run.
+    from cja_auto_sdr.core.credential_notices import forget_shown_messages
+
+    forget_shown_messages()
 
     summary_start = datetime.now(UTC).isoformat()
     summary_start_perf = time.perf_counter()

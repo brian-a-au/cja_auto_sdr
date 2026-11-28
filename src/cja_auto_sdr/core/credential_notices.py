@@ -37,6 +37,7 @@ __all__ = [
     "emit_notice",
     "emit_warning",
     "environment_field_origins",
+    "forget_shown_messages",
     "make_private_dirs",
     "mask_client_id",
     "note_file_keys",
@@ -117,10 +118,20 @@ def emit_warning(code: str, message: str, *, dedupe_key: str | None = None) -> b
     return _emit_once("Warning", code, message, dedupe_key)
 
 
+def forget_shown_messages() -> None:
+    """Forget the lines already shown.
+
+    ``main()`` calls this when a run starts, so a record that the run inherited
+    from another run of the tool cannot hide a line. Worker processes do not
+    call it, so they keep the lines that the main process already showed.
+    """
+    os.environ.pop(SHOWN_MESSAGES_VARIABLE, None)
+
+
 def reset_credential_notice_state() -> None:
     """Forget the lines already shown and the ``.env`` record. Tests call this."""
     global _dotenv_record  # noqa: PLW0603
-    os.environ.pop(SHOWN_MESSAGES_VARIABLE, None)
+    forget_shown_messages()
     _dotenv_record = None
 
 

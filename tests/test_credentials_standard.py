@@ -181,6 +181,19 @@ class TestMessageLines:
 
         assert os.environ[credential_notices.SHOWN_MESSAGES_VARIABLE]
 
+    def test_a_new_run_does_not_inherit_the_lines_of_another_run(self, workdir, monkeypatch, capsys):
+        # The record is an environment variable, so a run that is started by another run
+        # of the tool inherits it. main() starts with an empty record.
+        _write_private(workdir / "config.json", json.dumps({**CRED_A, "ORG_ID": "x"}))
+        _code, _out, first = run_cli(["--show-config"], capsys)
+        assert "Warning [upper_case_key]" in first
+        inherited = os.environ[credential_notices.SHOWN_MESSAGES_VARIABLE]
+
+        monkeypatch.setenv(credential_notices.SHOWN_MESSAGES_VARIABLE, inherited)
+        _code, _out, second = run_cli(["--show-config"], capsys)
+
+        assert "Warning [upper_case_key]" in second
+
     def test_reset_forgets_the_lines_and_the_dotenv_record(self, capsys):
         emit_notice("mixed_sources", "The message.")
         record_dotenv_load("/x/.env", {"ORG_ID"})
