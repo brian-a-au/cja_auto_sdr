@@ -193,7 +193,7 @@ tests/
 └── README.md                        # This file
 ```
 
-**Total: 10,152 comprehensive tests**
+**Total: 10,156 comprehensive tests**
 
 ### Test Count Breakdown
 
@@ -202,16 +202,16 @@ tests/
 
 | Category | Tests | Files | Notes |
 |----------|-------|-------|-------|
-| `unit` | 9,990 | 174 | Default primary category for files without explicit integration/e2e/smoke scope |
+| `unit` | 9,994 | 174 | Default primary category for files without explicit integration/e2e/smoke scope |
 | `integration` | 123 | 3 | Cross-module integration suites |
 | `e2e` | 23 | 2 | End-to-end suites with a mocked external boundary |
 | `smoke` | 16 | 2 | Lightweight command-mode coverage |
 | `slow` | 0 | 0 | Overlay marker; these tests are also counted in a primary category |
-| **Primary Total** | **10,152** | **181** | **unit + integration + e2e + smoke** |
+| **Primary Total** | **10,156** | **181** | **unit + integration + e2e + smoke** |
 
 | CI Slice | Tests | Files | Selector |
 |----------|-------|-------|----------|
-| `test-unit` | 9,990 | 174 | `-m "unit and not slow"` |
+| `test-unit` | 9,994 | 174 | `-m "unit and not slow"` |
 | `test-integration` | 146 | 5 | `-m "integration or e2e or slow"` |
 | `smoke-test` | 16 | 2 | `-m smoke` |
 
@@ -283,7 +283,7 @@ tests/
 | `test_config_validation.py` | 60 | Configuration validation logic |
 | `test_credentials.py` | 84 | Credential resolution and source selection |
 | `test_credential_lookup_pinned.py` | 28 | Pins which credential the lookup returns for the main source combinations |
-| `test_credentials_standard.py` | 161 | Client ID mask, notices, file modes, sign-in codes, `--show-config`, `--profile-test` |
+| `test_credentials_standard.py` | 165 | Client ID mask, notices, file modes, sign-in codes, `--show-config`, `--profile-test` |
 | `test_standard_cases.py` | 81 | Shared cases of the Adobe credentials standard v1, checked against `known-differences.json` |
 | `test_performance_tracker.py` | 7 | Performance tracker (cache eviction, statistics) |
 | `test_snapshot.py` | 108 | Diff snapshot creation and comparison |
@@ -402,7 +402,7 @@ tests/
 | `test_diff_snapshot_retention.py` | 102 | Diff snapshot-retention parse-cache characterization test |
 | `test_diff_comparator_normalize.py` | 22 | Diff field-normalization type-fast-path characterization test |
 | `test_logging_diagnostics.py` | 2 | emit_diagnostic isEnabledFor guard characterization tests |
-| **Total** | **10,152** | **Collected via pytest --collect-only** |
+| **Total** | **10,156** | **Collected via pytest --collect-only** |
 
 ## Running Tests
 
@@ -860,7 +860,7 @@ the `tests/README.md` inventory tree or count table.
 - [x] Performance benchmarking tests (implemented in test_optimized_validation.py)
 - [x] Tests for output formats including Excel (test_output_formats.py)
 - [x] Tests for batch processing functionality (test_batch_processor.py)
-- [x] Comprehensive test coverage (10,152 tests total)
+- [x] Comprehensive test coverage (10,156 tests total)
 - [x] Org-wide analysis tests (test_org_report.py) - 257 tests (including large org scaling, output path aliases, memory warnings, smart cache invalidation)
 - [x] Org-wide analysis integration tests (test_org_report_integration.py) - 46 tests (end-to-end flows, caching, filtering, governance thresholds)
 - [x] Profile management tests (test_profiles.py) - 112 tests

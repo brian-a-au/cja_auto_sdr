@@ -20,8 +20,8 @@ CJA SDR Generator — a CLI tool for generating Solution Design Reference (SDR) 
 - Build system: **hatchling** (dynamic version from `src/cja_auto_sdr/core/version.py`)
 - Entry points: `cja_auto_sdr` and `cja-auto-sdr` (both via `__main__:main`)
 - Current version: v3.13.13
-- Tests: **10,152** across 181 files at **95% coverage gate**
-- Dependencies: cjapy, numpy, pandas, xlsxwriter, tqdm, python-dotenv
+- Tests: **10,156** across 181 files at **95% coverage gate**
+- Dependencies: cjapy, numpy, pandas, xlsxwriter, tqdm, python-dotenv, requests
 - Optional deps: scipy (clustering), argcomplete (completion), notion-client (notion). The `env` extra still lists python-dotenv so that `cja-auto-sdr[env]` installs
 - Credentials standard: the tool meets Levels 1 and 2 of the Adobe credentials standard v1. `known-differences.json` lists the Level 3 rules it does not apply yet, and `tests/standard_cases/` holds the shared cases (copied with `sync_cases.py`, do not edit by hand)
 
@@ -38,7 +38,7 @@ src/cja_auto_sdr/
 ├── generator.py             # Main orchestrator (~8.4K lines, monolithic workhorse)
 │
 ├── api/                     # API client, resilience & caching
-│   ├── client.py            # CJA API wrapper + .env bootstrap
+│   ├── client.py            # CJA API wrapper
 │   ├── sign_in.py           # Token request of the live test (--profile-test), with the standard's codes
 │   ├── dataview_listing.py  # list_data_views(): one large page (cjapy first-page bug)
 │   ├── resilience.py        # Circuit breaker, retry with jitter, batching
@@ -72,7 +72,7 @@ src/cja_auto_sdr/
 │   ├── config_validation.py # Config validation helpers
 │   ├── colors.py            # Console color formatting
 │   ├── credentials.py       # API credential resolution
-│   ├── credential_notices.py # Client ID mask, notice/warning lines, file modes, .env record
+│   ├── credential_notices.py # Client ID mask, notice/warning lines, file modes, .env bootstrap and its record
 │   ├── exit_codes.py        # Exit code definitions + explainer
 │   ├── exceptions.py        # Custom exception hierarchy
 │   ├── advisories.py        # Advisory system for actionable warnings
