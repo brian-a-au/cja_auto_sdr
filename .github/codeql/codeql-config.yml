@@ -1,0 +1,14 @@
+name: "cja_auto_sdr CodeQL configuration"
+
+# Turn off one import-style query from the security-and-quality suite, as
+# aa_auto_sdr does.
+#
+# py/cyclic-import flags modules that import each other. This package has many
+# such pairs, e.g., generator.py and the modules under cli/commands. The
+# package imports and runs with them, and the tests import every module, so a
+# cycle that failed at import time would fail the tests.
+#
+# Every other security and quality query still runs.
+query-filters:
+  - exclude:
+      id: py/cyclic-import
