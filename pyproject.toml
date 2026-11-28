@@ -26,7 +26,9 @@ dependencies = [
     "tqdm>=4.66.0",
     # Required since 3.14.0, so a .env file is read on every install. The `env` and
     # `full` extras still list it, so `cja-auto-sdr[env]` keeps working as an install target.
-    "python-dotenv>=1.0.0",
+    # 1.2.0 is the first release that honors PYTHON_DOTENV_DISABLED, which the docs name
+    # as the way to stop the tool from reading .env files.
+    "python-dotenv>=1.2.0",
     # The sign-in step of --profile-test uses requests directly, as cjapy does for its
     # own token request. cjapy already requires it, so this adds no package to an install.
     "requests>=2.31.0",
@@ -52,7 +54,7 @@ clustering = [
     "scipy>=1.14.0",
 ]
 env = [
-    "python-dotenv>=1.0.0",
+    "python-dotenv>=1.2.0",
 ]
 completion = [
     "argcomplete>=3.0.0",
@@ -62,7 +64,7 @@ notion = [
 ]
 full = [
     "scipy>=1.14.0",
-    "python-dotenv>=1.0.0",
+    "python-dotenv>=1.2.0",
     "argcomplete>=3.0.0",
     "notion-client>=3.0.0",
 ]

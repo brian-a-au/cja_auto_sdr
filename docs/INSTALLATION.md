@@ -386,14 +386,14 @@ dependencies = [
     "pandas>=2.3.3",
     "xlsxwriter>=3.2.9",
     "tqdm>=4.66.0",
-    "python-dotenv>=1.0.0",
+    "python-dotenv>=1.2.0",
 ]
 
 [project.optional-dependencies]
 clustering = ["scipy>=1.14.0"]
-env = ["python-dotenv>=1.0.0"]
+env = ["python-dotenv>=1.2.0"]
 completion = ["argcomplete>=3.0.0"]
-full = ["scipy>=1.14.0", "python-dotenv>=1.0.0", "argcomplete>=3.0.0"]
+full = ["scipy>=1.14.0", "python-dotenv>=1.2.0", "argcomplete>=3.0.0"]
 dev = ["pytest>=8.3.4", "pytest-cov>=4.1.0"]
 ```
 
