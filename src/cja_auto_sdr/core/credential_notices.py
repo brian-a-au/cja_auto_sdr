@@ -7,7 +7,10 @@ It imports only the standard library, ``core.constants`` and
 cycle.
 
 A notice or a warning is one line on stderr. It never goes to stdout, so it
-cannot break JSON output, and it never changes the exit code.
+cannot break JSON output, and it never changes the exit code. The line is plain
+text, e.g. ``Notice [code]: ...``. When the log output of the run is JSON
+(``--log-format json``, which ``--agent-mode`` sets), the line is a JSON log
+record instead, so a script can read every line of stderr as JSON.
 """
 
 from __future__ import annotations
@@ -43,6 +46,7 @@ __all__ = [
     "note_file_keys",
     "record_dotenv_load",
     "reset_credential_notice_state",
+    "set_json_log_lines",
     "variable_names",
     "warn_if_readable_by_others",
 ]
@@ -63,6 +67,12 @@ STANDARD_FIELDS: tuple[str, ...] = ("org_id", "client_id", "secret", "scopes")
 # for the whole run, so the lines already shown are kept in this variable, which
 # child processes inherit.
 SHOWN_MESSAGES_VARIABLE = "_CJA_AUTO_SDR_SHOWN_MESSAGES"
+
+# "json" when the notice and warning lines are JSON log records, "text" when they are
+# plain lines. main() sets it once the options are read. It is an environment variable
+# for the same reason as the one above: worker processes inherit it.
+LINE_FORMAT_VARIABLE = "_CJA_AUTO_SDR_NOTICE_FORMAT"
+NOTICE_LOGGER_NAME = "cja_auto_sdr.credentials"
 
 _CLIENT_ID_VISIBLE_CHARS = 4
 _GROUP_OR_OTHER_READ = 0o044
@@ -93,6 +103,74 @@ def _message_token(code: str, dedupe_key: str) -> str:
     return hashlib.sha256(f"{code}|{dedupe_key}".encode()).hexdigest()[:16]
 
 
+def set_json_log_lines(enabled: bool) -> None:
+    """Say whether the lines of this run are JSON log records or plain text."""
+    os.environ[LINE_FORMAT_VARIABLE] = "json" if enabled else "text"
+
+
+def _command_line_asks_for_json_logs() -> bool:
+    """Read the log format from the command line and LOG_FORMAT, for a line that comes early."""
+    words = sys.argv[1:]
+    chosen = os.environ.get("LOG_FORMAT", "")
+    agent_mode = False
+    for index, word in enumerate(words):
+        if word == "--agent-mode":
+            agent_mode = True
+        elif word == "--log-format" and index + 1 < len(words):
+            chosen = words[index + 1]
+        elif word.startswith("--log-format="):
+            chosen = word.split("=", 1)[1]
+    explicit = any(word == "--log-format" or word.startswith("--log-format=") for word in words)
+    if agent_mode and not explicit:
+        return True
+    return chosen.strip().lower() == "json"
+
+
+def _json_log_lines() -> bool:
+    chosen = os.environ.get(LINE_FORMAT_VARIABLE)
+    if chosen in ("json", "text"):
+        return chosen == "json"
+    # No one has said yet, e.g. a line that comes before main() has read the options.
+    return _command_line_asks_for_json_logs()
+
+
+class _CurrentStderrHandler(logging.StreamHandler):
+    """A handler that writes to whatever ``sys.stderr`` is when the record comes."""
+
+    def __init__(self) -> None:
+        logging.Handler.__init__(self)
+
+    @property
+    def stream(self) -> Any:
+        return sys.stderr
+
+    @stream.setter
+    def stream(self, _value: Any) -> None:
+        """Ignore the stream that ``StreamHandler`` wants to keep."""
+
+
+def _notice_logger() -> logging.Logger:
+    """Return the logger of the JSON records: the repo's JSON formatter and filter, on stderr.
+
+    The logger has its own handler and does not pass records on. The lines therefore
+    go to stderr in every command, also in one that sends its other log records to
+    stdout or that never sets up logging, and stdout stays free for the output.
+    """
+    logger = logging.getLogger(NOTICE_LOGGER_NAME)
+    if not any(isinstance(handler, _CurrentStderrHandler) for handler in logger.handlers):
+        from cja_auto_sdr.core.logging import JSONFormatter, SensitiveDataFilter
+
+        handler = _CurrentStderrHandler()
+        handler.setFormatter(JSONFormatter())
+        handler.addFilter(SensitiveDataFilter())
+        logger.addHandler(handler)
+        logger.propagate = False
+    # A notice is never hidden by --log-level, as the plain line is not.
+    logger.setLevel(logging.WARNING)
+    logger.disabled = False
+    return logger
+
+
 def _emit_once(label: str, code: str, message: str, dedupe_key: str | None) -> bool:
     token = _message_token(code, dedupe_key if dedupe_key is not None else message)
     shown = [item for item in os.environ.get(SHOWN_MESSAGES_VARIABLE, "").split(",") if item]
@@ -100,7 +178,10 @@ def _emit_once(label: str, code: str, message: str, dedupe_key: str | None) -> b
         return False
     shown.append(token)
     os.environ[SHOWN_MESSAGES_VARIABLE] = ",".join(shown)
-    sys.stderr.write(f"{label} [{code}]: {message}\n")
+    if _json_log_lines():
+        _notice_logger().warning("%s", message, extra={"code": code, "kind": label.lower()})
+    else:
+        sys.stderr.write(f"{label} [{code}]: {message}\n")
     return True
 
 
@@ -123,9 +204,11 @@ def forget_shown_messages() -> None:
 
     ``main()`` calls this when a run starts, so a record that the run inherited
     from another run of the tool cannot hide a line. Worker processes do not
-    call it, so they keep the lines that the main process already showed.
+    call it, so they keep the lines that the main process already showed. The
+    format of the lines is forgotten too, and ``main()`` sets it again.
     """
     os.environ.pop(SHOWN_MESSAGES_VARIABLE, None)
+    os.environ.pop(LINE_FORMAT_VARIABLE, None)
 
 
 def reset_credential_notice_state() -> None:

@@ -7684,6 +7684,11 @@ def _main_impl(run_state: dict[str, Any] | None = None):
 
     # Parse arguments (will show error and help if no data views provided)
     args = parse_arguments()
+    # Credential notices and warnings follow the log format: JSON log records with
+    # --log-format json (which --agent-mode sets), plain lines on stderr otherwise.
+    from cja_auto_sdr.core.credential_notices import set_json_log_lines
+
+    set_json_log_lines(getattr(args, "log_format", None) == "json")
     # --notion-database-title is a convenience for NOTION_DATABASE_TITLE: surface it
     # in the environment so every create path (single SDR, org-report, push-to-notion)
     # resolves the new database's title uniformly without threading it through the

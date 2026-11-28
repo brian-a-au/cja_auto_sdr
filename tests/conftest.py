@@ -52,6 +52,7 @@ def isolate_credential_environment(monkeypatch):
     for name in CREDENTIAL_VARIABLES:
         monkeypatch.delenv(name, raising=False)
     monkeypatch.delenv(credential_notices.SHOWN_MESSAGES_VARIABLE, raising=False)
+    monkeypatch.delenv(credential_notices.LINE_FORMAT_VARIABLE, raising=False)
     monkeypatch.setattr(credential_notices, "_dotenv_record", None)
 
 

@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import stat
+import subprocess
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -40,7 +41,7 @@ from cja_auto_sdr.core.credential_notices import (
     warn_if_readable_by_others,
 )
 from cja_auto_sdr.core.credentials import CredentialResolver, dotenv_and_config_differ
-from tests.test_standard_cases import assert_matches_schema, run_cli
+from tests.test_standard_cases import assert_matches_schema, assert_no_secret_in, run_cli
 
 CRED_A = {
     "org_id": "A1B2C3D4E5F6A7B8C9D0E1F2@AdobeOrg",
@@ -202,6 +203,203 @@ class TestMessageLines:
 
         assert credential_notices._dotenv_record is None
         assert emit_notice("mixed_sources", "The message.") is True
+
+
+# ==================== THE LINES AS JSON LOG RECORDS ====================
+
+
+def _records(err: str) -> list[dict]:
+    """Read stderr as JSON lines. A line that is not JSON fails the test."""
+    return [json.loads(line) for line in err.splitlines() if line.strip()]
+
+
+def _notice_records(err: str) -> list[dict]:
+    return [record for record in _records(err) if record.get("logger") == credential_notices.NOTICE_LOGGER_NAME]
+
+
+@pytest.mark.usefixtures("clean_root_logging")
+class TestLinesAsJsonLogRecords:
+    """With JSON log output, a notice or a warning is a JSON log record on stderr."""
+
+    @pytest.fixture
+    def setup_with_two_lines(self, workdir):
+        # An upper case key gives a warning, and the two files give a notice.
+        _write_config(workdir / "config.json", {**CRED_B, "ORG_ID": "x"})
+        _write_dotenv(workdir, CRED_A)
+        return workdir
+
+    @pytest.mark.parametrize("flags", [["--agent-mode"], ["--log-format", "json"]], ids=["agent-mode", "log-format"])
+    def test_each_line_is_a_json_log_record_on_stderr(self, setup_with_two_lines, capsys, flags):
+        code, out, err = run_cli(["--show-config", "--format", "json", *flags], capsys)
+
+        assert code == 0
+        assert "Warning [" not in err
+        assert "Notice [" not in err
+        records = _notice_records(err)
+        assert [record["code"] for record in records] == ["upper_case_key"]
+        record = records[0]
+        assert record["level"] == "WARNING"
+        assert record["kind"] == "warning"
+        assert record["message"].endswith("Rename it to org_id.")
+        assert "timestamp" in record
+        # stdout holds the report and nothing else.
+        report = json.loads(out)
+        assert_matches_schema(report, "config-check-v1")
+        assert [notice["code"] for notice in report["notices"]] == ["dotenv_and_config_differ"]
+
+    def test_a_notice_of_a_lookup_is_a_record_with_its_code(self, setup_with_two_lines, monkeypatch, capsys):
+        credential_notices.set_json_log_lines(True)
+
+        _lookup()
+
+        # The lookup also writes its own log records through the test's logger. Where they
+        # go depends on the handlers that are set up, so only the JSON lines are read here.
+        json_lines = "\n".join(line for line in capsys.readouterr().err.splitlines() if line.startswith("{"))
+        by_code = {record["code"]: record for record in _notice_records(json_lines)}
+        # The .env file wins, so the lookup does not read the config file for its keys.
+        assert set(by_code) == {"dotenv_and_config_differ"}
+        assert by_code["dotenv_and_config_differ"]["kind"] == "notice"
+        assert by_code["dotenv_and_config_differ"]["level"] == "WARNING"
+
+    def test_the_plain_lines_stay_as_they_are_without_json_logs(self, setup_with_two_lines, capsys):
+        _code, out, err = run_cli(["--show-config", "--format", "json"], capsys)
+
+        lines = err.splitlines()
+        assert len(lines) == 1
+        assert lines[0].startswith("Warning [upper_case_key]: ")
+        assert lines[0].endswith("Rename it to org_id.")
+        assert json.loads(out)["ok"] is True
+
+    def test_an_explicit_text_log_format_keeps_the_plain_lines_in_agent_mode(self, setup_with_two_lines, capsys):
+        _code, _out, err = run_cli(["--show-config", "--agent-mode", "--log-format", "text"], capsys)
+
+        assert err.startswith("Warning [upper_case_key]: ")
+
+    @posix_only
+    def test_the_live_test_keeps_stdout_clean(self, workdir, capsys):
+        path = _write_config(_profile_folder("prod") / "config.json", CRED_A)
+        path.chmod(0o644)
+        cja = MagicMock()
+        cja.getDataViews.return_value = [{"id": "dv_1"}]
+        with (
+            patch.object(sign_in, "post_token_request", lambda _fields: (200, {"access_token": "stub-token"})),
+            patch("cja_auto_sdr.generator.cjapy") as cjapy_module,
+            patch("cja_auto_sdr.generator._config_from_env"),
+        ):
+            cjapy_module.CJA.return_value = cja
+            code, out, err = run_cli(["--profile-test", "prod", "--agent-mode"], capsys)
+
+        assert code == 0
+        assert_matches_schema(json.loads(out), "live-test-v1")
+        assert [record["code"] for record in _notice_records(err)] == ["file_readable_by_others"]
+        assert "Warning [" not in err
+
+    def test_a_record_is_shown_once(self, capsys):
+        credential_notices.set_json_log_lines(True)
+
+        assert emit_notice("mixed_sources", "The message.") is True
+        assert emit_notice("mixed_sources", "The message.") is False
+
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert [record["message"] for record in _records(captured.err)] == ["The message."]
+
+    def test_a_worker_process_inherits_the_format_and_the_lines_already_shown(self):
+        credential_notices.set_json_log_lines(True)
+        emit_notice("mixed_sources", "Shown by the main process.")
+        script = (
+            "from cja_auto_sdr.core.credential_notices import emit_notice\n"
+            "emit_notice('mixed_sources', 'Shown by the main process.')\n"
+            "emit_notice('mixed_sources', 'Shown by the worker.')\n"
+        )
+
+        # A worker does not run main(), so it has only the environment that it inherited.
+        worker = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, check=True)
+
+        assert worker.stdout == ""
+        records = _records(worker.stderr)
+        assert [record["message"] for record in records] == ["Shown by the worker."]
+        assert records[0]["code"] == "mixed_sources"
+
+    def test_the_log_level_does_not_hide_a_record(self, setup_with_two_lines, capsys):
+        _code, _out, err = run_cli(["--show-config", "--agent-mode", "--log-level", "CRITICAL"], capsys)
+
+        assert [record["code"] for record in _notice_records(err)] == ["upper_case_key"]
+
+    @pytest.mark.parametrize(
+        ("argv", "log_format_variable", "as_json"),
+        [
+            (["--agent-mode"], None, True),
+            (["--log-format", "json"], None, True),
+            (["--log-format=json"], None, True),
+            (["--agent-mode", "--log-format", "text"], None, False),
+            ([], "json", True),
+            ([], None, False),
+        ],
+    )
+    def test_a_line_that_comes_before_the_options_are_read(
+        self, monkeypatch, capsys, argv, log_format_variable, as_json
+    ):
+        # No one has called set_json_log_lines yet. The line must not be lost, and in
+        # agent mode it must not be plain text, so the command line is read directly.
+        monkeypatch.setattr(sys, "argv", ["cja_auto_sdr", *argv])
+        if log_format_variable:
+            monkeypatch.setenv("LOG_FORMAT", log_format_variable)
+        else:
+            monkeypatch.delenv("LOG_FORMAT", raising=False)
+
+        emit_warning("upper_case_key", "An early line.")
+
+        err = capsys.readouterr().err
+        if as_json:
+            assert _records(err)[0]["message"] == "An early line."
+        else:
+            assert err == "Warning [upper_case_key]: An early line.\n"
+
+    def test_the_redaction_filter_leaves_every_message_whole(self, workdir, capsys):
+        from cja_auto_sdr.cli.commands.show_config import profile_and_config_message
+        from cja_auto_sdr.core.credentials import (
+            dotenv_and_config_message,
+            mixed_environment_message,
+            partial_environment_message,
+        )
+
+        origins = {"org_id": "environment", "client_id": "environment", "secret": "dotenv", "scopes": "dotenv"}
+        messages = {
+            "partial_source_skipped": partial_environment_message(
+                ["secret", "scopes"], next_source="reads the config file"
+            ),
+            "mixed_sources": mixed_environment_message(origins, str(workdir / ".env")),
+            "dotenv_and_config_differ": dotenv_and_config_message(
+                str(workdir / ".env"), "config.json", "the config file"
+            ),
+            "profile_and_config_both_given": profile_and_config_message("prod", profile_from_flag=True),
+            "file_readable_by_others": "Other users of this computer can read the credential file /x/secret.json.",
+            "upper_case_key": "/x/config.json holds the key SECRET. File keys are lower case. Rename it to secret.",
+        }
+        credential_notices.set_json_log_lines(True)
+
+        for code, message in messages.items():
+            emit_notice(code, message)
+
+        err = capsys.readouterr().err
+        assert "[REDACTED]" not in err
+        assert {record["code"]: record["message"] for record in _records(err)} == messages
+
+    @posix_only
+    def test_no_value_of_the_secret_or_the_full_client_id_is_in_a_record(self, workdir, monkeypatch, capsys):
+        _write_config(workdir / "config.json", {**CRED_B, "SECRET": CRED_B["secret"]}).chmod(0o644)
+        _write_dotenv(workdir, _without(CRED_A, "scopes"))
+        monkeypatch.setenv("CJA_PROFILE", "prod")
+        _write_config(_profile_folder("prod") / "config.json", _without(CRED_A, "secret"))
+        _write_private(_profile_folder("prod") / ".env", f"SECRET={CRED_A['secret']}\n")
+
+        _code, out, err = run_cli(["--show-config", "--config", "config.json", "--agent-mode"], capsys)
+
+        assert _notice_records(err)
+        assert_no_secret_in(out + err, [CRED_A["secret"], CRED_B["secret"]])
+        assert CRED_A["client_id"] not in err
+        assert CRED_B["client_id"] not in err
 
 
 # ==================== FILE AND FOLDER MODES ====================
