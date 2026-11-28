@@ -21,8 +21,10 @@ from cja_auto_sdr.core.credential_notices import (
     CONFIG_CHECK_SCHEMA,
     PRODUCT,
     STANDARD_FIELDS,
+    STRICT_LOOKUP_RELEASE,
     TOOL_NAME,
     DotenvSnapshot,
+    bootstrap_dotenv,
     dotenv_snapshot,
     environment_field_origins,
     mask_client_id,
@@ -32,7 +34,6 @@ from cja_auto_sdr.core.credential_notices import (
     warn_if_readable_by_others,
 )
 from cja_auto_sdr.core.credentials import (
-    STRICT_LOOKUP_RELEASE,
     describe_environment_source,
     dotenv_and_config_differ,
     dotenv_and_config_message,
@@ -393,11 +394,9 @@ def build_config_check(
         config_file_given: True when ``--config-file`` or ``--config`` was given.
         logger: Receives the debug line for each unknown key of a file.
     """
-    from cja_auto_sdr.api.client import _bootstrap_dotenv
-
     logger = logger or logging.getLogger(__name__)
     # The lookup loads .env first, so the check does the same.
-    _bootstrap_dotenv(logger)
+    bootstrap_dotenv(logger)
     return _ConfigCheck(
         profile_flag=profile_flag,
         config_file=config_file,

@@ -1,9 +1,10 @@
 """Shared helpers for the Adobe credentials standard, version 1.
 
 This module holds the one client ID mask, the notice and warning lines, the
-file mode checks, and the record of what the ``.env`` bootstrap loaded. It
-imports only the standard library and ``core.constants``, so any module can
-use it without joining an import cycle.
+file mode checks, and the ``.env`` bootstrap with the record of what it loaded.
+It imports only the standard library, ``core.constants`` and
+``core.error_policies``, so any module can use it without joining an import
+cycle.
 
 A notice or a warning is one line on stderr. It never goes to stdout, so it
 cannot break JSON output, and it never changes the exit code.
@@ -21,14 +22,17 @@ from pathlib import Path
 from typing import Any
 
 from cja_auto_sdr.core.constants import CREDENTIAL_FIELDS, ENV_VAR_MAPPING, HIDDEN_VALUE_DISPLAY
+from cja_auto_sdr.core.error_policies import RECOVERABLE_DOTENV_BOOTSTRAP_EXCEPTIONS
 
 __all__ = [
     "CONFIG_CHECK_SCHEMA",
     "LIVE_TEST_SCHEMA",
     "PRODUCT",
     "STANDARD_FIELDS",
+    "STRICT_LOOKUP_RELEASE",
     "TOOL_NAME",
     "DotenvSnapshot",
+    "bootstrap_dotenv",
     "dotenv_snapshot",
     "emit_notice",
     "emit_warning",
@@ -47,6 +51,9 @@ CONFIG_CHECK_SCHEMA = "adobe-credentials/v1/config-check"
 LIVE_TEST_SCHEMA = "adobe-credentials/v1/live-test"
 TOOL_NAME = "cja_auto_sdr"
 PRODUCT = "cja"
+
+# The release that applies the strict lookup rules of the Adobe credentials standard.
+STRICT_LOOKUP_RELEASE = "4.0"
 
 # The four credential fields of the standard, in the order they are reported.
 STANDARD_FIELDS: tuple[str, ...] = ("org_id", "client_id", "secret", "scopes")
@@ -235,6 +242,32 @@ def record_dotenv_load(path: str, loaded_names: Iterable[str]) -> None:
     if _dotenv_record is not None and _dotenv_record[0] == path:
         names |= _dotenv_record[1]
     _dotenv_record = (path, names)
+
+
+def bootstrap_dotenv(logger: logging.Logger) -> None:
+    """Load .env variables into the environment. Variables that are already set are kept."""
+    try:
+        from dotenv import find_dotenv, load_dotenv
+    except ImportError:
+        logger.debug("python-dotenv not installed (.env files will not be auto-loaded)")
+        return
+    except RECOVERABLE_DOTENV_BOOTSTRAP_EXCEPTIONS as e:
+        logger.debug("Failed to import python-dotenv for .env auto-loading: %s", e)
+        return
+
+    try:
+        dotenv_path = find_dotenv(usecwd=True)
+        names_before = set(os.environ)
+        dotenv_loaded = load_dotenv(dotenv_path)
+        if isinstance(dotenv_path, str) and dotenv_path:
+            # Remember which variables came from the file, so the config check can name it.
+            record_dotenv_load(dotenv_path, set(os.environ) - names_before)
+        if dotenv_loaded:
+            logger.debug(".env file found and loaded")
+        else:
+            logger.debug(".env file not found (python-dotenv available but no .env file)")
+    except RECOVERABLE_DOTENV_BOOTSTRAP_EXCEPTIONS as e:
+        logger.debug("Failed to load .env via python-dotenv: %s", e)
 
 
 def _dotenv_disabled() -> bool:

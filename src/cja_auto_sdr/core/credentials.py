@@ -19,6 +19,7 @@ from cja_auto_sdr.core.constants import (
 )
 from cja_auto_sdr.core.credential_notices import (
     STANDARD_FIELDS,
+    STRICT_LOOKUP_RELEASE,
     dotenv_snapshot,
     emit_notice,
     environment_field_origins,
@@ -242,9 +243,6 @@ class EnvironmentCredentialLoader(CredentialLoader):
 
 
 # ==================== LEVEL 3 NOTICES ====================
-
-# The release that applies the strict lookup rules of the Adobe credentials standard.
-STRICT_LOOKUP_RELEASE = "4.0"
 
 
 def missing_standard_fields(credentials: dict[str, Any] | None) -> list[str]:

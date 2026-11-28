@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import os
 import tempfile
 import time
 from collections.abc import Mapping, Sequence
@@ -14,16 +13,13 @@ import cjapy
 
 from cja_auto_sdr.api.resilience import _extract_http_status_code_from_result, make_api_call_with_retry
 from cja_auto_sdr.core.constants import BANNER_WIDTH
-from cja_auto_sdr.core.credential_notices import record_dotenv_load
+from cja_auto_sdr.core.credential_notices import bootstrap_dotenv as _bootstrap_dotenv
 from cja_auto_sdr.core.credentials import (
     CredentialResolver,
     normalize_credential_value,
     normalize_scopes_value,
 )
-from cja_auto_sdr.core.error_policies import (
-    RECOVERABLE_CONNECTION_TEST_EXCEPTIONS,
-    RECOVERABLE_DOTENV_BOOTSTRAP_EXCEPTIONS,
-)
+from cja_auto_sdr.core.error_policies import RECOVERABLE_CONNECTION_TEST_EXCEPTIONS
 from cja_auto_sdr.core.exceptions import (
     APIError,
     CredentialSourceError,
@@ -36,32 +32,6 @@ _LEGACY_TEMP_CONFIG_SUFFIX = ".json"
 _LEGACY_TEMP_CONFIG_MAX_AGE_SECONDS = 3600.0
 _temp_cleanup_next_check_monotonic = 0.0
 CredentialConfigValue = str | Sequence[str] | None
-
-
-def _bootstrap_dotenv(logger: logging.Logger) -> None:
-    """Load .env variables into the environment. Variables that are already set are kept."""
-    try:
-        from dotenv import find_dotenv, load_dotenv
-    except ImportError:
-        logger.debug("python-dotenv not installed (.env files will not be auto-loaded)")
-        return
-    except RECOVERABLE_DOTENV_BOOTSTRAP_EXCEPTIONS as e:
-        logger.debug("Failed to import python-dotenv for .env auto-loading: %s", e)
-        return
-
-    try:
-        dotenv_path = find_dotenv(usecwd=True)
-        names_before = set(os.environ)
-        dotenv_loaded = load_dotenv(dotenv_path)
-        if isinstance(dotenv_path, str) and dotenv_path:
-            # Remember which variables came from the file, so the config check can name it.
-            record_dotenv_load(dotenv_path, set(os.environ) - names_before)
-        if dotenv_loaded:
-            logger.debug(".env file found and loaded")
-        else:
-            logger.debug(".env file not found (python-dotenv available but no .env file)")
-    except RECOVERABLE_DOTENV_BOOTSTRAP_EXCEPTIONS as e:
-        logger.debug("Failed to load .env via python-dotenv: %s", e)
 
 
 def _cleanup_stale_temp_configs(logger: logging.Logger) -> float:

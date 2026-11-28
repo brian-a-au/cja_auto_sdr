@@ -2937,6 +2937,7 @@ def test_profile(profile_name: str, output_format: str = "table") -> bool:  # no
 # ==================== CJA CLIENT (moved to api/client.py) ====================
 from cja_auto_sdr.api.client import (
     _bootstrap_dotenv,
+    _build_cjapy_config_kwargs,
     _config_from_env,
     _describe_unexpected_probe_payload,
     _normalize_dataview_listing_payload_or_raise,
