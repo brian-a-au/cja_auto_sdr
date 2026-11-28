@@ -168,7 +168,7 @@ uv run cja_auto_sdr --show-config --format json
 uv run cja_auto_sdr --profile-test <name> --format json
 ```
 
-`--show-config --format json` prints the `adobe-credentials/v1/config-check` shape, and `--profile-test <name> --format json` prints the `adobe-credentials/v1/live-test` shape. Both exit 0 when `ok` is true and 1 when it is not. Notices and warnings about credentials are plain text lines on stderr that start with `Notice [code]:` or `Warning [code]:`. They never go to stdout and never change the exit code.
+`--show-config --format json` prints the `adobe-credentials/v1/config-check` shape, and `--profile-test <name> --format json` prints the `adobe-credentials/v1/live-test` shape. Both exit 0 when `ok` is true and 1 when it is not. Notices and warnings about credentials go to stderr. They never go to stdout and never change the exit code. With `--agent-mode` or `--log-format json`, each one is a JSON log record with `"level": "WARNING"`, `"logger": "cja_auto_sdr.credentials"`, the code in `code`, and `notice` or `warning` in `kind`. In every other mode, each one is a plain text line that starts with `Notice [code]:` or `Warning [code]:`.
 
 ---
 

@@ -479,6 +479,8 @@ A warning is also one line on stderr:
 | `file_readable_by_others` | The group or other users can read a credential file that the tool reads. Run `chmod 600` on the file. The check is skipped on Windows |
 | `upper_case_key` | A JSON file holds a credential key in upper case, e.g., `ORG_ID`. File keys are lower case, so the key was not read |
 
+With `--log-format json`, which `--agent-mode` sets, a notice or a warning is not a plain text line. It is a JSON log record on stderr with the level `WARNING` and the logger `cja_auto_sdr.credentials`. The text is in `message`, the code is in `code`, and `kind` is `notice` or `warning`. `--log-level` does not hide these records.
+
 A key that the tool does not know is ignored. With `--log-level DEBUG`, one log line names each such key.
 
 ---

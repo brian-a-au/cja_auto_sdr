@@ -336,7 +336,13 @@ Reports how the tool finds the credential, without an API call. The JSON names e
 uv run cja_auto_sdr --show-config --format json | jq '{ok, source, notices}'
 ```
 
-Notices and warnings about credentials are plain text lines on stderr. They start with `Notice [code]:` or `Warning [code]:`. They can appear on any command that reads a credential, and they never go to stdout.
+Notices and warnings about credentials go to stderr, and they never go to stdout. They can appear on any command that reads a credential. With `--agent-mode` or `--log-format json`, each one is a JSON log record:
+
+```json
+{"timestamp": "2026-11-28T02:58:41.638835+00:00", "level": "WARNING", "logger": "cja_auto_sdr.credentials", "message": "Other users of this computer can read the credential file /work/config.json. Run: chmod 600 /work/config.json", "module": "credential_notices", "function": "_emit_once", "line": 182, "process": 71622, "process_name": "MainProcess", "thread": 8393466240, "thread_name": "MainThread", "code": "file_readable_by_others", "kind": "warning"}
+```
+
+Read the code from `code`. `kind` is `notice` or `warning`. `--log-level` does not hide these records. In every other mode, each one is a plain text line that starts with `Notice [code]:` or `Warning [code]:`.
 
 Recommended preflight sequence for automated pipelines:
 
