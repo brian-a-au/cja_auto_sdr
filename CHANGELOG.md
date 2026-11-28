@@ -9,6 +9,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+This release makes the tool meet Levels 1 and 2 of the Adobe credentials standard, version 1. It adds a config check, a second name for `--config-file`, a live test with two results, and notices about release 4.0. The order in which the tool looks for a credential is the same as in v3.13.13. One thing can change which credential is used: `python-dotenv` is now a required dependency, so an install that ignored `.env` files now reads them. Read "Changed" before you upgrade if you installed without the `env` or `full` extra.
+
+### Added
+
+- `--show-config` shows where the credential comes from, without an API call. It lists every source that holds a value, highest first, with the path of each file. A profile is shown with both of its files, and a `.env` file is shown with the path where the tool found it. The report also has the masked client ID, whether the secret is set, the scopes, any problems, and any notices. `--show-config --format json` prints the `adobe-credentials/v1/config-check` shape. `--show-config --config-json` prints the same JSON. The command exits 0 when the credential is ready to use, and 1 when it is not.
+- `--config` is a second name for `--config-file`.
+- `--profile-test NAME --format json` prints the result as JSON in the `adobe-credentials/v1/live-test` shape. `--agent-mode` sets `--format json`, so `--profile-test NAME --agent-mode` now prints this JSON and not the text.
+- The tool prints a notice when release 4.0 will act differently in your setup. A notice is one line on stderr that starts with `Notice [code]:`. It is printed once per run, and it never changes the result, the exit code, or stdout. The notices are:
+  - `dotenv_and_config_differ`: the `.env` file and the config file hold different credentials. The notice names the source that this run uses.
+  - `partial_source_skipped`: the environment variables hold some of the four credential fields and a required one is missing. The notice names the missing variables. The tool skips the variables and reads the config file, as before.
+  - `mixed_sources`: the four fields come from two places, e.g., the environment variables and `.env`, or the two files of a profile.
+  - `profile_and_config_both_given`: a profile and `--config-file` are both given. The tool uses the profile, as before. In release 4.0, `--profile` with `--config-file` will be an error.
+- The tool prints a warning when the group or other users can read a credential file that it reads, e.g., `config.json` with mode 0644. The warning is one line on stderr that starts with `Warning [file_readable_by_others]:`, and it is printed once per file in a run. Run `chmod 600` on the file to stop it. The check is skipped on Windows.
+- With `--log-format json`, which `--agent-mode` sets, a notice or a warning is a JSON log record on stderr and not a plain text line. The record has the level `WARNING`, the logger `cja_auto_sdr.credentials`, the text in `message`, the code in `code`, and `notice` or `warning` in `kind`. A script that reads every line of stderr as JSON therefore keeps working. `--log-level` does not hide these records, and they never go to stdout.
+- The tool prints a warning when a JSON credential file holds a credential key in upper case, e.g., `ORG_ID`. File keys are lower case, so such a key was never read. Before this release it was dropped without a message.
+- A profile name can now contain dots, e.g., `client-a.eu_west`. A name still starts with a letter or a digit and has 64 characters or fewer.
+- `known-differences.json` lists the Level 3 rules of the standard that the tool does not apply yet. The shared cases of the standard are in `tests/standard_cases/`.
+
+### Changed
+
+- `python-dotenv` is now a required dependency. In v3.13.13 it was installed only with the `env` or `full` extra, and an install without it ignored every `.env` file. Now every install loads the nearest `.env` file into the environment. The tool looks in the working folder first and then in each parent folder. A variable that is already set keeps its value. If you installed without the extra and you have such a `.env` file, these results can differ after the upgrade:
+  - The `.env` file sets `ORG_ID`, `CLIENT_ID` and `SECRET`, and no profile is in use. The tool now uses that credential. Before, it used `config.json`, or it stopped because it found no credential.
+  - The `.env` file sets `CJA_PROFILE`, and you give no `--profile`. The tool now uses that profile. Before, it used the environment variables or `config.json`.
+  - Your environment sets some of `ORG_ID`, `CLIENT_ID`, `SECRET` and `SCOPES`, and the `.env` file sets the others. The tool now uses the two together. Before, it skipped a partial set and used `config.json`.
+  - The `.env` file sets other settings that the tool reads from the environment, e.g., `OUTPUT_DIR` or `LOG_LEVEL`. They now apply.
+
+  When the `.env` file and the config file hold different credentials, the `dotenv_and_config_differ` notice names the source that the run uses. `--show-config` shows the same for any setup. To keep the old result, set `PYTHON_DOTENV_DISABLED=1`, or move the `.env` file. An install that already had `python-dotenv` acts as before. The lowest version of `python-dotenv` is now 1.2.0, because that is the first version that reads `PYTHON_DOTENV_DISABLED`. The `env` and `full` extras still exist, so `cja-auto-sdr[env]` still installs.
+- The client ID is now masked the same way everywhere: the first 4 characters, `****`, and the last 4 characters. A client ID of 8 characters or fewer is shown as `****`. `--config-status`, `--config-json` and `--profile-show` used to print one star for each hidden character. In `--config-json` output, `credentials.client_id.value` therefore changed, e.g., from `1234************************cdef` to `1234****cdef`. The keys of `--config-json` are the same.
+- `--profile-test` now reports sign-in and the data views call (`getDataViews`) separately. It first asks Adobe's sign-in service for a token. When that fails, it names the reason with one of the codes `bad_client_id`, `bad_secret`, `scopes_rejected`, `unreachable` and `sign_in_failed`, and it does not make the data views call. When the data views call fails, the code is `no_product_access` or `unreachable`. The text of the command changed: the lines "API connection: SUCCESS" and "API connection: FAILED" are now "Sign-in: OK" and "Data views: OK", or the step that failed with its code. The exit codes are the same. The sign-in request uses the same proxy variables and certificate settings as the other calls to Adobe, so `--profile-test` works on the same networks as before.
+- `--profile-test` stops before sign-in when the profile lacks one of `org_id`, `client_id`, `secret` and `scopes`, and it names the missing fields. Before, it failed later with a less clear message.
+- `--validate-config` lists `python-dotenv` with the required packages, not with the optional ones.
+
+### Fixed
+
+- The debug line for an unknown key in a credential file now appears. The tool removed unknown keys before the check that was meant to log them, so the line never appeared for `config.json` or for a profile. With `--log-level DEBUG`, one line now names each unknown key and its file.
+
+### Security
+
+- The tool creates a new profile folder with mode 0700, so only your user account can open it. This also applies to `~/.cja` and `~/.cja/orgs` when the tool creates them. A folder that already exists keeps its mode. `config.json` in a profile was already written with mode 0600.
+
 ## [3.13.13] - 2026-11-27
 
 This patch stops the config and profile commands from printing part of the secret. It adds no feature or flag. Output files and exit codes are the same as in v3.13.12. The text of four commands and one error message changed, and one value in `--config-json` output changed. Both are listed below.

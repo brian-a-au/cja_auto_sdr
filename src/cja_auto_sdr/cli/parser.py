@@ -393,9 +393,11 @@ Requirements:
 
     parser.add_argument(
         "--config-file",
+        "--config",
+        dest="config_file",
         type=str,
         default="config.json",
-        help="Path to CJA configuration file (default: config.json)",
+        help="Path to CJA configuration file (default: config.json). --config is a second name for this option",
     )
 
     parser.add_argument(
@@ -644,6 +646,13 @@ Requirements:
         "--validate-config",
         action="store_true",
         help="Validate configuration and API connectivity without processing any data views",
+    )
+
+    parser.add_argument(
+        "--show-config",
+        action="store_true",
+        help="Show where the credential comes from, without an API call: every source that holds a value, "
+        "the path of each file, the masked client ID, and any notices. Use --format json for JSON output",
     )
 
     parser.add_argument(
@@ -996,7 +1005,8 @@ Requirements:
         "--profile-test",
         type=str,
         metavar="NAME",
-        help="Test profile credentials and API connectivity",
+        help="Test a profile against Adobe. Reports sign-in and the data views call separately. "
+        "Use --format json for JSON output",
     )
 
     profile_group.add_argument(

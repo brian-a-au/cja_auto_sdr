@@ -1,21 +1,21 @@
 {
   "name": "cja_sdr_config",
-  "description": "Configuration preflight and status checks for cja_auto_sdr. Use 'validate_config' to verify credentials and connectivity before running generation or governance commands. Use 'config_status' to inspect current effective configuration. These are lightweight, read-only operations suitable for agent preflight checks.",
+  "description": "Configuration preflight and status checks for cja_auto_sdr. Use 'validate_config' to verify credentials and connectivity before running generation or governance commands. Use 'config_status' to inspect current effective configuration. Use 'show_config' to see every credential source, the path of each file, and any notices, without an API call. These are lightweight, read-only operations suitable for agent preflight checks.",
   "parameters": {
     "type": "object",
     "properties": {
       "command": {
         "type": "string",
-        "enum": ["validate_config", "config_status"],
-        "description": "Config command to run. 'validate_config' tests credential resolution and API connectivity. 'config_status' displays the effective configuration for the selected profile."
+        "enum": ["validate_config", "config_status", "show_config"],
+        "description": "Config command to run. 'validate_config' tests credential resolution and API connectivity. 'config_status' displays the effective configuration for the selected profile. 'show_config' (--show-config) reports every credential source that holds a value, with file paths, problems and notices, and makes no API call."
       },
       "config_json": {
         "type": "boolean",
-        "description": "When true, emit config_status output as JSON (applies to config_status command only). Useful for agents parsing configuration programmatically."
+        "description": "When true, emit JSON. With config_status it is the --config-json output. With show_config it is the adobe-credentials/v1/config-check shape (the same as --show-config --format json). It does not apply to validate_config."
       },
       "config_file": {
         "type": "string",
-        "description": "Path to a custom config file. Overrides the default config.json in the working directory."
+        "description": "Path to a custom config file (--config-file, or its second name --config). Overrides the default config.json in the working directory."
       },
       "profile": {
         "type": "string",

@@ -103,13 +103,7 @@ export SECRET="p8e-XXX..."
 export SCOPES="your_scopes_from_developer_console"
 ```
 
-Or create a `.env` file (requires `python-dotenv`):
-
-```bash
-# Install dotenv support
-uv add python-dotenv
-# or: pip install python-dotenv
-```
+Or create a `.env` file. The tool reads it on every install, because `python-dotenv` is a required dependency since v3.14.0:
 
 ```bash
 # .env file
@@ -286,10 +280,7 @@ SCOPES=your_scopes_from_developer_console
 # LOG_LEVEL=DEBUG
 ```
 
-**Important:** The `.env` file requires `python-dotenv` to be installed:
-```bash
-uv add python-dotenv
-```
+The tool looks for `.env` in the working folder first and then in each parent folder, and it uses the first file that it finds. It loads the values into the environment, and a variable that is already set keeps its value. To stop the tool from reading any `.env` file, set `PYTHON_DOTENV_DISABLED=1`.
 
 ---
 
@@ -359,10 +350,11 @@ Invalid: abc123 (too short)
 
 ### Checking and Validating Configuration
 
-There are two commands for checking your configuration:
+There are three commands for checking your configuration:
 
 | Command | API Call | Best For |
 |---------|----------|----------|
+| `--show-config` | No | Shows every source that holds a value, the path of each file, the credential in use, and any notices. See [Show Where the Credential Comes From](#show-where-the-credential-comes-from) |
 | `--config-status` | No | Quick troubleshooting—shows configuration source, fields, and masked credentials |
 | `--validate-config` | Yes | Full validation—runs 5 checks: environment, dependencies, credentials, API connectivity, and output permissions |
 
@@ -384,7 +376,7 @@ cja_auto_sdr --dry-run
 
 ```text
 [1/5] Checking environment... Python 3.14.2, darwin
-[2/5] Checking dependencies... core: cjapy, pandas, numpy, xlsxwriter, tqdm; optional: scipy, argcomplete, python-dotenv
+[2/5] Checking dependencies... core: cjapy, pandas, numpy, xlsxwriter, tqdm, python-dotenv; optional: scipy, argcomplete
 [3/5] Checking credentials... profile "default" loaded
 [4/5] Testing API connectivity... authenticated as user@example.com
 [5/5] Checking output permissions... output directory writable
@@ -394,6 +386,102 @@ cja_auto_sdr --dry-run
 **When to use each:**
 - Use `--config-status` first for quick troubleshooting (no network required)
 - Use `--validate-config` for full validation—checks environment, dependencies, credentials, API connectivity, and output permissions
+
+### Show Where the Credential Comes From
+
+`--show-config` reports how the tool would find the credential. It makes no API call.
+
+```bash
+cja_auto_sdr --show-config
+cja_auto_sdr --show-config --format json
+cja_auto_sdr --profile client-a --show-config
+```
+
+The report holds these things:
+
+- Every source that holds a value, highest first. A file is shown with its path. A profile is shown with both of its files, `config.json` and `.env`. A `.env` file is shown with the path where the tool found it.
+- Every source that was skipped because it was partial, with the names of the missing fields.
+- The profile, when one is used.
+- The client ID as its first 4 characters, `****`, and its last 4 characters.
+- Whether the secret is set. No character of the secret is shown.
+- The scopes, exactly as you gave them.
+- Any problems, e.g., a missing field.
+- Any notices about a later release.
+
+The command exits 0 when the credential is ready to use, and 1 when it is not.
+
+With `--format json`, the output has the config check shape of the Adobe credentials standard, version 1:
+
+```json
+{
+  "schema": "adobe-credentials/v1/config-check",
+  "tool": "cja_auto_sdr",
+  "tool_version": "3.14.0",
+  "product": "cja",
+  "ok": true,
+  "profile": null,
+  "source": {"kind": "default_config", "name": "config file config.json", "path": "/work/config.json"},
+  "sources": [
+    {
+      "kind": "environment",
+      "name": "environment variables",
+      "path": null,
+      "used": false,
+      "fields": ["org_id", "client_id"],
+      "skipped": "partial",
+      "missing": ["secret", "scopes"]
+    },
+    {
+      "kind": "default_config",
+      "name": "config file config.json",
+      "path": "/work/config.json",
+      "used": true,
+      "fields": ["org_id", "client_id", "secret", "scopes"],
+      "skipped": null
+    }
+  ],
+  "credential": {
+    "org_id": "ABC123DEF456@AdobeOrg",
+    "client_id": "1234****cdef",
+    "secret_set": true,
+    "scopes": "openid,AdobeID",
+    "sandbox": null
+  },
+  "problems": [],
+  "notices": [
+    {
+      "code": "partial_source_skipped",
+      "message": "The environment variables hold part of a credential. Missing: SECRET, SCOPES. ...",
+      "missing": ["secret", "scopes"]
+    }
+  ],
+  "warnings": []
+}
+```
+
+The `kind` of a source is one of `flag_profile`, `profile_variable`, `environment`, `dotenv`, `flag_config` and `default_config`. `--config-status` and `--config-json` keep their own output, so a script that reads them needs no change.
+
+### Notices and Warnings
+
+A notice is one line on stderr. It says that release 4.0 will act differently in your setup. A notice never changes the result of the run, the exit code, or stdout. Each notice is printed once per run.
+
+| Notice | When it is printed | What release 4.0 will do |
+|--------|--------------------|--------------------------|
+| `dotenv_and_config_differ` | The `.env` file and the config file hold different credentials. The notice names the source that this run uses | It will read `.env` in the working folder only, as a source of its own |
+| `partial_source_skipped` | The environment variables hold some of the four fields and a required one is missing. The notice names the missing variables. This run skips them and reads the config file | It will stop with an error |
+| `mixed_sources` | The four fields come from two places, e.g., the environment variables and `.env`, or the two files of a profile | It will take all four fields from one source |
+| `profile_and_config_both_given` | A profile and `--config-file` are both given. This run uses the profile | `--profile` with `--config-file` will be an error. With `CJA_PROFILE`, the config file will be used |
+
+A warning is also one line on stderr:
+
+| Warning | When it is printed |
+|---------|--------------------|
+| `file_readable_by_others` | The group or other users can read a credential file that the tool reads. Run `chmod 600` on the file. The check is skipped on Windows |
+| `upper_case_key` | A JSON file holds a credential key in upper case, e.g., `ORG_ID`. File keys are lower case, so the key was not read |
+
+With `--log-format json`, which `--agent-mode` sets, a notice or a warning is not a plain text line. It is a JSON log record on stderr with the level `WARNING` and the logger `cja_auto_sdr.credentials`. The text is in `message`, the code is in `code`, and `kind` is `notice` or `warning`. `--log-level` does not hide these records.
+
+A key that the tool does not know is ignored. With `--log-level DEBUG`, one log line names each such key.
 
 ---
 
@@ -549,7 +637,7 @@ CJA_PROFILE=client-b cja_auto_sdr --list-dataviews
 | `--profile-list` | List all available profiles |
 | `--profile-add NAME` | Create a new profile interactively |
 | `--profile-show NAME` | Show profile configuration. The secret is shown as `****` and the client ID as its first 4 and last 4 characters |
-| `--profile-test NAME` | Test profile credentials and API connectivity |
+| `--profile-test NAME` | Test a profile against Adobe. Reports sign-in and the data views call separately |
 | `--profile-import NAME FILE` | Import profile non-interactively from JSON/.env file (or profile directory) |
 | `--profile-overwrite` | With `--profile-import`, allow replacing an existing profile |
 
@@ -562,13 +650,49 @@ cja_auto_sdr --profile-list
 # Show profile details (secrets masked)
 cja_auto_sdr --profile-show client-a
 
-# Test profile connectivity
+# Test a profile: sign-in first, then the data views call
 cja_auto_sdr --profile-test client-a
+cja_auto_sdr --profile-test client-a --format json
 
 # Import profile credentials from file (non-interactive)
 cja_auto_sdr --profile-import client-b ./client-b.env
 cja_auto_sdr --profile-import client-b ./client-b.json --profile-overwrite
 ```
+
+### Testing a Profile
+
+`--profile-test NAME` reports two results separately, because one can pass while the other fails:
+
+- **Sign-in.** The tool asks Adobe's sign-in service for a token.
+- **Product access.** The tool makes one `getDataViews` call. This step runs only when sign-in worked.
+
+A failed result has one of these codes:
+
+| Code | Result | Meaning |
+|------|--------|---------|
+| `bad_client_id` | Sign-in | Adobe does not know the client ID |
+| `bad_secret` | Sign-in | Adobe knows the client ID and rejected the secret |
+| `scopes_rejected` | Sign-in | Adobe rejected one or more scopes |
+| `sign_in_failed` | Sign-in | Sign-in failed for another reason. The message holds Adobe's own text, cut to 200 characters |
+| `no_product_access` | Product access | Sign-in worked, but the credential cannot reach Customer Journey Analytics. Add the Customer Journey Analytics API and the Adobe Experience Platform API to the credential, and add its technical account to a CJA product profile |
+| `unreachable` | Either | The tool could not reach Adobe, or the answer did not come from Adobe |
+
+With `--format json`, the output has the live test shape of the Adobe credentials standard, version 1:
+
+```json
+{
+  "schema": "adobe-credentials/v1/live-test",
+  "tool": "cja_auto_sdr",
+  "tool_version": "3.14.0",
+  "product": "cja",
+  "ok": false,
+  "source": {"kind": "flag_profile", "name": "profile client-a"},
+  "sign_in": {"ok": false, "code": "bad_secret", "message": "Adobe knows the client ID and rejected the secret. ..."},
+  "product_access": {"ok": null, "code": null, "message": null}
+}
+```
+
+`ok` is `null` for a step that did not run. The command exits 0 when both steps pass, and 1 when one does not.
 
 ### Profile Credential Precedence
 
@@ -592,11 +716,13 @@ The `.env` file overrides any matching values from `config.json`, allowing you t
 
 Profile names must:
 - Start with a letter or number
-- Contain only letters, numbers, dashes (`-`), and underscores (`_`)
+- Contain only letters, numbers, dots (`.`), dashes (`-`), and underscores (`_`)
 - Be 64 characters or less
 
-**Valid names:** `client-a`, `prod_org`, `acme2024`, `my_client`
-**Invalid names:** `-invalid`, `has spaces`, `special@chars`
+**Valid names:** `client-a`, `prod_org`, `acme2024`, `my_client`, `client-a.eu_west`
+**Invalid names:** `-invalid`, `.hidden`, `has spaces`, `special@chars`
+
+The tool creates a new profile folder with mode 0700 and writes `config.json` with mode 0600, so only your user account can read them. A folder that already exists keeps its mode.
 
 ### Updated Configuration Precedence
 

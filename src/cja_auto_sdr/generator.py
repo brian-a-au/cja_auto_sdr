@@ -779,6 +779,37 @@ def _cli_option_specified(option_name: str, argv: list[str] | None = None) -> bo
     return False
 
 
+def _config_file_flag_given() -> bool:
+    """Return True when --config-file or its second name --config was given."""
+    return _cli_option_specified("--config-file") or _cli_option_specified("--config")
+
+
+def _profile_flag_given() -> bool:
+    """Return True when --profile or -p was given, as opposed to CJA_PROFILE alone."""
+    if any(token.startswith("-p") and not token.startswith("--") for token in sys.argv[1:]):
+        return True
+    return _cli_option_specified("--profile")
+
+
+def _notice_profile_and_config_both_given(args: argparse.Namespace) -> None:
+    """Print a notice when a profile and a config file are both given. The profile is used.
+
+    --show-config lists the notice in its own report, so it is not printed there.
+    """
+    if getattr(args, "show_config", False) or not _config_file_flag_given():
+        return
+    profile = resolve_active_profile(getattr(args, "profile", None))
+    if not profile:
+        return
+    from cja_auto_sdr.cli.commands.show_config import profile_and_config_message
+    from cja_auto_sdr.core.credential_notices import emit_notice
+
+    emit_notice(
+        "profile_and_config_both_given",
+        profile_and_config_message(profile, profile_from_flag=_profile_flag_given()),
+    )
+
+
 @lru_cache(maxsize=1)
 def _known_long_options() -> frozenset[str]:
     """Return canonical long-option strings from the configured parser."""
@@ -1606,7 +1637,14 @@ def _run_mode_checks(args: argparse.Namespace) -> tuple[tuple[RunMode, bool], ..
                 or getattr(args, "list_calculated_metrics", None)
             ),
         ),
-        (RunMode.CONFIG_STATUS, bool(getattr(args, "config_status", False) or getattr(args, "config_json", False))),
+        (
+            RunMode.CONFIG_STATUS,
+            bool(
+                getattr(args, "show_config", False)
+                or getattr(args, "config_status", False)
+                or getattr(args, "config_json", False)
+            ),
+        ),
         (RunMode.VALIDATE_CONFIG, getattr(args, "validate_config", False)),
         (RunMode.STATS, getattr(args, "stats", False)),
         (
@@ -1968,6 +2006,7 @@ _PUSH_TO_NOTION_INCOMPATIBLE_FLAGS: tuple[tuple[str, str, str | None], ...] = (
     ("profile_show", "--profile-show", None),
     ("profile_test", "--profile-test", None),
     ("sample_config", "--sample-config", None),
+    ("show_config", "--show-config", None),
     ("config_status", "--config-status", None),
     ("config_json", "--config-json", None),
     ("validate_config", "--validate-config", None),
@@ -2216,6 +2255,7 @@ def _validate_semantic_flag_relationships(
         # One-shot modes that would otherwise be silently replaced by a live polling loop.
         for dest, flag in (
             ("dry_run", "--dry-run"),
+            ("show_config", "--show-config"),
             ("config_status", "--config-status"),
             ("config_json", "--config-json"),
             ("validate_config", "--validate-config"),
@@ -2889,14 +2929,15 @@ def show_profile(profile_name: str) -> bool:
     return _profiles_module().show_profile(profile_name)
 
 
-def test_profile(profile_name: str) -> bool:
-    return _profiles_module().test_profile(profile_name)
+def test_profile(profile_name: str, output_format: str = "table") -> bool:  # noqa: PT028
+    return _profiles_module().test_profile(profile_name, output_format=output_format)
 
 
 # ==================== CONFIG VALIDATION (moved to core/config_validation.py) ====================
 # ==================== CJA CLIENT (moved to api/client.py) ====================
 from cja_auto_sdr.api.client import (
     _bootstrap_dotenv,
+    _build_cjapy_config_kwargs,
     _config_from_env,
     _describe_unexpected_probe_payload,
     _normalize_dataview_listing_payload_or_raise,
@@ -5833,6 +5874,23 @@ def _read_config_status_file(config_file: str, logger: logging.Logger) -> tuple[
     return _impl(config_file=config_file, logger=logger)
 
 
+def show_config(
+    config_file: str = "config.json",
+    *,
+    profile_flag: str | None = None,
+    config_file_given: bool = False,
+    output_json: bool = False,
+) -> bool:
+    from cja_auto_sdr.cli.commands.show_config import show_config as _impl
+
+    return _impl(
+        config_file,
+        profile_flag=profile_flag,
+        config_file_given=config_file_given,
+        output_json=output_json,
+    )
+
+
 def show_config_status(config_file: str = "config.json", profile: str | None = None, output_json: bool = False) -> bool:
     from cja_auto_sdr.cli.commands.config import show_config_status as _impl
 
@@ -7361,6 +7419,31 @@ def _dispatch_post_validation_report_modes(
     run_state: dict[str, Any] | None = None,
 ) -> list[str]:
     """Handle config/status, interactive, stats, and org-report branches."""
+    if getattr(args, "show_config", False):
+        output_json = bool(getattr(args, "config_json", False)) or (
+            _resolve_command_output_format(
+                getattr(args, "format", None),
+                supported_formats={"json": "json", "console": "table", "table": "table"},
+                fallback_format="table",
+                warning_scope="--show-config",
+            )
+            == "json"
+        )
+        _warn_output_ignored(
+            getattr(args, "output", None),
+            scope="with --show-config",
+            hint="redirect stdout to save the report",
+        )
+        success = show_config(
+            args.config_file,
+            profile_flag=getattr(args, "profile", None) if _profile_flag_given() else None,
+            config_file_given=_config_file_flag_given(),
+            output_json=output_json,
+        )
+        if run_state is not None:
+            run_state["details"] = {"operation_success": success}
+        sys.exit(0 if success else 1)
+
     if getattr(args, "config_status", False) or getattr(args, "config_json", False):
         output_json = getattr(args, "config_json", False)
         _warn_output_ignored(
@@ -7601,6 +7684,11 @@ def _main_impl(run_state: dict[str, Any] | None = None):
 
     # Parse arguments (will show error and help if no data views provided)
     args = parse_arguments()
+    # Credential notices and warnings follow the log format: JSON log records with
+    # --log-format json (which --agent-mode sets), plain lines on stderr otherwise.
+    from cja_auto_sdr.core.credential_notices import set_json_log_lines
+
+    set_json_log_lines(getattr(args, "log_format", None) == "json")
     # --notion-database-title is a convenience for NOTION_DATABASE_TITLE: surface it
     # in the environment so every create path (single SDR, org-report, push-to-notion)
     # resolves the new database's title uniformly without threading it through the
@@ -7794,6 +7882,8 @@ def _main_impl(run_state: dict[str, Any] | None = None):
         print(result)
         sys.exit(0)
 
+    _notice_profile_and_config_both_given(args)
+
     # Handle --watch mode (continuous monitoring loop). Dispatched before color theme
     # setup and the other CLI subcommand handlers so that --watch takes precedence over
     # profile/git/snapshot dispatchers; semantic prevalidation rules
@@ -7851,7 +7941,18 @@ def _main_impl(run_state: dict[str, Any] | None = None):
 
     # Handle --profile-test mode (no data view required)
     if getattr(args, "profile_test", None):
-        success = test_profile(args.profile_test.strip())
+        test_format = _resolve_command_output_format(
+            args.format,
+            supported_formats={"json": "json", "console": "table", "table": "table"},
+            fallback_format="table",
+            warning_scope="--profile-test",
+        )
+        _warn_output_ignored(
+            getattr(args, "output", None),
+            scope="with --profile-test",
+            hint="redirect stdout to save the result",
+        )
+        success = test_profile(args.profile_test.strip(), output_format=test_format)
         if run_state is not None:
             run_state["details"] = {"operation_success": success}
         sys.exit(0 if success else 1)
@@ -8342,6 +8443,11 @@ def _main_impl(run_state: dict[str, Any] | None = None):
 
 def main():
     """Main entry point with optional run summary emission."""
+    # A notice or a warning is shown once per run. Start with an empty record, so that a
+    # record inherited from another run of the tool cannot hide a line of this run.
+    from cja_auto_sdr.core.credential_notices import forget_shown_messages
+
+    forget_shown_messages()
 
     summary_start = datetime.now(UTC).isoformat()
     summary_start_perf = time.perf_counter()

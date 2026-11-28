@@ -12,15 +12,29 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from cja_auto_sdr.api import sign_in as sign_in_module
 from cja_auto_sdr.api.client import _normalize_dataview_listing_payload_or_raise
 from cja_auto_sdr.api.dataview_listing import list_data_views
 from cja_auto_sdr.api.quality_policy import _canonical_quality_policy_key
+from cja_auto_sdr.api.sign_in import MESSAGE_LIMIT, NO_PRODUCT_ACCESS_MESSAGE
 from cja_auto_sdr.core.colors import ConsoleColors
 from cja_auto_sdr.core.constants import (
     BANNER_WIDTH,
     CREDENTIAL_FIELDS,
     ENV_VAR_MAPPING,
     HIDDEN_VALUE_DISPLAY,
+)
+from cja_auto_sdr.core.credential_notices import (
+    LIVE_TEST_SCHEMA,
+    PRODUCT,
+    STANDARD_FIELDS,
+    STRICT_LOOKUP_RELEASE,
+    TOOL_NAME,
+    emit_notice,
+    make_private_dirs,
+    mask_client_id,
+    note_file_keys,
+    warn_if_readable_by_others,
 )
 from cja_auto_sdr.core.credentials import filter_credentials, normalize_credential_field
 from cja_auto_sdr.core.exceptions import (
@@ -30,6 +44,7 @@ from cja_auto_sdr.core.exceptions import (
     api_connection_hint,
 )
 from cja_auto_sdr.core.json_io import write_json_atomic
+from cja_auto_sdr.core.version import __version__
 
 __all__ = [
     "_normalize_import_credentials",
@@ -82,10 +97,10 @@ def validate_profile_name(name: str) -> tuple[bool, str | None]:
     if not name:
         return False, "Profile name cannot be empty"
 
-    if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_-]*", name):
+    if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9._-]*", name):
         return False, (
             f"Profile name '{name}' is invalid. "
-            "Must start with alphanumeric and contain only letters, numbers, dashes, and underscores."
+            "Must start with alphanumeric and contain only letters, numbers, dots, dashes, and underscores."
         )
 
     if len(name) > 64:
@@ -100,10 +115,12 @@ def load_profile_config_json(profile_path: Path) -> dict[str, str] | None:
     if not os.path.exists(config_file):
         return None
 
+    warn_if_readable_by_others(config_file)
     try:
         with open(config_file, encoding="utf-8") as f:
             config = json.load(f)
         if isinstance(config, dict):
+            note_file_keys(config, config_file, logging.getLogger(__name__))
             return filter_credentials(config)
         return None
     except OSError:
@@ -183,6 +200,7 @@ def load_profile_dotenv(profile_path: Path) -> dict[str, str] | None:
     if not os.path.exists(env_file):
         return None
 
+    warn_if_readable_by_others(env_file)
     credentials = {}
     try:
         with open(env_file, encoding="utf-8-sig") as f:
@@ -246,6 +264,15 @@ def load_profile_credentials(profile_name: str, logger: logging.Logger) -> dict[
 
     if json_source and env_credentials:
         logger.debug("Profile '%s': merged config.json with .env overrides", profile_name)
+        from_dotenv = [name for name in STANDARD_FIELDS if env_credentials.get(name)]
+        from_json = [name for name in STANDARD_FIELDS if credentials.get(name) and name not in from_dotenv]
+        if from_dotenv and from_json:
+            emit_notice(
+                "mixed_sources",
+                f"The profile {profile_name} mixes config.json ({', '.join(from_json)}) with .env "
+                f"({', '.join(from_dotenv)}) in {profile_path}. This run uses them together. "
+                f"Release {STRICT_LOOKUP_RELEASE} will take all four fields from one file.",
+            )
     elif json_source:
         logger.debug("Profile '%s': loaded from config.json", profile_name)
     else:
@@ -413,7 +440,7 @@ def add_profile_interactive(profile_name: str) -> bool:
             return False
 
     try:
-        profile_path.mkdir(parents=True, exist_ok=True)
+        make_private_dirs(profile_path)
     except OSError as e:
         print(ConsoleColors.error(f"Error creating profile directory: {e}"), file=sys.stderr)
         return False
@@ -622,7 +649,7 @@ def import_profile_non_interactive(profile_name: str, source_file: str | Path, o
     }
 
     try:
-        profile_path.mkdir(parents=True, exist_ok=True)
+        make_private_dirs(profile_path)
         config_path = profile_path / "config.json"
         write_json_atomic(config_path, config_payload, indent=2, file_mode=0o600, trailing_newline=True)
     except OSError as e:
@@ -647,7 +674,11 @@ def import_profile_non_interactive(profile_name: str, source_file: str | Path, o
 
 
 def mask_sensitive_value(value: str, show_chars: int = 4) -> str:
-    """Mask sensitive values for display."""
+    """Mask sensitive values for display.
+
+    Kept for callers outside this package. The tool itself shows a client ID
+    with ``mask_client_id`` and a secret as ``****``.
+    """
     if not value:
         return "(empty)"
 
@@ -701,7 +732,7 @@ def show_profile(profile_name: str) -> bool:
                 # secret key here, because the loader drops empty values.
                 display_value = HIDDEN_VALUE_DISPLAY
             elif key == "client_id":
-                display_value = generator.mask_sensitive_value(value)
+                display_value = mask_client_id(value)
             else:
                 display_value = value
             print(f"  {key}: {display_value}")
@@ -710,44 +741,110 @@ def show_profile(profile_name: str) -> bool:
     return True
 
 
-def test_profile(profile_name: str) -> bool:
-    """Test profile credentials and API connectivity."""
-    generator = _generator_module()
+def _product_access_failure(exc: Exception) -> tuple[str, str]:
+    """Return the code and the message for a failed product call of the live test."""
+    if api_connection_hint(exc) is not None:
+        return "no_product_access", NO_PRODUCT_ACCESS_MESSAGE
+    summary = api_connection_error_summary(exc) or str(exc) or type(exc).__name__
+    return "unreachable", f"The Customer Journey Analytics call failed: {summary[:MESSAGE_LIMIT]}"
 
-    print()
-    print("=" * BANNER_WIDTH)
-    print(f"TESTING PROFILE: {profile_name}")
-    print("=" * BANNER_WIDTH)
-    print()
+
+def _profile_load_problem_code(profile_name: str, exc: Exception) -> str:
+    """Return the standard's error code for a profile that could not be loaded."""
+    if isinstance(exc, ProfileNotFoundError):
+        return "profile_not_found"
+    if not validate_profile_name(profile_name)[0]:
+        return "invalid_profile_name"
+    return "no_credential"
+
+
+def test_profile(profile_name: str, output_format: str = "table") -> bool:  # noqa: PT028
+    """Test a profile against Adobe and report sign-in and product access separately.
+
+    Sign-in is one token request to Adobe's sign-in service. Product access is
+    one ``getDataViews`` call, which runs only when sign-in worked. With
+    ``output_format="json"`` the result is printed as JSON in the live test
+    shape of the Adobe credentials standard, and nothing else goes to stdout.
+    """
+    generator = _generator_module()
+    as_json = output_format == "json"
+
+    def say(line: str = "") -> None:
+        if not as_json:
+            print(line)
+
+    result: dict[str, Any] = {
+        "schema": LIVE_TEST_SCHEMA,
+        "tool": TOOL_NAME,
+        "tool_version": __version__,
+        "product": PRODUCT,
+        "ok": False,
+        "source": {"kind": "flag_profile", "name": f"profile {profile_name}"},
+        "sign_in": {"ok": None, "code": None, "message": None},
+        "product_access": {"ok": None, "code": None, "message": None},
+    }
+
+    def finish(passed: bool) -> bool:
+        result["ok"] = passed
+        if as_json:
+            print(json.dumps(result, indent=2))
+        return passed
+
+    say()
+    say("=" * BANNER_WIDTH)
+    say(f"TESTING PROFILE: {profile_name}")
+    say("=" * BANNER_WIDTH)
+    say()
 
     try:
         logger = logging.getLogger("profile_test")
         logger.setLevel(logging.WARNING)
         credentials = generator.load_profile_credentials(profile_name, logger)
-    except ProfileNotFoundError as e:
+    except (ProfileNotFoundError, ProfileConfigError) as e:
         print(ConsoleColors.error(f"ERROR: {e}"), file=sys.stderr)
-        return False
-    except ProfileConfigError as e:
-        print(ConsoleColors.error(f"ERROR: {e}"), file=sys.stderr)
-        return False
+        result["problems"] = [{"code": _profile_load_problem_code(profile_name, e), "message": str(e)}]
+        return finish(False)
 
-    print("1. Profile found and loaded")
+    say("1. Profile found and loaded")
 
     issues = generator.ConfigValidator.validate_all(credentials, logger)
     if issues:
-        print("2. Credential validation: WARNINGS")
+        say("2. Credential validation: WARNINGS")
         for issue in issues:
-            print(f"   - {issue}")
+            say(f"   - {issue}")
     else:
-        print("2. Credential validation: OK")
+        say("2. Credential validation: OK")
 
-    print("3. Testing API connectivity...")
+    missing = [name for name in STANDARD_FIELDS if not credentials.get(name)]
+    if missing:
+        message = f"The profile is missing: {', '.join(missing)}. Sign-in needs all four fields."
+        result["problems"] = [{"code": "partial_source", "message": message, "missing": missing}]
+        print(ConsoleColors.error(f"3. Sign-in: NOT RUN. {message}"), file=sys.stderr)
+        print(ConsoleColors.error("Profile test: FAILED"), file=sys.stderr)
+        return finish(False)
+
+    say("3. Signing in to Adobe...")
+    # Sign in with the values that cjapy gets, e.g. scopes without spaces.
+    signed_in = sign_in_module.request_token(generator._build_cjapy_config_kwargs(credentials))
+    result["sign_in"] = signed_in.as_dict()
+    if not signed_in.ok:
+        print(ConsoleColors.error(f"   Sign-in: FAILED ({signed_in.code})"), file=sys.stderr)
+        print(ConsoleColors.error(f"   {signed_in.message}"), file=sys.stderr)
+        print(ConsoleColors.error("4. Data views (getDataViews): NOT RUN, because sign-in failed"), file=sys.stderr)
+        print(file=sys.stderr)
+        print(ConsoleColors.error("Profile test: FAILED"), file=sys.stderr)
+        print(file=sys.stderr)
+        return finish(False)
+    say("   Sign-in: OK")
+
+    say("4. Asking Customer Journey Analytics for the data views (getDataViews)...")
 
     def _print_profile_test_failure(exc: Exception) -> bool:
-        """Render a controlled profile-test failure with optional remediation hint."""
-        print(ConsoleColors.error("   API connection: FAILED"), file=sys.stderr)
-        summary = api_connection_error_summary(exc) or str(exc)
-        print(ConsoleColors.error(f"   Error: {summary}"), file=sys.stderr)
+        """Render a controlled product-call failure with optional remediation hint."""
+        code, message = _product_access_failure(exc)
+        result["product_access"] = {"ok": False, "code": code, "message": message}
+        print(ConsoleColors.error(f"   Data views: FAILED ({code})"), file=sys.stderr)
+        print(ConsoleColors.error(f"   {message}"), file=sys.stderr)
         print(file=sys.stderr)
         print(ConsoleColors.error("Profile test: FAILED"), file=sys.stderr)
         print(file=sys.stderr)
@@ -755,16 +852,14 @@ def test_profile(profile_name: str) -> bool:
         hint = api_connection_hint(exc)
         if hint:
             for line in hint.splitlines():
-                print(ConsoleColors.warning(f"  {line}"))
-            print()
-        print("Common issues:")
-        print("  - Invalid client_id or secret")
-        print("  - Incorrect OAuth scopes")
-        print("  - API project not provisioned for CJA")
-        print("  - Missing AEP API in Developer Console project")
-        print("  - Service account not granted product profile access")
-        print()
-        return False
+                say(ConsoleColors.warning(f"  {line}"))
+            say()
+        say("Common issues:")
+        say("  - API project not provisioned for CJA")
+        say("  - Missing AEP API in Developer Console project")
+        say("  - Service account not granted product profile access")
+        say()
+        return finish(False)
 
     try:
         generator._config_from_env(credentials, logger)
@@ -778,21 +873,6 @@ def test_profile(profile_name: str) -> bool:
                 operation="getDataViews (profile test)",
             )
         )
-
-        if dataviews is not None:
-            count = len(normalized_dataviews)
-            print("   API connection: SUCCESS")
-            print(f"   Data views accessible: {count}")
-            print()
-            print("Profile test: PASSED")
-            print()
-            return True
-
-        print("   API connection: OK (no data views found)")
-        print()
-        print("Profile test: PASSED")
-        print()
-        return True
     except generator.RECOVERABLE_CONFIG_API_EXCEPTIONS as e:
         return _print_profile_test_failure(e)
     except Exception as e:
@@ -800,3 +880,15 @@ def test_profile(profile_name: str) -> bool:
             raise
         logger.debug("Unexpected profile-test connectivity error", exc_info=True)
         return _print_profile_test_failure(e)
+
+    count = len(normalized_dataviews)
+    result["product_access"] = {"ok": True, "code": None, "message": None, "data_views": count}
+    if dataviews is not None:
+        say("   Data views: OK")
+        say(f"   Data views accessible: {count}")
+    else:
+        say("   Data views: OK (no data views found)")
+    say()
+    say("Profile test: PASSED")
+    say()
+    return finish(True)

@@ -28,7 +28,7 @@ uv run cja_auto_sdr --profile <name> ...   # use profile
 export CJA_PROFILE=<name>                  # set default
 ```
 
-Profiles stored in `~/.cja/orgs/<name>/`. Profile overrides env vars.
+Profiles stored in `~/.cja/orgs/<name>/`. Profile overrides env vars. A `.env` file in the working folder or a parent folder is loaded into the environment on every install, and a variable that is already set keeps its value.
 
 ---
 
@@ -160,7 +160,15 @@ uv run cja_auto_sdr <dv_id> --dry-run
 
 # Machine-readable config status
 uv run cja_auto_sdr --config-status --config-json
+
+# Every credential source, the path of each file, and any notices (no API call)
+uv run cja_auto_sdr --show-config --format json
+
+# Test a profile: sign-in and the data views call are reported separately
+uv run cja_auto_sdr --profile-test <name> --format json
 ```
+
+`--show-config --format json` prints the `adobe-credentials/v1/config-check` shape, and `--profile-test <name> --format json` prints the `adobe-credentials/v1/live-test` shape. Both exit 0 when `ok` is true and 1 when it is not. Notices and warnings about credentials go to stderr. They never go to stdout and never change the exit code. With `--agent-mode` or `--log-format json`, each one is a JSON log record with `"level": "WARNING"`, `"logger": "cja_auto_sdr.credentials"`, the code in `code`, and `notice` or `warning` in `kind`. In every other mode, each one is a plain text line that starts with `Notice [code]:` or `Warning [code]:`.
 
 ---
 
@@ -249,7 +257,7 @@ uv run cja_auto_sdr --config-status --config-json  # machine-readable config sta
 | Discovery / Inspection | ✅ | JSON on stdout for machine-readable flows; prefer exact IDs for unattended inspection |
 | Org Report | ✅ | JSON on stdout; `--format console --output -` is also supported for human-readable stdout |
 | Diff Family | ✅ | JSON on stdout for `--diff`, `--diff-snapshot`, `--compare-with-prev`, and `--compare-snapshots` |
-| Validation / Preflight | Partial | Use `--config-status --config-json` for JSON state; `--validate-config` remains exit-code driven |
+| Validation / Preflight | Partial | Use `--show-config --format json` or `--config-status --config-json` for JSON state; `--validate-config` remains exit-code driven |
 | Stats | Partial | Supports `--format json --output -` |
 | Fast-Path Flags | Partial | `--version` and `--completion` tolerate `--agent-mode`, but the preset is not applied before early exit |
 

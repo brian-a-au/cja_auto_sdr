@@ -49,8 +49,11 @@ way, you can still report it here.
 - **Credentials.** The tool reads credentials from environment variables, a
   `.env` file, `config.json`, or a profile under `~/.cja/orgs/`. When it writes
   a profile, it sets the file so that only your user account can read it.
+  A new profile folder is created so that only your user account can open it.
   `config.json` and `.env` files are listed in `.gitignore`. Status commands,
-  e.g., `--config-status`, show only part of each secret.
+  e.g., `--show-config`, show no character of the secret, and they show the
+  client ID as its first 4 and last 4 characters. The tool prints a warning
+  when the group or other users can read a credential file.
 - **Report content.** Text from your data views is treated as untrusted. The
   HTML writers escape it before they add it to a page. The Excel writers store
   it as plain text, so a value that starts with `=` does not run as a formula.

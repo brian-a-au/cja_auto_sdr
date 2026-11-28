@@ -140,7 +140,8 @@ class TestAgentAutomationDoc:
         assert "--validate-config" in content
         assert "--describe-dataview" in content
         assert "--interactive" in content
-        assert "--show-config" not in content
+        # --show-config did not exist before v3.14.0, and the guide must name it with its JSON option now.
+        assert "--show-config --format json" in content
 
     def test_does_not_document_agent_mode_run_summary_stdout_pair(self):
         content = AGENT_AUTOMATION_MD.read_text()

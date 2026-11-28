@@ -1,0 +1,168 @@
+{
+  "spec": "adobe-credentials/v1",
+  "area": "profile-names",
+  "note": "Names a tool accepts and rejects before it builds a path.",
+  "cases": [
+    {
+      "id": "name-001",
+      "level": 1,
+      "rule": "L1.4",
+      "title": "Letters and digits",
+      "given": {
+        "profile_name": "prod2"
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "name-002",
+      "level": 1,
+      "rule": "L1.4",
+      "title": "Dots, underscores and hyphens inside the name",
+      "given": {
+        "profile_name": "client-a.eu_west"
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "name-003",
+      "level": 1,
+      "rule": "L1.4",
+      "title": "A name of 64 characters",
+      "given": {
+        "profile_name": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "id": "name-004",
+      "level": 1,
+      "rule": "L1.4",
+      "title": "A name of 65 characters",
+      "given": {
+        "profile_name": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "name-005",
+      "level": 1,
+      "rule": "L1.4",
+      "title": "A name that climbs out of the profiles folder",
+      "given": {
+        "profile_name": "../other"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "name-006",
+      "level": 1,
+      "rule": "L1.4",
+      "title": "Two dots alone",
+      "given": {
+        "profile_name": ".."
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "name-007",
+      "level": 1,
+      "rule": "L1.4",
+      "title": "A name that starts with a dot",
+      "given": {
+        "profile_name": ".hidden"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "name-008",
+      "level": 1,
+      "rule": "L1.4",
+      "title": "A name with a slash",
+      "given": {
+        "profile_name": "a/b"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "name-009",
+      "level": 1,
+      "rule": "L1.4",
+      "title": "A name with a backslash",
+      "given": {
+        "profile_name": "a\\b"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "name-010",
+      "level": 1,
+      "rule": "L1.4",
+      "title": "A name with a space",
+      "given": {
+        "profile_name": "my profile"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "name-011",
+      "level": 1,
+      "rule": "L1.4",
+      "title": "An empty name",
+      "given": {
+        "profile_name": ""
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "name-012",
+      "level": 1,
+      "rule": "L1.4",
+      "title": "An absolute path",
+      "given": {
+        "profile_name": "/etc/passwd"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "id": "name-013",
+      "level": 1,
+      "rule": "L1.4",
+      "title": "An invalid name is rejected on read, before any file is opened",
+      "given": {
+        "sources": {
+          "flag_profile": {
+            "name": "../other"
+          }
+        },
+        "command": "config_check"
+      },
+      "expect": {
+        "error": "invalid_profile_name"
+      }
+    }
+  ]
+}

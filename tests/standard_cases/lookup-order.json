@@ -1,0 +1,271 @@
+{
+  "spec": "adobe-credentials/v1",
+  "area": "lookup-order",
+  "note": "Which source wins. Each source is given a complete credential unless omit says otherwise. Sources not named are absent.",
+  "cases": [
+    {
+      "id": "lookup-001",
+      "level": 3,
+      "rule": "L3.1",
+      "title": "--profile beats everything below it",
+      "given": {
+        "sources": {
+          "flag_profile": {
+            "name": "prod",
+            "credential": "A"
+          },
+          "profile_variable": {
+            "name": "other",
+            "credential": "B"
+          },
+          "environment": {
+            "credential": "B"
+          },
+          "dotenv": {
+            "credential": "B"
+          },
+          "default_config": {
+            "credential": "B"
+          }
+        }
+      },
+      "expect": {
+        "source": "flag_profile",
+        "credential": "A"
+      }
+    },
+    {
+      "id": "lookup-002",
+      "level": 3,
+      "rule": "L3.1",
+      "title": "--config beats everything below it",
+      "given": {
+        "sources": {
+          "flag_config": {
+            "credential": "A"
+          },
+          "profile_variable": {
+            "name": "other",
+            "credential": "B"
+          },
+          "environment": {
+            "credential": "B"
+          },
+          "dotenv": {
+            "credential": "B"
+          },
+          "default_config": {
+            "credential": "B"
+          }
+        }
+      },
+      "expect": {
+        "source": "flag_config",
+        "credential": "A"
+      }
+    },
+    {
+      "id": "lookup-003",
+      "level": 3,
+      "rule": "L3.1",
+      "title": "--profile and --config together are an error",
+      "given": {
+        "sources": {
+          "flag_profile": {
+            "name": "prod",
+            "credential": "A"
+          },
+          "flag_config": {
+            "credential": "B"
+          }
+        }
+      },
+      "expect": {
+        "error": "profile_and_config_both_given"
+      }
+    },
+    {
+      "id": "lookup-004",
+      "level": 3,
+      "rule": "L3.1",
+      "title": "The profile variable beats the environment variables",
+      "given": {
+        "sources": {
+          "profile_variable": {
+            "name": "prod",
+            "credential": "A"
+          },
+          "environment": {
+            "credential": "B"
+          },
+          "dotenv": {
+            "credential": "B"
+          },
+          "default_config": {
+            "credential": "B"
+          }
+        }
+      },
+      "expect": {
+        "source": "profile_variable",
+        "credential": "A"
+      }
+    },
+    {
+      "id": "lookup-005",
+      "level": 3,
+      "rule": "L3.1",
+      "title": "The environment variables beat .env",
+      "given": {
+        "sources": {
+          "environment": {
+            "credential": "A"
+          },
+          "dotenv": {
+            "credential": "B"
+          },
+          "default_config": {
+            "credential": "B"
+          }
+        }
+      },
+      "expect": {
+        "source": "environment",
+        "credential": "A"
+      }
+    },
+    {
+      "id": "lookup-006",
+      "level": 3,
+      "rule": "L3.1",
+      "title": ".env beats the default config file",
+      "given": {
+        "sources": {
+          "dotenv": {
+            "credential": "A"
+          },
+          "default_config": {
+            "credential": "B"
+          }
+        }
+      },
+      "expect": {
+        "source": "dotenv",
+        "credential": "A"
+      }
+    },
+    {
+      "id": "lookup-007",
+      "level": 3,
+      "rule": "L3.1",
+      "title": "The default config file is used when nothing else is set",
+      "given": {
+        "sources": {
+          "default_config": {
+            "credential": "A"
+          }
+        }
+      },
+      "expect": {
+        "source": "default_config",
+        "credential": "A"
+      }
+    },
+    {
+      "id": "lookup-008",
+      "level": 3,
+      "rule": "L3.1",
+      "title": ".env in a parent folder is not read",
+      "given": {
+        "sources": {
+          "dotenv": {
+            "credential": "B",
+            "location": "parent_folder"
+          },
+          "default_config": {
+            "credential": "A"
+          }
+        }
+      },
+      "expect": {
+        "source": "default_config",
+        "credential": "A"
+      }
+    },
+    {
+      "id": "lookup-009",
+      "level": 3,
+      "rule": "L3.1",
+      "title": ".env is not loaded into the environment, so it cannot set the profile variable",
+      "given": {
+        "sources": {
+          "dotenv": {
+            "credential": "A",
+            "extra_keys": {
+              "PROFILE_VARIABLE": "other"
+            }
+          },
+          "profile_variable_target": {
+            "name": "other",
+            "credential": "B"
+          }
+        }
+      },
+      "expect": {
+        "source": "dotenv",
+        "credential": "A"
+      }
+    },
+    {
+      "id": "lookup-010",
+      "level": 3,
+      "rule": "L3.1",
+      "title": "Nothing set is an error that names the ways to give a credential",
+      "given": {
+        "sources": {}
+      },
+      "expect": {
+        "error": "no_credential"
+      }
+    },
+    {
+      "id": "lookup-011",
+      "level": 3,
+      "rule": "L3.1",
+      "title": "A profile that does not exist is an error, with no fall back to a lower source",
+      "given": {
+        "sources": {
+          "flag_profile": {
+            "name": "missing"
+          },
+          "environment": {
+            "credential": "B"
+          }
+        }
+      },
+      "expect": {
+        "error": "profile_not_found"
+      }
+    },
+    {
+      "id": "lookup-012",
+      "level": 2,
+      "rule": "L2.4",
+      "title": "Until Level 3 applies, different complete credentials in .env and the config file give a notice",
+      "given": {
+        "sources": {
+          "dotenv": {
+            "credential": "A"
+          },
+          "default_config": {
+            "credential": "B"
+          }
+        },
+        "command": "config_check"
+      },
+      "expect": {
+        "notice": "dotenv_and_config_differ"
+      }
+    }
+  ]
+}

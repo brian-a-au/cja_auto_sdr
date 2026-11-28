@@ -1,0 +1,137 @@
+{
+  "spec": "adobe-credentials/v1",
+  "area": "masking",
+  "note": "Pure input and output pairs for the masking rules.",
+  "cases": [
+    {
+      "id": "mask-001",
+      "level": 1,
+      "rule": "L1.2",
+      "title": "A client ID of 32 characters shows its first 4 and last 4",
+      "given": {
+        "client_id": "aaaa1111bbbb2222cccc3333dddd4444"
+      },
+      "expect": {
+        "masked": "aaaa****4444"
+      }
+    },
+    {
+      "id": "mask-002",
+      "level": 1,
+      "rule": "L1.2",
+      "title": "A client ID of 9 characters shows its first 4 and last 4",
+      "given": {
+        "client_id": "abcdefghi"
+      },
+      "expect": {
+        "masked": "abcd****fghi"
+      }
+    },
+    {
+      "id": "mask-003",
+      "level": 1,
+      "rule": "L1.2",
+      "title": "A client ID of 8 characters is hidden whole",
+      "given": {
+        "client_id": "abcdefgh"
+      },
+      "expect": {
+        "masked": "****"
+      }
+    },
+    {
+      "id": "mask-004",
+      "level": 1,
+      "rule": "L1.2",
+      "title": "A client ID of 1 character is hidden whole",
+      "given": {
+        "client_id": "a"
+      },
+      "expect": {
+        "masked": "****"
+      }
+    },
+    {
+      "id": "mask-005",
+      "level": 1,
+      "rule": "L1.1",
+      "title": "A secret that is set shows as four stars",
+      "given": {
+        "secret": "fake-secret-A-not-a-credential-0001"
+      },
+      "expect": {
+        "masked": "****"
+      }
+    },
+    {
+      "id": "mask-006",
+      "level": 1,
+      "rule": "L1.1",
+      "title": "A short secret shows as four stars, so its length is not shown",
+      "given": {
+        "secret": "abc"
+      },
+      "expect": {
+        "masked": "****"
+      }
+    },
+    {
+      "id": "mask-007",
+      "level": 1,
+      "rule": "L1.1",
+      "title": "No 4 characters in a row from the secret appear in the output of the config check, text or JSON",
+      "given": {
+        "sources": {
+          "environment": {
+            "credential": "A"
+          }
+        },
+        "command": "config_check"
+      },
+      "expect": {
+        "output_excludes_secret": true
+      }
+    },
+    {
+      "id": "mask-008",
+      "level": 1,
+      "rule": "L1.1",
+      "title": "No 4 characters in a row from the secret appear in the output of a failed live test",
+      "given": {
+        "sources": {
+          "environment": {
+            "credential": "A"
+          }
+        },
+        "command": "live_test",
+        "sign_in_answer": {
+          "status": 401,
+          "body": {
+            "error": "invalid_client",
+            "error_description": "invalid client_secret parameter"
+          }
+        }
+      },
+      "expect": {
+        "output_excludes_secret": true
+      }
+    },
+    {
+      "id": "mask-009",
+      "level": 1,
+      "rule": "L1.1",
+      "title": "A worker or child process gets the credential in its environment or in a file, never in its arguments",
+      "given": {
+        "sources": {
+          "environment": {
+            "credential": "A"
+          }
+        },
+        "command": "run_child"
+      },
+      "expect": {
+        "child_arguments_exclude_secret": true
+      }
+    }
+  ]
+}

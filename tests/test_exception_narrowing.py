@@ -38,6 +38,7 @@ def _make_logger() -> logging.Logger:
 # ===========================================================================
 
 
+@pytest.mark.usefixtures("sign_in_ok")
 class TestTestProfileExceptionNarrowing:
     """Verify test_profile catches recoverable/bootstrap failures and propagates others."""
 
@@ -45,7 +46,9 @@ class TestTestProfileExceptionNarrowing:
         """Helper: invoke test_profile with in-memory cjapy configuration raising *exc*."""
         profile_dir = tmp_path / "orgs" / "narrowing"
         profile_dir.mkdir(parents=True)
-        (profile_dir / "config.json").write_text('{"client_id":"x","secret":"s","org_id":"o@AdobeOrg"}')
+        (profile_dir / "config.json").write_text(
+            '{"client_id":"x","secret":"s","org_id":"o@AdobeOrg","scopes":"openid"}'
+        )
 
         with (
             patch("cja_auto_sdr.generator.get_profile_path", return_value=profile_dir),

@@ -1,0 +1,125 @@
+{
+  "spec": "adobe-credentials/v1",
+  "area": "variable-forms",
+  "note": "The two sets of variable names in aa-health-duckdb.",
+  "cases": [
+    {
+      "id": "forms-001",
+      "level": 2,
+      "rule": "L2.2",
+      "tools": [
+        "aa-health-duckdb"
+      ],
+      "title": "The AHD_ names still work",
+      "given": {
+        "sources": {
+          "environment": {
+            "credential": "A",
+            "form": "AHD"
+          }
+        }
+      },
+      "expect": {
+        "source": "environment",
+        "credential": "A"
+      }
+    },
+    {
+      "id": "forms-002",
+      "level": 2,
+      "rule": "L2.2",
+      "tools": [
+        "aa-health-duckdb"
+      ],
+      "title": "The plain names work when nothing else gives a credential",
+      "given": {
+        "sources": {
+          "environment": {
+            "credential": "A",
+            "form": "plain"
+          }
+        }
+      },
+      "expect": {
+        "source": "environment",
+        "credential": "A"
+      }
+    },
+    {
+      "id": "forms-003",
+      "level": 2,
+      "rule": "L2.2",
+      "tools": [
+        "aa-health-duckdb"
+      ],
+      "title": "Both forms with different values give a notice, and the AHD_ names win until 0.2.0",
+      "given": {
+        "sources": {
+          "environment": {
+            "credential": "A",
+            "form": "AHD"
+          },
+          "environment_plain": {
+            "credential": "B",
+            "form": "plain"
+          }
+        }
+      },
+      "expect": {
+        "source": "environment",
+        "credential": "A",
+        "notice": "variable_forms_differ"
+      }
+    },
+    {
+      "id": "forms-004",
+      "level": 3,
+      "rule": "L3.2",
+      "tools": [
+        "aa-health-duckdb"
+      ],
+      "title": "From 0.2.0, both forms with different values stop the run",
+      "given": {
+        "sources": {
+          "environment": {
+            "credential": "A",
+            "form": "AHD"
+          },
+          "environment_plain": {
+            "credential": "B",
+            "form": "plain"
+          }
+        }
+      },
+      "expect": {
+        "error": "variable_forms_differ"
+      }
+    },
+    {
+      "id": "forms-005",
+      "level": 2,
+      "rule": "L2.2",
+      "tools": [
+        "aa-health-duckdb"
+      ],
+      "title": "Both forms with the same values give no notice",
+      "given": {
+        "sources": {
+          "environment": {
+            "credential": "A",
+            "form": "AHD"
+          },
+          "environment_plain": {
+            "credential": "A",
+            "form": "plain"
+          }
+        }
+      },
+      "expect": {
+        "source": "environment",
+        "credential": "A",
+        "notice": null
+      }
+    }
+  ]
+}

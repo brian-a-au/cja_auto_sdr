@@ -1,0 +1,205 @@
+{
+  "spec": "adobe-credentials/v1",
+  "area": "partial-sources",
+  "note": "A source with some of the four fields and not all of them.",
+  "cases": [
+    {
+      "id": "partial-001",
+      "level": 3,
+      "rule": "L3.2",
+      "title": "A partial set of environment variables is an error that names what is missing",
+      "given": {
+        "sources": {
+          "environment": {
+            "credential": "A",
+            "omit": [
+              "secret"
+            ]
+          },
+          "default_config": {
+            "credential": "B"
+          }
+        }
+      },
+      "expect": {
+        "error": "partial_source",
+        "missing": [
+          "secret"
+        ]
+      }
+    },
+    {
+      "id": "partial-002",
+      "level": 3,
+      "rule": "L3.2",
+      "title": "Fields are not mixed between the environment and a file",
+      "given": {
+        "sources": {
+          "environment": {
+            "credential": "A",
+            "omit": [
+              "secret",
+              "scopes"
+            ]
+          },
+          "default_config": {
+            "credential": "B"
+          }
+        }
+      },
+      "expect": {
+        "error": "partial_source",
+        "missing": [
+          "secret",
+          "scopes"
+        ]
+      }
+    },
+    {
+      "id": "partial-003",
+      "level": 3,
+      "rule": "L3.2",
+      "title": "A partial profile is an error, with no fall back",
+      "given": {
+        "sources": {
+          "flag_profile": {
+            "name": "prod",
+            "credential": "A",
+            "omit": [
+              "scopes"
+            ]
+          },
+          "environment": {
+            "credential": "B"
+          }
+        }
+      },
+      "expect": {
+        "error": "partial_source",
+        "missing": [
+          "scopes"
+        ]
+      }
+    },
+    {
+      "id": "partial-004",
+      "level": 3,
+      "rule": "L3.2",
+      "title": "A partial .env is an error",
+      "given": {
+        "sources": {
+          "dotenv": {
+            "credential": "A",
+            "omit": [
+              "org_id"
+            ]
+          },
+          "default_config": {
+            "credential": "B"
+          }
+        }
+      },
+      "expect": {
+        "error": "partial_source",
+        "missing": [
+          "org_id"
+        ]
+      }
+    },
+    {
+      "id": "partial-005",
+      "level": 3,
+      "rule": "L3.2",
+      "title": "Other settings can still come from another source",
+      "given": {
+        "sources": {
+          "flag_profile": {
+            "name": "prod",
+            "credential": "A"
+          },
+          "environment": {
+            "other_settings": true
+          }
+        }
+      },
+      "expect": {
+        "source": "flag_profile",
+        "credential": "A"
+      }
+    },
+    {
+      "id": "partial-006",
+      "level": 3,
+      "rule": "L3.3",
+      "title": "A credential without scopes is an error, with no built-in scopes",
+      "given": {
+        "sources": {
+          "default_config": {
+            "credential": "A",
+            "omit": [
+              "scopes"
+            ]
+          }
+        }
+      },
+      "expect": {
+        "error": "partial_source",
+        "missing": [
+          "scopes"
+        ]
+      }
+    },
+    {
+      "id": "partial-007",
+      "level": 2,
+      "rule": "L2.4",
+      "title": "Until Level 3 applies, a partial source that is skipped gives a notice with the missing fields",
+      "given": {
+        "sources": {
+          "environment": {
+            "credential": "A",
+            "omit": [
+              "secret"
+            ]
+          },
+          "default_config": {
+            "credential": "B"
+          }
+        },
+        "command": "config_check"
+      },
+      "expect": {
+        "notice": "partial_source_skipped",
+        "missing": [
+          "secret"
+        ]
+      }
+    },
+    {
+      "id": "partial-008",
+      "level": 2,
+      "rule": "L2.4",
+      "title": "Until Level 3 applies, fields from more than one source give a notice",
+      "given": {
+        "sources": {
+          "environment": {
+            "credential": "A",
+            "omit": [
+              "secret"
+            ]
+          },
+          "default_config": {
+            "credential": "B"
+          }
+        },
+        "command": "config_check"
+      },
+      "expect": {
+        "notice_one_of": [
+          "mixed_sources",
+          "partial_source_skipped"
+        ]
+      }
+    }
+  ]
+}

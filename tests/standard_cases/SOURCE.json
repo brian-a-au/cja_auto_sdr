@@ -1,0 +1,19 @@
+{
+  "spec": "adobe-credentials/v1",
+  "commit": "5490e71449f78b58a27f58e93745c067f6ec15ab",
+  "files": {
+    "config-check.json": "e4b1f11fb628c42aed5345dc0c436b1fd83184c23070ee737c3582f2e41a57db",
+    "fixtures.json": "650e23490efffb5db90a5ba92d818167a85768237d09f6f150c18a4d8c3903c5",
+    "lookup-order.json": "a96540736f289df21023ad2fdb48dc7db5ab37a1b3e0e1dc6d1885d12b341f84",
+    "masking.json": "06ee7076d8b3b0dd47783903c4e7db6045fdc34ad5670e693be2e9dda8c753ea",
+    "partial-sources.json": "4f7570deb6053034ce341cea22ee2ec9ca99f9cdceff54bbb36026a10462335b",
+    "permissions.json": "f06bdbf9c6a68f6b046ac8d457da78ebec1d9c60ff637ce59203f79ee7b0dd46",
+    "profile-names.json": "4d5dae39fbfb752dabc1be2d389396fb98a63019138f52a9c7ddc036ff10504b",
+    "sign-in-codes.json": "81913729ee224f4940567bf7cea08c4abdf1ba32da6e0607a4637e117a6f2c05",
+    "variable-forms.json": "40c27b65ee4bac8c81595d7b84880bb599660cec5b032d8d3537b6fc71b409f5",
+    "config-check-v1.schema.json": "d0897bab263b3088ded2f069aca2b227c7770140b889770cf9289a6a3c8f05fa",
+    "known-differences-v1.schema.json": "3eaae68fed5ec5aac8d44968fbaa7f6e998bd22c5ef7f877a8e9cd75285d9e26",
+    "live-test-v1.schema.json": "f27f52820048d415b698bc7a1f1d270e2ba6bfbc049cf58fc05b801e8ffd37ff",
+    "codes-v1.json": "cf3dbfa931e46452dfd584ac5e1d0ba80b57c18d353ae0d61f2fc96f02df43e9"
+  }
+}

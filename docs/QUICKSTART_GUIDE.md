@@ -317,18 +317,7 @@ SECRET=YOUR_CLIENT_SECRET
 SCOPES=your_scopes_from_developer_console
 ```
 
-To enable `.env` file loading, install the `env` extra using the method you chose in Step 2:
-
-```bash
-# PyPI installation with uv tool
-uv tool install "cja-auto-sdr[env]"
-
-# PyPI installation with pip (in your activated venv)
-python -m pip install "cja-auto-sdr[env]"
-
-# Source installation
-uv add python-dotenv
-```
+The tool reads the `.env` file on every install. Since v3.14.0 you do not need the `env` extra for this. To see which source the tool uses, run `cja_auto_sdr --show-config`.
 
 > **Note:** Environment variables take precedence over `config.json` if both are set.
 

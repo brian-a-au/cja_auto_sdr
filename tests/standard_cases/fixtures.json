@@ -1,0 +1,22 @@
+{
+  "spec": "adobe-credentials/v1",
+  "note": "Made-up credentials for the cases. None of them is real.",
+  "credentials": {
+    "A": {
+      "org_id": "A1B2C3D4E5F6A7B8C9D0E1F2@AdobeOrg",
+      "client_id": "aaaa1111bbbb2222cccc3333dddd4444",
+      "secret": "fake-secret-A-not-a-credential-0001",
+      "scopes": "openid,AdobeID,additional_info.projectedProductContext"
+    },
+    "B": {
+      "org_id": "B9B8B7B6B5B4B3B2B1B0BABB@AdobeOrg",
+      "client_id": "bbbb5555cccc6666dddd7777eeee8888",
+      "secret": "fake-secret-B-not-a-credential-0002",
+      "scopes": "openid,AdobeID,read_organizations"
+    }
+  },
+  "masked_client_id": {
+    "A": "aaaa****4444",
+    "B": "bbbb****8888"
+  }
+}

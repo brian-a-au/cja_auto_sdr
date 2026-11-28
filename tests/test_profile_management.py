@@ -531,6 +531,7 @@ class TestImportProfileNonInteractiveExtended:
 # ===========================================================================
 
 
+@pytest.mark.usefixtures("sign_in_ok")
 class TestTestProfile:
     """Tests for the profile connectivity test function."""
 
@@ -585,7 +586,8 @@ class TestTestProfile:
         assert "TESTING PROFILE: good" in captured.out
         assert "Profile found and loaded" in captured.out
         assert "Credential validation: OK" in captured.out
-        assert "API connection: SUCCESS" in captured.out
+        assert "Sign-in: OK" in captured.out
+        assert "Data views: OK" in captured.out
         assert "Data views accessible: 2" in captured.out
         assert "Profile test: PASSED" in captured.out
 
@@ -634,7 +636,7 @@ class TestTestProfile:
         assert result is False
         mock_config_from_env.assert_called_once()
         captured = capsys.readouterr()
-        assert "API connection: FAILED" in captured.err
+        assert "Data views: FAILED" in captured.err
         assert "Unexpected getDataViews() payload" in captured.err
         assert "statusCode=500" in captured.err
         assert "Profile test: FAILED" in captured.err
@@ -655,7 +657,7 @@ class TestTestProfile:
 
         assert result is False
         captured = capsys.readouterr()
-        assert "API connection: FAILED" in captured.err
+        assert "Data views: FAILED" in captured.err
         assert "Connection refused" in captured.err
         assert "Profile test: FAILED" in captured.err
         assert "Common issues:" in captured.out
@@ -677,7 +679,8 @@ class TestTestProfile:
         assert result is False
         captured = capsys.readouterr()
         assert "Profile test: FAILED" in captured.err
-        assert "HTTP 403 — authorization failed or resource not accessible" in captured.err
+        assert "Data views: FAILED (no_product_access)" in captured.err
+        assert "CJA product profile" in captured.err
         assert "authentication or authorization failed" in captured.out
 
     def test_plain_constructor_failure_returns_controlled_failure(self, tmp_path, capsys):

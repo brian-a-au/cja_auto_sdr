@@ -159,7 +159,7 @@ uv run cja_auto_sdr --config-status --config-json --agent-mode
 | Discovery / inspection (`--list-*`, `--describe-dataview`) | Yes             | JSON to stdout for machine-readable flows; prefer exact IDs for unattended inspection |
 | Org-report (`--org-report`)                         | Yes                      | JSON to stdout; advisories block included; `--format console --output -` is also valid for human-readable stdout |
 | Diff family (`--diff`, `--diff-snapshot`, `--compare-with-prev`, `--compare-snapshots`) | Yes | JSON to stdout; advisories block included |
-| Validation / preflight (`--validate-config`, `--config-status`) | Partial        | Use `--config-status --config-json` for JSON state; `--validate-config` is primarily exit-code driven |
+| Validation / preflight (`--validate-config`, `--config-status`, `--show-config`) | Partial        | Use `--show-config --format json` or `--config-status --config-json` for JSON state; `--validate-config` is primarily exit-code driven |
 | Fast-path flags (`--version`, `--completion`)       | Partial                  | Informational fast paths tolerate `--agent-mode`, but the preset itself is not applied before exit |
 | Interactive mode (`--interactive`)                  | No                       | Interactive prompts are not suitable for unattended pipelines |
 
@@ -327,6 +327,22 @@ Combine with `--agent-mode` for consistent JSON log output:
 ```bash
 uv run cja_auto_sdr --config-status --config-json --agent-mode
 ```
+
+### --show-config --format json
+
+Reports how the tool finds the credential, without an API call. The JSON names every source that holds a value, the path of each file, the masked client ID, `secret_set`, the scopes, any problems, and any notices. It has the `adobe-credentials/v1/config-check` shape, which is described in the [Configuration Guide](CONFIGURATION.md#show-where-the-credential-comes-from). The command exits 0 when `ok` is true and 1 when it is not.
+
+```bash
+uv run cja_auto_sdr --show-config --format json | jq '{ok, source, notices}'
+```
+
+Notices and warnings about credentials go to stderr, and they never go to stdout. They can appear on any command that reads a credential. With `--agent-mode` or `--log-format json`, each one is a JSON log record:
+
+```json
+{"timestamp": "2026-11-28T02:58:41.638835+00:00", "level": "WARNING", "logger": "cja_auto_sdr.credentials", "message": "Other users of this computer can read the credential file /work/config.json. Run: chmod 600 /work/config.json", "module": "credential_notices", "function": "_emit_once", "line": 182, "process": 71622, "process_name": "MainProcess", "thread": 8393466240, "thread_name": "MainThread", "code": "file_readable_by_others", "kind": "warning"}
+```
+
+Read the code from `code`. `kind` is `notice` or `warning`. `--log-level` does not hide these records. In every other mode, each one is a plain text line that starts with `Notice [code]:` or `Warning [code]:`.
 
 Recommended preflight sequence for automated pipelines:
 
